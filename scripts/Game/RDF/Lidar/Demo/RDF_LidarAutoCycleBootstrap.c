@@ -10,7 +10,7 @@ modded class SCR_BaseGameMode
         super.OnGameStart();
         if (s_EnableAutoCycleBootstrap)
         {
-            // Start auto-cycle with a sensible default interval (seconds)
+            // Start auto-cycle with a sensible default interval (ms)
             RDF_LidarDemoCycler.StartAutoCycle(10000.0);
         }
     }
