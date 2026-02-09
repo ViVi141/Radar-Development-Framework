@@ -18,26 +18,22 @@ scripts/Game/RDF/Lidar/
   Util/
     RDF_LidarSubjectResolver.c
   Demo/
+    RDF_LidarAutoBootstrap.c
     RDF_LidarAutoRunner.c
-    RDF_LidarAutoEntity.c
 ```
 
 ## Data Flow
 1. `RDF_LidarScanner` produces `RDF_LidarSample` data based on `RDF_LidarSettings`.
 2. `RDF_LidarVisualizer` renders samples using `RDF_LidarVisualSettings`.
-3. Demo utilities (AutoRunner/AutoEntity) optionally drive the scan loop.
+3. Demo utilities (AutoRunner) optionally drive the scan loop.
 
 ## Extension Points
 - Custom sampling: replace `BuildUniformDirection()` or set a custom `RDF_LidarSampleStrategy` via `RDF_LidarScanner.SetSampleStrategy()`.
-- Custom output: use `RDF_LidarExporter` to produce CSV/JSON representations, or consume `RDF_LidarSample` array for custom exporters.
+- Custom output: use `RDF_LidarVisualizer.GetLastSamples()` to obtain scan data and export externally (e.g. CSV/JSON).
 - Visual styles: provide a custom `RDF_LidarColorStrategy` via `RDF_LidarVisualizer` to override point/ray color mapping.
 
-## Tests & Packaging
-- Unit and integration tests live under `tests/`. These are simple engine-run scripts; CI integration requires a headless Reforger runner.
-- Use `scripts/tools/package-release.ps1` to create a release zip named `radar-lidar-v{VERSION}.zip` (requires PowerShell on Windows).
 ## Demo Isolation
 - `RDF_LidarAutoRunner` is off by default and only runs when started explicitly.
-- `RDF_LidarAutoEntity` lets you toggle the demo in-world without modifying game mode.
 - The bootstrap file no longer enables the demo by default; call `SCR_BaseGameMode.SetBootstrapEnabled(true)` to opt in.
 
 ## Performance Tips

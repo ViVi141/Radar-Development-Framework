@@ -1,7 +1,5 @@
 # Radar Development Framework — LiDAR 模块 📡
 
-See `docs/CHANGELOG.md` for recent changes.
-
 **简介**
 
 本仓库新增了一个轻量的激光雷达（LiDAR）开发框架，用于在 Arma Reforger 中快速做射线点云扫描、可视化与调试。该框架独立于示例模块，可直接在工程中启用作为开发工具或原型演示。
@@ -12,13 +10,13 @@ See `docs/CHANGELOG.md` for recent changes.
 - `scripts/Game/RDF/Lidar/Core/` — 扫描核心（设置、采样、扫描器）
 - `scripts/Game/RDF/Lidar/Visual/` — 可视化渲染（点云 + 渐变射线）
 - `scripts/Game/RDF/Lidar/Util/` — 主体解析（本地玩家 / 载具切换）
-- `scripts/Game/RDF/Lidar/Demo/` — 演示控制（可选自动运行与场景开关）
+- `scripts/Game/RDF/Lidar/Demo/` — 演示控制（可选自动运行）
 
 ---
 
 ## 快速上手 ⚡
 1. 框架默认不自动运行（避免影响其他模组）。
-2. 需要演示时：放置 `RDF_LidarAutoEntity` 并勾选启用，或在代码中调用 `RDF_LidarAutoRunner.SetDemoEnabled(true/false)`。
+2. 需要演示时：在代码中调用 `RDF_LidarAutoRunner.SetDemoEnabled(true/false)`。
 3. 调整参数：扫描参数在 `RDF_LidarSettings`，可视化参数在 `RDF_LidarVisualSettings`。
 
 示例代码：
@@ -36,12 +34,9 @@ RDF_LidarAutoRunner.SetMinTickInterval(0.2);
 RDF_LidarScanner scanner = new RDF_LidarScanner();
 scanner.SetSampleStrategy(new RDF_UniformSampleStrategy()); // default
 
-// Export last rendered scan (returns string; use engine file IO to save)
+// Get last scan data for custom export (e.g. CSV/JSON via external tooling)
 RDF_LidarVisualizer visual = new RDF_LidarVisualizer();
-string csv = visual.ExportLastScanCSV();
-string json = visual.ExportLastScanJSON();
-
-// Note: in-engine save/export helpers have been removed. Use `visual.GetLastSamples()` and external tooling to persist scan data.
+ref array<ref RDF_LidarSample> samples = visual.GetLastSamples();
 
 ```
 

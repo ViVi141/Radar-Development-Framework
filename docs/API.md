@@ -5,17 +5,32 @@
 ## Core
 
 ### RDF_LidarSettings
-字段（常用）：
+字段：
 - `m_Enabled` (bool): 是否启用扫描（默认 true）
 - `m_Range` (float): 扫描半径（默认 50.0）。在运行时会被 clamp 到 [0.1, 1000.0]
 - `m_RayCount` (int): 射线数量（默认 512）。在运行时会被 clamp 到 [1, 4096]
 - `m_UpdateInterval` (float): 扫描间隔（秒，默认 5.0），最小值 0.01
+- `m_OriginOffset` (vector): 扫描原点偏移（默认 "0 0 0"），与 `m_UseLocalOffset` 配合使用
+- `m_TraceFlags` (int): 射线检测标志（默认 `TraceFlags.WORLD | TraceFlags.ENTS`）
+- `m_LayerMask` (int): 物理层掩码（默认 `EPhysicsLayerPresets.Projectile`）
+- `m_UseBoundsCenter` (bool): 是否使用实体包围盒中心作为扫描原点（默认 true）
+- `m_UseLocalOffset` (bool): 是否将 `m_OriginOffset` 视为实体局部空间偏移（默认 true）
 
 方法：
 - `void Validate()` — 对设置进行防护性校验与 clamp（在扫描前会被自动调用）。
 
 ### RDF_LidarSample
-数据结构，包含每条射线的采样信息：`m_Index`, `m_Hit`, `m_Start`, `m_End`, `m_Dir`, `m_HitPos`, `m_Distance`, `m_Entity`, `m_ColliderName`, `m_Surface`。
+单条射线的采样结果数据结构。字段：
+- `m_Index` (int): 射线索引
+- `m_Hit` (bool): 是否命中
+- `m_Start` (vector): 射线起点
+- `m_End` (vector): 射线终点（最大距离处）
+- `m_Dir` (vector): 单位方向向量
+- `m_HitPos` (vector): 命中点位置（未命中时为射线终点）
+- `m_Distance` (float): 命中距离（未命中时为最大距离）
+- `m_Entity` (IEntity): 命中的实体（若有）
+- `m_ColliderName` (string): 命中的碰撞体名称
+- `m_Surface` (GameMaterial): 命中表面材质（若有）
 
 ### RDF_LidarScanner
 主要方法：
@@ -23,30 +38,30 @@
 - `RDF_LidarSettings GetSettings()` — 获取设置引用
 - `void Scan(IEntity subject, array<ref RDF_LidarSample> outSamples)` — 对给定实体执行扫描并填充 samples（会在入口处调用 `Validate()`）。
 - `void SetSampleStrategy(RDF_LidarSampleStrategy strategy)` — 注入自定义采样策略
+- `RDF_LidarSampleStrategy GetSampleStrategy()` — 获取当前采样策略
 
 备注：默认采样策略为 `RDF_UniformSampleStrategy`。
 
 ## Visual
 
 ### RDF_LidarVisualSettings
-字段（常用）：
-- `m_DrawPoints`, `m_DrawRays`, `m_ShowHitsOnly`
-- `m_PointSize`, `m_RayAlpha`, `m_RaySegments`
-- `m_MaxShapes`（int）：单次渲染创建的 Debug Shape 上限，用于防止资源过度创建（默认 2048）。
+字段：
+- `m_DrawPoints` (bool): 是否绘制命中点（默认 true）
+- `m_DrawRays` (bool): 是否绘制射线（默认 true）
+- `m_ShowHitsOnly` (bool): 是否仅绘制命中的点/射线（默认 false）
+- `m_PointSize` (float): 点球体半径（默认 0.08）
+- `m_RayAlpha` (float): 射线透明度（默认 0.25）
+- `m_RaySegments` (int): 每条射线的分段数，用于渐变显示（默认 6）
+- `m_UseDistanceGradient` (bool): 是否按距离渐变着色（默认 true）；为 false 时命中为红、未命中为橙
 
 ### RDF_LidarVisualizer
 主要方法：
 - `RDF_LidarVisualizer(RDF_LidarVisualSettings settings = null)` — 构造函数
-- `void Render(IEntity subject, RDF_LidarScanner scanner)` — 执行扫描并绘制点云（请注意形状上限）。
+- `void Render(IEntity subject, RDF_LidarScanner scanner)` — 执行扫描并绘制点云。
 - `RDF_LidarVisualSettings GetSettings()`
 - `ref array<ref RDF_LidarSample> GetLastSamples()` — 获取最近一次渲染的 sample 数组
-- `string ExportLastScanCSV()` / `string ExportLastScanJSON()` — 以字符串形式返回上次扫描的 CSV/JSON（不保证自动写入磁盘）
 
-颜色策略：可用 `RDF_LidarColorStrategy` 替换默认色彩映射。
-
-(Export functionality removed)
-
-Note: Export helpers were removed by project owner request. Use `RDF_LidarVisualizer.GetLastSamples()` to retrieve scan samples and export them externally if needed.
+颜色策略：可用 `RDF_LidarColorStrategy` 替换默认色彩映射。需自定义导出时，使用 `GetLastSamples()` 取得数据后自行处理（如 CSV/JSON）。
 
 ## Strategies
 
@@ -61,15 +76,24 @@ Note: Export helpers were removed by project owner request. Use `RDF_LidarVisual
 
 默认实现：`RDF_DefaultColorStrategy`。
 
+## Util
+
+### RDF_LidarSubjectResolver
+用于解析扫描主体（本地玩家或当前载具）的静态工具类。
+- `static IEntity ResolveLocalSubject(bool preferVehicle = true)` — 解析本地玩家控制的实体；若在载具内且 preferVehicle 为 true 则返回载具根实体
+- `static IEntity ResolveSubject(IEntity player, bool preferVehicle = true)` — 对给定玩家实体解析主体（载具或玩家）
+- `static vector ResolveOrigin(IEntity player = null, bool preferVehicle = true)` — 解析主体原点；player 为 null 时使用本地玩家
+
 ## Demo
 
 ### RDF_LidarAutoRunner
-- `static void SetDemoEnabled(bool enabled)` — 全局控制 demo
-- `static bool IsDemoEnabled()`
+- `static void SetDemoEnabled(bool enabled)` — 全局开启/关闭 demo
+- `static bool IsDemoEnabled()` — 是否已启用 demo
 - `static void SetMinTickInterval(float interval)` — 设置最小 tick 间隔（秒，推荐默认 0.2）以减少 per-frame 调度开销
-
-### RDF_LidarAutoEntity
-- 场景实体，可以在编辑器中通过属性启用/禁用 demo。
+- `static float GetMinTickInterval()` — 获取当前最小 tick 间隔
+- `static void StartAutoRun()` — 开始自动扫描循环
+- `static void StopAutoRun()` — 停止自动扫描循环
+- `static bool IsRunning()` — 当前是否正在自动运行
 
 ### SCR_BaseGameMode (modded bootstrap)
 - `static void SetBootstrapEnabled(bool enabled)` — 若启用，将在 `OnGameStart` 时自动 `SetDemoEnabled(true)`；默认**禁用**以避免意外激活。
