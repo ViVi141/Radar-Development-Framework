@@ -1,6 +1,6 @@
 # API Reference — Radar Development Framework (LiDAR)
 
-此文档为第一版 API 摘要，覆盖主要公开类与要点（无迁移/发布说明）。
+此文档为第一版 API 摘要，覆盖主要公开类与要点。
 
 ## Core
 

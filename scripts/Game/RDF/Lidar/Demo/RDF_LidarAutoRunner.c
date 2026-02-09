@@ -67,6 +67,22 @@ class RDF_LidarAutoRunner
         return s_AutoEnabled;
     }
 
+    // Set a custom sampling strategy to be used by the demo auto-runner.
+    static void SetDemoSampleStrategy(RDF_LidarSampleStrategy strategy)
+    {
+        if (!strategy) return;
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (inst && inst.m_Scanner)
+            inst.m_Scanner.SetSampleStrategy(strategy);
+    }
+
+    // Convenience helper: start the demo using hemisphere-only sampling.
+    static void StartHemisphereDemo()
+    {
+        SetDemoSampleStrategy(new RDF_HemisphereSampleStrategy());
+        SetDemoEnabled(true);
+    }
+
     static bool IsRunning()
     {
         return GetInstance().m_Running;
