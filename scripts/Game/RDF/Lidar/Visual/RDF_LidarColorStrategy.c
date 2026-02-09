@@ -1,9 +1,22 @@
 // Color strategy interface and default implementation for point and ray colors.
 class RDF_LidarColorStrategy
 {
+    // Backwards compatible: build color using distance/hit
     int BuildPointColor(float dist, bool hit, float lastRange, RDF_LidarVisualSettings settings)
     {
         return ARGBF(1,1,1,1);
+    }
+
+    // New: build color from full sample (default forwards to legacy BuildPointColor)
+    int BuildPointColorFromSample(RDF_LidarSample sample, float lastRange, RDF_LidarVisualSettings settings)
+    {
+        return BuildPointColor(sample.m_Distance, sample.m_Hit, lastRange, settings);
+    }
+
+    // New: allow per-sample point size
+    float BuildPointSizeFromSample(RDF_LidarSample sample, float lastRange, RDF_LidarVisualSettings settings)
+    {
+        return settings.m_PointSize;
     }
 
     int BuildRayColorAtT(float t, bool hit, RDF_LidarVisualSettings settings)
@@ -32,6 +45,25 @@ class RDF_DefaultColorStrategy : RDF_LidarColorStrategy
         if (!hit)
             alpha = 0.6;
         return ARGBF(alpha, r, g, b);
+    }
+
+    // Forward compatibility: implement sample-based overrides
+    override int BuildPointColorFromSample(RDF_LidarSample sample, float lastRange, RDF_LidarVisualSettings settings)
+    {
+        return BuildPointColor(sample.m_Distance, sample.m_Hit, lastRange, settings);
+    }
+
+    override float BuildPointSizeFromSample(RDF_LidarSample sample, float lastRange, RDF_LidarVisualSettings settings)
+    {
+        float baseSize = settings.m_PointSize;
+        if (settings.m_UseDistanceGradient)
+        {
+            float t = sample.m_Distance / Math.Max(0.1, lastRange);
+            t = Math.Clamp(t, 0.0, 1.0);
+            // Closer points slightly larger for depth cue
+            return baseSize * (1.0 + (1.0 - t) * 0.5);
+        }
+        return baseSize;
     }
 
     override int BuildRayColorAtT(float t, bool hit, RDF_LidarVisualSettings settings)

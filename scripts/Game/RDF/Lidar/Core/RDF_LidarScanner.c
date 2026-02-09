@@ -51,13 +51,26 @@ class RDF_LidarScanner
         int rays = Math.Clamp(m_Settings.m_RayCount, 1, 4096);
         float range = Math.Clamp(m_Settings.m_Range, 0.1, 1000.0);
 
+        // get subject orientation for sample directions (strategies produce local-space directions)
+        vector worldMat[4];
+        subject.GetWorldTransform(worldMat);
+        vector basisX = worldMat[0];
+        vector basisY = worldMat[1];
+        vector basisZ = worldMat[2];
+
         for (int i = 0; i < rays; i++)
         {
-            vector dir;
+            vector dirLocal;
             if (m_SampleStrategy)
-                dir = m_SampleStrategy.BuildDirection(i, rays);
+                dirLocal = m_SampleStrategy.BuildDirection(i, rays);
             else
-                dir = BuildUniformDirection(i, rays);
+                dirLocal = BuildUniformDirection(i, rays);
+
+            // Transform local direction into world space using subject basis
+            vector dir = (basisX * dirLocal[0]) + (basisY * dirLocal[1]) + (basisZ * dirLocal[2]);
+            float dlen = dir.Length();
+            if (dlen > 0.0)
+                dir = dir / dlen;
 
             TraceParam param = new TraceParam();
             param.Start = origin;

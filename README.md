@@ -39,14 +39,67 @@ scanner.SetSampleStrategy(new RDF_UniformSampleStrategy());
 // 示例：仅采样上半球（新增示例策略）
 scanner.SetSampleStrategy(new RDF_HemisphereSampleStrategy());
 
+// 其它采样策略示例：
+// Conical sampling (cone half-angle 30 degrees)
+scanner.SetSampleStrategy(new RDF_ConicalSampleStrategy(30.0));
+
+// Stratified sampling (near-regular grid on sphere)
+scanner.SetSampleStrategy(new RDF_StratifiedSampleStrategy());
+
+// Scanline / sector sampling (useful for sweep scans)
+scanner.SetSampleStrategy(new RDF_ScanlineSampleStrategy(64));
+
 // Convenience: start hemisphere demo (sets strategy and starts auto-run)
 RDF_LidarAutoRunner.StartHemisphereDemo();
+// Start conical demo (half-angle 25°, 256 rays)
+RDF_ConicalDemo.Start(25.0, 256);
+// Start stratified demo
+RDF_StratifiedDemo.Start(256);
+// Start scanline demo (32 sectors)
+RDF_ScanlineDemo.Start(32, 256);
+// Start conical demo with index coloring (forward-facing cone)
+RDF_ConicalDemo.Start(25.0, 256);
 // Stop demo
 RDF_LidarAutoRunner.SetDemoEnabled(false);
+
+// Demo cycler: call multiple times to rotate strategies
+RDF_LidarDemoCycler.Cycle(256);
+// or start a specific strategy by index
+RDF_LidarDemoCycler.StartIndex(2, 256); // 2 = conical in default cycle list
+
+// Auto-cycle: switch strategy automatically every 10 seconds
+RDF_LidarDemoCycler.StartAutoCycle(10.0);
+// Stop auto-cycle
+RDF_LidarDemoCycler.StopAutoCycle();
+// Query status
+RDF_LidarDemoCycler.IsAutoCycling();
+// Change interval while stopped (or restart after set)
+RDF_LidarDemoCycler.SetAutoCycleInterval(5.0);
+
+// Optional bootstrap (opt-in): enable auto-cycle at game start
+// By default the bootstrap is disabled to avoid surprising behavior. To enable at runtime:
+//   SCR_BaseGameMode.SetAutoCycleBootstrapEnabled(true);
+// To disable:
+//   SCR_BaseGameMode.SetAutoCycleBootstrapEnabled(false)
+
+// Demo configuration example:
+RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
+cfg.m_Enable = true;
+cfg.m_SampleStrategy = new RDF_ConicalSampleStrategy(25.0);
+cfg.m_RayCount = 256;
+cfg.m_MinTickInterval = 0.25;
+cfg.m_ColorStrategy = new RDF_IndexColorStrategy();
+RDF_LidarAutoRunner.SetDemoConfig(cfg);
+RDF_LidarAutoRunner.SetDemoEnabled(true);
+
+// Quick self-checks (run from dev console / init script):
+RDF_RunAllSampleChecks(); // prints basic verification for strategies
 ```
 - 获取上次扫描数据以便导出：
 ```c
 RDF_LidarVisualizer visual = new RDF_LidarVisualizer();
+// Optional: set an index-based color strategy for debugging sample order
+visual.SetColorStrategy(new RDF_IndexColorStrategy());
 ref array<ref RDF_LidarSample> samples = visual.GetLastSamples();
 // 导出由外部工具负责（CSV/JSON 等）
 ```

@@ -100,4 +100,39 @@
 
 ---
 
-使用示例和注意事项在 `README.md` 中，有关参数安全性、性能建议（限制射线数、降低分段）及导出使用说明也在 docs 中说明。
+## Demo API (新增)
+
+### RDF_LidarDemoConfig
+配置对象用于在启动 demo 时一次性传入多个设置：
+- `bool m_Enable` — 是否启用 demo（默认 false）
+- `RDF_LidarSampleStrategy m_SampleStrategy` — 要使用的采样策略（示例：`RDF_ConicalSampleStrategy`）
+- `RDF_LidarColorStrategy m_ColorStrategy` — 可选的颜色/大小策略（示例：`RDF_IndexColorStrategy`）
+- `int m_RayCount` — 覆盖扫描的射线数量（-1 表示保持不变）
+- `float m_MinTickInterval` — 覆盖 AutoRunner 的最小调度间隔（秒，-1 表示保持不变）
+- `float m_UpdateInterval` — 覆盖扫描设置的更新间隔（秒，-1 表示保持不变）
+
+方法：
+- `void ApplyTo(RDF_LidarAutoRunner runner)` — 将配置安全地应用到指定的 `RDF_LidarAutoRunner`（注：也可通过 `RDF_LidarAutoRunner.SetDemoConfig()` 全局设置）。
+
+### RDF_LidarAutoRunner（扩展）
+新增方法：
+- `static void SetDemoConfig(RDF_LidarDemoConfig cfg)` — 设置将被应用于下次启用 demo 的配置对象。
+- `static RDF_LidarDemoConfig GetDemoConfig()` — 获取当前（最近设置的）demo 配置。
+- `void ApplyDemoConfig()` — 实例方法：将 `m_DemoConfig` 应用到 scanner/visualizer/设置（在 `SetDemoEnabled(true)` 时自动调用）。
+- `static void SetDemoRayCount(int rays)` — 安全地在 demo scanner 上设定 `m_RayCount`（clamp）。
+
+示例：
+```c
+RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
+cfg.m_Enable = true;
+cfg.m_SampleStrategy = new RDF_ConicalSampleStrategy(25.0);
+cfg.m_RayCount = 256;
+cfg.m_MinTickInterval = 0.25;
+cfg.m_ColorStrategy = new RDF_IndexColorStrategy();
+RDF_LidarAutoRunner.SetDemoConfig(cfg);
+RDF_LidarAutoRunner.SetDemoEnabled(true);
+```
+
+---
+
+使用示例和注意事项在 `README.md` 中，有关参数安全性、性能建议（限制射线数、降低分段）及导出使用说明也在 docs 中说明.

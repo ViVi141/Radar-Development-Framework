@@ -8,6 +8,8 @@ class RDF_LidarAutoRunner
 
     protected ref RDF_LidarScanner m_Scanner;
     protected ref RDF_LidarVisualizer m_Visualizer;
+    // Optional demo config applied when demo starts
+    protected ref RDF_LidarDemoConfig m_DemoConfig;
     protected float m_LastScanTime = -1.0;
     protected bool m_Running = false;
 
@@ -56,10 +58,19 @@ class RDF_LidarAutoRunner
     static void SetDemoEnabled(bool enabled)
     {
         s_AutoEnabled = enabled;
+        RDF_LidarAutoRunner inst = GetInstance();
         if (enabled)
+        {
+            // Apply configured demo options if present
+            if (inst && inst.m_DemoConfig)
+                inst.ApplyDemoConfig();
+
             StartAutoRun();
+        }
         else
+        {
             StopAutoRun();
+        }
     }
 
     static bool IsDemoEnabled()
@@ -74,6 +85,53 @@ class RDF_LidarAutoRunner
         RDF_LidarAutoRunner inst = GetInstance();
         if (inst && inst.m_Scanner)
             inst.m_Scanner.SetSampleStrategy(strategy);
+    }
+
+    // Set the demo scanner ray count safely (clamped)
+    static void SetDemoRayCount(int rays)
+    {
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (!inst || !inst.m_Scanner) return;
+        RDF_LidarSettings s = inst.m_Scanner.GetSettings();
+        if (!s) return;
+        s.m_RayCount = Math.Clamp(rays, 1, 4096);
+    }
+
+    // Set the demo visual color strategy (applies to visualizer if present)
+    static void SetDemoColorStrategy(RDF_LidarColorStrategy strategy)
+    {
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (!inst || !inst.m_Visualizer) return;
+        inst.m_Visualizer.SetColorStrategy(strategy);
+    }
+
+    // Set the demo scanner update interval safely (seconds)
+    static void SetDemoUpdateInterval(float interval)
+    {
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (!inst || !inst.m_Scanner) return;
+        RDF_LidarSettings s = inst.m_Scanner.GetSettings();
+        if (!s) return;
+        s.m_UpdateInterval = Math.Max(0.01, interval);
+    }
+
+    static void SetDemoConfig(RDF_LidarDemoConfig cfg)
+    {
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (!inst) return;
+        inst.m_DemoConfig = cfg;
+    }
+
+    static RDF_LidarDemoConfig GetDemoConfig()
+    {
+        return GetInstance().m_DemoConfig;
+    }
+
+    // Apply current demo config to the running demo (called on Start)
+    void ApplyDemoConfig()
+    {
+        if (!m_DemoConfig) return;
+        m_DemoConfig.ApplyTo(this);
     }
 
     // Convenience helper: start the demo using hemisphere-only sampling.

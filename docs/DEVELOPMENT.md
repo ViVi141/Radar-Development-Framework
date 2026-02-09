@@ -34,9 +34,14 @@ scripts/Game/RDF/Lidar/
 3. 演示工具（`RDF_LidarAutoRunner`）可选地驱动定期扫描循环。
 
 ## 扩展点（示例）
-- 采样策略：实现 `RDF_LidarSampleStrategy::BuildDirection()`，并通过 `RDF_LidarScanner.SetSampleStrategy()` 注入。例如，`RDF_HemisphereSampleStrategy` 演示如何仅采样上半球。
-- 可视化：实现 `RDF_LidarColorStrategy`，替换颜色映射以满足不同显示需求。
+- 采样策略：实现 `RDF_LidarSampleStrategy::BuildDirection()`，并通过 `RDF_LidarScanner.SetSampleStrategy()` 注入。
+  - 内置与示例实现：`RDF_UniformSampleStrategy`（默认），`RDF_HemisphereSampleStrategy`（上半球），`RDF_ConicalSampleStrategy`（锥形/面向前方），`RDF_StratifiedSampleStrategy`（分层网格），`RDF_ScanlineSampleStrategy`（扇区/扫描线）。
+- 可视化：实现或扩展 `RDF_LidarColorStrategy` 以支持按样本着色或按索引/角度着色；当前已添加样本级 hook：
+  - `BuildPointColorFromSample(ref RDF_LidarSample sample, float lastRange, RDF_LidarVisualSettings settings)`
+  - `BuildPointSizeFromSample(ref RDF_LidarSample sample, float lastRange, RDF_LidarVisualSettings settings)`
 - 输出：通过 `RDF_LidarVisualizer.GetLastSamples()` 获取数据并在外部导出（CSV/JSON）。
+
+新增：`scripts/tests/lidar_sample_checks.c` 提供了基础自检函数以验证采样方向的单位长度与锥体边界。
 
 ## Demo 与隔离
 - `RDF_LidarAutoRunner` 默认关闭，需显式调用 `SetDemoEnabled(true)` 才会运行。
@@ -47,6 +52,22 @@ scripts/Game/RDF/Lidar/
     - `RDF_LidarAutoRunner.SetDemoEnabled(true);`
   - 或使用便捷 helper：
     - `RDF_HemisphereDemo.Start();` / `RDF_HemisphereDemo.Stop();`
+- 新增：**Demo 配置（`RDF_LidarDemoConfig`）**
+  - 创建并设置配置：
+    - `RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();`
+    - `cfg.m_Enable = true;`
+    - `cfg.m_SampleStrategy = new RDF_ConicalSampleStrategy(25.0);`
+    - `cfg.m_RayCount = 256;`
+    - `cfg.m_MinTickInterval = 0.25;`
+    - `cfg.m_ColorStrategy = new RDF_IndexColorStrategy();`
+    - `RDF_LidarAutoRunner.SetDemoConfig(cfg);`
+    - `RDF_LidarAutoRunner.SetDemoEnabled(true);`
+  - `RDF_LidarDemoConfig.ApplyTo()` 会把配置安全地应用到 demo（采样策略、射线数、可视化色彩、tick 间隔等）。
+- 新增：**更多 demo helper**
+  - `RDF_ScanlineDemo`：`Start(sectors = 32, rayCount = 256)` / `Stop()`。
+  - `RDF_LidarDemoCycler`：`Cycle(rayCount = 256)`（循环策略进行对比），`StartIndex(index, rayCount)`。
+  - 可选 bootstrap：`RDF_LidarAutoCycleBootstrap.c` 提供 `SCR_BaseGameMode.SetAutoCycleBootstrapEnabled(bool)`，用于在游戏启动时自动开启策略轮换（默认为禁用）。
+  - 自动轮换：`RDF_LidarDemoCycler.StartAutoCycle(intervalSeconds = 10.0)` / `RDF_LidarDemoCycler.StopAutoCycle()` / `RDF_LidarDemoCycler.SetAutoCycleInterval(seconds)`。
 
 ## 性能建议
 - 将 `m_RayCount` 限制在合理范围内（默认 512），并在运行时降低以减小开销。

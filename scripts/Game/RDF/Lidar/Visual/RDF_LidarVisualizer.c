@@ -26,6 +26,17 @@ class RDF_LidarVisualizer
         return m_Settings;
     }
 
+    void SetColorStrategy(RDF_LidarColorStrategy strategy)
+    {
+        if (strategy)
+            m_ColorStrategy = strategy;
+    }
+
+    RDF_LidarColorStrategy GetColorStrategy()
+    {
+        return m_ColorStrategy;
+    }
+
     // Return the most recent scan samples after Render()
     ref array<ref RDF_LidarSample> GetLastSamples()
     {
@@ -56,10 +67,23 @@ class RDF_LidarVisualizer
                 DrawRay(sample.m_Start, sample.m_HitPos, sample.m_Distance, sample.m_Hit);
 
             if (m_Settings.m_DrawPoints)
-                DrawPoint(sample.m_HitPos, sample.m_Distance, sample.m_Hit);
+                DrawPointFromSample(sample);
 
 
         }
+    }
+
+    // New: draw point using the full sample so color/size strategies can access metadata
+    protected void DrawPointFromSample(RDF_LidarSample sample)
+    {
+        if (!m_DebugShapes || !sample)
+            return;
+
+        int color = BuildPointColorFromSample(sample);
+        float size = BuildPointSizeFromSample(sample);
+        int shapeFlags = ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.TRANSP;
+        Shape s = Shape.CreateSphere(color, shapeFlags, sample.m_HitPos, size);
+        m_DebugShapes.Insert(s);
     }
 
     protected void DrawPoint(vector pos, float dist, bool hit)
@@ -119,6 +143,24 @@ class RDF_LidarVisualizer
         if (!hit)
             alpha = 0.6;
         return ARGBF(alpha, r, g, b);
+    }
+
+    // New: access color via the color strategy using a full sample
+    protected int BuildPointColorFromSample(RDF_LidarSample sample)
+    {
+        if (m_ColorStrategy)
+            return m_ColorStrategy.BuildPointColorFromSample(sample, GetRangeSafe(), m_Settings);
+
+        return BuildPointColor(sample.m_Distance, sample.m_Hit);
+    }
+
+    // New: access point size via the color strategy using a full sample
+    protected float BuildPointSizeFromSample(RDF_LidarSample sample)
+    {
+        if (m_ColorStrategy)
+            return m_ColorStrategy.BuildPointSizeFromSample(sample, GetRangeSafe(), m_Settings);
+
+        return m_Settings.m_PointSize;
     }
 
     protected int BuildRayColorAtT(float t, bool hit)
