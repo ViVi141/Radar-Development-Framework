@@ -3,7 +3,7 @@
 modded class SCR_BaseGameMode
 {
     // Default: disabled
-    protected static bool s_EnableAutoCycleBootstrap = true;
+    protected static bool s_EnableAutoCycleBootstrap = false;
 
     override void OnGameStart()
     {

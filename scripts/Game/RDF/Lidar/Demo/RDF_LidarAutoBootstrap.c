@@ -2,7 +2,7 @@
 modded class SCR_BaseGameMode
 {
     // Default: disabled to avoid unexpected demo activation when this file is included.
-    protected static bool s_EnableBootstrap = true;
+    protected static bool s_EnableBootstrap = false
 
     override void OnGameStart()
     {
