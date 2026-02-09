@@ -1,4 +1,4 @@
-// LiDAR scan output sample.
+// LiDAR scan output sample. // LiDAR 扫描输出样本。
 class RDF_LidarSample
 {
     int m_Index;

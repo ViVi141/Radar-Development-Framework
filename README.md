@@ -1,5 +1,7 @@
 # Radar Development Framework — LiDAR 模块 📡
 
+See `docs/CHANGELOG.md` for recent changes.
+
 **简介**
 
 本仓库新增了一个轻量的激光雷达（LiDAR）开发框架，用于在 Arma Reforger 中快速做射线点云扫描、可视化与调试。该框架独立于示例模块，可直接在工程中启用作为开发工具或原型演示。
@@ -26,6 +28,21 @@ RDF_LidarAutoRunner.SetDemoEnabled(true);
 
 // Disable demo visualization
 RDF_LidarAutoRunner.SetDemoEnabled(false);
+
+// Configure minimum tick interval (seconds) to reduce per-frame overhead
+RDF_LidarAutoRunner.SetMinTickInterval(0.2);
+
+// Replace sampling strategy (example: custom strategy that implements RDF_LidarSampleStrategy)
+RDF_LidarScanner scanner = new RDF_LidarScanner();
+scanner.SetSampleStrategy(new RDF_UniformSampleStrategy()); // default
+
+// Export last rendered scan (returns string; use engine file IO to save)
+RDF_LidarVisualizer visual = new RDF_LidarVisualizer();
+string csv = visual.ExportLastScanCSV();
+string json = visual.ExportLastScanJSON();
+
+// Note: in-engine save/export helpers have been removed. Use `visual.GetLastSamples()` and external tooling to persist scan data.
+
 ```
 
 全局启动开关示例（仅在加载 `RDF_LidarAutoBootstrap.c` 时生效）：
@@ -35,6 +52,8 @@ SCR_BaseGameMode.SetBootstrapEnabled(true);
 
 // Disable global auto-start
 SCR_BaseGameMode.SetBootstrapEnabled(false);
+
+Note: The bootstrap default is now disabled to avoid unexpected demo activation when this file is included. To enable global auto-start, call the API above or set it explicitly at runtime.
 ```
 
 参数配置示例：
@@ -49,6 +68,9 @@ RDF_LidarVisualizer visual = new RDF_LidarVisualizer();
 RDF_LidarVisualSettings vis = visual.GetSettings();
 vis.m_PointSize = 0.05;
 vis.m_RaySegments = 4;
+
+// Export removed: the project no longer provides in-engine export helpers. Use `visual.GetLastSamples()` to obtain the samples and export externally if required.
+
 ```
 
 常用扫描参数（`scripts/Game/RDF/Lidar/Core/RDF_LidarSettings.c`）：

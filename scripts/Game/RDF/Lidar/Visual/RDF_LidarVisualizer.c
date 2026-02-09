@@ -5,6 +5,8 @@ class RDF_LidarVisualizer
     protected ref array<ref Shape> m_DebugShapes;
     protected ref array<ref RDF_LidarSample> m_Samples;
     protected float m_LastRange = 50.0;
+    // Color strategy (injectable). Defaults to internal color builder.
+    protected ref RDF_LidarColorStrategy m_ColorStrategy;
 
     void RDF_LidarVisualizer(RDF_LidarVisualSettings settings = null)
     {
@@ -15,11 +17,19 @@ class RDF_LidarVisualizer
 
         m_DebugShapes = new array<ref Shape>();
         m_Samples = new array<ref RDF_LidarSample>();
+
+        m_ColorStrategy = new RDF_DefaultColorStrategy();
     }
 
     RDF_LidarVisualSettings GetSettings()
     {
         return m_Settings;
+    }
+
+    // Return the most recent scan samples after Render()
+    ref array<ref RDF_LidarSample> GetLastSamples()
+    {
+        return m_Samples;
     }
 
     void Render(IEntity subject, RDF_LidarScanner scanner)
@@ -31,6 +41,7 @@ class RDF_LidarVisualizer
         if (scanSettings)
             m_LastRange = Math.Max(0.1, scanSettings.m_Range);
 
+        // Clear previous debug shapes references before rendering.
         if (m_DebugShapes)
             m_DebugShapes.Clear();
 
@@ -46,6 +57,8 @@ class RDF_LidarVisualizer
 
             if (m_Settings.m_DrawPoints)
                 DrawPoint(sample.m_HitPos, sample.m_Distance, sample.m_Hit);
+
+
         }
     }
 
@@ -87,6 +100,9 @@ class RDF_LidarVisualizer
 
     protected int BuildPointColor(float dist, bool hit)
     {
+        if (m_ColorStrategy)
+            return m_ColorStrategy.BuildPointColor(dist, hit, GetRangeSafe(), m_Settings);
+
         if (!m_Settings.m_UseDistanceGradient)
         {
             if (hit)
@@ -107,6 +123,9 @@ class RDF_LidarVisualizer
 
     protected int BuildRayColorAtT(float t, bool hit)
     {
+        if (m_ColorStrategy)
+            return m_ColorStrategy.BuildRayColorAtT(t, hit, m_Settings);
+
         t = Math.Clamp(t, 0.0, 1.0);
         float baseAlpha = Math.Clamp(m_Settings.m_RayAlpha, 0.05, 1.0);
         float alpha = baseAlpha;
@@ -125,4 +144,8 @@ class RDF_LidarVisualizer
     {
         return m_LastRange;
     }
+
+    // Export functions removed: export functionality has been removed per project owner request.
+    // Use `GetLastSamples()` to obtain `array<ref RDF_LidarSample>` and export externally if needed.
+
 }

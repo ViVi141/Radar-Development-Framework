@@ -3,6 +3,9 @@ class RDF_LidarAutoRunner
 {
     protected static ref RDF_LidarAutoRunner s_Instance;
     protected static bool s_AutoEnabled = false;
+    // Minimum tick interval for the global call queue (seconds). Reduces per-frame overhead.
+    protected static float s_MinTickInterval = 0.2;
+
     protected ref RDF_LidarScanner m_Scanner;
     protected ref RDF_LidarVisualizer m_Visualizer;
     protected float m_LastScanTime = -1.0;
@@ -12,8 +15,19 @@ class RDF_LidarAutoRunner
     {
         m_Scanner = new RDF_LidarScanner();
         m_Visualizer = new RDF_LidarVisualizer();
-        // recurring tick; scanning is gated by m_Running
-        GetGame().GetCallqueue().CallLater(StaticTick, 0, true);
+        // recurring tick; scanning is gated by m_Running. Use a non-zero min tick interval to avoid per-frame overhead.
+        GetGame().GetCallqueue().CallLater(StaticTick, s_MinTickInterval, true);
+    }
+
+    // Configure minimum tick interval at runtime (seconds).
+    static void SetMinTickInterval(float interval)
+    {
+        s_MinTickInterval = Math.Max(0.01, interval);
+    }
+
+    static float GetMinTickInterval()
+    {
+        return s_MinTickInterval;
     }
 
     static void StaticTick()

@@ -10,4 +10,15 @@ class RDF_LidarSettings
     float m_UpdateInterval = 5.0;
     bool m_UseBoundsCenter = true;
     bool m_UseLocalOffset = true;
+
+    // Validate and clamp settings to safe defaults/ranges.
+    void Validate()
+    {
+        // Ray count: 1 .. 4096
+        m_RayCount = Math.Clamp(m_RayCount, 1, 4096);
+        // Range: 0.1 .. 1000.0
+        m_Range = Math.Clamp(m_Range, 0.1, 1000.0);
+        // Update interval: at least 0.01s
+        m_UpdateInterval = Math.Max(0.01, m_UpdateInterval);
+    }
 }

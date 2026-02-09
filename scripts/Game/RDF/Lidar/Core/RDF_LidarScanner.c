@@ -2,6 +2,8 @@
 class RDF_LidarScanner
 {
     protected ref RDF_LidarSettings m_Settings;
+    // Sampling strategy (injectable). Defaults to uniform distribution.
+    protected ref RDF_LidarSampleStrategy m_SampleStrategy;
 
     void RDF_LidarScanner(RDF_LidarSettings settings = null)
     {
@@ -9,11 +11,23 @@ class RDF_LidarScanner
             m_Settings = settings;
         else
             m_Settings = new RDF_LidarSettings();
+
+        m_SampleStrategy = new RDF_UniformSampleStrategy();
     }
 
     RDF_LidarSettings GetSettings()
     {
         return m_Settings;
+    }
+
+    void SetSampleStrategy(RDF_LidarSampleStrategy strategy)
+    {
+        m_SampleStrategy = strategy;
+    }
+
+    RDF_LidarSampleStrategy GetSampleStrategy()
+    {
+        return m_SampleStrategy;
     }
 
     void Scan(IEntity subject, array<ref RDF_LidarSample> outSamples)
@@ -30,16 +44,24 @@ class RDF_LidarScanner
         if (!world)
             return;
 
+        // Ensure settings are sane before scanning.
+        m_Settings.Validate();
+
         vector origin = GetSubjectOrigin(subject);
-        int rays = Math.Max(1, m_Settings.m_RayCount);
+        int rays = Math.Clamp(m_Settings.m_RayCount, 1, 4096);
+        float range = Math.Clamp(m_Settings.m_Range, 0.1, 1000.0);
 
         for (int i = 0; i < rays; i++)
         {
-            vector dir = BuildUniformDirection(i, rays);
+            vector dir;
+            if (m_SampleStrategy)
+                dir = m_SampleStrategy.BuildDirection(i, rays);
+            else
+                dir = BuildUniformDirection(i, rays);
 
             TraceParam param = new TraceParam();
             param.Start = origin;
-            param.End = origin + (dir * m_Settings.m_Range);
+            param.End = origin + (dir * range);
             param.Flags = m_Settings.m_TraceFlags;
             param.LayerMask = m_Settings.m_LayerMask;
             param.Exclude = subject;

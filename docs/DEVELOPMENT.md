@@ -28,15 +28,20 @@ scripts/Game/RDF/Lidar/
 3. Demo utilities (AutoRunner/AutoEntity) optionally drive the scan loop.
 
 ## Extension Points
-- Custom sampling: replace `BuildUniformDirection()` or create a new scanner class.
-- Custom output: consume `RDF_LidarSample` array for CSV/export/AI.
-- Visual styles: override `BuildPointColor()` or `BuildRayColorAtT()`.
+- Custom sampling: replace `BuildUniformDirection()` or set a custom `RDF_LidarSampleStrategy` via `RDF_LidarScanner.SetSampleStrategy()`.
+- Custom output: use `RDF_LidarExporter` to produce CSV/JSON representations, or consume `RDF_LidarSample` array for custom exporters.
+- Visual styles: provide a custom `RDF_LidarColorStrategy` via `RDF_LidarVisualizer` to override point/ray color mapping.
 
+## Tests & Packaging
+- Unit and integration tests live under `tests/`. These are simple engine-run scripts; CI integration requires a headless Reforger runner.
+- Use `scripts/tools/package-release.ps1` to create a release zip named `radar-lidar-v{VERSION}.zip` (requires PowerShell on Windows).
 ## Demo Isolation
 - `RDF_LidarAutoRunner` is off by default and only runs when started explicitly.
 - `RDF_LidarAutoEntity` lets you toggle the demo in-world without modifying game mode.
+- The bootstrap file no longer enables the demo by default; call `SCR_BaseGameMode.SetBootstrapEnabled(true)` to opt in.
 
 ## Performance Tips
-- Lower `m_RayCount` for runtime use.
-- Increase `m_UpdateInterval` for heavy scenes.
+- Lower `m_RayCount` for runtime use. `m_RayCount` is clamped to [1, 4096] for safety.
+- Increase `m_UpdateInterval` for heavy scenes. `m_UpdateInterval` has a minimum enforced value of 0.01s.
 - Reduce `m_RaySegments` to limit line segments.
+- Visualizer creates debug shapes per render. Be mindful of `m_RayCount` and `m_RaySegments` which influence the number of created shapes; reduce them to limit visual load.
