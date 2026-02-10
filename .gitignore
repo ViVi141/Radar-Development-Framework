@@ -1,0 +1,25 @@
+# Arma Reforger Workbench
+resourceDatabase.rdb
+*.rdb
+*.wrpl
+*.ent
+
+# Build / cache
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.sln.docstates
+
+# IDE
+.idea/
+*.iml
+
+# OS
+Thumbs.db
+.DS_Store
+Desktop.ini
+
+# Logs
+*.log
