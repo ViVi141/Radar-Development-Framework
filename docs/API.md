@@ -84,54 +84,58 @@
 - `static IEntity ResolveSubject(IEntity player, bool preferVehicle = true)` — 对给定玩家实体解析主体（载具或玩家）
 - `static vector ResolveOrigin(IEntity player = null, bool preferVehicle = true)` — 解析主体原点；player 为 null 时使用本地玩家
 
-## Demo
+## Demo（统一 API）
+
+### 统一开关
+- **RDF_LidarAutoRunner** 为演示的唯一起动入口，所有演示通过 **SetDemoEnabled** 与 **SetDemoConfig / StartWithConfig** 控制。
 
 ### RDF_LidarAutoRunner
-- `static void SetDemoEnabled(bool enabled)` — 全局开启/关闭 demo
+- `static void SetDemoEnabled(bool enabled)` — **统一开关**：开启/关闭 demo
 - `static bool IsDemoEnabled()` — 是否已启用 demo
-- `static void SetMinTickInterval(float interval)` — 设置最小 tick 间隔（秒，推荐默认 0.2）以减少 per-frame 调度开销
-- `static float GetMinTickInterval()` — 获取当前最小 tick 间隔
-- `static void StartAutoRun()` — 开始自动扫描循环
-- `static void StopAutoRun()` — 停止自动扫描循环
+- `static void StartWithConfig(RDF_LidarDemoConfig cfg)` — 应用配置并开启 demo（推荐与 `RDF_LidarDemoConfig.Create*()` 预设搭配）
+- `static void SetDemoConfig(RDF_LidarDemoConfig cfg)` — 设置当前 demo 配置（不自动开启）
+- `static RDF_LidarDemoConfig GetDemoConfig()` — 获取当前配置
+- `static void SetMinTickInterval(float interval)` — 最小 tick 间隔（秒）
+- `static float GetMinTickInterval()` — 获取最小 tick 间隔
+- `static void SetDemoSampleStrategy(RDF_LidarSampleStrategy strategy)` — 设置演示用采样策略
+- `static void SetDemoRayCount(int rays)` — 设置演示射线数（clamp）
+- `static void SetDemoColorStrategy(RDF_LidarColorStrategy strategy)` — 设置演示颜色策略
+- `static void SetDemoUpdateInterval(float interval)` — 设置演示扫描更新间隔（秒）
+- `static void StartAutoRun()` / `static void StopAutoRun()` — 内部启停（一般通过 SetDemoEnabled 即可）
 - `static bool IsRunning()` — 当前是否正在自动运行
-
-### SCR_BaseGameMode (modded bootstrap)
-- `static void SetBootstrapEnabled(bool enabled)` — 若启用，将在 `OnGameStart` 时自动 `SetDemoEnabled(true)`；默认**禁用**以避免意外激活。
 
 ---
 
-## Demo API (新增)
-
 ### RDF_LidarDemoConfig
-配置对象用于在启动 demo 时一次性传入多个设置：
+配置对象，**推荐通过静态预设工厂创建**，再配合 `SetDemoConfig` / `StartWithConfig` 使用：
 - `bool m_Enable` — 是否启用 demo（默认 false）
-- `RDF_LidarSampleStrategy m_SampleStrategy` — 要使用的采样策略（示例：`RDF_ConicalSampleStrategy`）
-- `RDF_LidarColorStrategy m_ColorStrategy` — 可选的颜色/大小策略（示例：`RDF_IndexColorStrategy`）
-- `int m_RayCount` — 覆盖扫描的射线数量（-1 表示保持不变）
-- `float m_MinTickInterval` — 覆盖 AutoRunner 的最小调度间隔（秒，-1 表示保持不变）
-- `float m_UpdateInterval` — 覆盖扫描设置的更新间隔（秒，-1 表示保持不变）
+- `RDF_LidarSampleStrategy m_SampleStrategy` — 采样策略
+- `RDF_LidarColorStrategy m_ColorStrategy` — 颜色策略（可选）
+- `int m_RayCount` — 射线数量（-1 表示不覆盖）
+- `float m_MinTickInterval` — 最小 tick 间隔（秒，-1 表示不覆盖）
+- `float m_UpdateInterval` — 扫描更新间隔（秒，-1 表示不覆盖）
+
+**预设工厂（替代原 RDF_*Demo.Start）：**
+- `static RDF_LidarDemoConfig CreateDefault(int rayCount = 256)`
+- `static RDF_LidarDemoConfig CreateHemisphere(int rayCount = 256)`
+- `static RDF_LidarDemoConfig CreateConical(float halfAngleDeg = 30.0, int rayCount = 256)`
+- `static RDF_LidarDemoConfig CreateStratified(int rayCount = 256)`
+- `static RDF_LidarDemoConfig CreateScanline(int sectors = 32, int rayCount = 256)`
 
 方法：
-- `void ApplyTo(RDF_LidarAutoRunner runner)` — 将配置安全地应用到指定的 `RDF_LidarAutoRunner`（注：也可通过 `RDF_LidarAutoRunner.SetDemoConfig()` 全局设置）。
+- `void ApplyTo(RDF_LidarAutoRunner runner)` — 将配置应用到 runner（内部通过 AutoRunner 的 SetDemo* API 实现）。
 
-### RDF_LidarAutoRunner（扩展）
-新增方法：
-- `static void SetDemoConfig(RDF_LidarDemoConfig cfg)` — 设置将被应用于下次启用 demo 的配置对象。
-- `static RDF_LidarDemoConfig GetDemoConfig()` — 获取当前（最近设置的）demo 配置。
-- `void ApplyDemoConfig()` — 实例方法：将 `m_DemoConfig` 应用到 scanner/visualizer/设置（在 `SetDemoEnabled(true)` 时自动调用）。
-- `static void SetDemoRayCount(int rays)` — 安全地在 demo scanner 上设定 `m_RayCount`（clamp）。
+### RDF_LidarDemoCycler
+策略轮换，仅调用 `RDF_LidarAutoRunner.SetDemoConfig` + `SetDemoEnabled`：
+- `static void Cycle(int rayCount = 256)` — 下一策略并开启 demo
+- `static void StartIndex(int index, int rayCount = 256)` — 按索引启动
+- `static void StartAutoCycle(float interval = 10.0)` / `StopAutoCycle()` / `SetAutoCycleInterval(float)` / `IsAutoCycling()`
 
-示例：
-```c
-RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
-cfg.m_Enable = true;
-cfg.m_SampleStrategy = new RDF_ConicalSampleStrategy(25.0);
-cfg.m_RayCount = 256;
-cfg.m_MinTickInterval = 0.25;
-cfg.m_ColorStrategy = new RDF_IndexColorStrategy();
-RDF_LidarAutoRunner.SetDemoConfig(cfg);
-RDF_LidarAutoRunner.SetDemoEnabled(true);
-```
+### SCR_BaseGameMode（统一 Bootstrap）
+- `static void SetBootstrapEnabled(bool enabled)` — **统一开关**：为 true 时在 `OnGameStart` 自动开演示；默认 **false**。
+- `static bool IsBootstrapEnabled()` — 是否启用 bootstrap
+- `static void SetBootstrapAutoCycle(bool enabled)` — 开局是否以自动轮换模式启动
+- `static void SetBootstrapAutoCycleInterval(float intervalSeconds)` — 轮换间隔（秒）
 
 ---
 

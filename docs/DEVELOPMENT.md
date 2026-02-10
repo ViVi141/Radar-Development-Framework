@@ -23,9 +23,10 @@ scripts/Game/RDF/Lidar/
   Util/
     RDF_LidarSubjectResolver.c // 解析扫描主体（玩家/载具）
   Demo/
-    RDF_LidarAutoBootstrap.c   // 可选 bootstrap（默认禁用）
-    RDF_LidarAutoRunner.c      // 自动运行演示器
-    RDF_LidarDemo_Hemisphere.c // 示例：半球采样演示 helper
+    RDF_LidarAutoBootstrap.c   // 统一 bootstrap（默认关闭）
+    RDF_LidarAutoRunner.c      // 演示唯一入口与统一开关
+    RDF_LidarDemoConfig.c      // 配置与预设工厂 Create*()
+    RDF_LidarDemo_Cycler.c     // 策略轮换（仅调用 API）
 ```
 
 ## 数据流
@@ -43,31 +44,15 @@ scripts/Game/RDF/Lidar/
 
 新增：`scripts/tests/lidar_sample_checks.c` 提供了基础自检函数以验证采样方向的单位长度与锥体边界。
 
-## Demo 与隔离
-- `RDF_LidarAutoRunner` 默认关闭，需显式调用 `SetDemoEnabled(true)` 才会运行。
-- 若项目希望在游戏启动时自动启用 demo，可在 bootstrap 模块中调用 `SCR_BaseGameMode.SetBootstrapEnabled(true)`；默认不建议启用以避免影响其他模组。
-- 示例：使用半球采样并启动 demo：
-  - 直接设置策略并启动：
-    - `RDF_LidarAutoRunner.SetDemoSampleStrategy(new RDF_HemisphereSampleStrategy());`
-    - `RDF_LidarAutoRunner.SetDemoEnabled(true);`
-  - 或使用便捷 helper：
-    - `RDF_HemisphereDemo.Start();` / `RDF_HemisphereDemo.Stop();`
-- 新增：**Demo 配置（`RDF_LidarDemoConfig`）**
-  - 创建并设置配置：
-    - `RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();`
-    - `cfg.m_Enable = true;`
-    - `cfg.m_SampleStrategy = new RDF_ConicalSampleStrategy(25.0);`
-    - `cfg.m_RayCount = 256;`
-    - `cfg.m_MinTickInterval = 0.25;`
-    - `cfg.m_ColorStrategy = new RDF_IndexColorStrategy();`
-    - `RDF_LidarAutoRunner.SetDemoConfig(cfg);`
-    - `RDF_LidarAutoRunner.SetDemoEnabled(true);`
-  - `RDF_LidarDemoConfig.ApplyTo()` 会把配置安全地应用到 demo（采样策略、射线数、可视化色彩、tick 间隔等）。
-- 新增：**更多 demo helper**
-  - `RDF_ScanlineDemo`：`Start(sectors = 32, rayCount = 256)` / `Stop()`。
-  - `RDF_LidarDemoCycler`：`Cycle(rayCount = 256)`（循环策略进行对比），`StartIndex(index, rayCount)`。
-  - 可选 bootstrap：`RDF_LidarAutoCycleBootstrap.c` 提供 `SCR_BaseGameMode.SetAutoCycleBootstrapEnabled(bool)`，用于在游戏启动时自动开启策略轮换（默认为禁用）。
-  - 自动轮换：`RDF_LidarDemoCycler.StartAutoCycle(intervalSeconds = 10.0)` / `RDF_LidarDemoCycler.StopAutoCycle()` / `RDF_LidarDemoCycler.SetAutoCycleInterval(seconds)`。
+## Demo 与隔离（统一 API + 统一开关）
+- **统一开关**：`RDF_LidarAutoRunner.SetDemoEnabled(true/false)` 为演示的唯一起停入口。
+- **统一配置入口**：所有演示通过 `RDF_LidarDemoConfig` 预设或自定义 config + `SetDemoConfig()` / `StartWithConfig()` 完成，不再使用独立 Demo 类（如原 `RDF_HemisphereDemo`、`RDF_ConicalDemo` 等已移除）。
+- 预设启动示例：
+  - `RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateHemisphere(256));`
+  - `RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateConical(25.0, 256));`
+- 自定义配置：`RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();` 设置各字段后 `RDF_LidarAutoRunner.SetDemoConfig(cfg); SetDemoEnabled(true);`。
+- **统一 Bootstrap**：仅一个文件 `RDF_LidarAutoBootstrap.c`，`SCR_BaseGameMode.SetBootstrapEnabled(true)` 在游戏启动时开演示（默认策略）；`SetBootstrapAutoCycle(true)` 可改为开局自动轮换策略，轮换间隔由 `SetBootstrapAutoCycleInterval(seconds)` 设置。默认 bootstrap 为 **关闭**。
+- **RDF_LidarDemoCycler**：仅调用 `RDF_LidarAutoRunner.SetDemoConfig` + `SetDemoEnabled`，用于策略轮换与自动轮换。
 
 ## 性能建议
 - 将 `m_RayCount` 限制在合理范围内（默认 512），并在运行时降低以减小开销。

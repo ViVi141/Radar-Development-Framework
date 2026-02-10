@@ -1,4 +1,4 @@
-// Demo cycler: cycles through a set of sample strategies for quick visual comparison.
+// Demo cycler: cycles through a set of sample strategies. Uses only RDF_LidarAutoRunner.SetDemoConfig() and SetDemoEnabled().
 class RDF_LidarDemoCycler
 {
     protected static int s_Index = -1;

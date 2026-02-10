@@ -1,19 +1,41 @@
-// Global auto-start for LiDAR demo (opt-in by including this file).
+// Unified bootstrap for LiDAR demo: single switch, opt-in. Uses only public API.
 modded class SCR_BaseGameMode
 {
-    // Default: disabled to avoid unexpected demo activation when this file is included.
-    protected static bool s_EnableBootstrap = false;
+    // Master switch: when true, demo is started on game start. Default: false.
+    protected static bool s_BootstrapEnabled = true;
+    // When true, start in auto-cycle mode (rotate strategies). When false, start with default preset.
+    protected static bool s_BootstrapAutoCycle = false;
+    protected static float s_BootstrapAutoCycleInterval = 10.0;
 
     override void OnGameStart()
     {
         super.OnGameStart();
-        if (s_EnableBootstrap)
-            RDF_LidarAutoRunner.SetDemoEnabled(true);
+        if (!s_BootstrapEnabled)
+            return;
+
+        if (s_BootstrapAutoCycle)
+            RDF_LidarDemoCycler.StartAutoCycle(s_BootstrapAutoCycleInterval);
+        else
+            RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateDefault());
     }
 
-    // Set to true to enable global auto-start.
     static void SetBootstrapEnabled(bool enabled)
     {
-        s_EnableBootstrap = enabled;
+        s_BootstrapEnabled = enabled;
+    }
+
+    static bool IsBootstrapEnabled()
+    {
+        return s_BootstrapEnabled;
+    }
+
+    static void SetBootstrapAutoCycle(bool enabled)
+    {
+        s_BootstrapAutoCycle = enabled;
+    }
+
+    static void SetBootstrapAutoCycleInterval(float intervalSeconds)
+    {
+        s_BootstrapAutoCycleInterval = Math.Max(0.1, intervalSeconds);
     }
 }

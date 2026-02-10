@@ -127,17 +127,18 @@ class RDF_LidarAutoRunner
         return GetInstance().m_DemoConfig;
     }
 
-    // Apply current demo config to the running demo (called on Start)
+    // Apply current demo config to the running demo (called on SetDemoEnabled(true)).
     void ApplyDemoConfig()
     {
         if (!m_DemoConfig) return;
         m_DemoConfig.ApplyTo(this);
     }
 
-    // Convenience helper: start the demo using hemisphere-only sampling.
-    static void StartHemisphereDemo()
+    // Single API entry: apply config and turn demo on. Use RDF_LidarDemoConfig.Create*() for presets.
+    static void StartWithConfig(RDF_LidarDemoConfig cfg)
     {
-        SetDemoSampleStrategy(new RDF_HemisphereSampleStrategy());
+        if (!cfg) return;
+        SetDemoConfig(cfg);
         SetDemoEnabled(true);
     }
 
