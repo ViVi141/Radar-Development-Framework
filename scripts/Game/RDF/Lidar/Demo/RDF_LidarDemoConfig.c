@@ -61,41 +61,33 @@ class RDF_LidarDemoConfig
         return cfg;
     }
 
+    // Build config from an existing strategy (e.g. for Cycler). Optionally set color strategy.
+    static RDF_LidarDemoConfig FromStrategy(RDF_LidarSampleStrategy strategy, int rayCount = 256, RDF_LidarColorStrategy colorStrategy = null)
+    {
+        if (!strategy) return null;
+        RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
+        cfg.m_Enable = true;
+        cfg.m_SampleStrategy = strategy;
+        cfg.m_RayCount = Math.Clamp(rayCount, 1, 4096);
+        if (colorStrategy)
+            cfg.m_ColorStrategy = colorStrategy;
+        return cfg;
+    }
+
     // ---------- Apply config to runner (uses RDF_LidarAutoRunner public API only) ----------
 
     void ApplyTo(RDF_LidarAutoRunner runner)
     {
         if (!runner) return;
         if (m_SampleStrategy)
-        {
             RDF_LidarAutoRunner.SetDemoSampleStrategy(m_SampleStrategy);
-            Print("[RDF Demo] Applied sample strategy: " + m_SampleStrategy.ClassName());
-        }
-
         if (m_RayCount > 0)
-        {
             RDF_LidarAutoRunner.SetDemoRayCount(m_RayCount);
-            Print("[RDF Demo] Applied ray count: " + m_RayCount);
-        }
-
         if (m_MinTickInterval > 0.0)
-        {
             RDF_LidarAutoRunner.SetMinTickInterval(m_MinTickInterval);
-            Print("[RDF Demo] Applied min tick interval: " + m_MinTickInterval);
-        }
-
         if (m_ColorStrategy)
-        {
-            // apply color strategy via AutoRunner public API
             RDF_LidarAutoRunner.SetDemoColorStrategy(m_ColorStrategy);
-            Print("[RDF Demo] Applied color strategy: " + m_ColorStrategy.ClassName());
-        }
-
         if (m_UpdateInterval > 0.0)
-        {
-            // apply update interval via AutoRunner public API
             RDF_LidarAutoRunner.SetDemoUpdateInterval(Math.Max(0.01, m_UpdateInterval));
-            Print("[RDF Demo] Applied update interval: " + m_UpdateInterval);
-        }
     }
 }

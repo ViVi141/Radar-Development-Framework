@@ -19,36 +19,34 @@ class RDF_LidarDemoCycler
         s_Strategies.Insert(new RDF_ScanlineSampleStrategy(32));
     }
 
-    // Cycle to the next strategy and start demo.
+    // Cycle to the next strategy and start demo. Uses RDF_LidarDemoConfig.FromStrategy().
     static void Cycle(int rayCount = 256)
     {
         InitList();
         s_Index = (s_Index + 1) % s_Strategies.Count();
         RDF_LidarSampleStrategy strat = s_Strategies.Get(s_Index);
-        RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
-        cfg.m_Enable = true;
-        cfg.m_SampleStrategy = strat;
-        cfg.m_RayCount = Math.Clamp(rayCount, 1, 4096);
-        RDF_LidarAutoRunner.SetDemoConfig(cfg);
-        RDF_LidarAutoRunner.SetDemoEnabled(true);
-        Print("[RDF] Demo started: " + strat.ClassName() + " (index=" + s_Index + ")");
+        RDF_LidarDemoConfig cfg = RDF_LidarDemoConfig.FromStrategy(strat, rayCount, new RDF_IndexColorStrategy());
+        if (cfg)
+        {
+            RDF_LidarAutoRunner.SetDemoConfig(cfg);
+            RDF_LidarAutoRunner.SetDemoEnabled(true);
+        }
     }
 
-    // Start a specific strategy by index
+    // Start a specific strategy by index.
     static void StartIndex(int index, int rayCount = 256)
     {
         InitList();
-        if (index < 0) index = -index; // inline abs
+        if (index < 0) index = -index;
         index = index % s_Strategies.Count();
-        RDF_LidarSampleStrategy strat = s_Strategies.Get(index);
-        RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
-        cfg.m_Enable = true;
-        cfg.m_SampleStrategy = strat;
-        cfg.m_RayCount = Math.Clamp(rayCount, 1, 4096);
-        RDF_LidarAutoRunner.SetDemoConfig(cfg);
-        RDF_LidarAutoRunner.SetDemoEnabled(true);
         s_Index = index;
-        Print("[RDF] Demo started: " + strat.ClassName() + " (index=" + s_Index + ")");
+        RDF_LidarSampleStrategy strat = s_Strategies.Get(index);
+        RDF_LidarDemoConfig cfg = RDF_LidarDemoConfig.FromStrategy(strat, rayCount, new RDF_IndexColorStrategy());
+        if (cfg)
+        {
+            RDF_LidarAutoRunner.SetDemoConfig(cfg);
+            RDF_LidarAutoRunner.SetDemoEnabled(true);
+        }
     }
 
     static void Stop()

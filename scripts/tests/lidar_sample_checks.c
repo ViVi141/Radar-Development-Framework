@@ -25,12 +25,13 @@ static void RDF_TestConicalBounds(RDF_ConicalSampleStrategy strategy, int count 
     Print("[RDF TEST] Conical bounds check complete (halfAngle=" + strategy.m_HalfAngleDeg + ")");
 }
 
-// Run quick checks
+// Run quick checks for all built-in strategies.
 static void RDF_RunAllSampleChecks()
 {
     RDF_TestStrategyUnitLength(new RDF_UniformSampleStrategy(), 128);
+    RDF_TestStrategyUnitLength(new RDF_HemisphereSampleStrategy(), 128);
     RDF_TestStrategyUnitLength(new RDF_StratifiedSampleStrategy(), 128);
-    RDF_TestStrategyUnitLength(new RDF_ScanlineSampleStrategy(), 128);
+    RDF_TestStrategyUnitLength(new RDF_ScanlineSampleStrategy(32), 128);
     RDF_TestStrategyUnitLength(new RDF_ConicalSampleStrategy(30.0), 128);
     RDF_TestConicalBounds(new RDF_ConicalSampleStrategy(30.0), 128);
 
