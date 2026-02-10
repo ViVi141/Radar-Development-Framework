@@ -116,6 +116,31 @@ class RDF_LidarAutoRunner
             vs.m_DrawOriginAxis = draw;
     }
 
+    // When true: render game view + point cloud. When false: render point cloud only (solid background + disable scene render).
+    static void SetDemoRenderWorld(bool renderWorld)
+    {
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (!inst || !inst.m_Visualizer)
+            return;
+        RDF_LidarVisualSettings vs = inst.m_Visualizer.GetSettings();
+        if (vs)
+            vs.m_RenderWorld = renderWorld;
+        PlayerController controller = GetGame().GetPlayerController();
+        if (controller)
+            controller.SetCharacterCameraRenderActive(renderWorld);
+    }
+
+    static bool GetDemoRenderWorld()
+    {
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (!inst || !inst.m_Visualizer)
+            return true;
+        RDF_LidarVisualSettings vs = inst.m_Visualizer.GetSettings();
+        if (!vs)
+            return true;
+        return vs.m_RenderWorld;
+    }
+
     // When true, installs built-in handler that prints hit count and closest distance after each scan (uses RDF_LidarSampleUtils).
     static void SetDemoVerbose(bool verbose)
     {
@@ -149,6 +174,9 @@ class RDF_LidarAutoRunner
         RDF_LidarAutoRunner inst = GetInstance();
         if (!inst) return;
         inst.m_DemoConfig = cfg;
+        // If demo is already running, apply the new config so e.g. m_RenderWorld takes effect immediately.
+        if (s_AutoEnabled && inst.m_DemoConfig)
+            inst.ApplyDemoConfig();
     }
 
     static RDF_LidarDemoConfig GetDemoConfig()

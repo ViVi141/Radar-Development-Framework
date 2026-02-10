@@ -85,6 +85,9 @@ RDF_LidarAutoRunner.SetMinTickInterval(0.2);
 RDF_LidarAutoRunner.SetDemoRayCount(128);
 RDF_LidarAutoRunner.SetDemoSampleStrategy(new RDF_HemisphereSampleStrategy());
 RDF_LidarAutoRunner.SetDemoColorStrategy(new RDF_IndexColorStrategy());
+// 切换渲染：true = 游戏画面+点云，false = 仅点云（纯色背景）
+RDF_LidarAutoRunner.SetDemoRenderWorld(true);   // 或 false 仅点云
+RDF_LidarAutoRunner.GetDemoRenderWorld();
 ```
 
 ### 自检（控制台/脚本）
@@ -104,6 +107,7 @@ RDF_RunAllSampleChecks();
 ## 常见设置
 - 扫描半径、射线数量与更新频率：在 `RDF_LidarSettings` 中配置（clamp 与校验已实现）。
 - 可视化细节：在 `RDF_LidarVisualSettings` 中控制点大小、分段数、透明度等。调试时可开启 `m_DrawOriginAxis = true` 绘制扫描原点与 X/Y/Z 三轴。
+- **游戏+点云 / 仅点云**：`m_RenderWorld = true`（默认）为游戏画面+点云；`false` 为仅点云（相机前黑色四边形 + 关闭场景渲染）。Demo 下用 `SetDemoRenderWorld(false)` 或 config 的 `m_RenderWorld = false`。
 
 ---
 

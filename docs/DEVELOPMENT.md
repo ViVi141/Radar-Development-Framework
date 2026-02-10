@@ -16,17 +16,28 @@ scripts/Game/RDF/Lidar/
     RDF_LidarSettings.c        // 参数与校验
     RDF_LidarTypes.c           // 数据结构（RDF_LidarSample 等）
     RDF_LidarScanner.c         // 扫描与射线构建
-    RDF_HemisphereSampleStrategy.c // 示例策略（仅采样上半球）
+    RDF_LidarSampleStrategy.c  // 采样策略接口与默认均匀策略
+    RDF_HemisphereSampleStrategy.c
+    RDF_ConicalSampleStrategy.c
+    RDF_StratifiedSampleStrategy.c
+    RDF_ScanlineSampleStrategy.c
+    RDF_SweepSampleStrategy.c  // 雷达式扇区旋转扫描
   Visual/
-    RDF_LidarVisualSettings.c  // 可视化参数
-    RDF_LidarVisualizer.c      // 渲染与数据获取
+    RDF_LidarVisualSettings.c  // 可视化参数（含 m_RenderWorld 仅点云开关）
+    RDF_LidarVisualizer.c      // 渲染与数据获取（仅点云时在相机前绘制黑色四边形）
+    RDF_LidarColorStrategy.c   // 颜色策略接口与默认实现
+    RDF_IndexColorStrategy.c
   Util/
     RDF_LidarSubjectResolver.c // 解析扫描主体（玩家/载具）
+    RDF_LidarExport.c          // CSV 导出
+    RDF_LidarSampleUtils.c     // 统计与过滤
+    RDF_LidarScanCompleteHandler.c // 扫描完成回调基类
   Demo/
     RDF_LidarAutoBootstrap.c   // 统一 bootstrap（默认关闭）
     RDF_LidarAutoRunner.c      // 演示唯一入口与统一开关
     RDF_LidarDemoConfig.c      // 配置与预设工厂 Create*()
     RDF_LidarDemo_Cycler.c     // 策略轮换（仅调用 API）
+    RDF_LidarDemoStatsHandler.c // 内置统计回调（命中数、最近距离）
 ```
 
 ## 数据流
@@ -50,9 +61,10 @@ scripts/Game/RDF/Lidar/
 - 预设启动示例：
   - `RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateHemisphere(256));`
   - `RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateConical(25.0, 256));`
-- 自定义配置：`RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();` 设置各字段后 `RDF_LidarAutoRunner.SetDemoConfig(cfg); SetDemoEnabled(true);`。
+- 自定义配置：`RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();` 设置各字段后 `RDF_LidarAutoRunner.SetDemoConfig(cfg); SetDemoEnabled(true);`。若 demo 已开启，再次调用 `SetDemoConfig(cfg)` 会立即应用新配置。
 - **统一 Bootstrap**：仅一个文件 `RDF_LidarAutoBootstrap.c`，`SCR_BaseGameMode.SetBootstrapEnabled(true)` 在游戏启动时开演示（默认策略）；`SetBootstrapAutoCycle(true)` 可改为开局自动轮换策略，轮换间隔由 `SetBootstrapAutoCycleInterval(seconds)` 设置。默认 bootstrap 为 **关闭**。
 - **RDF_LidarDemoCycler**：仅调用 `RDF_LidarAutoRunner.SetDemoConfig` + `SetDemoEnabled`，用于策略轮换与自动轮换。
+- **仅点云模式**：`SetDemoRenderWorld(false)` 或 config 中 `m_RenderWorld = false` 时，在相机前绘制黑色四边形遮挡场景，并调用 `PlayerController.SetCharacterCameraRenderActive(false)` 关闭场景渲染；点云因 NOZBUFFER 绘制在上层。
 
 ## 性能建议
 - 将 `m_RayCount` 限制在合理范围内（默认 512），并在运行时降低以减小开销。

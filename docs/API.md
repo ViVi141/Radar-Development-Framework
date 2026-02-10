@@ -55,6 +55,7 @@
 - `m_UseDistanceGradient` (bool): 是否按距离渐变着色（默认 true）；为 false 时命中为红、未命中为橙
 - `m_DrawOriginAxis` (bool): 是否绘制扫描原点与局部 X/Y/Z 三轴（默认 false，调试用）
 - `m_OriginAxisLength` (float): 三轴长度（默认 0.8）
+- `m_RenderWorld` (bool): 为 true 时渲染游戏画面+点云；为 false 时仅渲染点云（在相机前绘制黑色四边形遮挡场景，并通过 `SetCharacterCameraRenderActive(false)` 关闭场景渲染，默认 true）
 
 ### RDF_LidarVisualizer
 主要方法：
@@ -118,7 +119,7 @@
 - `static void SetDemoEnabled(bool enabled)` — **统一开关**：开启/关闭 demo
 - `static bool IsDemoEnabled()` — 是否已启用 demo
 - `static void StartWithConfig(RDF_LidarDemoConfig cfg)` — 应用配置并开启 demo（推荐与 `RDF_LidarDemoConfig.Create*()` 预设搭配）
-- `static void SetDemoConfig(RDF_LidarDemoConfig cfg)` — 设置当前 demo 配置（不自动开启）
+- `static void SetDemoConfig(RDF_LidarDemoConfig cfg)` — 设置当前 demo 配置（不自动开启）；若 demo 已在运行则立即应用新配置（如 `m_RenderWorld` 等）
 - `static RDF_LidarDemoConfig GetDemoConfig()` — 获取当前配置
 - `static void SetMinTickInterval(float interval)` — 最小 tick 间隔（秒）
 - `static float GetMinTickInterval()` — 获取最小 tick 间隔
@@ -129,6 +130,8 @@
 - `static void SetScanCompleteHandler(RDF_LidarScanCompleteHandler handler)` — 设置扫描完成回调（传 null 清除）
 - `static RDF_LidarScanCompleteHandler GetScanCompleteHandler()` — 获取当前回调
 - `static void SetDemoDrawOriginAxis(bool draw)` — 是否在 demo 中绘制扫描原点与三轴（对应 VisualSettings.m_DrawOriginAxis）
+- `static void SetDemoRenderWorld(bool renderWorld)` — 为 true 时渲染游戏画面+点云，为 false 时仅渲染点云；内部会同步调用 `PlayerController.SetCharacterCameraRenderActive(renderWorld)` 以关闭/恢复场景渲染
+- `static bool GetDemoRenderWorld()` — 获取当前是否渲染游戏画面（默认 true）
 - `static void SetDemoVerbose(bool verbose)` — 为 true 时使用内置回调每帧打印命中数与最近距离（使用 RDF_LidarSampleUtils）
 - `static void StartAutoRun()` / `static void StopAutoRun()` — 内部启停（一般通过 SetDemoEnabled 即可）
 - `static bool IsRunning()` — 当前是否正在自动运行
@@ -145,6 +148,7 @@
 - `float m_UpdateInterval` — 扫描更新间隔（秒，-1 表示不覆盖）
 - `bool m_DrawOriginAxis` — 为 true 时 demo 绘制扫描原点与三轴（ApplyTo 时通过 SetDemoDrawOriginAxis 应用）
 - `bool m_Verbose` — 为 true 时 demo 每帧打印命中数与最近距离（ApplyTo 时通过 SetDemoVerbose 应用）
+- `bool m_RenderWorld` — 为 true 时渲染游戏画面+点云，为 false 时仅渲染点云（ApplyTo 时通过 SetDemoRenderWorld 应用）
 
 **预设工厂（替代原 RDF_*Demo.Start）：**
 - `static RDF_LidarDemoConfig CreateDefault(int rayCount = 256)`

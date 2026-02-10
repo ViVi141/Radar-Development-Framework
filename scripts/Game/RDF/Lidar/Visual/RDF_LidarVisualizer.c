@@ -58,6 +58,10 @@ class RDF_LidarVisualizer
 
         scanner.Scan(subject, m_Samples);
 
+        // When "point cloud only": draw a black quad in front of the camera to hide the world (point cloud uses NOZBUFFER so it draws on top).
+        if (!m_Settings.m_RenderWorld && m_DebugShapes)
+            DrawPointCloudOnlyBackground();
+
         if (m_Settings.m_DrawOriginAxis && m_Samples.Count() > 0)
             DrawOriginAxis(subject, m_Samples.Get(0).m_Start);
 
@@ -72,6 +76,44 @@ class RDF_LidarVisualizer
             if (m_Settings.m_DrawPoints)
                 DrawPointFromSample(sample);
         }
+    }
+
+    // Draw a large black quad just in front of the local camera to occlude the world (used when m_RenderWorld is false).
+    protected void DrawPointCloudOnlyBackground()
+    {
+        if (!m_DebugShapes)
+            return;
+        PlayerController controller = GetGame().GetPlayerController();
+        if (!controller)
+            return;
+        PlayerCamera playerCam = controller.GetPlayerCamera();
+        if (!playerCam)
+            return;
+        vector mat[4];
+        playerCam.GetWorldCameraTransform(mat);
+        vector pos = mat[3];
+        vector forward = mat[2];
+        vector right = mat[0];
+        vector up = mat[1];
+        float dist = 1.0;
+        float halfSize = 100.0;
+        vector center = pos + (forward * dist);
+        vector p0 = center - (right * halfSize) - (up * halfSize);
+        vector p1 = center + (right * halfSize) - (up * halfSize);
+        vector p2 = center + (right * halfSize) + (up * halfSize);
+        vector p3 = center - (right * halfSize) + (up * halfSize);
+        vector tris[6];
+        tris[0] = p0;
+        tris[1] = p1;
+        tris[2] = p2;
+        tris[3] = p0;
+        tris[4] = p2;
+        tris[5] = p3;
+        int bgColor = ARGBF(1.0, 0.0, 0.0, 0.0);
+        int bgFlags = ShapeFlags.NOOUTLINE | ShapeFlags.DOUBLESIDE;
+        Shape bgShape = Shape.CreateTris(bgColor, bgFlags, tris, 2);
+        if (bgShape)
+            m_DebugShapes.Insert(bgShape);
     }
 
     protected void DrawOriginAxis(IEntity subject, vector origin)

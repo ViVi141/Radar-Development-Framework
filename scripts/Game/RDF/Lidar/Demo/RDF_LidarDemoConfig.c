@@ -10,12 +10,13 @@ class RDF_LidarDemoConfig
     float m_UpdateInterval = -1.0; // scanner update interval override (seconds) or -1 to leave
     bool m_DrawOriginAxis = false; // when true, demo draws scan origin and X/Y/Z axes (debug)
     bool m_Verbose = false; // when true, demo prints hit count and closest distance after each scan
+    bool m_RenderWorld = true; // when true: game view + point cloud; when false: point cloud only (solid background)
 
     void RDF_LidarDemoConfig() {}
 
     // ---------- Preset factory API (use these instead of legacy RDF_*Demo.Start) ----------
 
-    static RDF_LidarDemoConfig CreateDefault(int rayCount = 256)
+    static RDF_LidarDemoConfig CreateDefault(int rayCount = 512)
     {
         RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
         cfg.m_Enable = true;
@@ -36,7 +37,7 @@ class RDF_LidarDemoConfig
         return cfg;
     }
 
-    static RDF_LidarDemoConfig CreateHemisphere(int rayCount = 256)
+    static RDF_LidarDemoConfig CreateHemisphere(int rayCount = 512)
     {
         RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
         cfg.m_Enable = true;
@@ -45,7 +46,7 @@ class RDF_LidarDemoConfig
         return cfg;
     }
 
-    static RDF_LidarDemoConfig CreateConical(float halfAngleDeg = 30.0, int rayCount = 256)
+    static RDF_LidarDemoConfig CreateConical(float halfAngleDeg = 30.0, int rayCount = 512)
     {
         RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
         cfg.m_Enable = true;
@@ -55,7 +56,7 @@ class RDF_LidarDemoConfig
         return cfg;
     }
 
-    static RDF_LidarDemoConfig CreateStratified(int rayCount = 256)
+    static RDF_LidarDemoConfig CreateStratified(int rayCount = 512)
     {
         RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
         cfg.m_Enable = true;
@@ -65,7 +66,7 @@ class RDF_LidarDemoConfig
         return cfg;
     }
 
-    static RDF_LidarDemoConfig CreateScanline(int sectors = 32, int rayCount = 256)
+    static RDF_LidarDemoConfig CreateScanline(int sectors = 32, int rayCount = 512)
     {
         RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
         cfg.m_Enable = true;
@@ -86,7 +87,7 @@ class RDF_LidarDemoConfig
     }
 
     // Build config from an existing strategy (e.g. for Cycler). Optionally set color strategy.
-    static RDF_LidarDemoConfig FromStrategy(RDF_LidarSampleStrategy strategy, int rayCount = 256, RDF_LidarColorStrategy colorStrategy = null)
+    static RDF_LidarDemoConfig FromStrategy(RDF_LidarSampleStrategy strategy, int rayCount = 512, RDF_LidarColorStrategy colorStrategy = null)
     {
         if (!strategy) return null;
         RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
@@ -115,5 +116,6 @@ class RDF_LidarDemoConfig
             RDF_LidarAutoRunner.SetDemoUpdateInterval(Math.Max(0.01, m_UpdateInterval));
         RDF_LidarAutoRunner.SetDemoDrawOriginAxis(m_DrawOriginAxis);
         RDF_LidarAutoRunner.SetDemoVerbose(m_Verbose);
+        RDF_LidarAutoRunner.SetDemoRenderWorld(m_RenderWorld);
     }
 }
