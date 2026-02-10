@@ -34,6 +34,7 @@ static void RDF_RunAllSampleChecks()
     RDF_TestStrategyUnitLength(new RDF_ScanlineSampleStrategy(32), 128);
     RDF_TestStrategyUnitLength(new RDF_ConicalSampleStrategy(30.0), 128);
     RDF_TestConicalBounds(new RDF_ConicalSampleStrategy(30.0), 128);
+    RDF_TestStrategyUnitLength(new RDF_SweepSampleStrategy(30.0, 20.0, 45.0), 128);
 
     Print("[RDF TEST] All sample checks finished.");
 }

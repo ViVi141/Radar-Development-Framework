@@ -8,6 +8,8 @@ class RDF_LidarDemoConfig
     int m_RayCount = -1; // -1 = leave as-is
     float m_MinTickInterval = -1.0; // -1 = leave as-is
     float m_UpdateInterval = -1.0; // scanner update interval override (seconds) or -1 to leave
+    bool m_DrawOriginAxis = false; // when true, demo draws scan origin and X/Y/Z axes (debug)
+    bool m_Verbose = false; // when true, demo prints hit count and closest distance after each scan
 
     void RDF_LidarDemoConfig() {}
 
@@ -19,6 +21,18 @@ class RDF_LidarDemoConfig
         cfg.m_Enable = true;
         cfg.m_SampleStrategy = new RDF_UniformSampleStrategy();
         cfg.m_RayCount = Math.Clamp(rayCount, 1, 4096);
+        return cfg;
+    }
+
+    // Like CreateDefault but with origin axis and verbose stats (showcases new features).
+    static RDF_LidarDemoConfig CreateDefaultDebug(int rayCount = 512)
+    {
+        RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
+        cfg.m_Enable = true;
+        cfg.m_SampleStrategy = new RDF_UniformSampleStrategy();
+        cfg.m_RayCount = Math.Clamp(rayCount, 1, 4096);
+        cfg.m_DrawOriginAxis = true;
+        cfg.m_Verbose = true;
         return cfg;
     }
 
@@ -61,6 +75,16 @@ class RDF_LidarDemoConfig
         return cfg;
     }
 
+    static RDF_LidarDemoConfig CreateSweep(float halfAngleDeg = 30.0, float sweepWidthDeg = 20.0, float sweepSpeedDegPerSec = 45.0, int rayCount = 512)
+    {
+        RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
+        cfg.m_Enable = true;
+        cfg.m_SampleStrategy = new RDF_SweepSampleStrategy(halfAngleDeg, sweepWidthDeg, sweepSpeedDegPerSec);
+        cfg.m_RayCount = Math.Clamp(rayCount, 1, 4096);
+        cfg.m_ColorStrategy = new RDF_IndexColorStrategy();
+        return cfg;
+    }
+
     // Build config from an existing strategy (e.g. for Cycler). Optionally set color strategy.
     static RDF_LidarDemoConfig FromStrategy(RDF_LidarSampleStrategy strategy, int rayCount = 256, RDF_LidarColorStrategy colorStrategy = null)
     {
@@ -89,5 +113,7 @@ class RDF_LidarDemoConfig
             RDF_LidarAutoRunner.SetDemoColorStrategy(m_ColorStrategy);
         if (m_UpdateInterval > 0.0)
             RDF_LidarAutoRunner.SetDemoUpdateInterval(Math.Max(0.01, m_UpdateInterval));
+        RDF_LidarAutoRunner.SetDemoDrawOriginAxis(m_DrawOriginAxis);
+        RDF_LidarAutoRunner.SetDemoVerbose(m_Verbose);
     }
 }

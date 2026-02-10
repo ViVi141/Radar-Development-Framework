@@ -2,7 +2,7 @@
 modded class SCR_BaseGameMode
 {
     // Master switch: when true, demo is started on game start. Default: false.
-    protected static bool s_BootstrapEnabled = false;
+    protected static bool s_BootstrapEnabled = true;
     // When true, start in auto-cycle mode (rotate strategies). When false, start with default preset.
     protected static bool s_BootstrapAutoCycle = false;
     protected static float s_BootstrapAutoCycleInterval = 10.0;
@@ -14,9 +14,13 @@ modded class SCR_BaseGameMode
             return;
 
         if (s_BootstrapAutoCycle)
+        {
             RDF_LidarDemoCycler.StartAutoCycle(s_BootstrapAutoCycleInterval);
+            RDF_LidarAutoRunner.SetDemoDrawOriginAxis(true);
+            RDF_LidarAutoRunner.SetDemoVerbose(true);
+        }
         else
-            RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateDefault());
+            RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateDefaultDebug());
     }
 
     static void SetBootstrapEnabled(bool enabled)

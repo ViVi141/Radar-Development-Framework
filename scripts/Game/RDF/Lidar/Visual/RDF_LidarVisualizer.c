@@ -58,6 +58,9 @@ class RDF_LidarVisualizer
 
         scanner.Scan(subject, m_Samples);
 
+        if (m_Settings.m_DrawOriginAxis && m_Samples.Count() > 0)
+            DrawOriginAxis(subject, m_Samples.Get(0).m_Start);
+
         foreach (RDF_LidarSample sample : m_Samples)
         {
             if (m_Settings.m_ShowHitsOnly && !sample.m_Hit)
@@ -68,9 +71,35 @@ class RDF_LidarVisualizer
 
             if (m_Settings.m_DrawPoints)
                 DrawPointFromSample(sample);
-
-
         }
+    }
+
+    protected void DrawOriginAxis(IEntity subject, vector origin)
+    {
+        if (!m_DebugShapes || !subject || m_Settings.m_OriginAxisLength <= 0.0)
+            return;
+
+        vector worldMat[4];
+        subject.GetWorldTransform(worldMat);
+        vector axisX = worldMat[0];
+        vector axisY = worldMat[1];
+        vector axisZ = worldMat[2];
+        float len = m_Settings.m_OriginAxisLength;
+
+        vector endX[2];
+        endX[0] = origin;
+        endX[1] = origin + axisX * len;
+        m_DebugShapes.Insert(Shape.CreateLines(ARGBF(1, 1, 0, 0), ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER, endX, 2));
+
+        vector endY[2];
+        endY[0] = origin;
+        endY[1] = origin + axisY * len;
+        m_DebugShapes.Insert(Shape.CreateLines(ARGBF(1, 0, 1, 0), ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER, endY, 2));
+
+        vector endZ[2];
+        endZ[0] = origin;
+        endZ[1] = origin + axisZ * len;
+        m_DebugShapes.Insert(Shape.CreateLines(ARGBF(1, 0, 0, 1), ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER, endZ, 2));
     }
 
     // New: draw point using the full sample so color/size strategies can access metadata

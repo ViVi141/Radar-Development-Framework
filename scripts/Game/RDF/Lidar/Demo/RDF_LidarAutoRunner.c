@@ -8,8 +8,9 @@ class RDF_LidarAutoRunner
 
     protected ref RDF_LidarScanner m_Scanner;
     protected ref RDF_LidarVisualizer m_Visualizer;
-    // Optional demo config applied when demo starts
     protected ref RDF_LidarDemoConfig m_DemoConfig;
+    protected ref RDF_LidarScanCompleteHandler m_ScanCompleteHandler;
+    protected ref RDF_LidarDemoStatsHandler m_DemoStatsHandler;
     protected float m_LastScanTime = -1.0;
     protected bool m_Running = false;
 
@@ -105,6 +106,34 @@ class RDF_LidarAutoRunner
         inst.m_Visualizer.SetColorStrategy(strategy);
     }
 
+    // Draw scan origin and X/Y/Z axes in the demo (uses RDF_LidarVisualSettings.m_DrawOriginAxis).
+    static void SetDemoDrawOriginAxis(bool draw)
+    {
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (!inst || !inst.m_Visualizer) return;
+        RDF_LidarVisualSettings vs = inst.m_Visualizer.GetSettings();
+        if (vs)
+            vs.m_DrawOriginAxis = draw;
+    }
+
+    // When true, installs built-in handler that prints hit count and closest distance after each scan (uses RDF_LidarSampleUtils).
+    static void SetDemoVerbose(bool verbose)
+    {
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (!inst) return;
+        if (verbose)
+        {
+            if (!inst.m_DemoStatsHandler)
+                inst.m_DemoStatsHandler = new RDF_LidarDemoStatsHandler();
+            inst.m_ScanCompleteHandler = inst.m_DemoStatsHandler;
+        }
+        else
+        {
+            if (inst.m_ScanCompleteHandler == inst.m_DemoStatsHandler)
+                inst.m_ScanCompleteHandler = null;
+        }
+    }
+
     // Set the demo scanner update interval safely (seconds)
     static void SetDemoUpdateInterval(float interval)
     {
@@ -147,6 +176,19 @@ class RDF_LidarAutoRunner
         return GetInstance().m_Running;
     }
 
+    // Set handler called after each scan (e.g. threat detection, export). Pass null to clear.
+    static void SetScanCompleteHandler(RDF_LidarScanCompleteHandler handler)
+    {
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (inst)
+            inst.m_ScanCompleteHandler = handler;
+    }
+
+    static RDF_LidarScanCompleteHandler GetScanCompleteHandler()
+    {
+        return GetInstance().m_ScanCompleteHandler;
+    }
+
     void RDF_LidarTick()
     {
         if (!m_Running)
@@ -170,5 +212,12 @@ class RDF_LidarAutoRunner
 
         IEntity subject = RDF_LidarSubjectResolver.ResolveLocalSubject(true);
         m_Visualizer.Render(subject, m_Scanner);
+
+        if (m_ScanCompleteHandler)
+        {
+            ref array<ref RDF_LidarSample> samples = m_Visualizer.GetLastSamples();
+            if (samples)
+                m_ScanCompleteHandler.OnScanComplete(samples);
+        }
     }
 }

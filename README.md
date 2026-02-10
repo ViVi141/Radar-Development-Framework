@@ -10,7 +10,7 @@ Contact: 747384120@qq.com
 ## 主要内容 ✅
 - `scripts/Game/RDF/Lidar/Core/` — 扫描核心（设置、采样策略、扫描器）
 - `scripts/Game/RDF/Lidar/Visual/` — 可视化渲染（点云 + 渐变射线）
-- `scripts/Game/RDF/Lidar/Util/` — 主体解析（玩家 / 载具）
+- `scripts/Game/RDF/Lidar/Util/` — 主体解析、**导出 CSV**（`RDF_LidarExport`）、**统计/过滤**（`RDF_LidarSampleUtils`）、**扫描完成回调**（`RDF_LidarScanCompleteHandler`）
 - `scripts/Game/RDF/Lidar/Demo/` — 演示控制（可选自动运行）
 
 许可证：Apache-2.0（见仓库根目录 `LICENSE`）。
@@ -37,10 +37,12 @@ RDF_LidarAutoRunner.IsDemoEnabled();
 ```c
 // 使用预设并启动（一条调用）
 RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateDefault(256));
+RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateDefaultDebug(512)); // 带原点轴 + 控制台统计
 RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateHemisphere(256));
 RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateConical(25.0, 256));
 RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateStratified(256));
 RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateScanline(32, 256));
+RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateSweep(30.0, 20.0, 45.0, 512)); // 雷达扫描动画
 
 // 或分步：先设置配置再开开关
 RDF_LidarDemoConfig cfg = RDF_LidarDemoConfig.CreateConical(25.0, 256);
@@ -89,20 +91,19 @@ RDF_LidarAutoRunner.SetDemoColorStrategy(new RDF_IndexColorStrategy());
 ```c
 RDF_RunAllSampleChecks();
 ```
-- 获取上次扫描数据以便导出：
-```c
-RDF_LidarVisualizer visual = new RDF_LidarVisualizer();
-// Optional: set an index-based color strategy for debugging sample order
-visual.SetColorStrategy(new RDF_IndexColorStrategy());
-ref array<ref RDF_LidarSample> samples = visual.GetLastSamples();
-// 导出由外部工具负责（CSV/JSON 等）
-```
+
+### 导出与逻辑
+- **导出 CSV**：`RDF_LidarExport.ExportLastScanToConsole(visualizer)` 或 `RDF_LidarExport.PrintCSVToConsole(samples)`，从控制台复制到外部文件。
+- **扫描完成回调**：继承 `RDF_LidarScanCompleteHandler` 并重写 `OnScanComplete(samples)`，再调用 `RDF_LidarAutoRunner.SetScanCompleteHandler(handler)`。
+- **统计/过滤**：`RDF_LidarSampleUtils.GetClosestHit(samples)`、`GetHitCount(samples)`、`GetHitsInRange(...)`、`GetAverageDistance(...)` 等。详见 `docs/API.md`。
+- **仅逻辑不渲染**：直接使用 `RDF_LidarScanner.Scan(subject, outSamples)`，不创建 Visualizer；见 `docs/API.md` 中「仅逻辑不渲染」一节。
+- 获取上次扫描数据：`visual.GetLastSamples()` 后可用 `RDF_LidarExport.PrintCSVToConsole(samples)` 导出，或自行处理（CSV/JSON 等）。
 
 ---
 
 ## 常见设置
 - 扫描半径、射线数量与更新频率：在 `RDF_LidarSettings` 中配置（clamp 与校验已实现）。
-- 可视化细节：在 `RDF_LidarVisualSettings` 中控制点大小、分段数、透明度等。
+- 可视化细节：在 `RDF_LidarVisualSettings` 中控制点大小、分段数、透明度等。调试时可开启 `m_DrawOriginAxis = true` 绘制扫描原点与 X/Y/Z 三轴。
 
 ---
 

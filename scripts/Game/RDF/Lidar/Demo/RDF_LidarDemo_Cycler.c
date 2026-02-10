@@ -17,6 +17,7 @@ class RDF_LidarDemoCycler
         s_Strategies.Insert(new RDF_ConicalSampleStrategy(30.0));
         s_Strategies.Insert(new RDF_StratifiedSampleStrategy());
         s_Strategies.Insert(new RDF_ScanlineSampleStrategy(32));
+        s_Strategies.Insert(new RDF_SweepSampleStrategy(30.0, 20.0, 45.0));
     }
 
     // Cycle to the next strategy and start demo. Uses RDF_LidarDemoConfig.FromStrategy().

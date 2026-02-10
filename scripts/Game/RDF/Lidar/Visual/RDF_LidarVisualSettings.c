@@ -8,4 +8,7 @@ class RDF_LidarVisualSettings
     float m_RayAlpha = 0.25;
     bool m_UseDistanceGradient = true;
     int m_RaySegments = 6;
+    // Draw scan origin and local X/Y/Z axes for debugging (default off).
+    bool m_DrawOriginAxis = false;
+    float m_OriginAxisLength = 0.8;
 }

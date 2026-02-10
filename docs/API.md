@@ -53,6 +53,8 @@
 - `m_RayAlpha` (float): 射线透明度（默认 0.25）
 - `m_RaySegments` (int): 每条射线的分段数，用于渐变显示（默认 6）
 - `m_UseDistanceGradient` (bool): 是否按距离渐变着色（默认 true）；为 false 时命中为红、未命中为橙
+- `m_DrawOriginAxis` (bool): 是否绘制扫描原点与局部 X/Y/Z 三轴（默认 false，调试用）
+- `m_OriginAxisLength` (float): 三轴长度（默认 0.8）
 
 ### RDF_LidarVisualizer
 主要方法：
@@ -68,7 +70,11 @@
 ### RDF_LidarSampleStrategy (接口)
 - `vector BuildDirection(int index, int count)` — 返回单位方向向量
 
-实现：`RDF_UniformSampleStrategy`（基于黄金角近似的球面均匀采样）
+实现：`RDF_UniformSampleStrategy`、`RDF_HemisphereSampleStrategy`、`RDF_ConicalSampleStrategy`、`RDF_StratifiedSampleStrategy`、`RDF_ScanlineSampleStrategy`、`RDF_SweepSampleStrategy`（随时间旋转的扇区扫描，雷达风格）。
+
+### RDF_SweepSampleStrategy
+- 构造：`RDF_SweepSampleStrategy(float halfAngleDeg = 30.0, float sweepWidthDeg = 20.0, float sweepSpeedDegPerSec = 45.0)` — 锥半角、扇区宽度（度）、旋转速度（度/秒）。
+- 射线方向在扇区内沿弧线均匀分布，扇区随世界时间旋转。
 
 ### RDF_LidarColorStrategy (接口)
 - `int BuildPointColor(float dist, bool hit, float lastRange, RDF_LidarVisualSettings settings)`
@@ -83,6 +89,25 @@
 - `static IEntity ResolveLocalSubject(bool preferVehicle = true)` — 解析本地玩家控制的实体；若在载具内且 preferVehicle 为 true 则返回载具根实体
 - `static IEntity ResolveSubject(IEntity player, bool preferVehicle = true)` — 对给定玩家实体解析主体（载具或玩家）
 - `static vector ResolveOrigin(IEntity player = null, bool preferVehicle = true)` — 解析主体原点；player 为 null 时使用本地玩家
+
+### RDF_LidarExport
+将扫描结果导出为 CSV 格式（输出到控制台，可复制到外部文件）。
+- `static string GetCSVHeader()` — 返回 CSV 表头行
+- `static string SampleToCSVRow(RDF_LidarSample sample)` — 将单条样本格式化为 CSV 行
+- `static void PrintCSVToConsole(array<ref RDF_LidarSample> samples)` — 将整次扫描以 CSV 打印到控制台
+- `static void ExportLastScanToConsole(RDF_LidarVisualizer visualizer)` — 从 visualizer 取上次扫描并打印 CSV
+
+### RDF_LidarSampleUtils
+对样本数组的统计与过滤（静态方法）。
+- `static RDF_LidarSample GetClosestHit(array<ref RDF_LidarSample> samples)` — 最近命中样本，无则 null
+- `static RDF_LidarSample GetFurthestHit(array<ref RDF_LidarSample> samples)` — 最远命中样本，无则 null
+- `static int GetHitCount(array<ref RDF_LidarSample> samples)` — 命中数量
+- `static void GetHitsInRange(samples, minDist, maxDist, outSamples)` — 将距离在 [minDist, maxDist] 的命中填入 outSamples
+- `static float GetAverageDistance(samples, bool hitsOnly = true)` — 平均距离（hitsOnly 为 true 时仅统计命中）
+
+### RDF_LidarScanCompleteHandler
+扫描完成回调：子类重写 `OnScanComplete`，再通过 `RDF_LidarAutoRunner.SetScanCompleteHandler(handler)` 注册。
+- `void OnScanComplete(array<ref RDF_LidarSample> samples)` — 每次扫描完成后调用；在子类中实现业务逻辑（如威胁检测、导出）
 
 ## Demo（统一 API）
 
@@ -101,6 +126,10 @@
 - `static void SetDemoRayCount(int rays)` — 设置演示射线数（clamp）
 - `static void SetDemoColorStrategy(RDF_LidarColorStrategy strategy)` — 设置演示颜色策略
 - `static void SetDemoUpdateInterval(float interval)` — 设置演示扫描更新间隔（秒）
+- `static void SetScanCompleteHandler(RDF_LidarScanCompleteHandler handler)` — 设置扫描完成回调（传 null 清除）
+- `static RDF_LidarScanCompleteHandler GetScanCompleteHandler()` — 获取当前回调
+- `static void SetDemoDrawOriginAxis(bool draw)` — 是否在 demo 中绘制扫描原点与三轴（对应 VisualSettings.m_DrawOriginAxis）
+- `static void SetDemoVerbose(bool verbose)` — 为 true 时使用内置回调每帧打印命中数与最近距离（使用 RDF_LidarSampleUtils）
 - `static void StartAutoRun()` / `static void StopAutoRun()` — 内部启停（一般通过 SetDemoEnabled 即可）
 - `static bool IsRunning()` — 当前是否正在自动运行
 
@@ -114,13 +143,17 @@
 - `int m_RayCount` — 射线数量（-1 表示不覆盖）
 - `float m_MinTickInterval` — 最小 tick 间隔（秒，-1 表示不覆盖）
 - `float m_UpdateInterval` — 扫描更新间隔（秒，-1 表示不覆盖）
+- `bool m_DrawOriginAxis` — 为 true 时 demo 绘制扫描原点与三轴（ApplyTo 时通过 SetDemoDrawOriginAxis 应用）
+- `bool m_Verbose` — 为 true 时 demo 每帧打印命中数与最近距离（ApplyTo 时通过 SetDemoVerbose 应用）
 
 **预设工厂（替代原 RDF_*Demo.Start）：**
 - `static RDF_LidarDemoConfig CreateDefault(int rayCount = 256)`
+- `static RDF_LidarDemoConfig CreateDefaultDebug(int rayCount = 512)` — 同 CreateDefault，并开启原点轴与统计输出（展示新功能）
 - `static RDF_LidarDemoConfig CreateHemisphere(int rayCount = 256)`
 - `static RDF_LidarDemoConfig CreateConical(float halfAngleDeg = 30.0, int rayCount = 256)`
 - `static RDF_LidarDemoConfig CreateStratified(int rayCount = 256)`
 - `static RDF_LidarDemoConfig CreateScanline(int sectors = 32, int rayCount = 256)`
+- `static RDF_LidarDemoConfig CreateSweep(float halfAngleDeg = 30.0, float sweepWidthDeg = 20.0, float sweepSpeedDegPerSec = 45.0, int rayCount = 512)` — 雷达扫描动画预设
 
 方法：
 - `void ApplyTo(RDF_LidarAutoRunner runner)` — 将配置应用到 runner（内部通过 AutoRunner 的 SetDemo* API 实现）。
@@ -139,4 +172,30 @@
 
 ---
 
-使用示例和注意事项在 `README.md` 中，有关参数安全性、性能建议（限制射线数、降低分段）及导出使用说明也在 docs 中说明.
+## 仅逻辑不渲染（无可视化）
+
+若只需要扫描数据做逻辑（威胁检测、距离判断等），**不必使用 RDF_LidarVisualizer**，直接使用 Scanner 即可，避免创建 debug shapes：
+
+```c
+// 仅扫描，不绘制
+RDF_LidarScanner scanner = new RDF_LidarScanner();
+RDF_LidarSettings settings = scanner.GetSettings();
+settings.m_RayCount = 128;
+settings.m_Range = 80.0;
+
+array<ref RDF_LidarSample> samples = new array<ref RDF_LidarSample>();
+IEntity subject = RDF_LidarSubjectResolver.ResolveLocalSubject(true);
+scanner.Scan(subject, samples);
+
+// 用工具类做统计
+int hits = RDF_LidarSampleUtils.GetHitCount(samples);
+RDF_LidarSample closest = RDF_LidarSampleUtils.GetClosestHit(samples);
+if (closest)
+    Print("Closest hit distance: " + closest.m_Distance);
+```
+
+若使用 AutoRunner 但希望每次扫描后做处理，可设置 `SetScanCompleteHandler`，在回调里用 `RDF_LidarSampleUtils` 或 `RDF_LidarExport.PrintCSVToConsole(samples)` 导出。
+
+---
+
+使用示例和注意事项在 `README.md` 中，有关参数安全性、性能建议（限制射线数、降低分段）及导出使用说明也在 docs 中说明。
