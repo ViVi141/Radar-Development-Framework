@@ -76,7 +76,11 @@ class RDF_LidarExport
         if (!samples || !path || path == "")
             return false;
         bool exists = FileIO.FileExist(path);
-        FileMode mode = exists ? FileMode.APPEND : FileMode.WRITE;
+        FileMode mode;
+        if (exists)
+            mode = FileMode.APPEND;
+        else
+            mode = FileMode.WRITE;
         FileHandle f = FileIO.OpenFile(path, mode);
         if (!f)
             return false;
