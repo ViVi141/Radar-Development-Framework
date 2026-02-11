@@ -10,6 +10,10 @@ modded class SCR_BaseGameMode
     override void OnGameStart()
     {
         super.OnGameStart();
+
+        // Auto-bind network API if present on the local subject.
+        RDF_LidarNetworkUtils.BindAutoRunnerToLocalSubject(true);
+
         if (!s_BootstrapEnabled)
             return;
 

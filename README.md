@@ -25,6 +25,7 @@
 | `scripts/Game/RDF/Lidar/Visual/` | 可视化：点云与射线渲染、颜色策略、视觉参数 |
 | `scripts/Game/RDF/Lidar/Util/` | 工具：主体解析、CSV 导出、统计/过滤、扫描完成回调 |
 | `scripts/Game/RDF/Lidar/Demo/` | 演示：统一入口、配置预设、策略轮换、Bootstrap |
+| `scripts/Game/RDF/Lidar/Network/` | 网络：服务器权威同步 API 与组件 |
 
 详细模块说明与扩展点见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)，完整 API 见 [docs/API.md](docs/API.md)。
 
@@ -112,10 +113,50 @@ RDF_LidarAutoRunner.SetDemoRenderWorld(true);
 RDF_LidarAutoRunner.GetDemoRenderWorld();
 ```
 
-### 自检（控制台/脚本）
+### 多人游戏网络同步
+
+框架提供独立的网络模块（Network），用于服务器权威的 LiDAR 扫描与配置同步。
+
+#### 设置网络 API
+
+1. 在玩家实体预制件中添加 `RDF_LidarNetworkComponent`
+2. 将组件绑定到 AutoRunner（或使用自动绑定）：
 
 ```c
-RDF_RunAllSampleChecks();
+RDF_LidarAutoRunner.SetNetworkAPI(networkComponent);
+```
+
+或在游戏开始时自动绑定本地玩家主体：
+
+```c
+RDF_LidarNetworkUtils.BindAutoRunnerToLocalSubject(true);
+```
+
+#### 服务器权威扫描
+
+- 客户端请求扫描 → 服务器执行 → 结果广播到所有客户端
+- 可视化使用同步的扫描结果，确保所有玩家看到相同画面
+- 配置更改需要服务器验证，防止恶意参数
+
+#### 仅点云模式推荐
+
+在多人游戏中推荐使用仅点云模式：
+
+```c
+RDF_LidarDemoConfig cfg = RDF_LidarDemoConfig.CreateDefault(128);
+cfg.m_RenderWorld = false; // 仅点云，隐藏游戏世界
+RDF_LidarAutoRunner.SetDemoConfig(cfg);
+```
+
+#### 非 Demo 扫描（网络适配）
+
+```c
+RDF_LidarScanner scanner = new RDF_LidarScanner();
+array<ref RDF_LidarSample> samples = new array<ref RDF_LidarSample>();
+IEntity subject = RDF_LidarSubjectResolver.ResolveLocalSubject(true);
+
+// 自动使用网络 API（如已绑定），否则本地扫描
+bool updated = RDF_LidarNetworkScanner.ScanWithAutoRunnerAPI(subject, scanner, samples);
 ```
 
 ### 导出与逻辑
@@ -143,9 +184,10 @@ RDF_RunAllSampleChecks();
 
 ---
 
-## 文档与贡献
+## 文档、迁移与贡献
 
 - 内部架构、扩展接口与开发约定：[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 - 完整 API 与字段说明：[docs/API.md](docs/API.md)
+- **迁移指南（重要）**：近期网络同步重构包含破坏性变更，请参阅 [docs/MIGRATION.md](docs/MIGRATION.md) 进行升级。
 
 欢迎提交 PR、Issue 或讨论扩展点。PR 请说明变更目的与性能影响（如有）。直接联系：747384120@qq.com。

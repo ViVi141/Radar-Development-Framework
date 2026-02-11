@@ -27,6 +27,11 @@ scripts/Game/RDF/Lidar/
     RDF_LidarVisualizer.c      // 渲染与数据获取（仅点云时在相机前绘制黑色四边形）
     RDF_LidarColorStrategy.c   // 颜色策略接口与默认实现
     RDF_IndexColorStrategy.c
+  Network/
+    RDF_LidarNetworkAPI.c      // 网络同步 API（基类）
+    RDF_LidarNetworkComponent.c // Rpl 实现
+    RDF_LidarNetworkUtils.c    // 网络辅助工具（自动绑定）
+    RDF_LidarNetworkScanner.c  // 网络扫描适配器
   Util/
     RDF_LidarSubjectResolver.c // 解析扫描主体（玩家/载具）
     RDF_LidarExport.c          // CSV 导出

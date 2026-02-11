@@ -5,6 +5,9 @@ class RDF_LidarAutoRunner
     protected static bool s_AutoEnabled = false;
     // Minimum tick interval for the global call queue (seconds). Reduces per-frame overhead.
     protected static float s_MinTickInterval = 0.2;
+    // Network API for synchronization (optional, for multiplayer)
+    // Use a plain reference (no strong ref) to avoid Enforce strong-ref restriction on static fields.
+    protected static RDF_LidarNetworkAPI s_NetworkAPI;
 
     protected ref RDF_LidarScanner m_Scanner;
     protected ref RDF_LidarVisualizer m_Visualizer;
@@ -33,6 +36,24 @@ class RDF_LidarAutoRunner
         return s_MinTickInterval;
     }
 
+    // Set network API for multiplayer synchronization
+    static void SetNetworkAPI(RDF_LidarNetworkAPI networkAPI)
+    {
+        s_NetworkAPI = networkAPI;
+    }
+
+    // Backward-compatible alias
+    static void SetNetworkComponent(RDF_LidarNetworkAPI networkAPI)
+    {
+        SetNetworkAPI(networkAPI);
+    }
+
+    // Get current network API
+    static RDF_LidarNetworkAPI GetNetworkAPI()
+    {
+        return s_NetworkAPI;
+    }
+
     static void StaticTick()
     {
         GetInstance().RDF_LidarTick();
@@ -56,9 +77,14 @@ class RDF_LidarAutoRunner
     }
 
     // Single code switch to enable/disable the demo auto-run.
-    static void SetDemoEnabled(bool enabled)
+    static void SetDemoEnabled(bool enabled, bool sync = true)
     {
         s_AutoEnabled = enabled;
+
+        // Sync to network API if requested
+        if (sync && s_NetworkAPI)
+            s_NetworkAPI.SetDemoEnabled(enabled);
+
         RDF_LidarAutoRunner inst = GetInstance();
         if (enabled)
         {
@@ -169,11 +195,16 @@ class RDF_LidarAutoRunner
         s.m_UpdateInterval = Math.Max(0.01, interval);
     }
 
-    static void SetDemoConfig(RDF_LidarDemoConfig cfg)
+    static void SetDemoConfig(RDF_LidarDemoConfig cfg, bool sync = true)
     {
         RDF_LidarAutoRunner inst = GetInstance();
         if (!inst) return;
         inst.m_DemoConfig = cfg;
+
+        // Sync to network API if requested
+        if (sync && s_NetworkAPI)
+            s_NetworkAPI.SetDemoConfig(cfg);
+
         // If demo is already running, apply the new config so e.g. m_RenderWorld takes effect immediately.
         if (s_AutoEnabled && inst.m_DemoConfig)
             inst.ApplyDemoConfig();
@@ -239,13 +270,37 @@ class RDF_LidarAutoRunner
         m_LastScanTime = now;
 
         IEntity subject = RDF_LidarSubjectResolver.ResolveLocalSubject(true);
-        m_Visualizer.Render(subject, m_Scanner);
 
-        if (m_ScanCompleteHandler)
+        // Check if we have network API for server-authoritative scanning
+        if (s_NetworkAPI)
         {
-            ref array<ref RDF_LidarSample> samples = m_Visualizer.GetLastSamples();
-            if (samples)
-                m_ScanCompleteHandler.OnScanComplete(samples);
+            // Request server to perform scan (no subject parameter)
+            s_NetworkAPI.RequestScan();
+
+            // Use synchronized scan results for visualization
+            if (s_NetworkAPI.HasSyncedSamples())
+            {
+                ref array<ref RDF_LidarSample> syncedSamples = s_NetworkAPI.GetLastScanResults();
+                if (!syncedSamples)
+                    return;
+                // Update visualizer with server results
+                m_Visualizer.RenderWithSamples(subject, syncedSamples);
+
+                if (m_ScanCompleteHandler)
+                    m_ScanCompleteHandler.OnScanComplete(syncedSamples);
+            }
+        }
+        else
+        {
+            // Local scanning (single-player or no network component)
+            m_Visualizer.Render(subject, m_Scanner);
+
+            if (m_ScanCompleteHandler)
+            {
+                ref array<ref RDF_LidarSample> samples = m_Visualizer.GetLastSamples();
+                if (samples)
+                    m_ScanCompleteHandler.OnScanComplete(samples);
+            }
         }
     }
 }

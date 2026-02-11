@@ -106,9 +106,49 @@
 - `static void GetHitsInRange(samples, minDist, maxDist, outSamples)` — 将距离在 [minDist, maxDist] 的命中填入 outSamples
 - `static float GetAverageDistance(samples, bool hitsOnly = true)` — 平均距离（hitsOnly 为 true 时仅统计命中）
 
-### RDF_LidarScanCompleteHandler
-扫描完成回调：子类重写 `OnScanComplete`，再通过 `RDF_LidarAutoRunner.SetScanCompleteHandler(handler)` 注册。
-- `void OnScanComplete(array<ref RDF_LidarSample> samples)` — 每次扫描完成后调用；在子类中实现业务逻辑（如威胁检测、导出）
+### RDF_LidarNetworkAPI
+网络同步 API 基类（默认空实现），用于解耦 Demo 与网络逻辑。
+
+主要方法：
+- `bool IsNetworkAvailable()` — 网络层是否可用
+- `void SetDemoEnabled(bool enabled)` — 设置演示启用状态（服务器权威）
+- `void SetDemoConfig(RDF_LidarDemoConfig config)` — 设置演示配置（服务器权威）
+- `void RequestScan()` — 请求服务器执行扫描（客户端调用，无参数，服务器使用组件所属实体作为扫描主体）
+- `bool HasSyncedSamples()` — 是否已有同步样本
+- `array<ref RDF_LidarSample> GetLastScanResults()` — 获取最后扫描结果
+
+### RDF_LidarNetworkComponent
+Network 模块内置实现，基于 Rpl 同步状态与扫描结果。
+
+同步属性（原子字段）：
+- `[RplProp] m_DemoEnabled` — 演示启用状态（bool）
+- `[RplProp] m_RayCount` — 射线计数（int）
+- `[RplProp] m_UpdateInterval` — 扫描更新间隔（float）
+- `[RplProp] m_RenderWorld` — 是否同时渲染世界（bool）
+- `[RplProp] m_DrawOriginAxis` — 是否绘制原点轴（bool）
+- `[RplProp] m_Verbose` — 是否输出统计（bool）
+
+备注：不再直接 Rpl 同步 `RDF_LidarDemoConfig` 对象；配置通过 RPC 以原子字段形式传输以避免复杂对象复制。
+
+扫描结果：服务器通过 `RDF_LidarExport.SamplesToCSV()` 将样本序列化为紧凑 CSV 字符串，并通过不可靠 RPC `RpcDo_ScanCompleteWithPayload(string csv)` 广播到客户端；客户端使用 `RDF_LidarExport.ParseCSVToSamples(csv)` 解析回 `RDF_LidarSample` 列表。
+### RDF_LidarAutoRunner 网络集成
+- `static void SetNetworkAPI(RDF_LidarNetworkAPI networkAPI)` — 设置网络 API 引用
+- `static RDF_LidarNetworkAPI GetNetworkAPI()` — 获取网络 API
+
+当设置网络 API 后，AutoRunner 会使用服务器权威的扫描与同步状态变化。
+
+### RDF_LidarNetworkUtils
+网络辅助工具：
+- `static RDF_LidarNetworkAPI FindNetworkAPI(IEntity entity)` — 从实体或其父链上查找网络 API
+- `static bool BindAutoRunnerToLocalSubject(bool preferVehicle = true)` — 自动绑定本地玩家主体上的网络 API
+
+### RDF_LidarNetworkScanner
+网络扫描适配器（非 Demo）：
+- `static bool Scan(IEntity subject, RDF_LidarScanner scanner, array<ref RDF_LidarSample> outSamples, RDF_LidarNetworkAPI api)` — 有网络则用同步结果，否则本地扫描
+- `static bool ScanWithAutoRunnerAPI(IEntity subject, RDF_LidarScanner scanner, array<ref RDF_LidarSample> outSamples)` — 使用 AutoRunner 已绑定的网络 API
+
+### RDF_LidarVisualizer 网络支持
+- `void RenderWithSamples(IEntity subject, array<ref RDF_LidarSample> samples)` — 使用预计算样本渲染（用于网络同步）
 
 ## Demo（统一 API）
 

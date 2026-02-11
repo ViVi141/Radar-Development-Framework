@@ -78,6 +78,54 @@ class RDF_LidarVisualizer
         }
     }
 
+    // Render using pre-computed samples (for network synchronization)
+    void RenderWithSamples(IEntity subject, array<ref RDF_LidarSample> samples)
+    {
+        if (!subject || !samples || !m_Settings)
+            return;
+
+        // Update last range from samples if available
+        if (samples.Count() > 0)
+        {
+            RDF_LidarSample firstSample = samples.Get(0);
+            if (firstSample.m_Distance > 0)
+                m_LastRange = firstSample.m_Distance;
+            else
+                m_LastRange = 50.0;
+        }
+
+        // Clear previous debug shapes references before rendering.
+        if (m_DebugShapes)
+            m_DebugShapes.Clear();
+
+        // Use provided samples instead of scanning
+        m_Samples.Clear();
+        m_Samples.Reserve(samples.Count());
+        foreach (RDF_LidarSample sample : samples)
+        {
+            m_Samples.Insert(sample);
+        }
+
+        // When "point cloud only": draw a black quad in front of the camera to hide the world (point cloud uses NOZBUFFER so it draws on top).
+        if (!m_Settings.m_RenderWorld && m_DebugShapes)
+            DrawPointCloudOnlyBackground();
+
+        if (m_Settings.m_DrawOriginAxis && m_Samples.Count() > 0)
+            DrawOriginAxis(subject, m_Samples.Get(0).m_Start);
+
+        foreach (RDF_LidarSample sample : m_Samples)
+        {
+            if (m_Settings.m_ShowHitsOnly && !sample.m_Hit)
+                continue;
+
+            if (m_Settings.m_DrawRays)
+                DrawRay(sample.m_Start, sample.m_HitPos, sample.m_Distance, sample.m_Hit);
+
+            if (m_Settings.m_DrawPoints)
+                DrawPointFromSample(sample);
+        }
+    }
+
     // Draw a large black quad just in front of the local camera to occlude the world (used when m_RenderWorld is false).
     protected void DrawPointCloudOnlyBackground()
     {
