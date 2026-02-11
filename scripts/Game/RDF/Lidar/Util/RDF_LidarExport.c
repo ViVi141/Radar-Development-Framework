@@ -52,11 +52,14 @@ class RDF_LidarExport
     }
 
     // Serialize samples to compact CSV string for network broadcast (see RFC in code comments).
-    static string SamplesToCSV(array<ref RDF_LidarSample> samples)
+    // Serialize samples to compact CSV string for network broadcast (see RFC in code comments).
+    // Optional: quantize floats to reduce size and optionally apply simple RLE compression.
+    static string SamplesToCSV(array<ref RDF_LidarSample> samples, bool compress = false, int decimalPlaces = 3)
     {
         if (!samples || samples.Count() == 0)
             return string.Empty;
 
+        float mul = Math.Pow(10.0, decimalPlaces);
         string csv = "";
         for (int i = 0; i < samples.Count(); i++)
         {
@@ -66,15 +69,19 @@ class RDF_LidarExport
             if (s.m_Hit)
                 hitStr = "1";
             string part = s.m_Index.ToString() + "|" + hitStr + "|";
-            part = part + s.m_Start[0].ToString() + "," + s.m_Start[1].ToString() + "," + s.m_Start[2].ToString() + "|";
-            part = part + s.m_HitPos[0].ToString() + "," + s.m_HitPos[1].ToString() + "," + s.m_HitPos[2].ToString() + "|";
-            part = part + s.m_Dir[0].ToString() + "," + s.m_Dir[1].ToString() + "," + s.m_Dir[2].ToString() + "|";
-            part = part + s.m_Distance.ToString();
+            part = part + (Math.Round(s.m_Start[0] * mul) / mul).ToString() + "," + (Math.Round(s.m_Start[1] * mul) / mul).ToString() + "," + (Math.Round(s.m_Start[2] * mul) / mul).ToString() + "|";
+            part = part + (Math.Round(s.m_HitPos[0] * mul) / mul).ToString() + "," + (Math.Round(s.m_HitPos[1] * mul) / mul).ToString() + "," + (Math.Round(s.m_HitPos[2] * mul) / mul).ToString() + "|";
+            part = part + (Math.Round(s.m_Dir[0] * mul) / mul).ToString() + "," + (Math.Round(s.m_Dir[1] * mul) / mul).ToString() + "," + (Math.Round(s.m_Dir[2] * mul) / mul).ToString() + "|";
+            part = part + (Math.Round(s.m_Distance * mul) / mul).ToString();
             if (i < samples.Count() - 1)
                 csv += part + ";";
             else
                 csv += part;
         }
+
+        if (compress)
+            return "RLE:" + RLECompress(csv);
+
         return csv;
     }
 
@@ -84,6 +91,16 @@ class RDF_LidarExport
         array<ref RDF_LidarSample> outSamples = new array<ref RDF_LidarSample>();
         if (!csv || csv == string.Empty)
             return outSamples;
+
+        // Detect simple compression wrapper (RLE)
+        if (csv.StartsWith("RLE:"))
+        {
+            string raw = csv.Substring(4, csv.Length() - 4);
+            raw = RLEDecompress(raw);
+            if (!raw || raw == string.Empty)
+                return outSamples;
+            csv = raw;
+        }
 
         array<string> parts = new array<string>();
         csv.Split(";", parts, false);
@@ -100,17 +117,24 @@ class RDF_LidarExport
             array<string> vals = new array<string>();
             // start
             f.Get(2).Split(",", vals, false);
+            if (vals.Count() < 3) continue; // malformed start
             vector start = Vector(vals.Get(0).ToFloat(), vals.Get(1).ToFloat(), vals.Get(2).ToFloat());
             vals.Clear();
             // hitPos
             f.Get(3).Split(",", vals, false);
+            if (vals.Count() < 3) continue; // malformed hitPos
             vector hitPos = Vector(vals.Get(0).ToFloat(), vals.Get(1).ToFloat(), vals.Get(2).ToFloat());
             vals.Clear();
             // dir
             f.Get(4).Split(",", vals, false);
+            if (vals.Count() < 3) continue; // malformed dir
             vector dir = Vector(vals.Get(0).ToFloat(), vals.Get(1).ToFloat(), vals.Get(2).ToFloat());
             vals.Clear();
             float dist = f.Get(5).ToFloat();
+
+            // Treat zero-distance hits as invalid
+            if (dist <= 0.0)
+                hit = false;
 
             RDF_LidarSample s = new RDF_LidarSample();
             s.m_Index = idx;
@@ -124,5 +148,91 @@ class RDF_LidarExport
         }
 
         return outSamples;
+    }
+
+    // ------------------ Simple RLE compression helpers ------------------
+    static string RLECompress(string s)
+    {
+        if (!s) return "";
+        string outStr = "";
+        int run = 1;
+        for (int i = 1; i <= s.Length(); i++)
+        {
+            bool end = (i == s.Length());
+            string cur = s.Substring(i - 1, 1);
+            string next = "";
+            if (!end)
+                next = s.Substring(i, 1);
+            if (!end && next == cur)
+            {
+                run++;
+                continue;
+            }
+            if (run >= 4)
+            {
+                // encode as: c<cnt> where cnt is decimal number, e.g. A#12
+                outStr += cur + "#" + run.ToString();
+            }
+            else
+            {
+                for (int r = 0; r < run; r++)
+                    outStr += cur;
+            }
+            run = 1;
+        }
+        return outStr;
+    }
+
+    static string RLEDecompress(string s)
+    {
+        if (!s) return "";
+        string outStr = "";
+        int i = 0;
+        while (i < s.Length())
+        {
+            string c = s.Substring(i, 1);
+            // If '#' is immediately after current char, parse the count
+            if (i + 1 >= s.Length())
+            {
+                // no run-length encoding, append remainder
+                outStr += s.Substring(i, s.Length() - i);
+                break;
+            }
+
+            string nextChar = s.Substring(i + 1, 1);
+            if (nextChar == "#")
+            {
+                int numStart = i + 2; // after c and '#'
+                int numEnd = numStart;
+                while (numEnd < s.Length())
+                {
+                    string digit = s.Substring(numEnd, 1);
+                    if (digit < "0" || digit > "9")
+                        break;
+                    numEnd++;
+                }
+                if (numEnd == numStart)
+                {
+                    // no digits found after '#', treat as literal and advance by 1
+                    outStr += c;
+                    i++;
+                }
+                else
+                {
+                    string numStr = s.Substring(numStart, numEnd - numStart);
+                    int cnt = numStr.ToInt();
+                    for (int r = 0; r < cnt; r++)
+                        outStr += c;
+                    i = numEnd;
+                }
+            }
+            else
+            {
+                // no encoding for this char, append it and continue
+                outStr += c;
+                i++;
+            }
+        }
+        return outStr;
     }
 }

@@ -3,9 +3,33 @@ class RDF_LidarNetworkComponentClass : RDF_LidarNetworkAPIClass
 {
 }
 
+// Helper buffer used to assemble chunked CSV payloads received over unreliable RPCs.
+class RDF_ScanPayloadBuffer
+{
+	int m_Serial;
+	int m_ExpectedParts;
+	ref array<string> m_Parts;
+	float m_CreateTime;
+
+	void RDF_ScanPayloadBuffer(int serial)
+	{
+		m_Serial = serial;
+		m_ExpectedParts = 0;
+		m_Parts = new array<string>();
+		m_CreateTime = 0.0;
+		if (GetGame().GetWorld())
+			m_CreateTime = GetGame().GetWorld().GetWorldTime();
+	} 
+}
+
 class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 {
     protected RplComponent m_RplComponent;
+
+	// Chunking and assembly helpers
+	const int RDF_MAX_CSV_CHUNK = 1000; // bytes per unreliable RPC chunk
+	protected int m_ScanSerial = 0;
+	protected ref array<ref RDF_ScanPayloadBuffer> m_PayloadBuffers;
 
 	[RplProp(condition: RplCondition.NoOwner, onRplName: "OnDemoEnabledChanged")]
 	protected bool m_DemoEnabled = false;
@@ -41,6 +65,8 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 		}
 		if (!m_LastScanResults)
 			m_LastScanResults = new array<ref RDF_LidarSample>();
+		if (!m_PayloadBuffers)
+			m_PayloadBuffers = new array<ref RDF_ScanPayloadBuffer>();
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -159,12 +185,35 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 		scanner.Scan(subject, results);
 		UpdateScanResults(results);
 
-		// Serialize results to CSV and broadcast to clients
-		string csv = RDF_LidarExport.SamplesToCSV(results);
-		Rpc(RpcDo_ScanCompleteWithPayload, csv);
-	}
+        // Serialize results to CSV and broadcast to clients (chunk if large)
+        string csv = RDF_LidarExport.SamplesToCSV(results);
+        if (!csv || csv == string.Empty)
+        {
+            // nothing to send
+            return;
+        }
 
+        // If payload is large, try compressing before chunking to reduce bandwidth
+        if (csv.Length() > (RDF_MAX_CSV_CHUNK * 3))
+            csv = RDF_LidarExport.SamplesToCSV(results, true, 3); // compressed, 3 decimal places
 
+        if (csv.Length() <= RDF_MAX_CSV_CHUNK)
+        {
+            Rpc(RpcDo_ScanCompleteWithPayload, csv);
+        }
+        else
+        {
+            m_ScanSerial++;
+            int partCount = Math.Ceil(csv.Length() / (float)RDF_MAX_CSV_CHUNK);
+            for (int i = 0; i < partCount; i++)
+            {
+                int start = i * RDF_MAX_CSV_CHUNK;
+                int len = Math.Min(RDF_MAX_CSV_CHUNK, csv.Length() - start);
+                string chunk = csv.Substring(start, len);
+                Rpc(RpcDo_ScanCompleteChunk, m_ScanSerial, i, i == (partCount - 1), chunk);
+            }
+        }
+    }
 	//------------------------------------------------------------------------------------------------
 	protected void UpdateScanResults(array<ref RDF_LidarSample> results)
 	{
@@ -192,20 +241,100 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 			return;
 
 		array<ref RDF_LidarSample> samples = RDF_LidarExport.ParseCSVToSamples(csv);
-		if (!m_LastScanResults)
-			m_LastScanResults = new array<ref RDF_LidarSample>();
-		m_LastScanResults.Clear();
-		foreach (RDF_LidarSample s : samples)
-			m_LastScanResults.Insert(s);
+		ApplyLocalScanResults(samples);
 		// Clients may react to scan completion via other hooks
 	}
 
-	//------------------------------------------------------------------------------------------------
-	override bool HasSyncedSamples()
+	// Chunked arrival handler: assemble parts and apply when complete.
+	[RplRpc(RplChannel.Unreliable, RplRcver.Broadcast)]
+	protected void RpcDo_ScanCompleteChunk(int serial, int seq, bool isLast, string csvPart)
 	{
-		return m_LastScanResults && m_LastScanResults.Count() > 0;
+		if (!csvPart || csvPart == string.Empty)
+			return;
+
+		if (!m_PayloadBuffers)
+			m_PayloadBuffers = new array<ref RDF_ScanPayloadBuffer>();
+
+		RDF_ScanPayloadBuffer buf = null;
+		foreach (RDF_ScanPayloadBuffer b : m_PayloadBuffers)
+		{
+			if (b.m_Serial == serial)
+			{
+				buf = b;
+				break;
+			}
+		}
+
+		if (!buf)
+		{
+			buf = new RDF_ScanPayloadBuffer(serial);
+			m_PayloadBuffers.Insert(buf);
+		}
+
+		// store as "seq|data" to allow unordered arrival
+		buf.m_Parts.Insert(seq.ToString() + "|" + csvPart);
+		if (isLast)
+			buf.m_ExpectedParts = seq + 1;
+
+		// Cleanup old buffers (e.g., >10s) to avoid leaked incomplete payloads
+		float now = 0.0;
+		if (GetGame().GetWorld())
+			now = GetGame().GetWorld().GetWorldTime();
+		for (int bi = m_PayloadBuffers.Count() - 1; bi >= 0; bi--)
+		{
+			if (now - m_PayloadBuffers.Get(bi).m_CreateTime > 10.0)
+				m_PayloadBuffers.Remove(bi);
+		} 
+
+		// If we know expected part count and have all parts, attempt assembly
+		if (buf.m_ExpectedParts > 0 && buf.m_Parts.Count() >= buf.m_ExpectedParts)
+		{
+			string assembled = "";
+			for (int i = 0; i < buf.m_ExpectedParts; i++)
+			{
+				bool found = false;
+				for (int j = 0; j < buf.m_Parts.Count(); j++)
+				{
+					string entry = buf.m_Parts.Get(j);
+					array<string> kv = new array<string>();
+					entry.Split("|", kv, false);
+					if (kv.Count() < 2) continue;
+					int s = kv.Get(0).ToInt();
+					if (s == i)
+					{
+						assembled += kv.Get(1);
+						found = true;
+						break;
+					}
+				}
+				if (!found)
+				{
+					// missing part; wait for further arrivals
+					return;
+				}
+			}
+
+			array<ref RDF_LidarSample> samples = RDF_LidarExport.ParseCSVToSamples(assembled);
+			ApplyLocalScanResults(samples);
+			// cleanup buffer
+			m_PayloadBuffers.RemoveItem(buf);
+		}
 	}
 
+	// Apply scan results locally on clients without triggering replication
+	protected void ApplyLocalScanResults(array<ref RDF_LidarSample> results)
+	{
+		if (!m_LastScanResults)
+			m_LastScanResults = new array<ref RDF_LidarSample>();
+
+		m_LastScanResults.Clear();
+		if (results)
+		{
+			m_LastScanResults.Reserve(results.Count());
+			foreach (RDF_LidarSample s : results)
+				m_LastScanResults.Insert(s);
+		}
+	}
 	//------------------------------------------------------------------------------------------------
 	override array<ref RDF_LidarSample> GetLastScanResults()
 	{

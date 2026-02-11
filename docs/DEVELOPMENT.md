@@ -32,6 +32,16 @@ scripts/Game/RDF/Lidar/
     RDF_LidarNetworkComponent.c // Rpl 实现
     RDF_LidarNetworkUtils.c    // 网络辅助工具（自动绑定）
     RDF_LidarNetworkScanner.c  // 网络扫描适配器
+
+  // === 网络模块注意事项（分片 / 压缩 / 异步） ===
+  // 说明：近期对网络同步做了重构以支持服务器权威扫描与高射线计数场景下的可靠传输。
+  // - RequestScan() 变为无参：组件的 owner 作为扫描主体；请更新旧调用（RequestScan(subject) -> RequestScan()）。
+  // - 序列化：服务器端使用 RDF_LidarExport.SamplesToCSV() 将样本序列化为紧凑字符串，客户端使用 ParseCSVToSamples() 解析。
+  // - 分片：若载荷较大，服务器会将 CSV 按块（默认每块约 1000 字节）分片并通过不可靠 RPC 广播；客户端支持乱序组装与超时清理。
+  // - 压缩（可选）：为进一步减小带宽，支持一个简单的 RLE 压缩层（序列前缀 `RLE:` 表示压缩），在超长载荷下自动启用或可作为选项开启。
+  // - 异步扫描：RequestScan() 为异步请求，新增 `RDF_LidarNetworkScanner.ScanAsync()` / `ScanWithAutoRunnerAPIAsync()` 帮助器，支持超时回退到本地扫描并通过回调（RDF_LidarScanCompleteHandler）通知结果。
+  // - 兼容性：Rpl 不再直接复制 `RDF_LidarDemoConfig` 对象，配置以原子字段形式（m_RayCount / m_UpdateInterval / m_RenderWorld / m_DrawOriginAxis / m_Verbose）传输并由服务器验证。
+
   Util/
     RDF_LidarSubjectResolver.c // 解析扫描主体（玩家/载具）
     RDF_LidarExport.c          // CSV 导出

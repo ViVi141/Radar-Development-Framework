@@ -84,12 +84,17 @@ class RDF_LidarVisualizer
         if (!subject || !samples || !m_Settings)
             return;
 
-        // Update last range from samples if available
+        // Update last range from samples if available (use max positive distance among samples)
         if (samples.Count() > 0)
         {
-            RDF_LidarSample firstSample = samples.Get(0);
-            if (firstSample.m_Distance > 0)
-                m_LastRange = firstSample.m_Distance;
+            float maxDist = 0.0;
+            foreach (RDF_LidarSample s : samples)
+            {
+                if (s && s.m_Distance > maxDist)
+                    maxDist = s.m_Distance;
+            }
+            if (maxDist > 0.0)
+                m_LastRange = maxDist;
             else
                 m_LastRange = 50.0;
         }

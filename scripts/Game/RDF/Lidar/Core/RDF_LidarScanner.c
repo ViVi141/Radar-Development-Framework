@@ -80,7 +80,8 @@ class RDF_LidarScanner
             param.Exclude = subject;
 
             float hitFraction = world.TraceMove(param, null);
-            bool hit = (param.TraceEnt != null) || (param.SurfaceProps != null) || (param.ColliderName != string.Empty);
+            // Conservative hit validation: rely on TraceEnt or SurfaceProps; ignore ColliderName checks to avoid type incompat.
+            bool hit = (param.TraceEnt != null) || (param.SurfaceProps != null);
 
             vector hitPos = param.End;
             float dist = m_Settings.m_Range;
@@ -88,6 +89,18 @@ class RDF_LidarScanner
             {
                 dist = hitFraction * m_Settings.m_Range;
                 hitPos = origin + (dir * dist);
+                // Treat zero-distance hits as invalid (distance == 0 => ignore hit)
+                if (dist <= 0.0)
+                {
+                    hit = false;
+                    dist = m_Settings.m_Range;
+                    hitPos = param.End;
+                }
+            }
+            else
+            {
+                // No valid hit
+                hit = false;
             }
 
             RDF_LidarSample sample = new RDF_LidarSample();

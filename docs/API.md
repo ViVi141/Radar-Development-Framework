@@ -144,8 +144,13 @@ Network 模块内置实现，基于 Rpl 同步状态与扫描结果。
 
 ### RDF_LidarNetworkScanner
 网络扫描适配器（非 Demo）：
-- `static bool Scan(IEntity subject, RDF_LidarScanner scanner, array<ref RDF_LidarSample> outSamples, RDF_LidarNetworkAPI api)` — 有网络则用同步结果，否则本地扫描
-- `static bool ScanWithAutoRunnerAPI(IEntity subject, RDF_LidarScanner scanner, array<ref RDF_LidarSample> outSamples)` — 使用 AutoRunner 已绑定的网络 API
+- `static bool Scan(IEntity subject, RDF_LidarScanner scanner, array<ref RDF_LidarSample> outSamples, RDF_LidarNetworkAPI api)` — 有网络则用同步结果，否则本地扫描（同步，若无可用同步样本则返回 false）
+- `static bool ScanWithAutoRunnerAPI(IEntity subject, RDF_LidarScanner scanner, array<ref RDF_LidarSample> outSamples)` — 使用 AutoRunner 已绑定的网络 API（同步）
+- `static void ScanAsync(IEntity subject, RDF_LidarScanner scanner, array<ref RDF_LidarSample> outSamples, RDF_LidarNetworkAPI api, float timeoutSeconds, RDF_LidarScanCompleteHandler handler)` — 异步请求服务器扫描，并通过 `handler.OnScanComplete(outSamples)` 在完成或超时后回调（非阻塞）。参数 `timeoutSeconds` 可用于指定超时回退时限；若想更细粒度控制轮询间隔与重试，可联系维护者扩展 `ScanAsync`。
+- `static void ScanWithAutoRunnerAPIAsync(IEntity subject, RDF_LidarScanner scanner, array<ref RDF_LidarSample> outSamples, float timeoutSeconds, RDF_LidarScanCompleteHandler handler)` — 使用 AutoRunner 已绑定的网络 API 的异步便捷方式
+
+### RDF_LidarExport 网络序列化
+- `static string SamplesToCSV(array<ref RDF_LidarSample> samples, bool compress = false, int decimalPlaces = 3)` — 将样本序列化为紧凑字符串；当 `compress=true` 时会在序列化后应用简单 RLE 压缩并在结果前缀 `RLE:` 以便解析方识别并解压。
 
 ### RDF_LidarVisualizer 网络支持
 - `void RenderWithSamples(IEntity subject, array<ref RDF_LidarSample> samples)` — 使用预计算样本渲染（用于网络同步）
