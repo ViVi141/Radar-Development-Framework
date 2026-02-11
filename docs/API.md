@@ -8,7 +8,7 @@
 字段：
 - `m_Enabled` (bool): 是否启用扫描（默认 true）
 - `m_Range` (float): 扫描半径（默认 50.0）。在运行时会被 clamp 到 [0.1, 1000.0]
-- `m_RayCount` (int): 射线数量（默认 512）。在运行时会被 clamp 到 [1, 4096]
+- `m_RayCount` (int): 射线数量（默认 512）。在运行时保证至少为 1，无上限
 - `m_UpdateInterval` (float): 扫描间隔（秒，默认 5.0），最小值 0.01
 - `m_OriginOffset` (vector): 扫描原点偏移（默认 "0 0 0"），与 `m_UseLocalOffset` 配合使用
 - `m_TraceFlags` (int): 射线检测标志（默认 `TraceFlags.WORLD | TraceFlags.ENTS`）

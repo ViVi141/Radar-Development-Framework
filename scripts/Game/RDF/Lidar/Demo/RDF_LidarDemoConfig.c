@@ -21,7 +21,7 @@ class RDF_LidarDemoConfig
         RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
         cfg.m_Enable = true;
         cfg.m_SampleStrategy = new RDF_UniformSampleStrategy();
-        cfg.m_RayCount = Math.Clamp(rayCount, 1, 4096);
+        cfg.m_RayCount = Math.Max(rayCount, 1);
         return cfg;
     }
 
@@ -31,7 +31,7 @@ class RDF_LidarDemoConfig
         RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
         cfg.m_Enable = true;
         cfg.m_SampleStrategy = new RDF_UniformSampleStrategy();
-        cfg.m_RayCount = Math.Clamp(rayCount, 1, 4096);
+        cfg.m_RayCount = Math.Max(rayCount, 1);
         cfg.m_ColorStrategy = new RDF_ThreeColorStrategy(0xFF00FF00, 0xFFFFFF00, 0xFFFF0000);
         return cfg;
     }
@@ -42,7 +42,7 @@ class RDF_LidarDemoConfig
         RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
         cfg.m_Enable = true;
         cfg.m_SampleStrategy = new RDF_UniformSampleStrategy();
-        cfg.m_RayCount = Math.Clamp(rayCount, 1, 4096);
+        cfg.m_RayCount = Math.Max(rayCount, 1);
         cfg.m_DrawOriginAxis = true;
         cfg.m_Verbose = true;
         return cfg;
@@ -53,7 +53,7 @@ class RDF_LidarDemoConfig
         RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
         cfg.m_Enable = true;
         cfg.m_SampleStrategy = new RDF_HemisphereSampleStrategy();
-        cfg.m_RayCount = Math.Clamp(rayCount, 1, 4096);
+        cfg.m_RayCount = Math.Max(rayCount, 1);
         return cfg;
     }
 
@@ -62,7 +62,7 @@ class RDF_LidarDemoConfig
         RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
         cfg.m_Enable = true;
         cfg.m_SampleStrategy = new RDF_ConicalSampleStrategy(halfAngleDeg);
-        cfg.m_RayCount = Math.Clamp(rayCount, 1, 4096);
+        cfg.m_RayCount = Math.Max(rayCount, 1);
         cfg.m_ColorStrategy = new RDF_IndexColorStrategy();
         return cfg;
     }
@@ -72,7 +72,7 @@ class RDF_LidarDemoConfig
         RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
         cfg.m_Enable = true;
         cfg.m_SampleStrategy = new RDF_StratifiedSampleStrategy();
-        cfg.m_RayCount = Math.Clamp(rayCount, 1, 4096);
+        cfg.m_RayCount = Math.Max(rayCount, 1);
         cfg.m_ColorStrategy = new RDF_IndexColorStrategy();
         return cfg;
     }
@@ -82,7 +82,7 @@ class RDF_LidarDemoConfig
         RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
         cfg.m_Enable = true;
         cfg.m_SampleStrategy = new RDF_ScanlineSampleStrategy(sectors);
-        cfg.m_RayCount = Math.Clamp(rayCount, 1, 4096);
+        cfg.m_RayCount = Math.Max(rayCount, 1);
         cfg.m_ColorStrategy = new RDF_IndexColorStrategy();
         return cfg;
     }
@@ -92,7 +92,7 @@ class RDF_LidarDemoConfig
         RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
         cfg.m_Enable = true;
         cfg.m_SampleStrategy = new RDF_SweepSampleStrategy(halfAngleDeg, sweepWidthDeg, sweepSpeedDegPerSec);
-        cfg.m_RayCount = Math.Clamp(rayCount, 1, 4096);
+        cfg.m_RayCount = Math.Max(rayCount, 1);
         cfg.m_ColorStrategy = new RDF_IndexColorStrategy();
         return cfg;
     }
@@ -104,7 +104,7 @@ class RDF_LidarDemoConfig
         RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
         cfg.m_Enable = true;
         cfg.m_SampleStrategy = strategy;
-        cfg.m_RayCount = Math.Clamp(rayCount, 1, 4096);
+        cfg.m_RayCount = Math.Max(rayCount, 1);
         if (colorStrategy)
             cfg.m_ColorStrategy = colorStrategy;
         return cfg;

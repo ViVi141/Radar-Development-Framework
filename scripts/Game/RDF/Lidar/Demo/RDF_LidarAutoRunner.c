@@ -114,14 +114,14 @@ class RDF_LidarAutoRunner
             inst.m_Scanner.SetSampleStrategy(strategy);
     }
 
-    // Set the demo scanner ray count safely (clamped)
+    // Set the demo scanner ray count (minimum 1, no upper limit)
     static void SetDemoRayCount(int rays)
     {
         RDF_LidarAutoRunner inst = GetInstance();
         if (!inst || !inst.m_Scanner) return;
         RDF_LidarSettings s = inst.m_Scanner.GetSettings();
         if (!s) return;
-        s.m_RayCount = Math.Clamp(rays, 1, 4096);
+        s.m_RayCount = Math.Max(rays, 1);
     }
 
     // Set the demo visual color strategy (applies to visualizer if present)
