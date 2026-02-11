@@ -25,6 +25,17 @@ class RDF_LidarDemoConfig
         return cfg;
     }
 
+    // Like CreateDefault but with three-color distance gradient (near=green, mid=yellow, far=red).
+    static RDF_LidarDemoConfig CreateThreeColor(int rayCount = 512)
+    {
+        RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
+        cfg.m_Enable = true;
+        cfg.m_SampleStrategy = new RDF_UniformSampleStrategy();
+        cfg.m_RayCount = Math.Clamp(rayCount, 1, 4096);
+        cfg.m_ColorStrategy = new RDF_ThreeColorStrategy(0xFF00FF00, 0xFFFFFF00, 0xFFFF0000);
+        return cfg;
+    }
+
     // Like CreateDefault but with origin axis and verbose stats (showcases new features).
     static RDF_LidarDemoConfig CreateDefaultDebug(int rayCount = 512)
     {

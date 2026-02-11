@@ -27,6 +27,7 @@ scripts/Game/RDF/Lidar/
     RDF_LidarVisualizer.c      // 渲染与数据获取（仅点云时在相机前绘制黑色四边形）
     RDF_LidarColorStrategy.c   // 颜色策略接口与默认实现
     RDF_IndexColorStrategy.c
+    RDF_ThreeColorStrategy.c   // 近/中/远三段渐变（绿→黄→红）
   Network/
     RDF_LidarNetworkAPI.c      // 网络同步 API（基类）
     RDF_LidarNetworkComponent.c // Rpl 实现

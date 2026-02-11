@@ -81,7 +81,7 @@
 - `int BuildPointColor(float dist, bool hit, float lastRange, RDF_LidarVisualSettings settings)`
 - `int BuildRayColorAtT(float t, bool hit, RDF_LidarVisualSettings settings)`
 
-默认实现：`RDF_DefaultColorStrategy`。
+实现：`RDF_DefaultColorStrategy`、`RDF_IndexColorStrategy`、`RDF_ThreeColorStrategy`（近/中/远三段渐变，默认绿→黄→红）。
 
 ## Util
 
@@ -92,11 +92,15 @@
 - `static vector ResolveOrigin(IEntity player = null, bool preferVehicle = true)` — 解析主体原点；player 为 null 时使用本地玩家
 
 ### RDF_LidarExport
-将扫描结果导出为 CSV 格式（输出到控制台，可复制到外部文件）。
+将扫描结果导出为 CSV 格式（输出到控制台或写入磁盘）。
 - `static string GetCSVHeader()` — 返回 CSV 表头行
 - `static string SampleToCSVRow(RDF_LidarSample sample)` — 将单条样本格式化为 CSV 行
 - `static void PrintCSVToConsole(array<ref RDF_LidarSample> samples)` — 将整次扫描以 CSV 打印到控制台
 - `static void ExportLastScanToConsole(RDF_LidarVisualizer visualizer)` — 从 visualizer 取上次扫描并打印 CSV
+- `static bool ExportToFile(array<ref RDF_LidarSample> samples, string path)` — 将样本写入 CSV 文件（覆盖），成功返回 true
+- `static bool AppendToFile(array<ref RDF_LidarSample> samples, string path, bool writeHeaderIfNew = true)` — 追加样本到 CSV 文件，文件不存在时创建并可选写入表头
+- `static string GetExtendedCSVHeader()` — 扩展 CSV 表头（含 time、origin、elevation、azimuth、subjectVel、subjectYaw、subjectPitch、scanId、frameIndex、entityClass，适用于 AI 训练）
+- `static string SampleToExtendedCSVRow(sample, currentTime, maxRange, subjectVel, subjectYaw, subjectPitch, scanId, frameIndex)` — 将单条样本格式化为扩展 CSV 行
 
 ### RDF_LidarSampleUtils
 对样本数组的统计与过滤（静态方法）。
@@ -197,6 +201,7 @@ Network 模块内置实现，基于 Rpl 同步状态与扫描结果。
 
 **预设工厂（替代原 RDF_*Demo.Start）：**
 - `static RDF_LidarDemoConfig CreateDefault(int rayCount = 256)`
+- `static RDF_LidarDemoConfig CreateThreeColor(int rayCount = 512)` — 同 CreateDefault，三色距离渐变（近绿→中黄→远红）
 - `static RDF_LidarDemoConfig CreateDefaultDebug(int rayCount = 512)` — 同 CreateDefault，并开启原点轴与统计输出（展示新功能）
 - `static RDF_LidarDemoConfig CreateHemisphere(int rayCount = 256)`
 - `static RDF_LidarDemoConfig CreateConical(float halfAngleDeg = 30.0, int rayCount = 256)`

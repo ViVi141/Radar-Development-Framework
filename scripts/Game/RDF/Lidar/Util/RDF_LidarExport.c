@@ -51,6 +51,91 @@ class RDF_LidarExport
         RDF_LidarExport.PrintCSVToConsole(samples);
     }
 
+    // Export samples to CSV file. Overwrites if file exists. Returns true on success.
+    static bool ExportToFile(array<ref RDF_LidarSample> samples, string path)
+    {
+        if (!samples || !path || path == "")
+            return false;
+        FileHandle f = FileIO.OpenFile(path, FileMode.WRITE);
+        if (!f)
+            return false;
+        f.WriteLine(RDF_LidarExport.GetCSVHeader());
+        for (int i = 0; i < samples.Count(); i++)
+        {
+            RDF_LidarSample s = samples.Get(i);
+            if (s)
+                f.WriteLine(RDF_LidarExport.SampleToCSVRow(s));
+        }
+        f.Close();
+        return true;
+    }
+
+    // Append samples to CSV file. If file does not exist, creates with header. Returns true on success.
+    static bool AppendToFile(array<ref RDF_LidarSample> samples, string path, bool writeHeaderIfNew = true)
+    {
+        if (!samples || !path || path == "")
+            return false;
+        bool exists = FileIO.FileExist(path);
+        FileMode mode = exists ? FileMode.APPEND : FileMode.WRITE;
+        FileHandle f = FileIO.OpenFile(path, mode);
+        if (!f)
+            return false;
+        if (!exists && writeHeaderIfNew)
+            f.WriteLine(RDF_LidarExport.GetCSVHeader());
+        for (int i = 0; i < samples.Count(); i++)
+        {
+            RDF_LidarSample s = samples.Get(i);
+            if (s)
+                f.WriteLine(RDF_LidarExport.SampleToCSVRow(s));
+        }
+        f.Close();
+        return true;
+    }
+
+    // Extended CSV header for AI training / offline analysis. Includes time, subject pose, scan metadata.
+    static string GetExtendedCSVHeader()
+    {
+        return "index,hit,time,originX,originY,originZ,dirX,dirY,dirZ,elevation,azimuth,maxRange,distance,hitPosX,hitPosY,hitPosZ,targetName,subjectVelX,subjectVelY,subjectVelZ,subjectYaw,subjectPitch,scanId,frameIndex,entityClass";
+    }
+
+    // Format one sample as extended CSV row. Pass subject metadata from caller.
+    static string SampleToExtendedCSVRow(RDF_LidarSample sample, float currentTime, float maxRange, vector subjectVel, float subjectYaw, float subjectPitch, int scanId, int frameIndex)
+    {
+        if (!sample) return "";
+        vector s = sample.m_Start;
+        vector d = sample.m_Dir;
+        vector h = sample.m_HitPos;
+        string hitStr = "0";
+        if (sample.m_Hit)
+            hitStr = "1";
+        float elevation = Math.Atan2(d[2], Math.Sqrt(d[0] * d[0] + d[1] * d[1]));
+        float azimuth = Math.Atan2(d[1], d[0]);
+        string targetName = "";
+        if (sample.m_Entity)
+        {
+            string n = sample.m_Entity.GetName();
+            if (n)
+                targetName = n;
+        }
+        if (targetName == "" && sample.m_ColliderName)
+            targetName = sample.m_ColliderName;
+        string entityClass = "";
+        if (sample.m_Entity && sample.m_ColliderName)
+            entityClass = sample.m_ColliderName;
+        string row = sample.m_Index.ToString() + "," + hitStr + "," + currentTime.ToString() + ",";
+        row = row + s[0].ToString() + "," + s[1].ToString() + "," + s[2].ToString() + ",";
+        row = row + d[0].ToString() + "," + d[1].ToString() + "," + d[2].ToString() + ",";
+        row = row + elevation.ToString() + "," + azimuth.ToString() + ",";
+        row = row + maxRange.ToString() + "," + sample.m_Distance.ToString() + ",";
+        row = row + h[0].ToString() + "," + h[1].ToString() + "," + h[2].ToString() + ",";
+        row = row + "\"" + targetName + "\",";
+        row = row + subjectVel[0].ToString() + "," + subjectVel[1].ToString() + "," + subjectVel[2].ToString() + ",";
+        row = row + subjectYaw.ToString() + "," + subjectPitch.ToString() + ",";
+        row = row + scanId.ToString() + "," + frameIndex.ToString() + ",";
+        row = row + "\"" + entityClass + "\"";
+        return row;
+    }
+
     // Serialize samples to compact CSV string for network broadcast (see RFC in code comments).
     // Serialize samples to compact CSV string for network broadcast (see RFC in code comments).
     // Optional: quantize floats to reduce size and optionally apply simple RLE compression.

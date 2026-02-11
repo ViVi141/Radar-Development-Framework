@@ -42,7 +42,11 @@ class RDF_LidarScanner
 
         World world = subject.GetWorld();
         if (!world)
-            return;
+        {
+            world = GetGame().GetWorld();
+            if (!world)
+                return;
+        }
 
         // Ensure settings are sane before scanning.
         m_Settings.Validate();
