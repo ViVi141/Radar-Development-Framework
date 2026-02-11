@@ -52,6 +52,8 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 
 	// Local (non-replicated) storage for last scan results
 	protected ref array<ref RDF_LidarSample> m_LastScanResults;
+	// Timestamp (world time) when last scan results were updated (local or received)
+	protected float m_LastScanTime = 0.0; 
 
 	//------------------------------------------------------------------------------------------------
 	override void EOnInit(IEntity owner)
@@ -228,9 +230,12 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 			{
 				m_LastScanResults.Insert(sample);
 			}
+			// mark time on server when results are produced
+			if (GetGame().GetWorld())
+				m_LastScanTime = GetGame().GetWorld().GetWorldTime();
 		}
 		Replication.BumpMe();
-	}
+	} 
 
 	//------------------------------------------------------------------------------------------------
 	[RplRpc(RplChannel.Unreliable, RplRcver.Broadcast)]
@@ -333,12 +338,36 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 			m_LastScanResults.Reserve(results.Count());
 			foreach (RDF_LidarSample s : results)
 				m_LastScanResults.Insert(s);
+			// mark time when client receives results
+			if (GetGame().GetWorld())
+				m_LastScanTime = GetGame().GetWorld().GetWorldTime();
+			if (m_Verbose)
+				Print("RDF_LidarNetworkComponent: Applied local scan results (" + m_LastScanResults.Count() + " samples)", LogLevel.NORMAL);
 		}
-	}
+		// notify local hooks
+		OnScanResultsChanged();
+	} 
 	//------------------------------------------------------------------------------------------------
 	override array<ref RDF_LidarSample> GetLastScanResults()
 	{
 		return m_LastScanResults;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	override bool HasSyncedSamples()
+	{
+		if (!m_LastScanResults || m_LastScanResults.Count() == 0)
+			return false;
+
+		float now = 0.0;
+		if (GetGame().GetWorld())
+			now = GetGame().GetWorld().GetWorldTime();
+
+		// Treat data older than 60s as stale
+		if (now - m_LastScanTime > 60.0)
+			return false;
+
+		return true;
 	}
 
 	//------------------------------------------------------------------------------------------------
