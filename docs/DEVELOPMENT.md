@@ -96,3 +96,90 @@ scripts/Game/RDF/Lidar/
 ---
 
 如需帮助实现示例演示、CI 配置或增加更多示例策略，请告诉我你希望优先的项。
+
+---
+
+## English translation
+
+# LiDAR Framework — Developer Guide
+
+Repository: https://github.com/ViVi141/Radar-Development-Framework
+Contact: 747384120@qq.com
+License: Apache-2.0
+
+## Goals
+- The framework is **silent by default** and only runs when explicitly enabled.
+- Keep scanning core, visualization and demo logic isolated to simplify replacement and testing.
+- Expose stable extension points for third-party reuse.
+
+## Module layout
+
+```
+scripts/Game/RDF/Lidar/
+  Core/
+    RDF_LidarSettings.c        // parameters & validation
+    RDF_LidarTypes.c           // data structs (RDF_LidarSample etc.)
+    RDF_LidarScanner.c         // scanning & ray construction
+    RDF_LidarSampleStrategy.c  // sampling strategy interface & default uniform strategy
+    RDF_HemisphereSampleStrategy.c
+    RDF_ConicalSampleStrategy.c
+    RDF_StratifiedSampleStrategy.c
+    RDF_ScanlineSampleStrategy.c
+    RDF_SweepSampleStrategy.c  // radar-style rotating sector
+  Visual/
+    RDF_LidarVisualSettings.c  // visual params (including m_RenderWorld)
+    RDF_LidarVisualizer.c      // rendering & data retrieval
+    RDF_LidarColorStrategy.c   // color strategy interface & defaults
+    RDF_IndexColorStrategy.c
+    RDF_ThreeColorStrategy.c   // 3-range gradient (green→yellow→red)
+  Network/
+    RDF_LidarNetworkAPI.c
+    RDF_LidarNetworkComponent.c
+    RDF_LidarNetworkUtils.c
+    RDF_LidarNetworkScanner.c
+  Util/
+    RDF_LidarSubjectResolver.c
+    RDF_LidarExport.c
+    RDF_LidarSampleUtils.c
+    RDF_LidarScanCompleteHandler.c
+  Demo/
+    RDF_LidarAutoBootstrap.c
+    RDF_LidarAutoRunner.c
+    RDF_LidarDemoConfig.c
+    RDF_LidarDemo_Cycler.c
+    RDF_LidarDemoStatsHandler.c
+```
+
+## Data flow
+1. `RDF_LidarScanner` produces an array of `RDF_LidarSample` from `RDF_LidarSettings`.
+2. `RDF_LidarVisualizer` renders samples according to `RDF_LidarVisualSettings`.
+3. The demo driver (`RDF_LidarAutoRunner`) optionally drives periodic scans.
+
+## Extension points (examples)
+- Sampling strategy: implement `RDF_LidarSampleStrategy::BuildDirection()` and inject via `RDF_LidarScanner.SetSampleStrategy()`.
+  - Built-in examples: `RDF_UniformSampleStrategy`, `RDF_HemisphereSampleStrategy`, `RDF_ConicalSampleStrategy`, `RDF_StratifiedSampleStrategy`, `RDF_ScanlineSampleStrategy`.
+- Visualization: implement/extend `RDF_LidarColorStrategy` to color by sample attributes or by index/angle.
+- Output: use `RDF_LidarVisualizer.GetLastSamples()` (defensive copy) and export externally (CSV/JSON).
+
+New: `scripts/tests/lidar_sample_checks.c` contains basic self-checks for sampling direction unit-length and conical bounds.
+
+## Demo & isolation (unified API)
+- **Unified switch**: `RDF_LidarAutoRunner.SetDemoEnabled(true/false)` is the single start/stop entry for demos.
+- **Unified config entry**: use `RDF_LidarDemoConfig` presets + `SetDemoConfig()` / `StartWithConfig()` instead of separate demo classes.
+- **Bootstrap**: `RDF_LidarAutoBootstrap.c` provides optional auto-start at `OnGameStart` (default disabled).
+- **Point-cloud-only**: `SetDemoRenderWorld(false)` or `m_RenderWorld = false` draws a black quad and disables scene rendering so only the point cloud is visible.
+
+## Performance recommendations
+- Limit `m_RayCount` to reasonable values (default 512) and reduce at runtime when possible.
+- Increase `m_UpdateInterval` to reduce frequency; the minimum is implementation-limited (≥ 0.01s).
+- Reduce `m_RaySegments` and point draw counts to control rendering load.
+
+## Development & contribution
+- Code style: follow existing project conventions and place files in the appropriate module directories.
+- PRs: describe motivation, compatibility and performance impact.
+- Testing: provide simple scenario validations (scan results, visual stability).
+- CI: consider adding GitHub Actions for lint/build/docs checks.
+
+---
+
+If you want me to implement example demos, add CI, or create more sample strategies, tell me which item to prioritize.

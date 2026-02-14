@@ -191,3 +191,200 @@ bool updated = RDF_LidarNetworkScanner.ScanWithAutoRunnerAPI(subject, scanner, s
 - **迁移指南（重要）**：近期网络同步重构包含破坏性变更，请参阅 [docs/MIGRATION.md](docs/MIGRATION.md) 进行升级。
 
 欢迎提交 PR、Issue 或讨论扩展点。PR 请说明变更目的与性能影响（如有）。直接联系：747384120@qq.com。
+
+---
+
+## English translation
+
+# Radar Development Framework — LiDAR module
+
+A lightweight, modular LiDAR (light detection and ranging) development framework for **Arma Reforger** that provides ray-based point-cloud scanning, visualization rendering and debugging utilities. The scanning core, visualizer and demo components are separated to make extension and reuse easy.
+
+- **Repository**: [Radar-Development-Framework](https://github.com/ViVi141/Radar-Development-Framework)
+- **Contact**: 747384120@qq.com
+- **License**: Apache-2.0 (see `LICENSE` in repository root)
+
+---
+
+## Features
+
+- **Scanning core**: configurable ray count, range and intervals; supports multiple sampling strategies (uniform, hemisphere, conical, stratified, scanline, sweep/radar-style, etc.)
+- **Visualization**: point-cloud + gradient rays, pluggable color strategies, optional "point-cloud-only" mode (solid background)
+- **Demos & debugging**: unified switch, preset configs, strategy cycler, optional bootstrap-on-start (disabled by default)
+- **Tools & extensions**: CSV export, sampling statistics/filters, scan-complete callbacks; supports logic-only scans without rendering (no Visualizer)
+
+---
+
+## Project structure
+
+| Path | Purpose |
+|------|---------|
+| `scripts/Game/RDF/Lidar/Core/` | Scanning core: settings, types, scanner and sampling strategies |
+| `scripts/Game/RDF/Lidar/Visual/` | Visualization: point-cloud/ray rendering, color strategies, visual settings |
+| `scripts/Game/RDF/Lidar/Util/` | Utilities: subject resolution, CSV export, statistics/filters, scan-complete callbacks |
+| `scripts/Game/RDF/Lidar/Demo/` | Demos: single entry, preset configs, strategy cycler, bootstrap |
+| `scripts/Game/RDF/Lidar/Network/` | Network: server-authoritative synchronization API & components |
+
+See `docs/DEVELOPMENT.md` for module details and extension points, and `docs/API.md` for the full API reference.
+
+---
+
+## Quick start
+
+The framework does **not auto-run** by default. Demos must be explicitly enabled to avoid interfering with other mods.
+
+### Unified switch (single entry point)
+
+```c
+// Enable demo (after setting DemoConfig or using StartWithConfig)
+RDF_LidarAutoRunner.SetDemoEnabled(true);
+
+// Disable demo
+RDF_LidarAutoRunner.SetDemoEnabled(false);
+
+// Query
+RDF_LidarAutoRunner.IsDemoEnabled();
+```
+
+### Start with a preset (recommended)
+
+All demos are driven via `RDF_LidarDemoConfig` presets + `RDF_LidarAutoRunner`:
+
+```c
+RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateDefault(256));
+RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateDefaultDebug(512)); // origin axis + console stats
+RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateHemisphere(256));
+RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateConical(25.0, 256));
+RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateStratified(256));
+RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateScanline(32, 256));
+RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateSweep(30.0, 20.0, 45.0, 512)); // radar sweep animation
+
+// Or set config then enable
+RDF_LidarDemoConfig cfg = RDF_LidarDemoConfig.CreateConical(25.0, 256);
+RDF_LidarAutoRunner.SetDemoConfig(cfg);
+RDF_LidarAutoRunner.SetDemoEnabled(true);
+```
+
+### Custom configuration
+
+```c
+RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
+cfg.m_Enable = true;
+cfg.m_SampleStrategy = new RDF_ConicalSampleStrategy(25.0);
+cfg.m_RayCount = 256;
+cfg.m_MinTickInterval = 0.25;
+cfg.m_ColorStrategy = new RDF_IndexColorStrategy();
+RDF_LidarAutoRunner.SetDemoConfig(cfg);
+RDF_LidarAutoRunner.SetDemoEnabled(true);
+```
+
+### Strategy cycler (Cycler)
+
+```c
+RDF_LidarDemoCycler.Cycle(256);                    // switch to next strategy and enable demo
+RDF_LidarDemoCycler.StartIndex(2, 256);            // start by index (e.g. 2 = conical)
+RDF_LidarDemoCycler.StartAutoCycle(10.0);          // auto-cycle every 10s
+RDF_LidarDemoCycler.StopAutoCycle();
+RDF_LidarDemoCycler.SetAutoCycleInterval(5.0);
+```
+
+### Bootstrap (optional auto-start at game start)
+
+Provided via a modded `SCR_BaseGameMode`. Disabled by default.
+
+```c
+SCR_BaseGameMode.SetBootstrapEnabled(true);
+SCR_BaseGameMode.SetBootstrapAutoCycle(true);
+SCR_BaseGameMode.SetBootstrapAutoCycleInterval(10.0);
+```
+
+### Common API examples
+
+```c
+RDF_LidarAutoRunner.SetMinTickInterval(0.2);
+RDF_LidarAutoRunner.SetDemoRayCount(128);
+RDF_LidarAutoRunner.SetDemoSampleStrategy(new RDF_HemisphereSampleStrategy());
+RDF_LidarAutoRunner.SetDemoColorStrategy(new RDF_IndexColorStrategy());
+// true = render game world + point cloud, false = point-cloud-only (solid background)
+RDF_LidarAutoRunner.SetDemoRenderWorld(true);
+RDF_LidarAutoRunner.GetDemoRenderWorld();
+```
+
+### Multiplayer network sync
+
+The framework includes a Network module for server-authoritative LiDAR scans and configuration synchronization.
+
+#### Setup
+1. Add `RDF_LidarNetworkComponent` to the prefab for the player-controlled entity.
+2. Bind the component to the AutoRunner (or rely on automatic binding):
+
+```c
+RDF_LidarAutoRunner.SetNetworkAPI(networkComponent);
+```
+
+or auto-bind to the local subject at game start:
+
+```c
+RDF_LidarNetworkUtils.BindAutoRunnerToLocalSubject(true);
+```
+
+#### Server-authoritative scans
+
+- Client requests a scan → server executes → results broadcast to clients
+- Visualizer renders the synchronized scan so all players see the same data
+- Configuration changes should be validated server-side to prevent malicious parameters
+
+#### Point-cloud-only recommended
+
+For multiplayer, consider point-cloud-only mode:
+
+```c
+RDF_LidarDemoConfig cfg = RDF_LidarDemoConfig.CreateDefault(128);
+cfg.m_RenderWorld = false; // point-cloud-only
+RDF_LidarAutoRunner.SetDemoConfig(cfg);
+```
+
+#### Non-demo scans (network-aware)
+
+```c
+RDF_LidarScanner scanner = new RDF_LidarScanner();
+array<ref RDF_LidarSample> samples = new array<ref RDF_LidarSample>();
+IEntity subject = RDF_LidarSubjectResolver.ResolveLocalSubject(true);
+
+// Automatically uses the bound network API (if set), otherwise performs a local scan
+bool updated = RDF_LidarNetworkScanner.ScanWithAutoRunnerAPI(subject, scanner, samples);
+```
+
+### Export & logic-only scans
+
+- **Export CSV**: `RDF_LidarExport.ExportLastScanToConsole(visualizer)` or `RDF_LidarExport.PrintCSVToConsole(samples)` — copy from console to external file.
+- **Scan-complete callback**: subclass `RDF_LidarScanCompleteHandler`, override `OnScanComplete(samples)`, and call `RDF_LidarAutoRunner.SetScanCompleteHandler(handler)`.
+- **Statistics/filters**: `RDF_LidarSampleUtils.GetClosestHit(samples)`, `GetHitCount(samples)`, `GetHitsInRange(...)`, `GetAverageDistance(...)`, see `docs/API.md`.
+- **Logic-only scans**: call `RDF_LidarScanner.Scan(subject, outSamples)` without creating a Visualizer (see `docs/API.md` "logic-only" section).
+- Retrieve last scan via `visualizer.GetLastSamples()` (returns a defensive copy), then export with `RDF_LidarExport.PrintCSVToConsole(samples)`.
+
+---
+
+## Common settings
+
+- **Scan parameters** (range, ray count, update interval) are in `RDF_LidarSettings` (includes clamps and validation).
+- **Visualization** settings (point size, segments, alpha) are in `RDF_LidarVisualSettings`; enable `m_DrawOriginAxis = true` for origin axis debug.
+- **World+point-cloud vs point-cloud-only**: `m_RenderWorld = true` (default) renders the game world + point cloud; `false` renders point cloud only by drawing a black quad in front of the camera and disabling scene rendering.
+
+---
+
+## Performance recommendations
+
+- Lower `m_RayCount` or `m_RaySegments` to reduce cost.
+- For dense point-clouds increase `m_UpdateInterval` or disable rendering when not needed.
+
+---
+
+## Docs, migration & contribution
+
+- Developer architecture & extension points: `docs/DEVELOPMENT.md`
+- Full API & field documentation: `docs/API.md`
+- **Migration guide (important)**: recent network sync refactor contains breaking changes — see `docs/MIGRATION.md` to upgrade.
+
+Contributions welcome — please open PRs or Issues and describe purpose and performance impact. Contact: 747384120@qq.com.
+

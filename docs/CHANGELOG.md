@@ -86,6 +86,60 @@
 
 回滚：若视觉退化不可接受，可将阈值调高或恢复旧的 `m_RaySegments` 行为（一次性替换代码即可）。
 
+---
+
+## English translation
+
+# CHANGELOG
+
+## 2026-02-14 — Fixes & Performance Improvements
+
+Summary: This update fixes several functional inconsistencies and performance bottlenecks and includes internal optimizations to reduce runtime allocations and network overhead. All changes maintain API compatibility (no public method signatures were changed).
+
+Highlights:
+
+- Fix: `RDF_LidarScanner::Scan` now uses a local `range` variable consistently for `param.End`, hit distance and `m_HitPos` calculations to avoid inconsistent distances caused by mixing with `m_Settings.m_Range`.
+  - File: `scripts/Game/RDF/Lidar/Core/RDF_LidarScanner.c`
+
+- Optimization: Reuse a single `TraceParam` instance inside `RDF_LidarScanner::Scan` to reduce per-ray temporary allocations (lower GC pressure).
+  - File: `scripts/Game/RDF/Lidar/Core/RDF_LidarScanner.c`
+
+- Optimization: Network serialization de-duplication. `RDF_LidarNetworkComponent::PerformScanInternal` now constructs the CSV string once and compresses that string when needed instead of re-serializing samples.
+  - File: `scripts/Game/RDF/Lidar/Network/RDF_LidarNetworkComponent.c`
+
+- Fix/Optimization: Fragment reassembly now writes directly to buffer slots by index and tracks received counts to avoid the previous O(n^2) behavior, improving unreliable-RPC fragment reassembly robustness and performance.
+  - File: `scripts/Game/RDF/Lidar/Network/RDF_LidarNetworkComponent.c`
+
+- Optimization: `RDF_LidarNetworkScanner` async poll scheduling changed to a single scheduled job that re-schedules itself only when needed, avoiding idle polling.
+  - File: `scripts/Game/RDF/Lidar/Network/RDF_LidarNetworkScanner.c`
+
+- Low-risk rendering preallocation: `RDF_LidarVisualizer` now preallocates capacity for `m_Samples` and `m_DebugShapes`, reducing per-frame array reallocations and copies.
+  - File: `scripts/Game/RDF/Lidar/Visual/RDF_LidarVisualizer.c`
+
+Compatibility: No public method signatures or property names were changed; demos, network, export and existing scripts remain backward compatible.
+
+Performance impact (expected):
+- Reduced short-lived allocations during ray scanning (TraceParam reuse) — noticeable GC reduction under high `m_RayCount`.
+- Reduced CPU/memory peaks on the network side by avoiding duplicate serialization for large payloads.
+- Faster and more robust fragment reassembly under lossy networks.
+- Preallocated render arrays reduce frame jitter and slightly improve frame rate.
+
+Testing notes: run scenarios with high `m_RayCount` and in multiplayer to validate fragment/assembly robustness.
+
+## 2026-02-15 — Visual batching prototype & follow-up
+
+Summary: Introduced a low-risk prototype for batch/degenerate drawing in `RDF_LidarVisualizer` plus additional preallocation optimizations to reduce Shape counts and memory churn in dense scans.
+
+- Added preallocation/reserve logic in `RDF_LidarVisualizer` to reduce array reallocations.
+- Added a segmented-degeneration prototype that falls back to single-segment rays when (rayCount × segments) exceeds a threshold (prototype later reverted).
+- Fixed a potential dangling reference to `s_NetworkAPI` in `RDF_LidarAutoRunner` by validating `IsNetworkAvailable()` before use and auto-cleaning invalid references.
+- Hardened `GetLastSamples()` to return a defensive copy (API signature unchanged).
+
+Compatibility: No public API signature changes; note `GetLastSamples()` now returns a defensive copy (behavioral change for code that previously modified the returned array to affect internal state).
+
+Performance/visual impact: See original changelog for details.
+
+
 ### 2026-02-15 (回退)
 
 已回退“分段退化”改动，恢复默认按 `m_RaySegments` 的分段绘制行为（原因：保持视觉一致性与细节）。

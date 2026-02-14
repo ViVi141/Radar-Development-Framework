@@ -253,3 +253,206 @@ if (closest)
 ---
 
 使用示例和注意事项在 `README.md` 中，有关参数安全性、性能建议（限制射线数、降低分段）及导出使用说明也在 docs 中说明。
+
+---
+
+## English translation
+
+# API Reference — Radar Development Framework (LiDAR)
+
+This document is the first-version API summary covering the main public classes and highlights.
+
+## Core
+
+### RDF_LidarSettings
+Fields:
+- `m_Enabled` (bool): enable scanning (default true)
+- `m_Range` (float): scan radius (default 50.0). Clamped at runtime to [0.1, 1000.0]
+- `m_RayCount` (int): number of rays (default 512). At runtime guaranteed to be at least 1.
+- `m_UpdateInterval` (float): scan interval in seconds (default 5.0), minimum 0.01
+- `m_OriginOffset` (vector): origin offset (default "0 0 0"), used with `m_UseLocalOffset`
+- `m_TraceFlags` (int): trace flags (default `TraceFlags.WORLD | TraceFlags.ENTS`)
+- `m_LayerMask` (int): physics layer mask (default `EPhysicsLayerPresets.Projectile`)
+- `m_UseBoundsCenter` (bool): use bounding-box center as origin (default true)
+- `m_UseLocalOffset` (bool): treat `m_OriginOffset` as local-space offset (default true)
+
+Methods:
+- `void Validate()` — defensive validation and clamping (called automatically before scanning).
+
+### RDF_LidarSample
+Single-ray sample structure. Fields:
+- `m_Index` (int): ray index
+- `m_Hit` (bool): whether it hit
+- `m_Start` (vector): ray start
+- `m_End` (vector): ray end (max distance)
+- `m_Dir` (vector): unit direction vector
+- `m_HitPos` (vector): hit position (or ray end if no hit)
+- `m_Distance` (float): hit distance (or max distance if no hit)
+- `m_Entity` (IEntity): hit entity (if any)
+- `m_ColliderName` (string): collider name
+- `m_Surface` (GameMaterial): hit surface material (if available)
+
+### RDF_LidarScanner
+Key methods:
+- `RDF_LidarScanner(RDF_LidarSettings settings = null)` — constructor
+- `RDF_LidarSettings GetSettings()` — get settings reference
+- `void Scan(IEntity subject, array<ref RDF_LidarSample> outSamples)` — scan given entity and fill samples (calls `Validate()` at entry)
+- `void SetSampleStrategy(RDF_LidarSampleStrategy strategy)` — inject a sampling strategy
+- `RDF_LidarSampleStrategy GetSampleStrategy()` — get current strategy
+
+Notes: default sampling strategy is `RDF_UniformSampleStrategy`.
+
+## Visual
+
+### RDF_LidarVisualSettings
+Fields:
+- `m_DrawPoints` (bool): draw hit points (default true)
+- `m_DrawRays` (bool): draw rays (default true)
+- `m_ShowHitsOnly` (bool): draw only hits (default false)
+- `m_PointSize` (float): point sphere radius (default 0.08)
+- `m_RayAlpha` (float): ray alpha (default 0.25)
+- `m_RaySegments` (int): segments per ray for gradient rendering (default 6)
+- `m_UseDistanceGradient` (bool): distance-based gradient coloring (default true)
+- `m_DrawOriginAxis` (bool): draw origin axis (default false, debug)
+- `m_OriginAxisLength` (float): axis length (default 0.8)
+- `m_RenderWorld` (bool): when true render game world + point cloud; when false render point cloud only (draws a black quad and calls `SetCharacterCameraRenderActive(false)` to disable scene rendering; default true)
+
+### RDF_LidarVisualizer
+Key methods:
+- `RDF_LidarVisualizer(RDF_LidarVisualSettings settings = null)` — constructor
+- `void Render(IEntity subject, RDF_LidarScanner scanner)` — perform scan and render point-cloud
+- `RDF_LidarVisualSettings GetSettings()`
+- `ref array<ref RDF_LidarSample> GetLastSamples()` — returns a defensive copy of the last rendered samples
+
+Color strategy: replaceable via `RDF_LidarColorStrategy`. For exports, use `GetLastSamples()` to obtain data and post-process (CSV/JSON).
+
+## Strategies
+
+### RDF_LidarSampleStrategy (interface)
+- `vector BuildDirection(int index, int count)` — returns a unit direction vector
+
+Implementations: `RDF_UniformSampleStrategy`, `RDF_HemisphereSampleStrategy`, `RDF_ConicalSampleStrategy`, `RDF_StratifiedSampleStrategy`, `RDF_ScanlineSampleStrategy`, `RDF_SweepSampleStrategy` (time-rotating sector — radar style).
+
+### RDF_SweepSampleStrategy
+- Constructor: `RDF_SweepSampleStrategy(float halfAngleDeg = 30.0, float sweepWidthDeg = 20.0, float sweepSpeedDegPerSec = 45.0)` — half-angle, sector width (deg), rotation speed (deg/sec).
+- Directions are distributed across the sector and sector rotates with world time.
+
+### RDF_LidarColorStrategy (interface)
+- `int BuildPointColor(float dist, bool hit, float lastRange, RDF_LidarVisualSettings settings)`
+- `int BuildRayColorAtT(float t, bool hit, RDF_LidarVisualSettings settings)`
+
+Implementations: `RDF_DefaultColorStrategy`, `RDF_IndexColorStrategy`, `RDF_ThreeColorStrategy` (three-range gradient: near/mid/far — green→yellow→red).
+
+## Util
+
+### RDF_LidarSubjectResolver
+Utility for resolving the scan subject (local player or vehicle):
+- `static IEntity ResolveLocalSubject(bool preferVehicle = true)` — resolve the local subject; if in vehicle and preferVehicle==true returns the vehicle root entity
+- `static IEntity ResolveSubject(IEntity player, bool preferVehicle = true)` — resolve subject for a given player entity
+- `static vector ResolveOrigin(IEntity player = null, bool preferVehicle = true)` — resolve subject origin; player==null uses local player
+
+### RDF_LidarExport
+Export scan results to CSV (console or disk):
+- `static string GetCSVHeader()`
+- `static string SampleToCSVRow(RDF_LidarSample sample)`
+- `static void PrintCSVToConsole(array<ref RDF_LidarSample> samples)`
+- `static void ExportLastScanToConsole(RDF_LidarVisualizer visualizer)`
+- `static bool ExportToFile(array<ref RDF_LidarSample> samples, string path)` — overwrite file
+- `static bool AppendToFile(array<ref RDF_LidarSample> samples, string path, bool writeHeaderIfNew = true)` — append; create file if missing
+- `static string GetExtendedCSVHeader()` — extended header (time, origin, elevation, azimuth, subjectVel, subjectYaw, subjectPitch, scanId, frameIndex, entityClass)
+- `static string SampleToExtendedCSVRow(sample, currentTime, maxRange, subjectVel, subjectYaw, subjectPitch, scanId, frameIndex)`
+
+### RDF_LidarSampleUtils
+Static statistics & filters for sample arrays:
+- `static RDF_LidarSample GetClosestHit(array<ref RDF_LidarSample> samples)`
+- `static RDF_LidarSample GetFurthestHit(array<ref RDF_LidarSample> samples)`
+- `static int GetHitCount(array<ref RDF_LidarSample> samples)`
+- `static void GetHitsInRange(samples, minDist, maxDist, outSamples)`
+- `static float GetAverageDistance(samples, bool hitsOnly = true)`
+
+### RDF_LidarNetworkAPI
+Network sync API base (default empty implementation) to decouple demo and networking:
+- `bool IsNetworkAvailable()`
+- `void SetDemoEnabled(bool enabled)`
+- `void SetDemoConfig(RDF_LidarDemoConfig config)`
+- `void RequestScan()`
+- `bool HasSyncedSamples()`
+- `array<ref RDF_LidarSample> GetLastScanResults()`
+
+### RDF_LidarNetworkComponent
+Built-in network implementation using Rpl and sample serialization.
+Synchronized properties: `[RplProp] m_DemoEnabled`, `m_RayCount`, `m_UpdateInterval`, `m_RenderWorld`, `m_DrawOriginAxis`, `m_Verbose`.
+Note: `RDF_LidarDemoConfig` objects are not Rpl-synchronized; configs are transported via atomic fields/RPC.
+
+### RDF_LidarNetworkScanner
+Network-aware scanner adapter:
+- `static bool Scan(IEntity subject, RDF_LidarScanner scanner, array<ref RDF_LidarSample> outSamples, RDF_LidarNetworkAPI api)` — use network if available, otherwise local scan
+- `static bool ScanWithAutoRunnerAPI(IEntity subject, RDF_LidarScanner scanner, array<ref RDF_LidarSample> outSamples)` — convenience
+- `static void ScanAsync(..., RDF_LidarScanCompleteHandler handler)` — async request with timeout and callback
+
+### RDF_LidarExport network serialization
+- `static string SamplesToCSV(array<ref RDF_LidarSample> samples, bool compress = false, int decimalPlaces = 3)` — compact serialization; `compress=true` applies optional RLE compression with `RLE:` prefix.
+
+### RDF_LidarVisualizer network support
+- `void RenderWithSamples(IEntity subject, array<ref RDF_LidarSample> samples)` — render using precomputed samples (for network sync)
+
+## Demo (unified API)
+
+### Unified switch
+`RDF_LidarAutoRunner` is the single entry for demos; controlled by `SetDemoEnabled` and `SetDemoConfig / StartWithConfig`.
+
+### RDF_LidarAutoRunner
+- `static void SetDemoEnabled(bool enabled)`
+- `static bool IsDemoEnabled()`
+- `static void StartWithConfig(RDF_LidarDemoConfig cfg)`
+- `static void SetDemoConfig(RDF_LidarDemoConfig cfg)`
+- `static RDF_LidarDemoConfig GetDemoConfig()`
+- `static void SetMinTickInterval(float interval)`
+- `static float GetMinTickInterval()`
+- `static void SetDemoSampleStrategy(RDF_LidarSampleStrategy strategy)`
+- `static void SetDemoRayCount(int rays)`
+- `static void SetDemoColorStrategy(RDF_LidarColorStrategy strategy)`
+- `static void SetDemoUpdateInterval(float interval)`
+- `static void SetScanCompleteHandler(RDF_LidarScanCompleteHandler handler)`
+- `static RDF_LidarScanCompleteHandler GetScanCompleteHandler()`
+- `static void SetDemoDrawOriginAxis(bool draw)`
+- `static void SetDemoRenderWorld(bool renderWorld)`
+- `static bool GetDemoRenderWorld()`
+- `static void SetDemoVerbose(bool verbose)`
+- `static void StartAutoRun()` / `static void StopAutoRun()`
+- `static bool IsRunning()`
+
+### RDF_LidarDemoConfig
+Configuration object with factory presets (use `Create*()`):
+- `bool m_Enable`
+- `RDF_LidarSampleStrategy m_SampleStrategy`
+- `RDF_LidarColorStrategy m_ColorStrategy`
+- `int m_RayCount`
+- `float m_MinTickInterval`
+- `float m_UpdateInterval`
+- `bool m_DrawOriginAxis`
+- `bool m_Verbose`
+- `bool m_RenderWorld`
+
+Factory presets: `CreateDefault`, `CreateThreeColor`, `CreateDefaultDebug`, `CreateHemisphere`, `CreateConical`, `CreateStratified`, `CreateScanline`, `CreateSweep`.
+
+Methods: `void ApplyTo(RDF_LidarAutoRunner runner)` — apply config to runner.
+
+### RDF_LidarDemoCycler
+- `static void Cycle(int rayCount = 256)`
+- `static void StartIndex(int index, int rayCount = 256)`
+- `static void StartAutoCycle(float interval = 10.0)` / `StopAutoCycle()` / `SetAutoCycleInterval(float)` / `IsAutoCycling()`
+
+### SCR_BaseGameMode (bootstrap)
+- `static void SetBootstrapEnabled(bool enabled)`
+- `static bool IsBootstrapEnabled()`
+- `static void SetBootstrapAutoCycle(bool enabled)`
+- `static void SetBootstrapAutoCycleInterval(float intervalSeconds)`
+
+## Logic-only (no visualizer)
+
+Use `RDF_LidarScanner` directly for logic-only scans; avoid creating a Visualizer to skip debug shapes. Example usage is provided in the README and above.
+
+---
+
+If you want example demos, CI configuration, or additional sample strategies implemented, tell me which item to prioritize.

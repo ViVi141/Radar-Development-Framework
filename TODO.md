@@ -80,3 +80,83 @@
 ---
 
 *最后更新：按「以电磁波为载体的雷达系统」规划整理。*
+
+---
+
+## English translation
+
+# TODO — Radar Development Framework
+
+This document lists features and improvements to implement, prioritizing an electromagnetic-wave–based radar system.
+
+## 1. Electromagnetic-wave–based radar (main track)
+
+Extend the existing LiDAR ray-scan model to support electromagnetic waves with band/frequency/wavelength/phase/attenuation/reflection properties while remaining compatible with the Core/Visual/Util structure.
+
+### 1. Basic EM model
+
+- [ ] **Band / Frequency / Wavelength**
+  - Define EM wave parameters (e.g. `RDF_EMWaveParams` or extend `RDF_LidarSettings`): carrier frequency `f` (Hz), optional band enum (L/S/C/X/Ku, etc.).
+  - Wavelength λ = c / f (c = speed of light); use in material reflection and attenuation calculations.
+  - Allow configuring by frequency or wavelength with sensible clamps (e.g. 1 MHz–100 GHz).
+
+- [ ] **Phase**
+  - Record phase for each emitted ray / returned echo (transmit phase, echo phase) for Doppler/coherent extensions.
+  - Add `m_Phase` (or `m_PhaseRad`) to sample structures; phase varies with propagation: `phase = 2π * 2 * distance / λ` (round-trip).
+
+- [ ] **Attenuation (propagation loss)**
+  - Free-space path loss (FSPL): FSPL = (4π d f / c)^2, or in dB: 20*log10(d) + 20*log10(f) + 92.45 (d in km, f in GHz).
+  - Add received power / signal-strength fields to samples computed from transmit power minus FSPL (and material losses).
+  - Optional: simple atmospheric/rain attenuation model.
+
+- [ ] **Reflection & RCS**
+  - Map materials/surfaces to a reflection coefficient or simplified radar cross section (RCS).
+  - Received amplitude = f(tx_power, path_loss, reflection_coefficient/RCS).
+  - Optional: simple specular vs diffuse reflection model based on incidence angle.
+
+### 2. Data structures & API
+
+- [ ] **Radar sample type**
+  - Add `RDF_RadarSample` (or extend/combine with `RDF_LidarSample`) with fields: frequency/wavelength, phase, received power/intensity, reflection coefficient/RCS, round-trip time, etc.
+  - Or provide a conversion layer that maps LiDAR samples + EM params → radar samples without breaking existing LiDAR API.
+
+- [ ] **Radar settings**
+  - Add `RDF_RadarSettings` (or extend current settings): transmit power, carrier frequency/band, enable phase/attenuation/reflection options, environmental parameters.
+
+- [ ] **Radar scanner**
+  - Implement `RDF_RadarScanner`: reuse existing trace flow and sampling strategies, then post-process hits to compute EM-related fields.
+
+### 3. Visualization & demo
+
+- [ ] **Radar echo visualization**: map point size/color to received intensity/SNR; provide PPI-like displays if UI allows.
+- [ ] **Demo / presets**: radar presets (e.g. `RDF_RadarDemoConfig`), integrate with `RDF_LidarAutoRunner` or a dedicated runner.
+
+### 4. Docs & tests
+
+- [ ] Update `docs/API.md` with radar types & API.
+- [ ] Update `docs/DEVELOPMENT.md` with model assumptions (frequency ranges, attenuation formulas, RCS simplifications).
+- [ ] Unit/self-check tests: verify FSPL and phase calculations for given frequency/distance.
+
+---
+
+## 2. Other optional items
+
+- [ ] Doppler: compute Doppler shift if entity velocity is available.
+- [ ] Noise & detection thresholds: simple noise model + detection gate for valid echoes.
+- [ ] Reuse sampling strategies between radar and LiDAR; only backend processing differs.
+
+---
+
+## 3. Suggested implementation order
+
+1. EM parameter types (frequency/wavelength/band).
+2. Attenuation (FSPL) + sample intensity field.
+3. Reflection / RCS mapping and material hooks.
+4. Phase field and calculations.
+5. Radar scanner built on existing trace flow.
+6. Visualization & demo integration.
+7. Docs & tests.
+
+---
+
+*Last updated: organized around the electromagnetic-wave–based radar plan.*
