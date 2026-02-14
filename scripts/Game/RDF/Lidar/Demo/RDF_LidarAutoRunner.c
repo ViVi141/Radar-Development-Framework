@@ -36,10 +36,20 @@ class RDF_LidarAutoRunner
         return s_MinTickInterval;
     }
 
-    // Set network API for multiplayer synchronization
+    // Set network API for multiplayer synchronization (weak reference).
+    // AutoRunner validates the API before use and clears stale references.
     static void SetNetworkAPI(RDF_LidarNetworkAPI networkAPI)
     {
-        s_NetworkAPI = networkAPI;
+        if (!networkAPI)
+        {
+            s_NetworkAPI = null;
+            return;
+        }
+        // Only bind if network layer appears available
+        if (networkAPI.IsNetworkAvailable())
+            s_NetworkAPI = networkAPI;
+        else
+            s_NetworkAPI = null;
     }
 
     // Backward-compatible alias
@@ -48,9 +58,24 @@ class RDF_LidarAutoRunner
         SetNetworkAPI(networkAPI);
     }
 
-    // Get current network API
+    // Internal helper: validate and clear stale network API
+    static bool IsNetworkAPIValid()
+    {
+        if (!s_NetworkAPI)
+            return false;
+        if (!s_NetworkAPI.IsNetworkAvailable())
+        {
+            s_NetworkAPI = null; // clear stale ref
+            return false;
+        }
+        return true;
+    }
+
+    // Get current network API (returns null if invalid)
     static RDF_LidarNetworkAPI GetNetworkAPI()
     {
+        if (!IsNetworkAPIValid())
+            return null;
         return s_NetworkAPI;
     }
 
@@ -82,7 +107,7 @@ class RDF_LidarAutoRunner
         s_AutoEnabled = enabled;
 
         // Sync to network API if requested
-        if (sync && s_NetworkAPI)
+        if (sync && IsNetworkAPIValid())
             s_NetworkAPI.SetDemoEnabled(enabled);
 
         RDF_LidarAutoRunner inst = GetInstance();
@@ -202,7 +227,7 @@ class RDF_LidarAutoRunner
         inst.m_DemoConfig = cfg;
 
         // Sync to network API if requested
-        if (sync && s_NetworkAPI)
+        if (sync && IsNetworkAPIValid())
             s_NetworkAPI.SetDemoConfig(cfg);
 
         // If demo is already running, apply the new config so e.g. m_RenderWorld takes effect immediately.
@@ -272,7 +297,7 @@ class RDF_LidarAutoRunner
         IEntity subject = RDF_LidarSubjectResolver.ResolveLocalSubject(true);
 
         // Check if we have network API for server-authoritative scanning
-        if (s_NetworkAPI)
+        if (IsNetworkAPIValid())
         {
             // Request server to perform scan (no subject parameter)
             s_NetworkAPI.RequestScan();

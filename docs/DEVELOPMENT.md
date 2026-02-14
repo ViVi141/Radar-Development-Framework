@@ -67,7 +67,7 @@ scripts/Game/RDF/Lidar/
 - 可视化：实现或扩展 `RDF_LidarColorStrategy` 以支持按样本着色或按索引/角度着色；当前已添加样本级 hook：
   - `BuildPointColorFromSample(ref RDF_LidarSample sample, float lastRange, RDF_LidarVisualSettings settings)`
   - `BuildPointSizeFromSample(ref RDF_LidarSample sample, float lastRange, RDF_LidarVisualSettings settings)`
-- 输出：通过 `RDF_LidarVisualizer.GetLastSamples()` 获取数据并在外部导出（CSV/JSON）。
+- 输出：通过 `RDF_LidarVisualizer.GetLastSamples()` 获取**防御性副本**并在外部导出（CSV/JSON）。
 
 新增：`scripts/tests/lidar_sample_checks.c` 提供了基础自检函数以验证采样方向的单位长度与锥体边界。
 

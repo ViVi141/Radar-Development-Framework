@@ -165,7 +165,7 @@ bool updated = RDF_LidarNetworkScanner.ScanWithAutoRunnerAPI(subject, scanner, s
 - **扫描完成回调**：继承 `RDF_LidarScanCompleteHandler` 并重写 `OnScanComplete(samples)`，再调用 `RDF_LidarAutoRunner.SetScanCompleteHandler(handler)`。
 - **统计/过滤**：`RDF_LidarSampleUtils.GetClosestHit(samples)`、`GetHitCount(samples)`、`GetHitsInRange(...)`、`GetAverageDistance(...)` 等，详见 [docs/API.md](docs/API.md)。
 - **仅逻辑不渲染**：直接使用 `RDF_LidarScanner.Scan(subject, outSamples)`，不创建 Visualizer，见 [docs/API.md](docs/API.md)「仅逻辑不渲染」一节。
-- 获取上次扫描：`visualizer.GetLastSamples()` 后可用 `RDF_LidarExport.PrintCSVToConsole(samples)` 导出或自行处理。
+- 获取上次扫描：`visualizer.GetLastSamples()`（返回防御性副本）后可用 `RDF_LidarExport.PrintCSVToConsole(samples)` 导出或自行处理。
 
 ---
 

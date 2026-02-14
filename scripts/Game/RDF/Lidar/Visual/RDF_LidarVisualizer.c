@@ -37,10 +37,17 @@ class RDF_LidarVisualizer
         return m_ColorStrategy;
     }
 
-    // Return the most recent scan samples after Render()
+    // Return a defensive copy of the most recent scan samples after Render().
+    // Caller may modify the returned array without affecting visualizer internal state.
     ref array<ref RDF_LidarSample> GetLastSamples()
     {
-        return m_Samples;
+        ref array<ref RDF_LidarSample> outSamples = new array<ref RDF_LidarSample>();
+        if (!m_Samples || m_Samples.Count() == 0)
+            return outSamples;
+        outSamples.Reserve(m_Samples.Count());
+        foreach (RDF_LidarSample s : m_Samples)
+            outSamples.Insert(s);
+        return outSamples;
     }
 
     void Render(IEntity subject, RDF_LidarScanner scanner)
@@ -339,6 +346,6 @@ class RDF_LidarVisualizer
     }
 
     // Export functions removed: export functionality has been removed per project owner request.
-    // Use `GetLastSamples()` to obtain `array<ref RDF_LidarSample>` and export externally if needed.
+    // Use `GetLastSamples()` to obtain a defensive copy of `array<ref RDF_LidarSample>` (safe to modify) and export externally if needed.
 
 }

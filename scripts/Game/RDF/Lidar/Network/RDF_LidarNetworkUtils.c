@@ -28,7 +28,7 @@ class RDF_LidarNetworkUtils
 			return false;
 
 		RDF_LidarNetworkAPI api = FindNetworkAPI(subject);
-		if (!api)
+		if (!api || !api.IsNetworkAvailable())
 			return false;
 
 		RDF_LidarAutoRunner.SetNetworkAPI(api);

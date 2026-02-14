@@ -62,7 +62,7 @@
 - `RDF_LidarVisualizer(RDF_LidarVisualSettings settings = null)` — 构造函数
 - `void Render(IEntity subject, RDF_LidarScanner scanner)` — 执行扫描并绘制点云。
 - `RDF_LidarVisualSettings GetSettings()`
-- `ref array<ref RDF_LidarSample> GetLastSamples()` — 获取最近一次渲染的 sample 数组
+- `ref array<ref RDF_LidarSample> GetLastSamples()` — 返回最近一次渲染样本的防御性副本（对返回数组的修改不会影响 visualizer 内部状态）
 
 颜色策略：可用 `RDF_LidarColorStrategy` 替换默认色彩映射。需自定义导出时，使用 `GetLastSamples()` 取得数据后自行处理（如 CSV/JSON）。
 
