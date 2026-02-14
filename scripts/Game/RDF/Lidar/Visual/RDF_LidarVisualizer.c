@@ -49,12 +49,30 @@ class RDF_LidarVisualizer
             return;
 
         RDF_LidarSettings scanSettings = scanner.GetSettings();
+        int rays = 0;
         if (scanSettings)
+        {
             m_LastRange = Math.Max(0.1, scanSettings.m_Range);
+            rays = Math.Max(scanSettings.m_RayCount, 1);
+        }
 
-        // Clear previous debug shapes references before rendering.
+        // Pre-allocate arrays to reduce per-frame reallocations
         if (m_DebugShapes)
+        {
             m_DebugShapes.Clear();
+            int segs = Math.Max(1, m_Settings.m_RaySegments);
+            int extraPoint = 0;
+            if (m_Settings.m_DrawPoints)
+                extraPoint = 1;
+            int estShapes = 16 + rays * (segs + extraPoint);
+            m_DebugShapes.Reserve(estShapes);
+        }
+
+        if (m_Samples)
+        {
+            m_Samples.Clear();
+            m_Samples.Reserve(rays);
+        }
 
         scanner.Scan(subject, m_Samples);
 
@@ -99,19 +117,28 @@ class RDF_LidarVisualizer
                 m_LastRange = 50.0;
         }
 
-        // Clear previous debug shapes references before rendering.
+        // Pre-allocate arrays to reduce per-frame reallocations
         if (m_DebugShapes)
+        {
             m_DebugShapes.Clear();
+            int segs = Math.Max(1, m_Settings.m_RaySegments);
+            int extraPoint = 0;
+            if (m_Settings.m_DrawPoints)
+                extraPoint = 1;
+            int estShapes = 16 + samples.Count() * (segs + extraPoint);
+            m_DebugShapes.Reserve(estShapes);
+        }
 
         // Use provided samples instead of scanning
         m_Samples.Clear();
         m_Samples.Reserve(samples.Count());
-        foreach (RDF_LidarSample sample : samples)
+        foreach (RDF_LidarSample sampleIn : samples)
         {
-            m_Samples.Insert(sample);
+            m_Samples.Insert(sampleIn);
         }
 
-        // When "point cloud only": draw a black quad in front of the camera to hide the world (point cloud uses NOZBUFFER so it draws on top).
+        // Note: always use configured segmentation; do not apply automatic degradation here.
+
         if (!m_Settings.m_RenderWorld && m_DebugShapes)
             DrawPointCloudOnlyBackground();
 

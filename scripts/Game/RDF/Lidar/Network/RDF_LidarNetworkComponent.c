@@ -9,6 +9,7 @@ class RDF_ScanPayloadBuffer
 	int m_Serial;
 	int m_ExpectedParts;
 	ref array<string> m_Parts;
+	int m_ReceivedParts;
 	float m_CreateTime;
 
 	void RDF_ScanPayloadBuffer(int serial)
@@ -16,6 +17,7 @@ class RDF_ScanPayloadBuffer
 		m_Serial = serial;
 		m_ExpectedParts = 0;
 		m_Parts = new array<string>();
+		m_ReceivedParts = 0;
 		m_CreateTime = 0.0;
 		if (GetGame().GetWorld())
 			m_CreateTime = GetGame().GetWorld().GetWorldTime();
@@ -187,34 +189,35 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 		scanner.Scan(subject, results);
 		UpdateScanResults(results);
 
-        // Serialize results to CSV and broadcast to clients (chunk if large)
-        string csv = RDF_LidarExport.SamplesToCSV(results);
-        if (!csv || csv == string.Empty)
-        {
-            // nothing to send
-            return;
-        }
+		// Serialize results to CSV and broadcast to clients (chunk if large).
+		// Avoid serializing twice: produce CSV once, then apply compression on the string if needed.
+		string csv = RDF_LidarExport.SamplesToCSV(results);
+		if (!csv || csv == string.Empty)
+		{
+			// nothing to send
+			return;
+		}
 
-        // If payload is large, try compressing before chunking to reduce bandwidth
-        if (csv.Length() > (RDF_MAX_CSV_CHUNK * 3))
-            csv = RDF_LidarExport.SamplesToCSV(results, true, 3); // compressed, 3 decimal places
+		// If payload is large, try compressing the already-built CSV to reduce CPU and allocations.
+		if (csv.Length() > (RDF_MAX_CSV_CHUNK * 3))
+			csv = "RLE:" + RDF_LidarExport.RLECompress(csv);
 
-        if (csv.Length() <= RDF_MAX_CSV_CHUNK)
-        {
-            Rpc(RpcDo_ScanCompleteWithPayload, csv);
-        }
-        else
-        {
-            m_ScanSerial++;
-            int partCount = Math.Ceil(csv.Length() / (float)RDF_MAX_CSV_CHUNK);
-            for (int i = 0; i < partCount; i++)
-            {
-                int start = i * RDF_MAX_CSV_CHUNK;
-                int len = Math.Min(RDF_MAX_CSV_CHUNK, csv.Length() - start);
-                string chunk = csv.Substring(start, len);
-                Rpc(RpcDo_ScanCompleteChunk, m_ScanSerial, i, i == (partCount - 1), chunk);
-            }
-        }
+		if (csv.Length() <= RDF_MAX_CSV_CHUNK)
+		{
+			Rpc(RpcDo_ScanCompleteWithPayload, csv);
+		}
+		else
+		{
+			m_ScanSerial++;
+			int partCount = Math.Ceil(csv.Length() / (float)RDF_MAX_CSV_CHUNK);
+			for (int i = 0; i < partCount; i++)
+			{
+				int start = i * RDF_MAX_CSV_CHUNK;
+				int len = Math.Min(RDF_MAX_CSV_CHUNK, csv.Length() - start);
+				string chunk = csv.Substring(start, len);
+				Rpc(RpcDo_ScanCompleteChunk, m_ScanSerial, i, i == (partCount - 1), chunk);
+			}
+		}
     }
 	//------------------------------------------------------------------------------------------------
 	protected void UpdateScanResults(array<ref RDF_LidarSample> results)
@@ -276,8 +279,24 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 			m_PayloadBuffers.Insert(buf);
 		}
 
-		// store as "seq|data" to allow unordered arrival
-		buf.m_Parts.Insert(seq.ToString() + "|" + csvPart);
+		// Store chunk directly into indexed slot to allow O(1) assembly and avoid O(n^2) searches.
+		if (buf.m_Parts.Count() <= seq)
+		{
+			int need = seq - buf.m_Parts.Count() + 1;
+			for (int k = 0; k < need; k++)
+				buf.m_Parts.Insert("");
+		}
+		// If slot was empty, increment received count
+		if (buf.m_Parts.Get(seq) == "")
+		{
+			buf.m_Parts.Set(seq, csvPart);
+			buf.m_ReceivedParts++;
+		}
+		else
+		{
+			// overwrite duplicate or retransmitted chunk
+			buf.m_Parts.Set(seq, csvPart);
+		}
 		if (isLast)
 			buf.m_ExpectedParts = seq + 1;
 
@@ -292,31 +311,18 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 		} 
 
 		// If we know expected part count and have all parts, attempt assembly
-		if (buf.m_ExpectedParts > 0 && buf.m_Parts.Count() >= buf.m_ExpectedParts)
+		if (buf.m_ExpectedParts > 0 && buf.m_ReceivedParts >= buf.m_ExpectedParts)
 		{
 			string assembled = "";
 			for (int i = 0; i < buf.m_ExpectedParts; i++)
 			{
-				bool found = false;
-				for (int j = 0; j < buf.m_Parts.Count(); j++)
-				{
-					string entry = buf.m_Parts.Get(j);
-					array<string> kv = new array<string>();
-					entry.Split("|", kv, false);
-					if (kv.Count() < 2) continue;
-					int s = kv.Get(0).ToInt();
-					if (s == i)
-					{
-						assembled += kv.Get(1);
-						found = true;
-						break;
-					}
-				}
-				if (!found)
+				string part = buf.m_Parts.Get(i);
+				if (part == "")
 				{
 					// missing part; wait for further arrivals
 					return;
 				}
+				assembled += part;
 			}
 
 			array<ref RDF_LidarSample> samples = RDF_LidarExport.ParseCSVToSamples(assembled);

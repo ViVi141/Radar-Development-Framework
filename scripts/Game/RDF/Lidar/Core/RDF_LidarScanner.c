@@ -62,6 +62,8 @@ class RDF_LidarScanner
         vector basisY = worldMat[1];
         vector basisZ = worldMat[2];
 
+        // Reuse TraceParam instance to reduce per-ray allocations.
+        TraceParam param = new TraceParam();
         for (int i = 0; i < rays; i++)
         {
             vector dirLocal;
@@ -76,28 +78,32 @@ class RDF_LidarScanner
             if (dlen > 0.0)
                 dir = dir / dlen;
 
-            TraceParam param = new TraceParam();
+            // Populate reusable TraceParam
             param.Start = origin;
             param.End = origin + (dir * range);
             param.Flags = m_Settings.m_TraceFlags;
             param.LayerMask = m_Settings.m_LayerMask;
             param.Exclude = subject;
+            // Clear previous trace result fields (safety)
+            param.TraceEnt = null;
+            param.SurfaceProps = null;
+            param.ColliderName = string.Empty;
 
             float hitFraction = world.TraceMove(param, null);
             // Conservative hit validation: rely on TraceEnt or SurfaceProps; ignore ColliderName checks to avoid type incompat.
             bool hit = (param.TraceEnt != null) || (param.SurfaceProps != null);
 
             vector hitPos = param.End;
-            float dist = m_Settings.m_Range;
+            float dist = range;
             if (hit && hitFraction > 0.0)
             {
-                dist = hitFraction * m_Settings.m_Range;
+                dist = hitFraction * range;
                 hitPos = origin + (dir * dist);
                 // Treat zero-distance hits as invalid (distance == 0 => ignore hit)
                 if (dist <= 0.0)
                 {
                     hit = false;
-                    dist = m_Settings.m_Range;
+                    dist = range;
                     hitPos = param.End;
                 }
             }
