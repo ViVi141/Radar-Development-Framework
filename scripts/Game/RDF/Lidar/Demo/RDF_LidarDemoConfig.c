@@ -2,6 +2,7 @@
 // All demo presets are built via static Create*() methods; use RDF_LidarAutoRunner.SetDemoConfig() + SetDemoEnabled() as the only API.
 class RDF_LidarDemoConfig
 {
+    // Demo enabled flag — default false so demos do not run unless explicitly started.
     bool m_Enable = false;
     ref RDF_LidarSampleStrategy m_SampleStrategy;
     ref RDF_LidarColorStrategy m_ColorStrategy;
@@ -11,6 +12,8 @@ class RDF_LidarDemoConfig
     bool m_DrawOriginAxis = false; // when true, demo draws scan origin and X/Y/Z axes (debug)
     bool m_Verbose = false; // when true, demo prints hit count and closest distance after each scan
     bool m_RenderWorld = true; // when true: game view + point cloud; when false: point cloud only (solid background)
+    // When true: prefer VisualSettings' batched mesh renderer for performance in large point-clouds
+    bool m_UseBatchedMesh = false;
 
     void RDF_LidarDemoConfig() {}
 
@@ -40,11 +43,14 @@ class RDF_LidarDemoConfig
     static RDF_LidarDemoConfig CreateDefaultDebug(int rayCount = 512)
     {
         RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
-        cfg.m_Enable = true;
+        // debug preset does not auto-enable demo by default — keep behaviour opt-in
+        cfg.m_Enable = false;
         cfg.m_SampleStrategy = new RDF_UniformSampleStrategy();
         cfg.m_RayCount = Math.Max(rayCount, 1);
         cfg.m_DrawOriginAxis = true;
         cfg.m_Verbose = true;
+        // Do not enable batched mesh by default for debug preset to avoid surprising visual changes
+        cfg.m_UseBatchedMesh = false;
         return cfg;
     }
 
@@ -128,5 +134,7 @@ class RDF_LidarDemoConfig
         RDF_LidarAutoRunner.SetDemoDrawOriginAxis(m_DrawOriginAxis);
         RDF_LidarAutoRunner.SetDemoVerbose(m_Verbose);
         RDF_LidarAutoRunner.SetDemoRenderWorld(m_RenderWorld);
+        // Apply batched mesh preference (if visualizer supports it)
+        RDF_LidarAutoRunner.SetDemoUseBatchedMesh(m_UseBatchedMesh);
     }
 }

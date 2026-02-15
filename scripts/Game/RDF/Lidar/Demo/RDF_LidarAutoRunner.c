@@ -192,6 +192,25 @@ class RDF_LidarAutoRunner
         return vs.m_RenderWorld;
     }
 
+    // When true: prefer the VisualSettings' batched mesh renderer for large point-cloud performance.
+    static void SetDemoUseBatchedMesh(bool use)
+    {
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (!inst || !inst.m_Visualizer) return;
+        RDF_LidarVisualSettings vs = inst.m_Visualizer.GetSettings();
+        if (vs)
+            vs.m_UseBatchedMesh = use;
+    }
+
+    static bool GetDemoUseBatchedMesh()
+    {
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (!inst || !inst.m_Visualizer) return false;
+        RDF_LidarVisualSettings vs = inst.m_Visualizer.GetSettings();
+        if (!vs) return false;
+        return vs.m_UseBatchedMesh;
+    }
+
     // When true, installs built-in handler that prints hit count and closest distance after each scan (uses RDF_LidarSampleUtils).
     static void SetDemoVerbose(bool verbose)
     {

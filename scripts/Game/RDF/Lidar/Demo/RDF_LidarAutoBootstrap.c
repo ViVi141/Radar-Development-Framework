@@ -2,6 +2,7 @@
 modded class SCR_BaseGameMode
 {
     // Master switch: when true, demo is started on game start. Default: false.
+    // Keep bootstrap disabled by default so production mods depending on this addon are unaffected.
     protected static bool s_BootstrapEnabled = false;
     // When true, start in auto-cycle mode (rotate strategies). When false, start with default preset.
     protected static bool s_BootstrapAutoCycle = false;

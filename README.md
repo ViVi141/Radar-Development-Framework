@@ -77,6 +77,8 @@ cfg.m_SampleStrategy = new RDF_ConicalSampleStrategy(25.0);
 cfg.m_RayCount = 256;
 cfg.m_MinTickInterval = 0.25;
 cfg.m_ColorStrategy = new RDF_IndexColorStrategy();
+// 启用批量网格渲染以在高射线计数下获得更好性能（可选）
+cfg.m_UseBatchedMesh = true;
 RDF_LidarAutoRunner.SetDemoConfig(cfg);
 RDF_LidarAutoRunner.SetDemoEnabled(true);
 ```
@@ -181,6 +183,7 @@ bool updated = RDF_LidarNetworkScanner.ScanWithAutoRunnerAPI(subject, scanner, s
 
 - 降低 `m_RayCount` 或 `m_RaySegments` 可显著减少开销。
 - 高密度点云场景建议增大 `m_UpdateInterval` 或仅在调试时开启渲染。
+- 对于非常大的点云，启用 VisualSettings 的 `m_UseBatchedMesh = true` 可通过合并三角形批次大幅减少 Shape 调用，从而提升帧率（需在视觉与色彩粒度之间权衡）。
 
 ---
 

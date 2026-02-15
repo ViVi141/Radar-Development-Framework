@@ -13,4 +13,7 @@ class RDF_LidarVisualSettings
     float m_OriginAxisLength = 0.8;
     // When true: render game world + point cloud. When false: render point cloud only (draws a solid background to hide the world).
     bool m_RenderWorld = true;
+    // When true: use batched triangle-mesh rendering (fewer Shape calls) to draw points/rays.
+    // Recommended for high `m_RayCount` / large point-clouds to reduce draw-call overhead.
+    bool m_UseBatchedMesh = false;
 }

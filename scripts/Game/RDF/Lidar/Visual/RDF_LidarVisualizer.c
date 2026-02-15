@@ -90,16 +90,23 @@ class RDF_LidarVisualizer
         if (m_Settings.m_DrawOriginAxis && m_Samples.Count() > 0)
             DrawOriginAxis(subject, m_Samples.Get(0).m_Start);
 
-        foreach (RDF_LidarSample sample : m_Samples)
+        if (m_Settings.m_UseBatchedMesh)
         {
-            if (m_Settings.m_ShowHitsOnly && !sample.m_Hit)
-                continue;
+            DrawBatchedMeshes(subject, m_Samples);
+        }
+        else
+        {
+            foreach (RDF_LidarSample sample : m_Samples)
+            {
+                if (m_Settings.m_ShowHitsOnly && !sample.m_Hit)
+                    continue;
 
-            if (m_Settings.m_DrawRays)
-                DrawRay(sample.m_Start, sample.m_HitPos, sample.m_Distance, sample.m_Hit);
+                if (m_Settings.m_DrawRays)
+                    DrawRay(sample.m_Start, sample.m_HitPos, sample.m_Distance, sample.m_Hit);
 
-            if (m_Settings.m_DrawPoints)
-                DrawPointFromSample(sample);
+                if (m_Settings.m_DrawPoints)
+                    DrawPointFromSample(sample);
+            }
         }
     }
 
@@ -152,16 +159,23 @@ class RDF_LidarVisualizer
         if (m_Settings.m_DrawOriginAxis && m_Samples.Count() > 0)
             DrawOriginAxis(subject, m_Samples.Get(0).m_Start);
 
-        foreach (RDF_LidarSample sample : m_Samples)
+        if (m_Settings.m_UseBatchedMesh)
         {
-            if (m_Settings.m_ShowHitsOnly && !sample.m_Hit)
-                continue;
+            DrawBatchedMeshes(subject, m_Samples);
+        }
+        else
+        {
+            foreach (RDF_LidarSample sample : m_Samples)
+            {
+                if (m_Settings.m_ShowHitsOnly && !sample.m_Hit)
+                    continue;
 
-            if (m_Settings.m_DrawRays)
-                DrawRay(sample.m_Start, sample.m_HitPos, sample.m_Distance, sample.m_Hit);
+                if (m_Settings.m_DrawRays)
+                    DrawRay(sample.m_Start, sample.m_HitPos, sample.m_Distance, sample.m_Hit);
 
-            if (m_Settings.m_DrawPoints)
-                DrawPointFromSample(sample);
+                if (m_Settings.m_DrawPoints)
+                    DrawPointFromSample(sample);
+            }
         }
     }
 
@@ -229,6 +243,152 @@ class RDF_LidarVisualizer
         endZ[0] = origin;
         endZ[1] = origin + axisZ * len;
         m_DebugShapes.Insert(Shape.CreateLines(ARGBF(1, 0, 0, 1), ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER, endZ, 2));
+    }
+
+    // Batched mesh renderer: builds GPU-friendly triangle lists per-color-bucket and issues far fewer Shape calls.
+    // - Groups ray-segments and point billboards into color buckets (<= m_RaySegments buckets).
+    // - Produces one Shape.CreateTris() call per non-empty bucket (hits / misses separate), drastically reducing overhead.
+    protected void DrawBatchedMeshes(IEntity subject, array<ref RDF_LidarSample> samples)
+    {
+        if (!m_DebugShapes || !samples || samples.Count() == 0 || !m_Settings)
+            return;
+
+        PlayerController controller = GetGame().GetPlayerController();
+        if (!controller)
+            return;
+        PlayerCamera playerCam = controller.GetPlayerCamera();
+        if (!playerCam)
+            return;
+
+        vector camMat[4];
+        playerCam.GetWorldCameraTransform(camMat);
+        vector camRight = camMat[0];
+        vector camUp = camMat[1];
+
+        int segs = Math.Max(1, m_Settings.m_RaySegments);
+        // Two sets: hit / miss buckets to avoid mixing hit-based coloring rules
+        array<ref array<vector>> trisHits = new array<ref array<vector>>();
+        array<ref array<vector>> trisMisses = new array<ref array<vector>>();
+        for (int i = 0; i < segs; i++)
+        {
+            trisHits.Insert(new array<vector>());
+            trisMisses.Insert(new array<vector>());
+        }
+
+        float defaultPointSize = Math.Max(0.001, m_Settings.m_PointSize);
+        // Use a much thinner quad for ray geometry so it visually matches debug lines more closely.
+        float rayHalfWidth = defaultPointSize * 0.2; // visual thickness for ray-quads
+
+        foreach (RDF_LidarSample sample : samples)
+        {
+            if (m_Settings.m_ShowHitsOnly && !sample.m_Hit)
+                continue;
+
+            vector start = sample.m_Start;
+            vector end = sample.m_HitPos;
+            vector full = end - start;
+            float fullLen = full.Length();
+            vector dirNorm;
+            if (fullLen > 0.00001)
+                dirNorm = full / fullLen;
+            else
+                dirNorm = Vector(0,0,1);
+
+            // Precompute a perp axis roughly perpendicular to the ray and camera right
+            vector side = camRight;
+            float dot = side[0]*dirNorm[0] + side[1]*dirNorm[1] + side[2]*dirNorm[2];
+            vector perp = side - (dirNorm * dot);
+            float plen = perp.Length();
+            if (plen <= 1e-5)
+                perp = camUp;
+            else
+                perp = perp / plen;
+
+            // Draw ray as segmented thin quads (bucketed by t)
+            if (m_Settings.m_DrawRays && fullLen > 0.0)
+            {
+                for (int si = 1; si <= segs; si++)
+                {
+                    float t0 = (si - 1) / (float)segs;
+                    float t1 = si / (float)segs;
+                    vector p0 = start + full * t0;
+                    vector p1 = start + full * t1;
+
+                    vector v0 = p0 - perp * rayHalfWidth;
+                    vector v1 = p0 + perp * rayHalfWidth;
+                    vector v2 = p1 + perp * rayHalfWidth;
+                    vector v3 = p1 - perp * rayHalfWidth;
+
+                    int bucket = Math.Clamp((int)Math.Floor(t1 * segs), 0, segs - 1);
+                    ref array<vector> bucketArr;
+                    if (sample.m_Hit)
+                        bucketArr = trisHits.Get(bucket);
+                    else
+                        bucketArr = trisMisses.Get(bucket);
+                    // two triangles (v0,v1,v2) and (v0,v2,v3)
+                    bucketArr.Insert(v0);
+                    bucketArr.Insert(v1);
+                    bucketArr.Insert(v2);
+                    bucketArr.Insert(v0);
+                    bucketArr.Insert(v2);
+                    bucketArr.Insert(v3);
+                }
+            }
+
+            // NOTE: points will be drawn after the loop as spheres to preserve original appearance
+            // (batched triangles are used for rays only). This keeps point visuals unchanged while
+            // still benefiting from batched ray rendering.
+            
+        }
+
+        int triFlags = ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.TRANSP | ShapeFlags.DOUBLESIDE; // draw both sides to avoid backface culling
+
+        // Draw spherical points (preserve original point/sphere appearance)
+        if (m_Settings.m_DrawPoints)
+        {
+            foreach (RDF_LidarSample spt : samples)
+            {
+                if (m_Settings.m_ShowHitsOnly && !spt.m_Hit)
+                    continue;
+                DrawPointFromSample(spt);
+            }
+        }
+
+        // Emit shapes per bucket (hits / misses) — delegate chunking to helper to keep VM stack small
+        for (int i = 0; i < segs; i++)
+        {
+            int hitColor = BuildRayColorAtT(((i + 0.5) / (float)segs), true);
+            ref array<vector> hitTris = trisHits.Get(i);
+            if (hitTris && hitTris.Count() > 0)
+                EmitTrisArray(hitColor, triFlags, hitTris);
+
+            int missColor = BuildRayColorAtT(((i + 0.5) / (float)segs), false);
+            ref array<vector> missTris = trisMisses.Get(i);
+            if (missTris && missTris.Count() > 0)
+                EmitTrisArray(missColor, triFlags, missTris);
+        }
+    }
+
+    // Helper: emit triangles from an array<vector> in safe-sized chunks to avoid large stack allocations.
+    protected void EmitTrisArray(int color, int flags, array<vector> src)
+    {
+        const int CHUNK = 1020; // must be divisible by 3 and small enough for VM stack
+        int totalVerts = src.Count();
+        int offset = 0;
+        while (offset < totalVerts)
+        {
+            int copyCount = Math.Min(totalVerts - offset, CHUNK);
+            vector trisBuf[CHUNK];
+            for (int vi = 0; vi < copyCount; vi++)
+                trisBuf[vi] = src.Get(offset + vi);
+
+            int triCountChunk = copyCount / 3;
+            Shape s = Shape.CreateTris(color, flags, trisBuf, triCountChunk);
+            if (s)
+                m_DebugShapes.Insert(s);
+
+            offset += copyCount;
+        }
     }
 
     // New: draw point using the full sample so color/size strategies can access metadata

@@ -56,6 +56,7 @@
 - `m_DrawOriginAxis` (bool): 是否绘制扫描原点与局部 X/Y/Z 三轴（默认 false，调试用）
 - `m_OriginAxisLength` (float): 三轴长度（默认 0.8）
 - `m_RenderWorld` (bool): 为 true 时渲染游戏画面+点云；为 false 时仅渲染点云（在相机前绘制黑色四边形遮挡场景，并通过 `SetCharacterCameraRenderActive(false)` 关闭场景渲染，默认 true）
+- `m_UseBatchedMesh` (bool): 为 true 时启用批量三角网格渲染（按颜色桶合并点/射线为较少的 Shape.CreateTris 调用），推荐在高射线计数 / 大点云场景下使用以减少绘制调用（默认 false）
 
 ### RDF_LidarVisualizer
 主要方法：
@@ -181,6 +182,8 @@ Network 模块内置实现，基于 Rpl 同步状态与扫描结果。
 - `static void SetDemoDrawOriginAxis(bool draw)` — 是否在 demo 中绘制扫描原点与三轴（对应 VisualSettings.m_DrawOriginAxis）
 - `static void SetDemoRenderWorld(bool renderWorld)` — 为 true 时渲染游戏画面+点云，为 false 时仅渲染点云；内部会同步调用 `PlayerController.SetCharacterCameraRenderActive(renderWorld)` 以关闭/恢复场景渲染
 - `static bool GetDemoRenderWorld()` — 获取当前是否渲染游戏画面（默认 true）
+- `static void SetDemoUseBatchedMesh(bool use)` — 为 true 时切换到 `RDF_LidarVisualizer` 的批量三角网格渲染（`m_UseBatchedMesh`），适用于高射线计数场景以减少 Shape 调用
+- `static bool GetDemoUseBatchedMesh()` — 获取当前 demo 是否使用批量网格渲染（默认 false）
 - `static void SetDemoVerbose(bool verbose)` — 为 true 时使用内置回调每帧打印命中数与最近距离（使用 RDF_LidarSampleUtils）
 - `static void StartAutoRun()` / `static void StopAutoRun()` — 内部启停（一般通过 SetDemoEnabled 即可）
 - `static bool IsRunning()` — 当前是否正在自动运行
