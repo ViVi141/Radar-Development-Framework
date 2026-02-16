@@ -27,6 +27,7 @@ class RDF_ScanPayloadBuffer
 class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 {
     protected RplComponent m_RplComponent;
+    protected ref RDF_LidarScanner m_Scanner;
 
 	// Chunking and assembly helpers
 	const int RDF_MAX_CSV_CHUNK = 1000; // bytes per unreliable RPC chunk
@@ -71,7 +72,9 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 			m_LastScanResults = new array<ref RDF_LidarSample>();
 		if (!m_PayloadBuffers)
 			m_PayloadBuffers = new array<ref RDF_ScanPayloadBuffer>();
-	}
+		if (!m_Scanner)
+			m_Scanner = new RDF_LidarScanner();
+	} 
 
 	//------------------------------------------------------------------------------------------------
 	override bool IsNetworkAvailable()
@@ -180,7 +183,12 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 			return;
 
 		array<ref RDF_LidarSample> results = new array<ref RDF_LidarSample>();
-		RDF_LidarScanner scanner = new RDF_LidarScanner();
+		RDF_LidarScanner scanner = m_Scanner;
+		if (!scanner)
+		{
+			m_Scanner = new RDF_LidarScanner();
+			scanner = m_Scanner;
+		} 
 
 		// Apply replicated primitive config
 		scanner.GetSettings().m_RayCount = Math.Max(m_RayCount, 1);
@@ -249,7 +257,12 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 			return;
 
 		array<ref RDF_LidarSample> samples = RDF_LidarExport.ParseCSVToSamples(csv);
-		ApplyLocalScanResults(samples);
+		if (!samples || samples.Count() == 0)
+		{
+			if (m_Verbose)
+				Print("RDF_LidarNetworkComponent: Received empty/malformed CSV payload in RpcDo_ScanCompleteWithPayload", LogLevel.WARNING);
+		}
+		ApplyLocalScanResults(samples); 
 		// Clients may react to scan completion via other hooks
 	}
 
@@ -325,8 +338,11 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 				assembled += part;
 			}
 
-			array<ref RDF_LidarSample> samples = RDF_LidarExport.ParseCSVToSamples(assembled);
-			ApplyLocalScanResults(samples);
+			array<ref RDF_LidarSample> samples = RDF_LidarExport.ParseCSVToSamples(assembled);		if (!samples || samples.Count() == 0)
+		{
+			if (m_Verbose)
+				Print("RDF_LidarNetworkComponent: Parsed assembled CSV but got 0 samples (possible corruption)", LogLevel.WARNING);
+		}			ApplyLocalScanResults(samples);
 			// cleanup buffer
 			m_PayloadBuffers.RemoveItem(buf);
 		}
