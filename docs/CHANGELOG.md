@@ -1,5 +1,35 @@
 # CHANGELOG
 
+## 2026-02-17 — CSV/导出与网络传输改进（小范围性能与健壮性提升）
+
+概述：本次更新集中在服务器端的 CSV 序列化、网络传输和导出路径，目标是在处理大型点云时减少峰值内存/CPU 和降低网络分片的失败率。改动均为向后兼容的实现层优化（未修改公开 API 签名）。
+
+主要改动（实际实现）：
+
+- 优化：在 `RDF_LidarNetworkComponent` 中**缓存并复用** `RDF_LidarScanner`（替代每次 `new RDF_LidarScanner()`），减少短生命周期对象分配并降低 GC 压力。
+  - 文件：`scripts/Game/RDF/Lidar/Network/RDF_LidarNetworkComponent.c`
+
+- 优化：引入按样本构建的 CSV "parts"（新增 `RDF_LidarExport.SamplesToCSVParts`），并在服务器端**流式/分块**发送 RPC payload。对较大载荷仍支持将 parts 合并后进行 RLE 压缩再发送（保留原有 `RLE:` 协议前缀）。此改动显著减少了为大扫描一次性构建巨型字符串的内存峰值。
+  - 文件：`scripts/Game/RDF/Lidar/Util/RDF_LidarExport.c`, `scripts/Game/RDF/Lidar/Network/RDF_LidarNetworkComponent.c`
+
+- 改进：`ExportToFile` 采用 **best-effort 原子写入**（先写入 `.tmp` 临时文件，再写目标文件）以降低导出时产生截断文件的概率（注意：引擎脚本层面无法保证完全原子重命名）。
+  - 文件：`scripts/Game/RDF/Lidar/Util/RDF_LidarExport.c`
+
+- 健壮性增强：在 RPC 接收与分片组装路径增加对解析失败/空结果的可选日志（由 `m_Verbose` 控制），便于诊断网络损坏或压缩/解压问题。
+  - 文件：`scripts/Game/RDF/Lidar/Network/RDF_LidarNetworkComponent.c`
+
+- 文档：新增 `docs/USED_APIS.md`（列出项目实际调用的引擎 API 并包含 MCP 检查结论）。
+  - 文件：`docs/USED_APIS.md`
+
+兼容性说明：
+- 未修改任一公共方法的签名或外部可见行为；CSV/RLE 的字符串格式与客户端解析兼容（服务端仅改变序列化/分片实现）。
+
+测试建议：
+- 在本地或服务器上触发大射线计数扫描（例如 m_RayCount >= 4096），验证内存/GC 峰值、网络分片与客户端解析是否正常；开启 `m_Verbose` 以查看 RPC 解析警告日志。
+- 使用 `ExportToFile` 验证临时文件写入路径与最终目标文件内容一致（注意脚本层面的重命名/删除限制）。
+
+---
+
 ## 2026-02-14 — 修复与性能优化
 
 概述：本次提交修复了几处功能不一致和性能瓶颈，并做了若干内部实现优化以降低运行时分配与网络开销。所有改动均保持对外 API 的兼容性（未修改公开方法签名或行为契约）。
