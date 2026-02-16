@@ -52,46 +52,21 @@ class RDF_LidarExport
     }
 
     // Export samples to CSV file. Overwrites if file exists. Returns true on success.
-    // Best-effort atomic export: write to a temporary file first, then overwrite the target.
-    // Note: Enfusion/FileIO may not expose a cross-platform atomic rename API in script —
-    // this reduces the window for a truncated file but is not a perfect atomic rename.
     static bool ExportToFile(array<ref RDF_LidarSample> samples, string path)
     {
         if (!samples || !path || path == "")
             return false;
-
-        string tmpPath = path + ".tmp";
-        // 1) write to temporary file first
-        FileHandle ft = FileIO.OpenFile(tmpPath, FileMode.WRITE);
-        if (!ft)
+        FileHandle f = FileIO.OpenFile(path, FileMode.WRITE);
+        if (!f)
             return false;
-        ft.WriteLine(RDF_LidarExport.GetCSVHeader());
+        f.WriteLine(RDF_LidarExport.GetCSVHeader());
         for (int i = 0; i < samples.Count(); i++)
         {
             RDF_LidarSample s = samples.Get(i);
             if (s)
-                ft.WriteLine(RDF_LidarExport.SampleToCSVRow(s));
+                f.WriteLine(RDF_LidarExport.SampleToCSVRow(s));
         }
-        ft.Close();
-
-        // 2) overwrite destination (best-effort atomic behavior)
-        FileHandle fd = FileIO.OpenFile(path, FileMode.WRITE);
-        if (!fd)
-        {
-            // fallback: if we cannot open destination, leave temp file for inspection
-            return false;
-        }
-        // Copy from 'samples' again into target so we don't rely on reading files at script runtime.
-        fd.WriteLine(RDF_LidarExport.GetCSVHeader());
-        for (int i = 0; i < samples.Count(); i++)
-        {
-            RDF_LidarSample s = samples.Get(i);
-            if (s)
-                fd.WriteLine(RDF_LidarExport.SampleToCSVRow(s));
-        }
-        fd.Close();
-
-        // Leaving tmp file in place for now (could remove if engine exposes delete/rename APIs).
+        f.Close();
         return true;
     }
 
@@ -168,17 +143,17 @@ class RDF_LidarExport
     // Serialize samples to compact CSV string for network broadcast (see RFC in code comments).
     // Serialize samples to compact CSV string for network broadcast (see RFC in code comments).
     // Optional: quantize floats to reduce size and optionally apply simple RLE compression.
-    // Build per-sample CSV "parts" (compact, no trailing ';').
-    static array<string> SamplesToCSVParts(array<ref RDF_LidarSample> samples, int decimalPlaces = 3)
+    static string SamplesToCSV(array<ref RDF_LidarSample> samples, bool compress = false, int decimalPlaces = 3)
     {
-        array<string> parts = new array<string>();
         if (!samples || samples.Count() == 0)
-            return parts;
+            return string.Empty;
 
         float mul = Math.Pow(10.0, decimalPlaces);
+        string csv = "";
         for (int i = 0; i < samples.Count(); i++)
         {
             RDF_LidarSample s = samples.Get(i);
+            // Format: idx|hit|startX,startY,startZ|hitX,hitY,hitZ|dirX,dirY,dirZ|dist
             string hitStr = "0";
             if (s.m_Hit)
                 hitStr = "1";
@@ -187,25 +162,10 @@ class RDF_LidarExport
             part = part + (Math.Round(s.m_HitPos[0] * mul) / mul).ToString() + "," + (Math.Round(s.m_HitPos[1] * mul) / mul).ToString() + "," + (Math.Round(s.m_HitPos[2] * mul) / mul).ToString() + "|";
             part = part + (Math.Round(s.m_Dir[0] * mul) / mul).ToString() + "," + (Math.Round(s.m_Dir[1] * mul) / mul).ToString() + "," + (Math.Round(s.m_Dir[2] * mul) / mul).ToString() + "|";
             part = part + (Math.Round(s.m_Distance * mul) / mul).ToString();
-            parts.Insert(part);
-        }
-        return parts;
-    }
-
-    // Serialize samples to compact CSV string for network broadcast (see RFC in code comments).
-    static string SamplesToCSV(array<ref RDF_LidarSample> samples, bool compress = false, int decimalPlaces = 3)
-    {
-        array<string> parts = SamplesToCSVParts(samples, decimalPlaces);
-        if (!parts || parts.Count() == 0)
-            return string.Empty;
-
-        string csv = "";
-        for (int i = 0; i < parts.Count(); i++)
-        {
-            if (i < parts.Count() - 1)
-                csv += parts.Get(i) + ";";
+            if (i < samples.Count() - 1)
+                csv += part + ";";
             else
-                csv += parts.Get(i);
+                csv += part;
         }
 
         if (compress)

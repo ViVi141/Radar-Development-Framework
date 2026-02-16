@@ -45,17 +45,13 @@
 
 Summary: 未发现**致命或明显错误的 API 用法**。网络与本地逻辑遵循良好实践（例如：在代理端发送 RPC 前检查 `IsProxy()`；对来自客户端的参数在服务器端做了验证；RPC handler 的 `RplRpc` 注解与 `Rpc()` 调用方向一致）。
 
-已实现的改进（本次提交）
+发现的可改进项（非阻塞建议）：
 
-- 序列化优化：新增 `RDF_LidarExport.SamplesToCSVParts()` 并在 `RDF_LidarNetworkComponent.PerformScanInternal()` 中采用“parts 流式打包 + 分片发送”策略，避免为中等大小负载构建单个巨型字符串（降低内存峰值与临时分配）。
-- 缓存扫描器：组件内复用 `RDF_LidarScanner` 实例以减少频繁分配。 
-- RPC 接收强化：在 `RpcDo_ScanComplete*` 路径增加了解析失败 / 空负载的可选警告（`m_Verbose` 模式）。
-- ExportToFile 改进：对文件导出采用“先写临时文件，再覆盖目标”的 best-effort 策略以减少写出不完整文件的窗口（注意：真正的原子重命名取决于运行时 FileIO 是否提供重命名/删除 API）。
+- 小建议 — 备用时间源：在 `RDF_ScanPayloadBuffer` 构造与 RPC chunk 清理路径中，buffer 的 `m_CreateTime` 在没有 `GetWorld()` 时保留为 `0.0`，这会使基于世界时间的超时逻辑失效。建议在无法取得 world time 时使用一个备选时间（或尽早忽略/记录该缓冲）。
 
-建议的进一步优化（仍可选）
+- 建议 — 更明确的错误/日志：在 chunk 组装失败（长期缺失分片）或解析失败时增加可选日志/统计，便于调试网络问题（目前以 silent drop 为主，但代码已有 10s 清理）。
 
-- 如引擎支持：用原子文件重命名（rename/move）替换当前的 best-effort 逻辑以实现真正原子写入。
-- 若需要更高效网络序列化：考虑引入二进制打包或更强压缩算法（需兼容客户端解析）。
+- 建议 — 内存安全提示：`PerformScanInternal` 在服务器端会将 CSV 拼接为单个字符串以便分片发送；对极大点云可考虑早期流式序列化（当前已按 chunk 逻辑切分，风险较低）。
 
 总体评级：代码中的 API 使用模式是正确且一致的（无需要立即修复的问题）。
 
