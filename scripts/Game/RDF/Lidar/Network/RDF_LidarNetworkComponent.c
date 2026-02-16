@@ -27,6 +27,7 @@ class RDF_ScanPayloadBuffer
 class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 {
     protected RplComponent m_RplComponent;
+    protected ref RDF_LidarScanner m_Scanner;
 
 	// Chunking and assembly helpers
 	const int RDF_MAX_CSV_CHUNK = 1000; // bytes per unreliable RPC chunk
@@ -71,7 +72,9 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 			m_LastScanResults = new array<ref RDF_LidarSample>();
 		if (!m_PayloadBuffers)
 			m_PayloadBuffers = new array<ref RDF_ScanPayloadBuffer>();
-	}
+		if (!m_Scanner)
+			m_Scanner = new RDF_LidarScanner();
+	} 
 
 	//------------------------------------------------------------------------------------------------
 	override bool IsNetworkAvailable()
@@ -180,7 +183,12 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 			return;
 
 		array<ref RDF_LidarSample> results = new array<ref RDF_LidarSample>();
-		RDF_LidarScanner scanner = new RDF_LidarScanner();
+		RDF_LidarScanner scanner = m_Scanner;
+		if (!scanner)
+		{
+			m_Scanner = new RDF_LidarScanner();
+			scanner = m_Scanner;
+		} 
 
 		// Apply replicated primitive config
 		scanner.GetSettings().m_RayCount = Math.Max(m_RayCount, 1);
@@ -189,25 +197,42 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 		scanner.Scan(subject, results);
 		UpdateScanResults(results);
 
-		// Serialize results to CSV and broadcast to clients (chunk if large).
-		// Avoid serializing twice: produce CSV once, then apply compression on the string if needed.
-		string csv = RDF_LidarExport.SamplesToCSV(results);
-		if (!csv || csv == string.Empty)
+		// Serialize results to CSV and broadcast to clients (stream parts to avoid building one huge string).
+		array<string> parts = RDF_LidarExport.SamplesToCSVParts(results);
+		if (!parts || parts.Count() == 0)
 		{
 			// nothing to send
 			return;
 		}
 
-		// If payload is large, try compressing the already-built CSV to reduce CPU and allocations.
-		if (csv.Length() > (RDF_MAX_CSV_CHUNK * 3))
+		// Fast path: compute total length and decide whether to compress
+		int totalLen = 0;
+		for (int pi = 0; pi < parts.Count(); pi++)
+		{
+			totalLen += parts.Get(pi).Length();
+		}
+		// account for separators (';') between parts
+		totalLen += Math.Max(0, parts.Count() - 1);
+
+		// If payload is large, compress the fully-joined CSV (compression requires the full string)
+		if (totalLen > (RDF_MAX_CSV_CHUNK * 3))
+		{
+			string csv = "";
+			for (int i = 0; i < parts.Count(); i++)
+			{
+				if (i < parts.Count() - 1)
+					csv += parts.Get(i) + ";";
+				else
+					csv += parts.Get(i);
+			}
 			csv = "RLE:" + RDF_LidarExport.RLECompress(csv);
 
-		if (csv.Length() <= RDF_MAX_CSV_CHUNK)
-		{
-			Rpc(RpcDo_ScanCompleteWithPayload, csv);
-		}
-		else
-		{
+			if (csv.Length() <= RDF_MAX_CSV_CHUNK)
+			{
+				Rpc(RpcDo_ScanCompleteWithPayload, csv);
+				return;
+			}
+
 			m_ScanSerial++;
 			int partCount = Math.Ceil(csv.Length() / (float)RDF_MAX_CSV_CHUNK);
 			for (int i = 0; i < partCount; i++)
@@ -217,7 +242,36 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 				string chunk = csv.Substring(start, len);
 				Rpc(RpcDo_ScanCompleteChunk, m_ScanSerial, i, i == (partCount - 1), chunk);
 			}
+			return;
 		}
+
+		// Stream parts into chunks <= RDF_MAX_CSV_CHUNK (avoids building the full CSV string)
+		m_ScanSerial++;
+		int seq = 0;
+		string cur = "";
+		for (int i = 0; i < parts.Count(); i++)
+		{
+			string p = parts.Get(i);
+			string toAdd = cur == "" ? p : ";" + p;
+			if (cur.Length() + toAdd.Length() > RDF_MAX_CSV_CHUNK)
+			{
+				// flush current chunk
+				Rpc(RpcDo_ScanCompleteChunk, m_ScanSerial, seq, false, cur);
+				seq++;
+				cur = p; // start new chunk with p
+			}
+			else
+			{
+				cur += toAdd;
+			}
+		}
+
+		// send remaining chunk (mark as last)
+		if (cur != "")
+		{
+			Rpc(RpcDo_ScanCompleteChunk, m_ScanSerial, seq, true, cur);
+		}
+
     }
 	//------------------------------------------------------------------------------------------------
 	protected void UpdateScanResults(array<ref RDF_LidarSample> results)
@@ -249,7 +303,12 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 			return;
 
 		array<ref RDF_LidarSample> samples = RDF_LidarExport.ParseCSVToSamples(csv);
-		ApplyLocalScanResults(samples);
+		if (!samples || samples.Count() == 0)
+		{
+			if (m_Verbose)
+				Print("RDF_LidarNetworkComponent: Received empty/malformed CSV payload in RpcDo_ScanCompleteWithPayload", LogLevel.WARNING);
+		}
+		ApplyLocalScanResults(samples); 
 		// Clients may react to scan completion via other hooks
 	}
 
@@ -325,8 +384,11 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 				assembled += part;
 			}
 
-			array<ref RDF_LidarSample> samples = RDF_LidarExport.ParseCSVToSamples(assembled);
-			ApplyLocalScanResults(samples);
+			array<ref RDF_LidarSample> samples = RDF_LidarExport.ParseCSVToSamples(assembled);		if (!samples || samples.Count() == 0)
+		{
+			if (m_Verbose)
+				Print("RDF_LidarNetworkComponent: Parsed assembled CSV but got 0 samples (possible corruption)", LogLevel.WARNING);
+		}			ApplyLocalScanResults(samples);
 			// cleanup buffer
 			m_PayloadBuffers.RemoveItem(buf);
 		}
