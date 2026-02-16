@@ -18,9 +18,6 @@
 - 健壮性增强：在 RPC 接收与分片组装路径增加对解析失败/空结果的可选日志（由 `m_Verbose` 控制），便于诊断网络损坏或压缩/解压问题。
   - 文件：`scripts/Game/RDF/Lidar/Network/RDF_LidarNetworkComponent.c`
 
-- 文档：新增 `docs/USED_APIS.md`（列出项目实际调用的引擎 API 并包含 MCP 检查结论）。
-  - 文件：`docs/USED_APIS.md`
-
 兼容性说明：
 - 未修改任一公共方法的签名或外部可见行为；CSV/RLE 的字符串格式与客户端解析兼容（服务端仅改变序列化/分片实现）。
 
