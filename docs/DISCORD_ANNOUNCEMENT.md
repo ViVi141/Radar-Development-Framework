@@ -1,451 +1,655 @@
-# 📡 Radar Development Framework - 雷达开发框架公告
+# 📡 Radar Development Framework - Announcement
 
-**项目性质**：MOD 开发框架（不是直接可玩的 MOD）  
-**目标用户**：MOD 开发者、脚本作者  
-**发布日期**：2026-02-18  
+**Project Nature**: MOD Development Framework (not a directly playable MOD)
 
----
+**Target Users**: MOD developers, script authors
 
-## 📢 这是什么项目？
-
-各位 MOD 开发者和社区成员，
-
-我们完成了一个 **雷达系统开发框架** 的技术规划和引擎 API 验证。这是一个**开发者工具包**，旨在让其他开发者能够在 Arma Reforger 中创建基于物理原理的雷达系统。
-
-### 明确定位
-
-❌ **这不是**：
-- 直接可用的游戏内容
-- 即装即玩的 MOD
-- 有发布时间表的成品
-
-✅ **这是**：
-- 完整的技术方案和实现文档
-- 经过验证的引擎能力评估
-- 开源的代码参考和设计模式
-- 让开发者能够构建雷达系统的基础工具
+**Release Date**: 2026-02-18
 
 ---
 
-## ✅ 已完成的工作
+## 📢 What is this project?
 
-| 工作内容 | 状态 | 成果 |
+Dear MOD developers and community members,
+
+We have completed the technical planning and engine API validation of a **radar system development framework**. This is a **developer toolkit** designed to enable other developers to create physics-based radar systems within Arma Reforger.
+
+### Clear Positioning
+
+❌ **This is not**:
+
+- Readily available game content
+
+- Instant-play MODs
+
+- Finished product with a release schedule
+
+✅ **This is**:
+
+- Complete technical solution and implementation documentation
+
+- Validated engine capability assessment
+
+- Open-source code references and design patterns
+
+- Foundational tools enabling developers to build radar systems
+
+---
+
+## ✅ Completed Work
+
+| Work Content | Status | Results |
+
 |---------|------|------|
-| **引擎能力评估** | ✅ 完成 | 确认技术完全可行 |
-| **核心 API 验证** | ✅ 100% | 17 个关键 API 已验证可用 |
-| **技术方案设计** | ✅ 完成 | 7 个阶段的实现路线图 |
-| **技术文档编写** | ✅ 完成 | 5000+ 行详细文档 |
 
-**技术文档**：
-- 📄 `RADAR_IMPLEMENTATION_PLAN.md` - 完整实现方案（1831 行）
-- 📄 `REQUIRED_ENGINE_APIs.md` - 引擎 API 文档（4297 行，v2.2 🌲）
-- 📄 `REMAINING_LIMITATIONS.md` - 剩余限制分析（785 行）
+| **Engine Capability Assessment** | ✅ Completed | Technical feasibility confirmed |
 
----
+| **Core API Validation** | ✅ 100% | 17 key APIs validated and usable |
 
-## 🔬 已验证的技术能力
+| **Technical Solution Design** | ✅ Completed | 7-phase implementation roadmap |
 
-经过深度研究，我们确认 Enfusion 引擎**完全支持**雷达系统所需的所有核心功能：
+| **Technical Documentation** | ✅ Completed | 5000+ lines of detailed documentation |
 
-### 射线追踪与穿透 ⭐⭐⭐
-- ✅ 同步和异步射线追踪
-- ✅ 可获取命中点、法线、材质
-- ✅ 支持物理层过滤
-- ✅ **森林穿透**：过滤器忽略植被，探测后方目标 🌲⭐⭐⭐
-- ✅ **多目标探测**：收集射线路径上所有目标 ⭐⭐⭐
-- ✅ **RCS 过滤**：忽略小目标杂波，只探测大目标 ⭐⭐
+**Technical Documentation**:
 
-### 物理和材质系统 ⭐⭐⭐
-- ✅ 获取实体真实物理速度（多普勒的关键）
-- ✅ 查询材质密度（RCS 计算的基础）
-- ✅ 表面属性完整访问
-- ✅ 实时天气数据（降雨、雾、湿度影响衰减）🌦️
+- 📄 `RADAR_IMPLEMENTATION_PLAN.md` - Complete Implementation (1831 lines)
 
-### 可视化系统
-- ✅ 调试形状绘制
-- ✅ 区域网格生成（持久化）
-- ✅ 动态材质切换（运行时）
+- 📄 `REQUIRED_ENGINE_APIs.md` - Engine API Documentation (4297 lines, v2.2 🌲)
 
-### 数学和网络
-- ✅ 完整数学函数库（对数、幂、三角）
-- ✅ 向量运算（点积、距离、归一化）
-- ✅ 网络同步和 RPC 支持
-
-**API 验证完整度：100%** ✅  
-**所有核心功能均可实现** ✅
+- 📄 `REMAINING_LIMITATIONS.md` - Remaining Limitations Analysis (785 lines)
 
 ---
 
-## 🎯 框架功能概览
+## 🔬 Verified Technical Capabilities
 
-### 雷达物理模拟
-- **传播模型**：自由空间损耗（FSPL）、大气衰减
-- **探测能力**：基于雷达方程的动态计算
-- **RCS 估算**：使用真实材质密度
-- **信噪比**：动态 SNR 判断目标可探测性
+Through in-depth research, we have confirmed that the Enfusion engine **fully supports** all the core functionalities required for radar systems:
 
-### 多普勒测速 ⭐
-- **速度测量**：使用引擎真实物理速度
-- **径向速度**：计算目标接近/远离
-- **MTI 过滤**：区分移动和静止目标
-- **目标分类**：基于速度特征识别类型
+### Ray Tracing and Penetration ⭐⭐⭐
 
-### 雷达工作模式
-- **脉冲雷达**：传统测距
-- **连续波**：纯速度测量
-- **FMCW**：同时测距和测速
-- 可扩展架构
+- ✅ Synchronous and Asynchronous Ray Tracing
 
-### 可视化方案
-- **点云显示**：基于 LiDAR 系统
-- **PPI 显示**：360° 旋转扫描指示器
-- **目标标记**：可定制的颜色编码和高亮
-- **动画效果**：流畅的扫描线和状态指示
+- ✅ Capable of acquiring hit points, normals, and materials
 
-### 高级功能（可选）
-- **电子对抗**：干扰模拟和抗干扰
-- **目标追踪**：轨迹记录和预测
-- **SAR 成像**：合成孔径雷达（原型）
+- ✅ Supports Physical Layer Filtering
 
----
+- ✅ **Forest Penetration**: The filter ignores vegetation, detecting targets behind it 🌲⭐⭐⭐
 
-## ⚠️ 技术说明
+- ✅ **Multi-Target Detection**: Collects all targets along the ray path ⭐⭐⭐
 
-### 实现方式
+- ✅ **RCS Filtering**: Ignores small target clutter, only detects large targets ⭐⭐
 
-本框架是 **基于数学模型的模拟系统**：
+### Physics and Material System ⭐⭐⭐
 
-**工作流程**：
-1. 使用引擎射线追踪探测目标（真实的）
-2. 获取物理属性（速度、材质、位置）（真实的）
-3. 应用雷达物理公式计算结果（数学模拟）
-4. 可视化显示和数据输出（真实的）
+- ✅ Obtain the true physical velocity of an entity (key to Doppler)
 
-### 可以做到
+- ✅ Query material density (foundation of RCS calculation)
 
-✅ 基于距离的探测衰减  
-✅ 基于材质的反射率差异  
-✅ 基于速度的多普勒效应  
-✅ 真实可信的雷达显示  
-✅ 目标分类和追踪  
+- ✅ Complete access to surface properties
 
-### 剩余限制（透明说明）
+- ✅ Real-time weather data (attenuation of rainfall, fog, and humidity effects) 🌦️
 
-**🔴 严重限制**：无（已全部解决）✅
+### Visualization System
 
-**🟡 可接受的合理限制**：
-- ⚠️ **建筑/地形遮挡** - 墙体和山丘会阻挡射线（增强战术性）
-- ⚠️ **视距限制** - 适合战术级雷达（20-50km），不适合战略超视距雷达
-- ℹ️ **电磁波物理** - 使用数学模拟而非真实波传播（效果一致）
+- ✅ Debug shape drawing
 
-**✅ 已解决的关键能力**：
-- ✅ **森林穿透** - 可忽略植被探测后方目标 🌲⭐⭐⭐
-- ✅ **多目标探测** - 可收集路径上所有目标 ⭐⭐⭐
-- ✅ **小目标过滤** - 可忽略步兵等杂波，只显示车辆/飞机 ⭐⭐
+- ✅ Region mesh generation (persistent)
 
-**功能完整度评估**：**97%** ⭐⭐⭐⭐⭐
+- ✅ Dynamic material switching (runtime)
 
-**适用性评级**：
-- 防空预警雷达：⭐⭐⭐⭐⭐ (95%) - 几乎完美
-- 地面搜索雷达：⭐⭐⭐⭐ (80%) - 优秀
-- 火控引导雷达：⭐⭐⭐⭐ (85%) - 优秀
-- 导航测绘雷达：⭐⭐⭐⭐⭐ (90%) - 几乎完美
+### Mathematics and Networks
 
-**结论**：无阻碍性限制，剩余限制增强战术深度。
+- ✅ Complete mathematical function library (logarithms, powers, trigonometrics)
+
+- ✅ Vector operations (dot product, distance, normalization)
+
+- ✅ Network synchronization and RPC support
+
+**API Verification Completeness: 100%** ✅
+
+**All core functions are implemented** ✅
 
 ---
 
-## 🎮 可能的应用
+## 🎯 Framework Function Overview
 
-MOD 开发者可以使用本框架创建：
+### Radar Physical Simulation
 
-### 雷达系统类型
-- 地面搜索雷达（大范围监控）
-- 防空预警雷达（空中目标）
-- 火控雷达（武器引导）
-- 导航雷达（地形测绘）
-- 气象雷达（可选）
+- **Propagation Model**: Free Space Loss (FSPL), Atmospheric Attenuation
 
-### 战术玩法
-- 远距离探测和预警
-- 运动目标识别
-- 夜间/恶劣天气作战
-- 电子对抗战术
-- 精确火力引导
+- **Detection Capability**: Dynamic calculation based on radar equations
 
-### 实现建议
+- **RCS Estimation**: Using real material density
 
-**推荐雷达类型**（按适用性）：
-1. **防空预警雷达** ⭐⭐⭐⭐⭐ - 空中目标无遮挡，效果完美
-2. **导航测绘雷达** ⭐⭐⭐⭐⭐ - 地形探测无限制
-3. **火控引导雷达** ⭐⭐⭐⭐ - 精确追踪，视距内完美
-4. **地面搜索雷达** ⭐⭐⭐⭐ - 森林穿透，城市需多站
+- **Signal-to-Noise Ratio**: Dynamic SNR to determine target detectability
 
-**技术考虑**：
-- ✅ **森林环境** - 植被过滤器完美解决 🌲
-- ⚠️ **城市环境** - 建筑遮挡需要多站雷达网
-- ⚠️ **山区环境** - 高地部署或预警机平台
-- ✅ **性能优化** - 分帧扫描、LOD 等成熟技术
+### Doppler Velocity Measurement ⭐
 
----
+- **Velocity Measurement**: Using the engine's real physical velocity
 
-## 📚 如何使用
+- **Radial Velocity**: Calculating target approach/distance
 
-### 面向 MOD 开发者
+- **MTI Filtering**: Differentiating between moving and stationary targets
 
-**1. 学习阶段**
-- 阅读技术文档理解原理
-- 查看 API 文档了解引擎能力
-- 研究参考实现和设计模式
+- **Target Classification**: Identifying types based on velocity characteristics
 
-**2. 集成阶段**
-- 将框架模块集成到你的 MOD
-- 根据需求定制雷达参数
-- 实现你的游戏逻辑和平衡
+### Radar Operating Modes
 
-**3. 扩展阶段**
-- 添加自定义雷达模式
-- 创建专用可视化方案
-- 开发特定游戏机制
+- **Pulse Radar**: Traditional ranging
 
-### 开源协作
+- **Continuous Wave**: Pure velocity measurement
 
-- ✅ 所有代码和文档完全开源
-- ✅ 可用于任何项目（包括商业）
-- ✅ 欢迎贡献和改进
-- ✅ 鼓励分享你的实现
+- **FMCW**: Simultaneous ranging and velocity measurement
+
+- Scalable Architecture
+
+### Visualization Solutions
+
+- **Point Cloud Display**: Based on LiDAR system
+
+- **PPI Display**: 360° rotating scan indicator
+
+- **Target Marking**: Customizable color coding and highlighting
+
+- **Animation Effects:** Smooth scan lines and status indicators
+
+### Advanced Features (Optional)
+
+- **Electronic Countermeasures:** Jamming simulation and anti-jamming
+
+- **Target Tracking:** Trajectory recording and prediction
+
+- **SAR Imaging:** Synthetic Aperture Radar (Prototype)
 
 ---
 
-## ❓ 常见问题（FAQ）
+## ⚠️ Technical Description
 
-### Q: 现在有可用的代码吗？
+### Implementation Method
 
-**A**: 主要是技术方案和文档。
-- ✅ 完整的技术文档（6500+ 行）
-- ✅ 实现路线图和设计模式
-- ✅ 包含大量完整代码示例
-- 🚧 完整代码库正在开发中
-- 📋 基于 LiDAR 框架逐步扩展
+This framework is a **mathematical model-based simulation system**:
 
-### Q: 物理模型是真实的吗？
+**Workflow:**
 
-**A**: 基于真实物理公式的精确模拟。
+1. Target detection using engine ray tracing (realistic)
 
-**使用的真实数据**：
-- ✅ 引擎真实物理速度（`Physics.GetVelocity()`）
-- ✅ 真实材质密度（`GameMaterial.GetBallisticInfo()`）
-- ✅ 真实天气参数（降雨强度、雾浓度、湿度）
-- ✅ 精确几何距离和角度
+2. Acquiring physical properties (velocity, material, position) (realistic)
 
-**使用的真实公式**：
-- ✅ 雷达方程（检测距离计算）
-- ✅ 自由空间传播损耗（FSPL）
-- ✅ 雨衰减模型（ITU-R P.838）
-- ✅ 多普勒频移公式（径向速度）
-- ✅ RCS 估算（基于材质和几何）
+3. Applying radar physics formulas to calculate results (mathematical simulation)
 
-**技术实现方式**：
-- ℹ️ 使用射线追踪代替真实电磁波（引擎限制）
-- ℹ️ 数学公式计算信号强度（模拟传播）
+4. Visualization and data output (realistic)
 
-**结论**：物理模型真实准确，玩家体验与真实雷达一致。
+### Capabilities
 
-### Q: 我需要什么技术水平？
+✅ Distance-based detection attenuation
 
-**A**: 中等以上的 Enforce Script 能力。
-- 需要理解 Arma Reforger 组件系统
-- 需要熟悉射线追踪 API
-- 需要基础物理和数学知识
-- 文档提供详细技术指导
+✅ Material-based reflectivity differences
 
-### Q: 性能会有问题吗？
+✅ Velocity-based Doppler effect
 
-**A**: 充分考虑了性能优化。
-- ✅ 异步射线追踪避免阻塞
-- ✅ 可配置扫描密度平衡性能
-- ✅ 基于已优化的 LiDAR 框架
-- ⚠️ 最终性能取决于具体使用方式
+✅ Realistic radar display
 
-### Q: 森林和建筑物会遮挡雷达吗？
+✅ Target classification and tracking
 
-**A**: 区分对待，技术上已完全解决森林遮挡。
+### Remaining Limitations (Transparent Explanation)
 
-**森林/植被** 🌲：
-- ✅ **可以穿透** - 使用过滤器忽略树木
-- ✅ 探测森林后方的车辆、飞机等目标
-- ✅ 代码示例已提供，完全可实现
-- 🎯 **防空雷达在森林中完美工作** ⭐⭐⭐
+**🔴** **Severe Limitations**: None (All resolved) ✅
 
-**建筑物/地形** 🏢：
-- ⚠️ **会遮挡** - 射线无法穿透实体结构
-- 战术意义：躲在建筑后方可以隐蔽
-- 解决方案：多站雷达网、高位部署
-- 🎯 **增强战术深度而非缺陷** ✅
+**🟡 Acceptable Reasonable Limitations**:
 
-**实际影响**：
-- 防空雷达（空中目标）：几乎无影响 ⭐⭐⭐⭐⭐
-- 地面雷达（开阔地）：无影响 ⭐⭐⭐⭐⭐
-- 地面雷达（城市）：需要战术部署 ⭐⭐⭐⭐
+- ⚠️ **Building/Terrain Obstruction** - Walls and hills can block rays (enhancing tactical effectiveness)
 
-### Q: 可以用于商业 MOD 吗？
+- ⚠️ **Line-of-Sight Limitation** - Suitable for tactical radar (20-50km), not suitable for strategic over-the-horizon radar
 
-**A**: 可以，完全开源。
-- ✅ 可用于任何项目
-- ✅ 可自由修改和分发
-- ✅ 无需署名（欢迎但不强制）
+- ℹ️ **Electromagnetic Wave Physics** - Uses mathematical simulations instead of real wave propagation (consistent effect)
+
+**✅ Resolved Key Capabilities**:
+
+- ✅ **Forest Penetration** - Detects targets behind vegetation 🌲⭐⭐⭐
+
+- ✅ **Multi-Target Detection** - Collects all targets in the path ⭐⭐⭐
+
+- ✅ **Small Target Filtering** - Ignores infantry clutter, only displays vehicles/aircraft ⭐⭐
+
+**Functionality Completeness Assessment**:** 97% ⭐⭐⭐⭐⭐
+
+**Suitability Rating**:
+
+- Air Defense Early Warning Radar: ⭐⭐⭐⭐⭐ (95%) - Nearly perfect
+
+- Ground Search Radar: ⭐⭐⭐⭐ (80%) - Excellent
+
+- Fire Control Guidance Radar: ⭐⭐⭐⭐ (85%) - Excellent
+
+- Navigation and Mapping Radar: ⭐⭐⭐⭐⭐ (90%) - Near Perfect
+
+**Conclusion**: No obstructive limitations; remaining limitations enhance tactical depth.
 
 ---
 
-## 💬 社区反馈
+## 🎮 Possible Applications
 
-### 我们想知道
+MOD developers can use this framework to create:
 
-🗳️ **你计划用这个框架做什么？**
-- 战役/任务中的雷达系统
-- 多人对战的侦察设备
-- 仿真训练场景
-- 技术研究和实验
+### Radar System Types
 
-💡 **你需要哪些功能？**
-- 特定的雷达模式
-- 专用可视化方案
-- 与其他系统的集成
-- 更多文档和示例
+- Ground Search Radar (Large-area surveillance)
 
-🤝 **欢迎参与**
-- 贡献代码和改进
-- 分享实现经验
-- 提供测试反馈
-- 完善文档
+- Air Defense Early Warning Radar (Aerial targets)
+
+- Fire Control Radar (Weapon guidance)
+
+- Navigation Radar (Terrain mapping)
+
+- Weather Radar (Optional)
+
+### Tactical Gameplay
+
+- Long-range detection and early warning
+
+- Moving target identification
+
+- Night/Inclement weather operations
+
+- Electronic warfare tactics
+
+- Precision fire guidance
+
+### Implementation Suggestions
+
+**Recommended Radar Types** (by applicability):
+
+1. **Air Defense Early Warning Radar** ⭐⭐⭐⭐⭐ - Perfect performance with unobstructed aerial targets
+
+2. **Navigation Mapping Radar** ⭐⭐⭐⭐⭐ - Unrestricted terrain detection
+
+3. **Fire Control Guidance Radar** ⭐⭐⭐⭐ - Precise tracking, perfect within line of sight
+
+4. **Ground Search Radar** ⭐⭐⭐⭐ - Forest penetration, city requires multiple radar stations
+
+**Technical Considerations**:
+
+- ✅ **Forest Environment** - Vegetation filters perfectly solve the problem 🌲
+
+- ⚠️ **Urban Environment** - Building obstruction requires a multi-station radar network
+
+- ⚠️ **Mountainous Environment** - High-altitude deployment or early warning aircraft platform
+
+- ✅ **Performance Optimization** - Mature technologies such as frame-by-frame scanning and LOD
 
 ---
 
-## 🔗 相关资源
+## 📚 How to Use
 
-### 技术文档
-- 📄 `RADAR_IMPLEMENTATION_PLAN.md` - 完整实现方案（1831 行）
-- 📄 `REQUIRED_ENGINE_APIs.md` - API 文档（4297 行，v2.2 🌲）
-- 📄 `REMAINING_LIMITATIONS.md` - 剩余限制分析（785 行）
-- 📄 `API.md` - 现有 LiDAR 系统文档
+### For MOD Developers
 
-### 项目仓库
+**1. Learning Phase**
+
+- Read technical documentation to understand the principles
+
+- Review API documentation to understand engine capabilities
+
+- Study reference implementations and design patterns
+
+**2. Integration Phase**
+
+- Integrate the framework modules into your MOD
+
+- Customize radar parameters according to your needs
+
+- Implement your game logic and balance
+
+**3. Extension Phase**
+
+- Add custom radar modes
+
+- Create dedicated visualization solutions
+
+Develop specific game mechanics
+
+### Open Source Collaboration
+
+- ✅ All code and documentation are completely open source
+
+- ✅ Suitable for any project (including commercial)
+
+- ✅ Contributions and improvements are welcome
+
+- ✅ Sharing your implementation is encouraged
+
+---
+
+## ❓ Frequently Asked Questions (FAQ)
+
+### Q: Is there any code available now?
+
+**A**: Primarily technical solutions and documentation.
+
+- ✅ Complete technical documentation (6500+ lines)
+
+- ✅ Implementation roadmap and design patterns
+
+- ✅ Includes numerous complete code examples
+
+- 🚧 The complete codebase is under development
+
+- 📋 Gradually expanding based on the LiDAR framework
+
+### Q: Is the physical model realistic?
+
+**A**: An accurate simulation based on real physical formulas.
+
+**Real-world data used:**
+
+- ✅ Real-world engine physics (`Physics.GetVelocity()`)
+
+- ✅ Real-world material density (`GameMaterial.GetBallisticInfo()`)
+
+- ✅ Real-world weather parameters (rainfall intensity, fog concentration, humidity)
+
+- ✅ Precise geometric distances and angles
+
+**Real-world formulas used:**
+
+- ✅ Radar equations (detection distance calculation)
+
+- ✅ Free space propagation loss (FSPL)
+
+- ✅ Rain attenuation model (ITU-R P.838)
+
+- ✅ Doppler shift formula (radial velocity)
+
+- ✅ RCS estimation (based on materials and geometry)
+
+**Technical implementation:**
+
+- ℹ️ Using ray tracing instead of real electromagnetic waves (engine limitations)
+
+- ℹ️ Calculating signal strength using mathematical formulas (simulated propagation)
+
+**Conclusion:** The physics model is realistic and accurate, providing a player experience consistent with real radar.
+
+### Q: What skill level do I need?
+
+**A**: Intermediate to high level EnforceScript proficiency.
+
+- Understanding of the Arma Reforger component system required.
+
+- Familiarity with the ray tracing API required.
+
+- Basic physics and mathematics knowledge required.
+
+- Detailed technical guidance provided in the documentation.
+
+### Q: Will there be performance issues?
+
+**A**: Performance optimization has been fully considered.
+
+- ✅ Asynchronous ray tracing avoids blocking.
+
+- ✅ Configurable scan density to balance performance.
+
+- ✅ Based on an optimized LiDAR framework.
+
+- ⚠️ Final performance depends on specific usage.
+
+### Q: Will forests and buildings obstruct the radar?
+
+**A**: This is handled differently; forest obstruction has been completely resolved technically.
+
+**Forest/Vegetation** 🌲:
+
+- ✅ **Can penetrate** - Uses filters to ignore trees
+
+- ✅ Detects vehicles, aircraft, etc. behind forests
+
+- ✅ Code examples provided, fully achievable
+
+- 🎯 **Air defense radar works perfectly in forests** ⭐⭐⭐
+
+**Buildings/Terrain** 🏢:
+
+- ⚠️ **Can obstruct** - Rays cannot penetrate solid structures
+
+- Tactical significance: Hiding behind buildings provides concealment
+
+- Solution: Multi-station radar network, high-level deployment
+
+- 🎯 **Enhances tactical depth, not a weakness** ✅
+
+**Actual impact**:
+
+- Air defense radar (air targets): Almost no impact ⭐⭐⭐⭐⭐
+
+- Ground radar (open ground): No impact ⭐⭐⭐⭐⭐
+
+- Ground radar (city): Requires tactical deployment ⭐⭐⭐⭐
+
+### Q: Can it be used for commercial mods?
+
+**A**: Yes, completely open source.
+
+- ✅ Can be used in any project
+
+- ✅ Freely modifiable and distributed
+
+- ✅ No attribution required (welcome but not mandatory)
+
+---
+
+## 💬 Community Feedback
+
+### We Want to Know
+
+🗳️ **What do you plan to use this framework for?**
+
+- Radar systems in campaigns/missions
+
+- Reconnaissance equipment for multiplayer battles
+
+- Simulation training scenarios
+
+- Technical research and experimentation
+
+💡 **What features do you need?** **
+- Specific Radar Modes
+
+- Dedicated Visualization Solutions
+
+- Integration with Other Systems
+
+- More Documentation and Examples
+
+🤝 **Welcome to Participate**
+
+- Contribute Code and Improvements
+
+- Share Implementation Experience
+
+- Provide Testing Feedback
+
+- Improve Documentation
+
+---
+
+## Links 🔗 Related Resources
+
+### Technical Documentation
+
+- 📄 `RADAR_IMPLEMENTATION_PLAN.md` - Complete Implementation (1831 lines)
+
+- 📄 `REQUIRED_ENGINE_APIs.md` - API Documentation (4297 lines, v2.2 🌲)
+
+- 📄 `REMAINING_LIMITATIONS.md` - Remaining Limitation Analysis (785 lines)
+
+- 📄 `API.md` - Existing LiDAR System Documentation
+
+### Project Repository
+
 - 💻 `Radar-Development-Framework`
-- 📦 基于 LiDAR 框架扩展
+
+- 📦 Based on LiDAR Framework Extensions
 
 ---
 
-## 📢 最后的话
+## 📢 Final Remarks
 
-这是一个**技术可行**且**持续演进**的开发框架项目。
+This is a **technically feasible** and **continuously evolving** development framework project.
 
-### 已验证的基础
+### Verified Foundation
 
-✅ 所有关键 API 验证完成（100%）  
-✅ 射线穿透能力验证（森林穿透 + 多目标）🌲  
-✅ 完整的技术方案设计  
-✅ 详细的实现文档（6500+ 行）  
-✅ 真实物理模型和公式  
-✅ 剩余限制透明说明  
+✅ All key APIs verified (100%)
 
-### 项目特点
+✅ Ray penetration capability verified (forest penetration + multi-target) 🌲
 
-⏳ 长期维护，没有时间表  
-🔄 持续演进和完善  
-🤝 欢迎社区贡献  
-📖 完全开源透明  
+✅ Complete technical solution design
 
-### 对开发者的价值
+✅ Detailed implementation documentation (6500+ lines)
 
-无论你想创建战术 MOD、训练场景还是进行技术研究，这个框架都提供了坚实的技术基础和完整的实现指南。
+✅ Realistic physics model and formulas
 
-期待看到基于这个框架开发出的各种创意雷达系统！
+✅ Transparent explanation of remaining limitations
 
----
+### Project
+Features
 
-## ⚠️ 免责声明与说明
+⏳ Long-term maintenance, no timeline
 
-### 框架性质
+🔄 Continuously evolving and improving
 
-本项目是**开发中的技术框架**，而非最终产品：
+🤝 Community contributions are welcome
 
-**技术演进**：
-- ⚠️ API 和架构可能随技术发现而调整
-- ⚠️ 不保证不同版本间的向后兼容性
-- ⚠️ 新的引擎能力可能导致实现方式变化
-- ⚠️ 性能优化可能改变公开接口
+📖 Completely open source and transparent
 
-**可能的变更场景**：
-- 🔬 发现新的引擎 API 提供更好实现方式
-- 🐛 遇到技术难题需要调整设计方案
-- ⚡ 性能优化需要重构部分模块
-- 🎯 社区反馈推动功能改进
+### Value for Developers
 
-**使用建议**：
-- ✅ 将本框架作为**技术参考和学习资源**
-- ✅ 根据自己项目需求**自由修改和定制**
-- ✅ 关注项目更新，但不强制跟随
-- ⚠️ 生产环境使用前请充分测试
+Whether you want to create tactical mods, training scenarios, or conduct technical research, this framework provides a solid technical foundation and complete implementation guidelines.
 
-### 技术保证
-
-**我们承诺**：
-- ✅ 所有文档基于真实验证的引擎能力
-- ✅ 代码示例经过测试和验证
-- ✅ 技术方案在当前引擎版本可行
-- ✅ 重大变更会在文档中说明
-
-**我们不保证**：
-- ❌ 未来引擎更新不影响框架
-- ❌ 所有设计决策永远不变
-- ❌ 向后兼容所有历史版本
-- ❌ 适用于所有使用场景
-
-### 社区协作原则
-
-本项目采用**开放透明**的开发方式：
-- 📖 所有技术决策公开讨论
-- 🔄 欢迎提出改进建议和替代方案
-- 🤝 鼓励分享实现经验和问题
-- 🎯 优先考虑社区最需要的功能
-
-**如果遇到问题**：
-1. 检查是否为已知限制（参见 `REMAINING_LIMITATIONS.md`）
-2. 查看文档是否有更新版本
-3. 在社区讨论或提交 Issue
-4. 根据需要自行调整实现方案
+Looking forward to seeing all sorts of creative radar systems developed based on this framework!
 
 ---
 
-**欢迎关注、使用和贡献！** 🚀
+## ⚠️ Disclaimer and Explanation
 
-**提醒**：这是开发框架，不是最终产品。请根据实际需求评估和调整。
+### Framework Nature
+
+This project is a **technical framework under development**, not a final product:
+
+**Technology Evolution**:
+
+- ⚠️ API and architecture may be adjusted as technologies are discovered.
+
+- ⚠️ Backward compatibility between different versions is not guaranteed.
+
+- ⚠️ New engine capabilities may lead to changes in implementation methods.
+
+- ⚠️ Performance optimizations may change public interfaces.
+
+**Possible Change Scenarios**:
+
+- 🔬 Discovering a new engine API that provides a better implementation method.
+
+- 🐛 Encountering technical difficulties requiring design adjustments.
+
+- ⚡ Performance optimizations requiring the refactoring of some modules.
+
+- 🎯 Community feedback driving feature improvements.
+
+**Usage Recommendations**:
+
+- ✅ Use this framework as a **technical reference and learning resource**.
+
+- ✅ Freely modify and customize it according to your project needs.
+
+- ✅ Pay attention to project updates, but following them is not mandatory.
+
+- ⚠️ Please test thoroughly before using in a production environment.
+
+### Technical Guarantees
+
+**We promise**:
+
+- ✅ All documentation is based on real-world, verified engine capabilities
+
+- ✅ Code examples are tested and verified
+
+- ✅ Technical solutions are feasible in the current engine version
+
+- ✅ Major changes will be explained in the documentation
+
+**We do not guarantee**:
+
+- ❌ Future engine updates will not affect the framework
+
+- ❌ All design decisions will remain unchanged forever
+
+- ❌ Backward compatibility with all historical versions
+
+- ❌ Applicability to all use cases
+
+### Community Collaboration Principles
+
+This project adopts an **open and transparent** development approach:
+
+- 📖 All technical decisions are openly discussed
+
+- 🔄 Suggestions for improvement and alternative solutions are welcome
+
+- 🤝 Sharing implementation experience and problems is encouraged
+
+- 🎯 Prioritizing the features most needed by the community
+
+**If you encounter problems**:
+
+1. Check if it is a known limitation (see `REMAINING_LIMITATIONS.md`)
+
+2. Check if there is an updated version of the documentation
+
+3. Discuss in the community or submit an Issue
+
+4. Adjust the implementation as needed.
 
 ---
 
-## 附录：技术术语
+**Welcome to follow, use, and contribute!** 🚀
 
-| 术语 | 全称 | 说明 |
+**Reminder:** This is a development framework, not the final product. Please evaluate and adjust it according to your actual needs.
+
+---
+
+## Appendix: Technical Terminology
+
+| Terminology | Full Name | Description |
+
 |------|------|------|
-| FSPL | Free Space Path Loss | 自由空间传播损耗 |
-| RCS | Radar Cross Section | 雷达截面积 |
-| SNR | Signal-to-Noise Ratio | 信噪比 |
-| MTI | Moving Target Indicator | 移动目标检测 |
-| PPI | Plan Position Indicator | 平面位置显示器 |
-| FMCW | Frequency-Modulated Continuous Wave | 调频连续波 |
-| SAR | Synthetic Aperture Radar | 合成孔径雷达 |
-| ECM | Electronic Countermeasures | 电子对抗 |
+
+| FSPL | Free Space Path Loss | Free Space Propagation Loss |
+
+| RCS | Radar Cross Section | Radar Cross Section |
+
+| SNR | Signal-to-Noise Ratio | Signal-to-Noise Ratio |
+
+| MTI | Moving Target Indicator | Moving Target Detection |
+
+| PPI | Plane Position Indicator | Plane Position Indicator | Plane Position Indicator |
+
+| FMCW | Frequency-Modulated Continuous Wave | Frequency-Modulated Continuous Wave |
+
+| SAR | Synthetic Aperture Radar | Synthetic Aperture Radar |
+
+| ECM | Electronic Countermeasures | Electronic Countermeasures |
 
 ---
 
 ---
 
-## 📋 项目信息
+## 📋 Project Information
 
-*最后更新：2026-02-18 (v2.2 🌲)*  
-*项目状态：技术验证完成（97%），射线穿透能力已验证*  
-*文档完整度：6500+ 行技术文档 + 代码示例*  
+*Last Updated: 2026-02-18 (v2.2 🌲)* *Project Status: Technical verification completed (97%), ray penetration capability verified.*
 
-*© 2026 Radar Development Framework*  
-*本项目为开发中的技术框架，API 和设计可能随技术发展而变化*  
-*使用前请阅读免责声明，建议根据实际需求进行定制和测试*
+*Documentation Completeness: 6500+ lines of technical documentation + code examples.*
+
+*© 2026 Radar Development Framework*
+
+*This project is a technical framework under development; APIs and designs may change as technology evolves.*
+
+*Please read the disclaimer before use. Customization and testing based on actual needs are recommended.*
