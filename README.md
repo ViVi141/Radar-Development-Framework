@@ -48,6 +48,8 @@ RDF_LidarAutoRunner.SetDemoEnabled(false);
 RDF_LidarAutoRunner.IsDemoEnabled();
 ```
 
+- 修复：在某些情况下扫描被暂停但是可视化依然存在的现象已修复（`SetDemoEnabled(false)` / 暂停时会清理 visualizer）。
+
 ### 通过预设启动（推荐）
 
 所有演示均通过 `RDF_LidarDemoConfig` 预设 + `RDF_LidarAutoRunner` 完成：
@@ -372,7 +374,7 @@ bool updated = RDF_LidarNetworkScanner.ScanWithAutoRunnerAPI(subject, scanner, s
 
 - **Scan parameters** (range, ray count, update interval) are in `RDF_LidarSettings` (includes clamps and validation).
 - **Visualization** settings (point size, segments, alpha) are in `RDF_LidarVisualSettings`; enable `m_DrawOriginAxis = true` for origin axis debug.
-- **World+point-cloud vs point-cloud-only**: `m_RenderWorld = true` (default) renders the game world + point cloud; `false` renders point cloud only by drawing a black quad in front of the camera and disabling scene rendering.
+- **World+point-cloud vs point-cloud-only**: `m_RenderWorld = true` (default) renders the game world + point cloud; `false` renders point cloud only by drawing a black quad (uses NOZBUFFER so the point cloud renders on top) in front of the camera and disabling scene rendering.
 
 ---
 

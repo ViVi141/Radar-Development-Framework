@@ -211,7 +211,7 @@ class RDF_LidarVisualizer
         tris[4] = p2;
         tris[5] = p3;
         int bgColor = ARGBF(1.0, 0.0, 0.0, 0.0);
-        int bgFlags = ShapeFlags.NOOUTLINE | ShapeFlags.DOUBLESIDE;
+        int bgFlags = ShapeFlags.NOOUTLINE | ShapeFlags.DOUBLESIDE | ShapeFlags.NOZBUFFER | ShapeFlags.ONCE;
         Shape bgShape = Shape.CreateTris(bgColor, bgFlags, tris, 2);
         if (bgShape)
             m_DebugShapes.Insert(bgShape);
@@ -232,17 +232,17 @@ class RDF_LidarVisualizer
         vector endX[2];
         endX[0] = origin;
         endX[1] = origin + axisX * len;
-        m_DebugShapes.Insert(Shape.CreateLines(ARGBF(1, 1, 0, 0), ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER, endX, 2));
+        m_DebugShapes.Insert(Shape.CreateLines(ARGBF(1, 1, 0, 0), ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.ONCE, endX, 2));
 
         vector endY[2];
         endY[0] = origin;
         endY[1] = origin + axisY * len;
-        m_DebugShapes.Insert(Shape.CreateLines(ARGBF(1, 0, 1, 0), ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER, endY, 2));
+        m_DebugShapes.Insert(Shape.CreateLines(ARGBF(1, 0, 1, 0), ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.ONCE, endY, 2));
 
         vector endZ[2];
         endZ[0] = origin;
         endZ[1] = origin + axisZ * len;
-        m_DebugShapes.Insert(Shape.CreateLines(ARGBF(1, 0, 0, 1), ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER, endZ, 2));
+        m_DebugShapes.Insert(Shape.CreateLines(ARGBF(1, 0, 0, 1), ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.ONCE, endZ, 2));
     }
 
     // Batched mesh renderer: builds GPU-friendly triangle lists per-color-bucket and issues far fewer Shape calls.
@@ -341,7 +341,7 @@ class RDF_LidarVisualizer
             
         }
 
-        int triFlags = ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.TRANSP | ShapeFlags.DOUBLESIDE; // draw both sides to avoid backface culling
+        int triFlags = ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.TRANSP | ShapeFlags.DOUBLESIDE | ShapeFlags.ONCE; // draw both sides to avoid backface culling; ONCE so shapes disappear when Render stops (e.g. exit vehicle)
 
         // Draw spherical points (preserve original point/sphere appearance)
         if (m_Settings.m_DrawPoints)
@@ -399,7 +399,7 @@ class RDF_LidarVisualizer
 
         int color = BuildPointColorFromSample(sample);
         float size = BuildPointSizeFromSample(sample);
-        int shapeFlags = ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.TRANSP;
+        int shapeFlags = ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.TRANSP | ShapeFlags.ONCE;
         Shape s = Shape.CreateSphere(color, shapeFlags, sample.m_HitPos, size);
         m_DebugShapes.Insert(s);
     }
@@ -410,7 +410,7 @@ class RDF_LidarVisualizer
             return;
 
         int color = BuildPointColor(dist, hit);
-        int shapeFlags = ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.TRANSP;
+        int shapeFlags = ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.TRANSP | ShapeFlags.ONCE;
         Shape s = Shape.CreateSphere(color, shapeFlags, pos, m_Settings.m_PointSize);
         m_DebugShapes.Insert(s);
     }
@@ -434,7 +434,7 @@ class RDF_LidarVisualizer
             last = p[1];
 
             int color = BuildRayColorAtT(t, hit);
-            int shapeFlags = ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.TRANSP;
+            int shapeFlags = ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.TRANSP | ShapeFlags.ONCE;
             Shape s = Shape.CreateLines(color, shapeFlags, p, 2);
             m_DebugShapes.Insert(s);
         }

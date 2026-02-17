@@ -10,8 +10,12 @@
   - 文件：`scripts/Game/RDF/Lidar/Network/RDF_LidarNetworkComponent.c`
   - 兼容性：签名未变；对外调用者无影响。
 
+- 修正（可视化）：`DrawPointCloudOnlyBackground` 中背景四边形现在包含 `ShapeFlags.NOZBUFFER`，确保“仅点云”模式下背景遮挡行为可靠。
+  - 文件：`scripts/Game/RDF/Lidar/Visual/RDF_LidarVisualizer.c`
+  - 测试建议：将 `m_RenderWorld = false` 并确认点云始终在场景之上（移动相机、近/远物体验证）。
+
 测试建议：
-- 触发 `RequestScan()` 并在客户端确认 `HasSyncedSamples()` 返回 true；在模拟丢包的环境下验证单片载荷的接收率提升。
+- 触发 `RequestScan()` 并在客户端确认 `HasSyncedSamples()` 返回 true；在模拟丢包的环境下验证单片载荷的接收率提升.
 
 ---
 
