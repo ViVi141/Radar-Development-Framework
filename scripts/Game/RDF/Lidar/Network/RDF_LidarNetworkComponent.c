@@ -249,7 +249,7 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 	} 
 
 	//------------------------------------------------------------------------------------------------
-	[RplRpc(RplChannel.Unreliable, RplRcver.Broadcast)]
+	[RplRpc(RplChannel.Reliable, RplRcver.Broadcast)]
 	protected void RpcDo_ScanCompleteWithPayload(string csv)
 	{
 		// Deserialize CSV on clients and store locally

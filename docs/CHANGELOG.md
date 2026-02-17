@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## 2026-02-18 — 网络：单片扫描载荷改为可靠 RPC（小修复）
+
+概述：将单片扫描载荷的 RPC 通道由不可靠（Unreliable）改为可靠（Reliable），以降低小型（不分片）CSV 载荷在传输层丢失的概率。此变更仅更改传输通道；RPC 签名与分片逻辑保持不变。
+
+主要改动：
+
+- 修正：`RpcDo_ScanCompleteWithPayload(string csv)` 从 `RplChannel.Unreliable` 改为 `RplChannel.Reliable`。
+  - 文件：`scripts/Game/RDF/Lidar/Network/RDF_LidarNetworkComponent.c`
+  - 兼容性：签名未变；对外调用者无影响。
+
+测试建议：
+- 触发 `RequestScan()` 并在客户端确认 `HasSyncedSamples()` 返回 true；在模拟丢包的环境下验证单片载荷的接收率提升。
+
+---
+
 ## 2026-02-17 — CSV/导出与网络传输改进（小范围性能与健壮性提升）
 
 概述：本次更新集中在服务器端的 CSV 序列化、网络传输和导出路径，目标是在处理大型点云时减少峰值内存/CPU 和降低网络分片的失败率。改动均为向后兼容的实现层优化（未修改公开 API 签名）。
@@ -70,7 +85,6 @@
 - 使用复用/池化策略管理 `RDF_LidarSample` 对象（需保证外部不会长时间持有引用）。
 - 将 CSV 序列化改为可重用缓冲写入器（StringBuilder 风格）以进一步降低临时字符串分配。
 
-如需我继续，接下来我会按优先级实现「批量绘制原型」或「CSV 序列化缓冲化」。
 
 ## 2026-02-15 — 可视化批量绘制原型与进一步优化
 
