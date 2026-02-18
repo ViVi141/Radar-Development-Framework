@@ -180,6 +180,10 @@ class RDF_RCSModel
         bool  isMetal  = reflectivity >= 0.8;
         float angleMod = GetAngleDependentReflection(incidenceDeg, isMetal);
 
-        return baseRCS * reflectivity * angleMod;
+        float rcs = baseRCS * reflectivity * angleMod;
+        float minEntityRCS = 0.1;
+        if (rcs < minEntityRCS)
+            rcs = minEntityRCS;
+        return rcs;
     }
 }

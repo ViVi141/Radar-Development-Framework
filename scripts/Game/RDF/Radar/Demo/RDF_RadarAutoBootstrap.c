@@ -35,8 +35,8 @@ modded class SCR_BaseGameMode
         }
         else
         {
-            // Default single preset: X-band search.
-            RDF_RadarAutoRunner.StartWithConfig(RDF_RadarDemoConfig.CreateXBandSearch());
+            // Default single preset: helicopter radar (forward sector, MTI, 8 km).
+            RDF_RadarAutoRunner.StartWithConfig(RDF_RadarDemoConfig.CreateHelicopterRadar());
         }
 
         if (s_RadarBootstrapVerbose)
@@ -50,6 +50,11 @@ modded class SCR_BaseGameMode
         {
             RDF_RadarHUD.Show();
             RDF_RadarAutoRunner.SetScanCompleteHandler(RDF_RadarHUD.GetInstance());
+            if (!s_RadarBootstrapAutoCycle)
+            {
+                RDF_RadarHUD.SetDisplayRange(8000.0);   // heli preset 8 km
+                RDF_RadarHUD.SetMode("Heli Radar");
+            }
         }
 
         Print("[RDF] Radar bootstrap started  (autoCycle=" + s_RadarBootstrapAutoCycle.ToString() + "  hud=" + s_RadarBootstrapShowHUD.ToString() + ")");

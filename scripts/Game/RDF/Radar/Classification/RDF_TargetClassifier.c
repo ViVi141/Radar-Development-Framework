@@ -17,41 +17,54 @@ class RDF_TargetClassifier
 {
     void RDF_TargetClassifier() {}
 
-    // Classify a single radar sample.
-    // Returns ERadarTargetClass.UNKNOWN for non-hits or invalid samples.
+    // Classify a single radar sample. Uses pre-classification (m_EntityKind) when set,
+    // then refines with RCS and Doppler.
     static ERadarTargetClass ClassifyTarget(RDF_RadarSample sample)
     {
         if (!sample || !sample.m_Hit)
             return ERadarTargetClass.UNKNOWN;
 
-        float rcs   = sample.m_RadarCrossSection; // m^2
-        float speed = Math.AbsFloat(sample.m_TargetVelocity); // m/s
+        float rcs   = sample.m_RadarCrossSection;
+        float speed = Math.AbsFloat(sample.m_TargetVelocity);
+        bool hasEntity = (sample.m_Entity != null);
+        EEntityKind kind = sample.m_EntityKind;
 
-        // Stationary or very slow -> static object or infrastructure.
-        if (speed < 0.5)
-            return ERadarTargetClass.STATIC_OBJECT;
+        if (hasEntity && kind == EEntityKind.ENTITY_UNKNOWN)
+            kind = EEntityKind.ENTITY_STATIC;
 
-        // High-speed targets are aircraft regardless of RCS.
         if (speed > 50.0)
             return ERadarTargetClass.AIRCRAFT;
 
-        // Small UAV: tiny RCS + medium speed.
-        if (rcs < 0.05 && speed > 5.0)
-            return ERadarTargetClass.SMALL_UAV;
+        if (speed < 0.5)
+        {
+            if (kind == EEntityKind.ENTITY_VEHICLE || kind == EEntityKind.ENTITY_BUILDING || kind == EEntityKind.ENTITY_STATIC)
+                return ERadarTargetClass.STATIC_OBJECT;
+            if (hasEntity)
+                return ERadarTargetClass.STATIC_OBJECT;
+            return ERadarTargetClass.UNKNOWN;
+        }
 
-        // Infantry: small RCS, slow walking pace.
-        if (rcs < 1.0 && speed < 5.0)
+        if (kind == EEntityKind.ENTITY_CHARACTER)
             return ERadarTargetClass.INFANTRY;
 
-        // Naval: huge RCS, low speed.
+        if (kind == EEntityKind.ENTITY_VEHICLE)
+        {
+            if (rcs >= 10.0)
+                return ERadarTargetClass.VEHICLE_HEAVY;
+            return ERadarTargetClass.VEHICLE_LIGHT;
+        }
+
+        if (kind == EEntityKind.ENTITY_BUILDING || kind == EEntityKind.ENTITY_STATIC)
+            return ERadarTargetClass.STATIC_OBJECT;
+
+        if (rcs < 0.05 && speed > 5.0)
+            return ERadarTargetClass.SMALL_UAV;
+        if (rcs < 1.0 && speed < 5.0)
+            return ERadarTargetClass.INFANTRY;
         if (rcs > 1000.0 && speed < 15.0)
             return ERadarTargetClass.NAVAL;
-
-        // Heavy vehicle: large RCS, moderate speed.
         if (rcs >= 10.0 && speed < 40.0)
             return ERadarTargetClass.VEHICLE_HEAVY;
-
-        // Light vehicle: medium RCS, moderate speed.
         if (rcs >= 1.0 && speed < 40.0)
             return ERadarTargetClass.VEHICLE_LIGHT;
 

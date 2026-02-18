@@ -35,8 +35,8 @@ class RDF_RadarHUD : RDF_LidarScanCompleteHandler
     static const int PX_PAD_X   = 7;
     static const int PX_PAD_Y   = 4;
 
-    // Total panel height
-    static const int PX_H       = PX_HDR_H + PX_RADAR_H + 3 * PX_ROW_H + 6;
+    // Total panel height (4 rows: SNR, RCS, Range, Legend)
+    static const int PX_H       = PX_HDR_H + PX_RADAR_H + 4 * PX_ROW_H + 6;
 
     // ---- PPI canvas internals (unit coords = pixel coords 1:1) ----
     // Canvas is 210x210; center at (105,105), display radius 100 units.
@@ -47,12 +47,20 @@ class RDF_RadarHUD : RDF_LidarScanCompleteHandler
 
     // Real-world range corresponding to PPI_R pixels.
     // Set this from outside to match the active scanner's range.
-    float m_DisplayRange = 2500.0;
+    float m_DisplayRange = 8000.0;   // default for heli radar 8 km
 
     // ---- ARGB colours ----
     static const int COL_PANEL    = ARGB(210,  0,  12,  7);
     static const int COL_HDR      = ARGB(255,  0,  30, 15);
     static const int COL_TITLE    = ARGB(255,  0, 255, 110);
+    // Highlight colours for classified targets (vehicles, buildings, aircraft)
+    static const int COL_HL_VEHICLE_HEAVY = ARGB(255, 255, 255, 100);   // bright yellow-green
+    static const int COL_HL_VEHICLE_LIGHT = ARGB(255,  80, 255, 255);    // cyan
+    static const int COL_HL_STATIC        = ARGB(255, 255, 200,  0);    // orange (buildings)
+    static const int COL_HL_AIRCRAFT     = ARGB(255, 255,  60, 200);    // magenta
+    static const int COL_HL_NAVAL        = ARGB(255, 100, 200, 255);    // light blue
+    static const int COL_HL_INFANTRY     = ARGB(220,  0, 255, 100);     // green
+    static const int COL_HL_SMALL_UAV    = ARGB(255, 200, 200, 255);    // light purple
     static const int COL_MODE     = ARGB(255,  0, 160,  70);
     static const int COL_DATA     = ARGB(255,  0, 210,  95);
     static const int COL_DATA_DIM = ARGB(200,  0, 170,  75);
@@ -168,7 +176,7 @@ class RDF_RadarHUD : RDF_LidarScanCompleteHandler
         Widget wMode = MakeText(ws, PX_LEFT + 120, PX_TOP + PX_PAD_Y,
                                 PX_W - 126, PX_HDR_H - PX_PAD_Y, 95, COL_MODE);
         m_wMode = TextWidget.Cast(wMode);
-        m_wMode.SetText("X-Band Pulse");
+        m_wMode.SetText("Heli Radar");
         m_wMode.SetExactFontSize(15);
 
         // ---- CanvasWidget for PPI ----
@@ -214,6 +222,8 @@ class RDF_RadarHUD : RDF_LidarScanCompleteHandler
         m_wSNR = TextWidget.Cast(MakeDataRow(ws, 0, "SNR   --   Hits --"));
         m_wRCS = TextWidget.Cast(MakeDataRow(ws, 1, "RCS   --   Vel  --"));
         m_wRange = TextWidget.Cast(MakeDataRow(ws, 2, "Range  --"));
+        Widget wLegend = MakeDataRow(ws, 3, "Grey=terrain  Cyan=vehicle  Orange=static");
+        TextWidget.Cast(wLegend).SetExactFontSize(11);
 
         Print("[RDF_RadarHUD] HUD built  widgets=" + m_AllWidgets.Count().ToString());
     }
@@ -331,6 +341,11 @@ class RDF_RadarHUD : RDF_LidarScanCompleteHandler
                 continue;
             if (!s.IsDetectable(0.0))
                 continue;
+
+            ERadarTargetClass tc = RDF_TargetClassifier.ClassifyTarget(s);
+            if (tc == ERadarTargetClass.UNKNOWN && s.m_Entity == null)
+                continue;
+
             if (blipCount >= maxBlips)
                 break;
 
@@ -353,35 +368,65 @@ class RDF_RadarHUD : RDF_LidarScanCompleteHandler
             float bx = PPI_CX + normX * PPI_R;
             float by = PPI_CY - normZ * PPI_R;   // north = up = lower Y
 
-            // Choose blip size and colour by target type.
             float blipR;
             int   blipCol;
-            if (s.m_Entity != null)
+            if (tc == ERadarTargetClass.VEHICLE_HEAVY)
             {
-                float rcs = s.GetRCSdBsm();
-                if (rcs > 10.0)
-                {
-                    blipR   = 5.0;
-                    blipCol = ARGB(255,  0, 255,  60);
-                }
-                else
-                {
-                    blipR   = 3.5;
-                    blipCol = ARGB(220,  0, 200, 180);
-                }
+                blipR   = 6.0;
+                blipCol = COL_HL_VEHICLE_HEAVY;
+            }
+            else if (tc == ERadarTargetClass.VEHICLE_LIGHT)
+            {
+                blipR   = 5.0;
+                blipCol = COL_HL_VEHICLE_LIGHT;
+            }
+            else if (tc == ERadarTargetClass.STATIC_OBJECT)
+            {
+                blipR   = 5.0;
+                blipCol = COL_HL_STATIC;
+            }
+            else if (tc == ERadarTargetClass.AIRCRAFT)
+            {
+                blipR   = 6.0;
+                blipCol = COL_HL_AIRCRAFT;
+            }
+            else if (tc == ERadarTargetClass.NAVAL)
+            {
+                blipR   = 7.0;
+                blipCol = COL_HL_NAVAL;
+            }
+            else if (tc == ERadarTargetClass.INFANTRY)
+            {
+                blipR   = 3.0;
+                blipCol = COL_HL_INFANTRY;
+            }
+            else if (tc == ERadarTargetClass.SMALL_UAV)
+            {
+                blipR   = 3.5;
+                blipCol = COL_HL_SMALL_UAV;
             }
             else
             {
-                float rcs = s.GetRCSdBsm();
-                if (rcs > 0.0)
+                // UNKNOWN or terrain: keep original size/colour by entity and RCS.
+                if (s.m_Entity != null)
                 {
-                    blipR   = 3.0;
-                    blipCol = ARGB(200, 200, 200,   0);
+                    float rcs = s.GetRCSdBsm();
+                    if (rcs > 10.0)
+                    {
+                        blipR   = 5.0;
+                        blipCol = ARGB(255,  0, 255,  60);
+                    }
+                    else
+                    {
+                        blipR   = 3.5;
+                        blipCol = ARGB(220,  0, 200, 180);
+                    }
                 }
                 else
                 {
+                    // Terrain / ground: dim grey-green (not yellow) so it does not dominate.
                     blipR   = 2.0;
-                    blipCol = ARGB(140, 160, 100,   0);
+                    blipCol = ARGB(120, 80, 100, 80);
                 }
             }
 

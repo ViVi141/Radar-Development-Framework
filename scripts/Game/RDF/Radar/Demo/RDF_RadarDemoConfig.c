@@ -119,6 +119,38 @@ class RDF_RadarDemoConfig : RDF_LidarDemoConfig
         return cfg;
     }
 
+    // Helicopter radar - X-band forward sector, clutter filter only (no MTI) so stationary vehicles are visible.
+    //   f = 10 GHz, forward-looking sector +/-60 deg H, +/-15 deg V, 8 km range.
+    //   MTI off: ground vehicles and static objects remain visible; clutter filter still suppresses terrain-only returns.
+    static RDF_RadarDemoConfig CreateHelicopterRadar(int rayCount = 512)
+    {
+        RDF_RadarDemoConfig cfg = new RDF_RadarDemoConfig();
+        cfg.m_Enable               = true;
+        cfg.m_RayCount             = rayCount;
+        cfg.m_MinTickInterval      = 0.4;
+        cfg.m_SampleStrategy       = new RDF_SweepSampleStrategy(60.0, 30.0, 90.0);  // forward sector
+        cfg.m_ColorStrategy        = new RDF_DopplerColorStrategy(80.0);             // approaching=red, receding=blue
+        cfg.m_EnableClutterFilter  = true;   // suppress terrain-only (no entity) returns
+        cfg.m_EnableDoppler         = true;
+        cfg.m_EnableMTI             = false;  // OFF: keep stationary vehicles and buildings visible
+        cfg.m_DetectionThreshold    = 5.0;    // low: accuracy first, entities use 0 dB internally
+
+        RDF_EMWaveParameters em = new RDF_EMWaveParameters();
+        em.m_CarrierFrequency  = 10000000000.0;  // 10 GHz X-band
+        em.m_TransmitPower     = 500.0;           // 500 W typical heli radar
+        em.m_AntennaGain       = 28.0;
+        em.m_PulseWidth        = 0.000002;       // 2 us
+        em.m_PRF               = 2000.0;
+        em.CalculateWavelength();
+
+        cfg.m_EMWaveParams   = em;
+        cfg.m_RadarMode      = ERadarMode.PULSE;
+        cfg.m_UpdateInterval = 0.4;
+        cfg.m_RadarRange     = 8000.0;   // 8 km - tactical helicopter search
+        cfg.m_MinRange       = 15.0;     // blind zone only for terrain; entities always shown
+        return cfg;
+    }
+
     // Ka-band FMCW automotive radar - short range, high update rate.
     //   f = 77 GHz, Pt = 100 mW, G = 25 dBi, conical FOV +/-15 deg.
     static RDF_RadarDemoConfig CreateAutomotiveRadar(int rayCount = 256)

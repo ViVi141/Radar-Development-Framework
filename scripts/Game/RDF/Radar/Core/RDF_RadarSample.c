@@ -49,6 +49,9 @@ class RDF_RadarSample : RDF_LidarSample
     // Relative propagation delay used for range-gating (s).
     float m_DelayTime;
 
+    // Pre-classification from entity attributes (before physics). Used by RDF_EntityPreClassifier.
+    EEntityKind m_EntityKind = EEntityKind.ENTITY_UNKNOWN;
+
     void RDF_RadarSample()
     {
         m_TransmitPower = 0;

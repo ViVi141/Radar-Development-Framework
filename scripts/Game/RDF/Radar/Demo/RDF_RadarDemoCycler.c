@@ -23,6 +23,7 @@ class RDF_RadarDemoCycler
     {
         if (s_Configs) return;
         s_Configs = new array<ref RDF_RadarDemoConfig>();
+        s_Configs.Insert(RDF_RadarDemoConfig.CreateHelicopterRadar(s_RayCount));
         s_Configs.Insert(RDF_RadarDemoConfig.CreateXBandSearch(s_RayCount));
         s_Configs.Insert(RDF_RadarDemoConfig.CreateAutomotiveRadar(s_RayCount));
         s_Configs.Insert(RDF_RadarDemoConfig.CreateWeatherRadar(s_RayCount));
@@ -49,6 +50,9 @@ class RDF_RadarDemoCycler
         if (!cfg) return;
         Print("[RadarDemo] Cycler -> preset " + s_Index.ToString() + " / " + GetPresetName(s_Index));
         RDF_RadarAutoRunner.StartWithConfig(cfg);
+        RDF_RadarHUD.SetMode(GetPresetName(s_Index));
+        if (cfg.m_RadarRange > 0)
+            RDF_RadarHUD.SetDisplayRange(cfg.m_RadarRange);
     }
 
     // Jump to a specific preset index.
@@ -67,6 +71,9 @@ class RDF_RadarDemoCycler
         if (!cfg) return;
         Print("[RadarDemo] Cycler -> preset " + s_Index.ToString() + " / " + GetPresetName(s_Index));
         RDF_RadarAutoRunner.StartWithConfig(cfg);
+        RDF_RadarHUD.SetMode(GetPresetName(s_Index));
+        if (cfg.m_RadarRange > 0)
+            RDF_RadarHUD.SetDisplayRange(cfg.m_RadarRange);
     }
 
     // Stop the radar demo.
@@ -80,11 +87,12 @@ class RDF_RadarDemoCycler
     {
         switch (index)
         {
-            case 0: return "X-Band Search";
-            case 1: return "Automotive FMCW (77 GHz)";
-            case 2: return "Weather (S-Band)";
-            case 3: return "Phased Array (C-Band)";
-            case 4: return "L-Band Surveillance";
+            case 0: return "Helicopter (X-Band)";
+            case 1: return "X-Band Search";
+            case 2: return "Automotive FMCW (77 GHz)";
+            case 3: return "Weather (S-Band)";
+            case 4: return "Phased Array (C-Band)";
+            case 5: return "L-Band Surveillance";
         }
         return "Unknown";
     }

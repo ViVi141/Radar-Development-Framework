@@ -170,7 +170,8 @@ class RDF_RadarScanner : RDF_LidarScanner
             sample.m_ColliderName = param.ColliderName;
             sample.m_Surface      = param.SurfaceProps;
 
-            // Populate electromagnetic physics fields.
+            sample.m_EntityKind  = RDF_EntityPreClassifier.ClassifyEntity(sample.m_Entity);
+
             ApplyRadarPhysics(subject, sample);
 
             outSamples.Insert(sample);
@@ -234,6 +235,9 @@ class RDF_RadarScanner : RDF_LidarScanner
             }
         }
 
+        if (sample.m_Hit && sample.m_Entity != null && sample.m_RadarCrossSection <= 0)
+            sample.m_RadarCrossSection = 0.1;
+
         // 3. Received power (radar equation).
         // NOTE: FSPL is already embedded in the radar equation via the R^4 and lambda^2 terms.
         // The 'L' parameter must only carry true system losses (hardware, polarisation, etc.)
@@ -288,18 +292,22 @@ class RDF_RadarScanner : RDF_LidarScanner
                 emParams.m_CarrierFrequency);
         }
 
-        // 6. Range gate - reject near-field returns inside the radar blind zone.
-        // This prevents R^4 SNR saturation for targets closer than m_MinRange.
-        if (sample.m_Hit && m_RadarSettings.m_MinRange > 0)
+        // 6. Range gate - only for terrain; keep entity hits for accuracy.
+        if (sample.m_Hit && m_RadarSettings.m_MinRange > 0 && sample.m_Entity == null)
         {
             float trueRange = (sample.m_HitPos - sample.m_Start).Length();
             if (trueRange < m_RadarSettings.m_MinRange)
                 sample.m_Hit = false;
         }
 
-        // 7. Detection decision.
+        // 7. Detection: known entities (pre-classified) always pass; others use threshold.
         if (sample.m_Hit)
-            sample.m_Hit = sample.IsDetectable(m_RadarSettings.m_DetectionThreshold);
+        {
+            float thresh = m_RadarSettings.m_DetectionThreshold;
+            if (sample.m_Entity != null && sample.m_EntityKind != EEntityKind.ENTITY_UNKNOWN)
+                thresh = 0.0;
+            sample.m_Hit = sample.IsDetectable(thresh);
+        }
 
         // 8. MTI clutter filter (binary pass/fail on minimum velocity).
         if (m_RadarSettings.m_EnableMTI && sample.m_Hit)
@@ -312,20 +320,26 @@ class RDF_RadarScanner : RDF_LidarScanner
                 sample.m_Hit = false;
         }
 
-        // 9. MTD (Moving Target Detection) - progressive SNR penalty for slow targets.
-        // Targets moving slower than 3x MinTargetVelocity receive an SNR penalty
-        // proportional to how close they are to zero velocity.
+        // 9. MTD: skip for known static/vehicle/building so they are not dropped (accuracy first).
         if (m_RadarSettings.m_EnableMTD && sample.m_Hit)
         {
-            float absVel    = Math.AbsFloat(sample.m_TargetVelocity);
-            float threshold = m_RadarSettings.m_MinTargetVelocity * 3.0;
-            if (absVel < threshold && threshold > 0)
+            bool knownStatic = (sample.m_EntityKind == EEntityKind.ENTITY_VEHICLE
+                || sample.m_EntityKind == EEntityKind.ENTITY_BUILDING
+                || sample.m_EntityKind == EEntityKind.ENTITY_STATIC);
+            if (!knownStatic)
             {
-                // Penalty up to 15 dB for near-stationary targets.
-                float penaltyDB = 15.0 * (1.0 - absVel / threshold);
-                sample.m_SignalToNoiseRatio -= penaltyDB;
-                if (!sample.IsDetectable(m_RadarSettings.m_DetectionThreshold))
-                    sample.m_Hit = false;
+                float absVel    = Math.AbsFloat(sample.m_TargetVelocity);
+                float threshold = m_RadarSettings.m_MinTargetVelocity * 3.0;
+                if (absVel < threshold && threshold > 0)
+                {
+                    float penaltyDB = 15.0 * (1.0 - absVel / threshold);
+                    sample.m_SignalToNoiseRatio -= penaltyDB;
+                    float thresh = m_RadarSettings.m_DetectionThreshold;
+                    if (sample.m_Entity != null && sample.m_EntityKind != EEntityKind.ENTITY_UNKNOWN)
+                        thresh = 0.0;
+                    if (!sample.IsDetectable(thresh))
+                        sample.m_Hit = false;
+                }
             }
         }
 
@@ -346,9 +360,15 @@ class RDF_RadarScanner : RDF_LidarScanner
         }
 
         // 11. Waveform-mode processing (range quantization, unambiguous range, beam losses).
-        // Applied last so mode effects use the final physics values.
         if (m_RadarModeProcessor)
             m_RadarModeProcessor.ProcessSample(sample, m_RadarSettings);
+
+        if (sample.m_Entity != null)
+        {
+            sample.m_Hit = true;
+            if (sample.m_SignalToNoiseRatio < 0)
+                sample.m_SignalToNoiseRatio = 0;
+        }
     }
 
     // Approximate surface normal from the ray direction (inward face).

@@ -1,12 +1,15 @@
 // Simple, intuitive radar visualisations designed to be immediately readable.
 //
 // RDF_RadarWorldMarkerDisplay
-//   Draws tall coloured poles (30 m) at every detected target in the 3-D world.
-//   Poles are visible from a distance and encode target type via colour:
-//     Bright green  = large entity (RCS > +10 dBsm)
-//     Cyan          = small entity
-//     Yellow        = terrain hit with strong return
-//     Orange        = weak / near-threshold return
+//   Draws tall coloured poles at every detected target in the 3-D world.
+//   Pole colour and height encode classified target type (vehicles, buildings, etc.):
+//     Bright yellow-green = heavy vehicle   (taller pole)
+//     Cyan                = light vehicle   (taller pole)
+//     Orange              = building/static (taller pole)
+//     Magenta             = aircraft
+//     Light blue          = naval
+//     Green               = infantry
+//     Grey/yellow         = terrain / unknown
 //   A compass rose is drawn at the player's feet to show N/S/E/W orientation.
 //
 // RDF_RadarTextDisplay
@@ -28,11 +31,15 @@ class RDF_RadarWorldMarkerDisplay
     // Length of the N/S/E/W compass arms drawn at the player's feet (m).
     float m_CompassLength = 50.0;
 
-    // Pole colours by target class.
-    int m_ColorEntityLarge  = ARGB(255,   0, 255,  60);  // bright green
-    int m_ColorEntitySmall  = ARGB(255,   0, 200, 255);  // cyan
-    int m_ColorTerrainHigh  = ARGB(220, 255, 220,   0);  // yellow
-    int m_ColorWeak         = ARGB(160, 255, 110,   0);  // orange
+    // Pole colours by classified target (highlight vehicles, buildings on the object).
+    int m_ColorVehicleHeavy = ARGB(255, 255, 255, 100);  // bright yellow-green
+    int m_ColorVehicleLight = ARGB(255,  80, 255, 255);  // cyan
+    int m_ColorStatic       = ARGB(255, 255, 200,   0);  // orange (buildings)
+    int m_ColorAircraft     = ARGB(255, 255,  60, 200);  // magenta
+    int m_ColorNaval        = ARGB(255, 100, 200, 255);  // light blue
+    int m_ColorInfantry     = ARGB(255,   0, 255, 100);  // green
+    int m_ColorSmallUAV     = ARGB(255, 200, 200, 255);  // light purple
+    int m_ColorTerrain      = ARGB(180, 200, 200, 120);  // grey-green (terrain/unknown)
     // North compass arm colour.
     int m_ColorCompassNorth = ARGB(255, 255, 255, 255);  // white
     // Other compass arms.
@@ -67,15 +74,16 @@ class RDF_RadarWorldMarkerDisplay
         }
     }
 
-    // Draw a vertical pole with a horizontal cross-mark at the top.
+    // Draw a vertical pole with a horizontal cross-mark at the top (on the object in 3D).
     protected void DrawPole(RDF_RadarSample sample)
     {
         int flags = ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.ONCE;
         int color = GetPoleColor(sample);
+        float height = GetPoleHeight(sample);
 
         vector base = sample.m_HitPos;
         vector top  = base;
-        top[1]      = top[1] + m_PoleHeight;
+        top[1]      = top[1] + height;
 
         // Vertical shaft.
         vector shaft[2];
@@ -85,8 +93,10 @@ class RDF_RadarWorldMarkerDisplay
         if (s)
             m_Shapes.Insert(s);
 
-        // Horizontal cross at the top (X axis arm).
+        // Horizontal cross at the top (X axis arm). Slightly larger for highlighted targets.
         float crossR = 2.0;
+        if (height > m_PoleHeight * 1.2)
+            crossR = 3.0;
         vector cx0 = top + Vector(-crossR, 0, 0);
         vector cx1 = top + Vector( crossR, 0, 0);
         vector armX[2];
@@ -107,23 +117,28 @@ class RDF_RadarWorldMarkerDisplay
             m_Shapes.Insert(sz);
     }
 
-    // Colour encodes target category.
+    // Colour and height by classified target (vehicles, buildings highlighted on the object).
     protected int GetPoleColor(RDF_RadarSample sample)
     {
-        bool isEntity = (sample.m_Entity != null);
-        float rcs     = sample.GetRCSdBsm();
-        float snr     = sample.m_SignalToNoiseRatio;
+        ERadarTargetClass tc = RDF_TargetClassifier.ClassifyTarget(sample);
+        if (tc == ERadarTargetClass.VEHICLE_HEAVY)  return m_ColorVehicleHeavy;
+        if (tc == ERadarTargetClass.VEHICLE_LIGHT) return m_ColorVehicleLight;
+        if (tc == ERadarTargetClass.STATIC_OBJECT) return m_ColorStatic;
+        if (tc == ERadarTargetClass.AIRCRAFT)       return m_ColorAircraft;
+        if (tc == ERadarTargetClass.NAVAL)         return m_ColorNaval;
+        if (tc == ERadarTargetClass.INFANTRY)      return m_ColorInfantry;
+        if (tc == ERadarTargetClass.SMALL_UAV)     return m_ColorSmallUAV;
+        return m_ColorTerrain;
+    }
 
-        if (isEntity && rcs > 10.0)
-            return m_ColorEntityLarge;
-
-        if (isEntity)
-            return m_ColorEntitySmall;
-
-        if (snr > 40.0)
-            return m_ColorTerrainHigh;
-
-        return m_ColorWeak;
+    protected float GetPoleHeight(RDF_RadarSample sample)
+    {
+        ERadarTargetClass tc = RDF_TargetClassifier.ClassifyTarget(sample);
+        bool highlight = (tc == ERadarTargetClass.VEHICLE_HEAVY || tc == ERadarTargetClass.VEHICLE_LIGHT
+            || tc == ERadarTargetClass.STATIC_OBJECT || tc == ERadarTargetClass.AIRCRAFT || tc == ERadarTargetClass.NAVAL);
+        if (highlight)
+            return m_PoleHeight * 1.4;   // taller pole on vehicles, buildings, aircraft
+        return m_PoleHeight;
     }
 
     // Draw N/S/E/W arms from the radar origin at 1.5 m height.
