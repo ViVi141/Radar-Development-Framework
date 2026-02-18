@@ -135,6 +135,8 @@ scripts/Game/RDF/Radar/
 | `m_CfarOrderRank` | `int` | `8` | OS‑CFAR 排序阶位（1=最大, windowSize=最小，PoC） |
 | `m_CfarGuardAngleDeg` | `float` | `2.0` | CFAR 守护带角半径（度） |
 | `m_CfarMultiplier` | `float` | `6.0` | CFAR 门限倍数（线性功率倍率） |
+| `m_CfarUseOfflineTable` | `bool` | `true` | 启用从仓库/磁盘加载离线 OS‑CFAR 查表（优先于运行时估算） |
+| `m_CfarOfflineTablePath` | `string` | `"scripts/Game/RDF/Radar/Data/os_cfar_multipliers.csv"` | 离线查表文件路径 |
 | `m_EnableBlindSpeedFilter` | `bool` | `false` | 启用盲速（Doppler alias）抑制 |
 | `m_BlindSpeedToleranceHz` | `float` | `1.0` | 盲速容差（Hz） |
 

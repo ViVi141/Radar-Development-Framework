@@ -198,6 +198,24 @@ class RDF_RadarTests
         if (v > 0.0) Print("  [OK]"); else Print("  [FAIL]");
         Print("");
     }
+
+    static void TestOSCFARScannerAutoLoad()
+    {
+        Print("[Test] OS-CFAR Scanner Auto-Load from Settings");
+
+        // Build settings that explicitly point to the offline CSV and enable auto-load
+        RDF_RadarSettings s = new RDF_RadarSettings();
+        s.m_CfarUseOfflineTable = true;
+        s.m_CfarOfflineTablePath = "scripts/Game/RDF/Radar/Data/os_cfar_multipliers.csv";
+
+        // Construct a scanner using these settings — ctor should load the table
+        RDF_RadarScanner sc = new RDF_RadarScanner(s);
+
+        float v = RDF_CFar.GetCachedOSMultiplier(16, 4, 1e-6);
+        Print(string.Format("  Scanner-driven file lookup (16,4,1e-6) = %.6f", v));
+        if (v > 0.0) Print("  [OK]"); else Print("  [FAIL]");
+        Print("");
+    }
     // RCS models - sphere, plate, cylinder at X-band.
     static void TestRCS()
     {

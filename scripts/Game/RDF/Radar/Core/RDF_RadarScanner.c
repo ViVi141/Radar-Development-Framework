@@ -33,6 +33,12 @@ class RDF_RadarScanner : RDF_LidarScanner
 
         // Instantiate the mode processor matching the configured mode.
         InstantiateMode(m_RadarSettings.m_RadarMode);
+
+        // Optional: load offline OS-CFAR table at scanner init when enabled
+        if (m_RadarSettings.m_CfarUseOfflineTable && m_RadarSettings.m_CfarOfflineTablePath != string.Empty)
+        {
+            RDF_CFar.LoadOSMultiplierTableFromFile(m_RadarSettings.m_CfarOfflineTablePath);
+        }
     }
 
     RDF_RadarSettings GetRadarSettings()

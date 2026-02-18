@@ -78,6 +78,14 @@ class RDF_RadarSettings : RDF_LidarSettings
     // OS-CFAR rank (1 = largest, windowSize = smallest). Default ~median.
     int   m_CfarOrderRank = 8;
 
+    // === Offline OS‑CFAR lookup table ===
+    // When true, the scanner will attempt to load an offline CSV lookup table
+    // at startup to fill OS multiplier cache. If the file is missing, runtime
+    // estimator remains available as a fallback.
+    bool  m_CfarUseOfflineTable = true;
+    // Path to CSV file containing precomputed multipliers (window,rank,pfa,multiplier)
+    string m_CfarOfflineTablePath = "scripts/Game/RDF/Radar/Data/os_cfar_multipliers.csv";
+
     // === Blind-speed filtering ===
     // Drop targets whose Doppler aliases to (near) zero due to PRF sampling.
     bool  m_EnableBlindSpeedFilter = false;
