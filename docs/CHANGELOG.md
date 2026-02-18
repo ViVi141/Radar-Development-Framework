@@ -1,5 +1,82 @@
 # CHANGELOG
 
+## 2026-02-18 — 电磁波雷达系统：完整实现 + HUD PPI 扫描图
+
+### 概述
+
+完成了以电磁波为载体的雷达仿真系统全部模块，包括物理模型、工作模式、可视化、演示系统与片上 HUD（`RDF_RadarHUD`）。同时修复了多项运行时 Bug 并完善了 CanvasWidget PPI 圆形扫描图显示。
+
+### 新增模块（24 个脚本文件）
+
+**Core（核心）**
+- `RDF_EMWaveParameters.c` — 电磁波物理参数容器（频率、波长、波段、发射功率、天线增益等）
+- `RDF_RadarSample.c` — 雷达回波数据（继承 `RDF_LidarSample`，增加 SNR、RCS、多普勒、相位等字段）
+- `RDF_RadarSettings.c` — 雷达扫描器配置（量程、距离门限 `m_MinRange`、系统损耗、检测门限等）
+- `RDF_RadarScanner.c` — 雷达扫描核心（完整 `ApplyRadarPhysics()` 10 步物理管线）
+
+**Physics（物理）**
+- `RDF_RadarPropagation.c` — 电磁波传播：FSPL、大气衰减、雨衰
+- `RDF_RCSModel.c` — RCS 模型：解析球/板/柱、材质反射率查表、实体边界框估算、地物漫反射
+- `RDF_RadarEquation.c` — 雷达方程：接收功率、噪声功率 kTBF、SNR
+- `RDF_DopplerProcessor.c` — 多普勒：径向速度、频移 `fd = 2vr f/c`、MTI 杂波抑制
+
+**Modes（工作模式）**
+- `RDF_RadarMode.c` — 四种模式基类 + 具体实现：Pulse / CW / FMCW / PhasedArray
+
+**Visual（可视化）**
+- `RDF_RadarColorStrategy.c` — 四种颜色策略：SNR 映射、RCS 映射、多普勒色、复合色
+- `RDF_RadarDisplay.c` — PPI 平面显示（`RDF_PPIDisplay`）与 A-Scope 距离幅度图（`RDF_AScopeDisplay`）
+- `RDF_RadarSimpleDisplay.c` — 世界立柱标记（`RDF_RadarWorldMarkerDisplay`）+ ASCII 控制台地图（`RDF_RadarTextDisplay`）
+
+**Advanced / ECM / Classification**
+- `RDF_SARProcessor.c` — 合成孔径雷达处理器（SAR 图像积累）
+- `RDF_JammingModel.c` — 电子对抗干扰模型（噪声干扰、欺骗干扰、自卫干扰）
+- `RDF_TargetClassifier.c` — 目标自动分类（5 类：飞机/车辆/人员/建筑/未知）
+
+**Demo（演示系统）**
+- `RDF_RadarDemoConfig.c` — 五种预设工厂：`CreateXBandSearch` / `CreateAutomotiveRadar` / `CreateWeatherRadar` / `CreatePhasedArrayRadar` / `CreateLBandSurveillance`
+- `RDF_RadarAutoRunner.c` — 演示主驱动器（单例）：扫描 tick、回调派发、世界标记显示
+- `RDF_RadarDemoStatsHandler.c` — 控制台统计报告（SNR / RCS / 速度 / 多普勒 / 量程 / ASCII 地图）
+- `RDF_RadarDemoCycler.c` — 五预设自动轮换（手动 / 定时两种模式）
+- `RDF_RadarAutoBootstrap.c` — `modded SCR_BaseGameMode`：游戏启动自动运行雷达演示 + HUD
+
+**UI（片上 HUD）**
+- `RDF_RadarHUD.c` — 完全基于 `WorkspaceWidget.CreateWidgetInWorkspace` 的动态 HUD，含：
+  - 标题栏 + 当前工作模式
+  - `CanvasWidget` PPI 圆形扫描图（背景圆盘、50%/100% 距离环、N/S/E/W 罗盘轴、目标光点）
+  - 三行数据面板（SNR / RCS / 速度 / 命中数 / 量程）
+  - 0.5 秒节流防止闪烁
+
+**Tests / Util**
+- `RDF_RadarTests.c` — 单元测试（传播损耗、多普勒、RCS、检测距离）
+- `RDF_RadarBenchmark.c` — 性能基准
+- `RDF_RadarExport.c` — CSV 数据导出
+
+### 关键 Bug 修复
+
+| 问题 | 修复方案 |
+|------|---------|
+| `RDF_RadarScanner` 的雷达方程双重计入 FSPL | 系统损耗 L 改为只含 `m_SystemLossDB` + 大气/雨衰；`R⁴` 项已包含传播衰减 |
+| 近场 SNR 饱和（range min=1m，SNR=130dB+）| 增加 `m_MinRange` 距离门限，拒绝盲区内回波 |
+| 杂波过滤器不触发 | 地物判断从 `m_Surface != null` 修正为 `m_Entity == null` |
+| 距离显示全为 0 | 改用 `(m_HitPos - m_Start).Length()` 计算真实几何距离 |
+| 地物 RCS 返回 0 导致无法计算功率 | 引入漫反射面积散射模型 `sigma0 * patchArea` |
+| `.layout` 文件报错 `Unknown keyword 'FrameWidgetClass'` | `.layout` 是二进制格式；改用纯脚本 `CreateWidgetInWorkspace` 动态创建所有控件 |
+| HUD 数据闪烁 | 增加 0.5 秒节流（`System.GetTickCount()` 计时） |
+
+### Enfusion Script 兼容性修复
+
+- 替换所有非 ASCII Unicode 字符
+- 去除三目运算符 `? :`，改为 `if/else`
+- 去除函数式类型转换 `float(x)`，改为 C 风格 `(float)x`
+- 修复 `ToString()` 不能在临时表达式上调用的问题
+- 修复 `out` 作变量名与关键字冲突
+- 去除 `string.ToLower()`、`IEntity.GetMaterial()`、`IEntity.GetClassName()` 等不存在的 API
+- 修复 `enum` 直接整数转换报错，改用预填数组查表
+- `string.Format` 改为字符串拼接（Enfusion 用 `%1/%2` 位置说明符，不支持 `%.1f`）
+
+---
+
 ## 2026-02-18 — 网络：单片扫描载荷改为可靠 RPC（小修复）
 
 概述：将单片扫描载荷的 RPC 通道由不可靠（Unreliable）改为可靠（Reliable），以降低小型（不分片）CSV 载荷在传输层丢失的概率。此变更仅更改传输通道；RPC 签名与分片逻辑保持不变。

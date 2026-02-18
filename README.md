@@ -1,395 +1,201 @@
-# Radar Development Framework — LiDAR 模块
+# Radar Development Framework
 
-轻量、模块化的 LiDAR（激光雷达）开发框架，用于在 **Arma Reforger** 中实现射线点云扫描、可视化渲染与调试。扫描核心、可视化与演示相互隔离，便于扩展与复用。
+轻量、模块化的**双系统传感器框架**，用于在 **Arma Reforger** 中实现：
+
+- **LiDAR**：激光雷达射线点云扫描、可视化与演示
+- **电磁波雷达**：完整物理仿真（传播衰减、RCS、多普勒、SNR），含 PPI 扫描圆图 HUD
+
+两套系统共享采样核心与扩展接口，相互隔离，互不干扰。
 
 - **Repository**: [Radar-Development-Framework](https://github.com/ViVi141/Radar-Development-Framework)
 - **Contact**: 747384120@qq.com
-- **License**: Apache-2.0（见根目录 `LICENSE`）
+- **License**: Apache-2.0
 
 ---
 
-## 特性
+## 特性总览
 
-- **扫描核心**：可配置射线数、半径、间隔；支持多种采样策略（均匀、半球、锥形、分层、扫描线、雷达式扫掠等）
-- **可视化**：点云 + 渐变射线、可插拔颜色策略、可选「仅点云」模式（纯色背景）
-- **演示与调试**：统一开关、预设配置、策略轮换、Bootstrap 可选开局自启（默认关闭）
-- **工具与扩展**：CSV 导出、样本统计/过滤、扫描完成回调；支持仅逻辑不渲染（无 Visualizer）
+### LiDAR 模块
+- 可配置射线数、范围、间隔；多种采样策略（均匀、半球、锥形、分层、扫描线、雷达扫掠）
+- 点云 + 渐变射线可视化；可插拔颜色策略；仅点云模式（纯色背景）
+- CSV 导出、统计/过滤、扫描完成回调；支持多人网络同步（服务器权威）
+
+### 电磁波雷达模块
+- **物理模型**：FSPL、大气衰减、雨衰、雷达方程、SNR、系统噪声、多普勒频移
+- **RCS 模型**：球/板/柱解析 RCS、材质反射率查表、实体边界框估算、地物漫反射
+- **工作模式**：脉冲（Pulse）、连续波（CW）、调频连续波（FMCW）、相控阵（Phased Array）
+- **可视化**：3D 世界立柱标记、ASCII 控制台地图、PPI 圆形扫描图 HUD
+- **HUD**：底层直接用 `WorkspaceWidget.CreateWidgetInWorkspace` 动态构建，无需 `.layout` 文件
+- **高级**：SAR 处理器、电子对抗（ECM/干扰）、目标自动分类
+- **演示系统**：五种预设、自动轮换、Bootstrap 自启动
 
 ---
 
 ## 项目结构
 
-| 目录 | 说明 |
+```
+scripts/Game/RDF/
+  Lidar/
+    Core/       扫描核心：设置、类型、扫描器、采样策略
+    Visual/     可视化：点云/射线渲染、颜色策略
+    Util/       工具：主体解析、CSV 导出、统计/过滤、回调
+    Demo/       演示：AutoRunner、DemoConfig、Cycler、Bootstrap
+    Network/    网络：服务器权威同步
+
+  Radar/
+    Core/       核心：EMWaveParameters、RadarSample、RadarSettings、RadarScanner
+    Physics/    物理：传播损耗、RCS 模型、雷达方程、多普勒处理器
+    Modes/      工作模式：Pulse / CW / FMCW / PhasedArray
+    Visual/     可视化：颜色策略、PPI/A-Scope 显示、世界标记、文字地图
+    Advanced/   高级：SAR 处理器
+    ECM/        电子对抗：干扰模型
+    Classification/ 目标分类器
+    Demo/       演示：RadarDemoConfig、AutoRunner、DemoStatsHandler、Cycler、Bootstrap
+    UI/         HUD：RDF_RadarHUD（纯脚本 CanvasWidget PPI 扫描图）
+    Tests/      单元测试 + 性能基准
+    Util/       工具：RadarExport
+
+docs/
+  README.md               本文件
+  DEVELOPMENT.md          开发者架构与扩展指南
+  API.md                  LiDAR API 参考
+  RADAR_API.md            雷达 API 参考
+  RADAR_TUTORIAL.md       雷达使用教程
+  CHANGELOG.md            版本历史
+  TODO.md                 已完成/待办事项
+```
+
+---
+
+## 快速上手 — 雷达 Demo
+
+框架通过 `modded SCR_BaseGameMode` 在游戏启动时自动运行雷达演示（默认 **已开启**）：
+
+```c
+// 默认开启 X 波段搜索雷达 + PPI HUD
+// 如需关闭，在 RDF_RadarAutoBootstrap.c 中将 s_RadarBootstrapEnabled = false
+```
+
+### 手动控制
+
+```c
+// 以指定配置启动
+RDF_RadarAutoRunner.StartWithConfig(RDF_RadarDemoConfig.CreateXBandSearch());
+
+// 自动轮换五种预设（每 15 秒切换）
+RDF_RadarDemoCycler.StartAutoCycle(15.0);
+
+// 显示/隐藏 HUD
+RDF_RadarHUD.Show();
+RDF_RadarHUD.Hide();
+
+// 更新 PPI 显示量程（与扫描器配置保持一致）
+RDF_RadarHUD.SetDisplayRange(2500.0);
+```
+
+### 五种预设配置
+
+| 工厂方法 | 波段 | 典型场景 | 最大量程 |
+|---------|------|---------|---------|
+| `CreateXBandSearch()` | X (10 GHz) | 地面搜索/监视 | 2 500 m |
+| `CreateAutomotiveRadar()` | Ka (77 GHz) | 车辆防撞 FMCW | 200 m |
+| `CreateWeatherRadar()` | S (3 GHz) | 气象探测 | 50 000 m |
+| `CreatePhasedArrayRadar()` | X (10 GHz) | 多目标相控阵跟踪 | 10 000 m |
+| `CreateLBandSurveillance()` | L (1.3 GHz) | 远程预警 | 100 000 m |
+
+---
+
+## HUD 界面说明
+
+游戏启动后，屏幕**左下角**自动出现雷达 HUD，包含：
+
+```
++==========================================+
+| [>] RADAR              X-Band Pulse     |  ← 标题 + 当前模式
++------------------------------------------+
+|               N (北)                     |
+|         CanvasWidget PPI 圆形扫描图        |
+|  W (西)    (+)玩家位置     E (东)          |
+|               S (南)                     |
+|  内圈=半量程  外圈=全量程                  |
++------------------------------------------+
+| SNR  65.2 dB   Hits 23/512 rays         |
+| RCS  +18.0 dBsm   Vel  3.2 m/s         |
+| Range  30 m  to  1447 m                 |
++==========================================+
+```
+
+**目标光点颜色含义**：
+- 亮绿色（大实体，RCS > 10 dBsm）
+- 青色（小实体）
+- 黄色（强地物回波）
+- 暗橙色（弱地物回波）
+
+HUD 更新频率最高每 0.5 秒一次，防止数据闪烁。
+
+---
+
+## 快速上手 — LiDAR
+
+```c
+// 以预设配置一步启动
+RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateDefault(256));
+RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateConical(25.0, 256));
+RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateSweep(30.0, 20.0, 45.0, 512));
+
+// 轮换策略
+RDF_LidarDemoCycler.StartAutoCycle(10.0);
+
+// 开关
+RDF_LidarAutoRunner.SetDemoEnabled(true);
+RDF_LidarAutoRunner.SetDemoEnabled(false);
+```
+
+完整 LiDAR API 见 [docs/API.md](docs/API.md)。
+
+---
+
+## 雷达物理管线简介
+
+每条射线命中后，`RDF_RadarScanner.ApplyRadarPhysics()` 执行以下步骤：
+
+1. **自由空间路径损耗**（FSPL）：`20·log10(d) + 20·log10(f) + 92.45 dB`
+2. **大气衰减**（频率 × 距离相关）
+3. **雨衰**（可选，降雨率参数）
+4. **RCS 估算**：实体 → 边界框体积 × 材质反射率；地物 → 漫反射面积散射模型
+5. **接收功率**：完整雷达方程 `Pr = Pt·Gt·Gr·σ·λ²／(4π)³／R⁴／L`
+6. **距离门限**（Range Gate）：丢弃近场盲区
+7. **噪声功率**：`kTBF`，计算 SNR
+8. **多普勒频移**：`fd = 2·vr·f／c`（相对速度）
+9. **检测门限**：`SNR ≥ m_DetectionThreshold`
+10. **杂波过滤**（可选，MTI 模式）
+
+---
+
+## 扩展点
+
+- **采样策略**：实现 `RDF_LidarSampleStrategy::BuildDirection()` 并注入
+- **颜色策略**：实现 `RDF_RadarColorStrategy::BuildPointColorFromRadarSample()`
+- **RCS 模型**：修改 `RDF_RCSModel.EstimateEntityRCS()` 或 `EstimateTerrainRCS()`
+- **工作模式**：继承 `RDF_RadarMode` 并重写 `ApplyMode()`
+- **扫描完成回调**：继承 `RDF_LidarScanCompleteHandler`，重写 `OnScanComplete()`
+
+---
+
+## 文档索引
+
+| 文件 | 内容 |
 |------|------|
-| `scripts/Game/RDF/Lidar/Core/` | 扫描核心：设置、类型、扫描器、采样策略 |
-| `scripts/Game/RDF/Lidar/Visual/` | 可视化：点云与射线渲染、颜色策略、视觉参数 |
-| `scripts/Game/RDF/Lidar/Util/` | 工具：主体解析、CSV 导出、统计/过滤、扫描完成回调 |
-| `scripts/Game/RDF/Lidar/Demo/` | 演示：统一入口、配置预设、策略轮换、Bootstrap |
-| `scripts/Game/RDF/Lidar/Network/` | 网络：服务器权威同步 API 与组件 |
-
-详细模块说明与扩展点见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)，完整 API 见 [docs/API.md](docs/API.md)。
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 架构、模块布局、数据流、扩展指南 |
+| [docs/API.md](docs/API.md) | LiDAR 完整 API 参考 |
+| [docs/RADAR_API.md](docs/RADAR_API.md) | 雷达完整 API 参考 |
+| [docs/RADAR_TUTORIAL.md](docs/RADAR_TUTORIAL.md) | 雷达使用教程（14 章）|
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本更新历史 |
 
 ---
 
-## 快速上手
-
-框架默认**不自动运行**，演示需显式开启，避免干扰其他模组。
-
-### 统一开关（唯一入口）
-
-```c
-// 开启演示（需先通过 SetDemoConfig 或 StartWithConfig 设定策略等）
-RDF_LidarAutoRunner.SetDemoEnabled(true);
-
-// 关闭演示
-RDF_LidarAutoRunner.SetDemoEnabled(false);
-
-// 查询是否已开启
-RDF_LidarAutoRunner.IsDemoEnabled();
-```
-
-- 修复：在某些情况下扫描被暂停但是可视化依然存在的现象已修复（`SetDemoEnabled(false)` / 暂停时会清理 visualizer）。
-
-### 通过预设启动（推荐）
-
-所有演示均通过 `RDF_LidarDemoConfig` 预设 + `RDF_LidarAutoRunner` 完成：
-
-```c
-// 一条调用完成配置并启动
-RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateDefault(256));
-RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateDefaultDebug(512)); // 原点轴 + 控制台统计
-RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateHemisphere(256));
-RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateConical(25.0, 256));
-RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateStratified(256));
-RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateScanline(32, 256));
-RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateSweep(30.0, 20.0, 45.0, 512)); // 雷达扫描动画
-
-// 或分步：先设置配置再开启
-RDF_LidarDemoConfig cfg = RDF_LidarDemoConfig.CreateConical(25.0, 256);
-RDF_LidarAutoRunner.SetDemoConfig(cfg);
-RDF_LidarAutoRunner.SetDemoEnabled(true);
-```
-
-### 自定义配置
-
-```c
-RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
-cfg.m_Enable = true;
-cfg.m_SampleStrategy = new RDF_ConicalSampleStrategy(25.0);
-cfg.m_RayCount = 256;
-cfg.m_MinTickInterval = 0.25;
-cfg.m_ColorStrategy = new RDF_IndexColorStrategy();
-// 启用批量网格渲染以在高射线计数下获得更好性能（可选）
-cfg.m_UseBatchedMesh = true;
-RDF_LidarAutoRunner.SetDemoConfig(cfg);
-RDF_LidarAutoRunner.SetDemoEnabled(true);
-```
-
-### 策略轮换（Cycler）
-
-```c
-RDF_LidarDemoCycler.Cycle(256);                    // 切换到下一策略并开启演示
-RDF_LidarDemoCycler.StartIndex(2, 256);            // 按索引启动（如 2=锥形）
-RDF_LidarDemoCycler.StartAutoCycle(10.0);          // 每 10 秒自动轮换
-RDF_LidarDemoCycler.StopAutoCycle();
-RDF_LidarDemoCycler.SetAutoCycleInterval(5.0);
-```
-
-### 统一 Bootstrap（游戏开局可选自启）
-
-由本模组通过 **modded `SCR_BaseGameMode`** 提供，加载 RDF 后可用。默认**关闭**。
-
-```c
-SCR_BaseGameMode.SetBootstrapEnabled(true);        // 开局自动开演示（默认策略）
-SCR_BaseGameMode.SetBootstrapAutoCycle(true);      // 开局自动轮换策略
-SCR_BaseGameMode.SetBootstrapAutoCycleInterval(10.0);
-```
-
-### 其它常用 API
-
-```c
-RDF_LidarAutoRunner.SetMinTickInterval(0.2);
-RDF_LidarAutoRunner.SetDemoRayCount(128);
-RDF_LidarAutoRunner.SetDemoSampleStrategy(new RDF_HemisphereSampleStrategy());
-RDF_LidarAutoRunner.SetDemoColorStrategy(new RDF_IndexColorStrategy());
-// true = 游戏画面+点云，false = 仅点云（纯色背景）
-RDF_LidarAutoRunner.SetDemoRenderWorld(true);
-RDF_LidarAutoRunner.GetDemoRenderWorld();
-```
-
-### 多人游戏网络同步
-
-框架提供独立的网络模块（Network），用于服务器权威的 LiDAR 扫描与配置同步。
-
-#### 设置网络 API
-
-1. 在玩家实体预制件中添加 `RDF_LidarNetworkComponent`
-2. 将组件绑定到 AutoRunner（或使用自动绑定）：
-
-```c
-RDF_LidarAutoRunner.SetNetworkAPI(networkComponent);
-```
-
-或在游戏开始时自动绑定本地玩家主体：
-
-```c
-RDF_LidarNetworkUtils.BindAutoRunnerToLocalSubject(true);
-```
-
-#### 服务器权威扫描
-
-- 客户端请求扫描 → 服务器执行 → 结果广播到所有客户端
-- 可视化使用同步的扫描结果，确保所有玩家看到相同画面
-- 配置更改需要服务器验证，防止恶意参数
-
-#### 仅点云模式推荐
-
-在多人游戏中推荐使用仅点云模式：
-
-```c
-RDF_LidarDemoConfig cfg = RDF_LidarDemoConfig.CreateDefault(128);
-cfg.m_RenderWorld = false; // 仅点云，隐藏游戏世界
-RDF_LidarAutoRunner.SetDemoConfig(cfg);
-```
-
-#### 非 Demo 扫描（网络适配）
-
-```c
-RDF_LidarScanner scanner = new RDF_LidarScanner();
-array<ref RDF_LidarSample> samples = new array<ref RDF_LidarSample>();
-IEntity subject = RDF_LidarSubjectResolver.ResolveLocalSubject(true);
-
-// 自动使用网络 API（如已绑定），否则本地扫描
-bool updated = RDF_LidarNetworkScanner.ScanWithAutoRunnerAPI(subject, scanner, samples);
-```
-
-### 导出与逻辑
-
-- **导出 CSV**：`RDF_LidarExport.ExportLastScanToConsole(visualizer)` 或 `RDF_LidarExport.PrintCSVToConsole(samples)`，从控制台复制到外部文件。
-- **扫描完成回调**：继承 `RDF_LidarScanCompleteHandler` 并重写 `OnScanComplete(samples)`，再调用 `RDF_LidarAutoRunner.SetScanCompleteHandler(handler)`。
-- **统计/过滤**：`RDF_LidarSampleUtils.GetClosestHit(samples)`、`GetHitCount(samples)`、`GetHitsInRange(...)`、`GetAverageDistance(...)` 等，详见 [docs/API.md](docs/API.md)。
-- **仅逻辑不渲染**：直接使用 `RDF_LidarScanner.Scan(subject, outSamples)`，不创建 Visualizer，见 [docs/API.md](docs/API.md)「仅逻辑不渲染」一节。
-- 获取上次扫描：`visualizer.GetLastSamples()`（返回防御性副本）后可用 `RDF_LidarExport.PrintCSVToConsole(samples)` 导出或自行处理。
-
----
-
-## 常见设置
-
-- **扫描参数**：半径、射线数、更新间隔等在 `RDF_LidarSettings` 中配置（含 clamp 与校验）。
-- **可视化**：点大小、分段数、透明度等在 `RDF_LidarVisualSettings` 中配置；调试可设 `m_DrawOriginAxis = true` 绘制扫描原点与三轴。
-- **游戏+点云 / 仅点云**：`m_RenderWorld = true`（默认）为游戏画面+点云；`false` 为仅点云（相机前黑色四边形 + 关闭场景渲染）。演示下可用 `SetDemoRenderWorld(false)` 或 config 的 `m_RenderWorld = false`。
-
----
-
-## 性能建议
-
-- 降低 `m_RayCount` 或 `m_RaySegments` 可显著减少开销。
-- 高密度点云场景建议增大 `m_UpdateInterval` 或仅在调试时开启渲染。
-- 对于非常大的点云，启用 VisualSettings 的 `m_UseBatchedMesh = true` 可通过合并三角形批次大幅减少 Shape 调用，从而提升帧率（需在视觉与色彩粒度之间权衡）。
-
----
-
-## 文档、迁移与贡献
-
-- 内部架构、扩展接口与开发约定：[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
-- 完整 API 与字段说明：[docs/API.md](docs/API.md)
-- **迁移指南（重要）**：近期网络同步重构包含破坏性变更，请参阅 [docs/MIGRATION.md](docs/MIGRATION.md) 进行升级。
-
-欢迎提交 PR、Issue 或讨论扩展点。PR 请说明变更目的与性能影响（如有）。直接联系：747384120@qq.com。
-
----
-
-## English translation
-
-# Radar Development Framework — LiDAR module
-
-A lightweight, modular LiDAR (light detection and ranging) development framework for **Arma Reforger** that provides ray-based point-cloud scanning, visualization rendering and debugging utilities. The scanning core, visualizer and demo components are separated to make extension and reuse easy.
-
-- **Repository**: [Radar-Development-Framework](https://github.com/ViVi141/Radar-Development-Framework)
-- **Contact**: 747384120@qq.com
-- **License**: Apache-2.0 (see `LICENSE` in repository root)
-
----
-
-## Features
-
-- **Scanning core**: configurable ray count, range and intervals; supports multiple sampling strategies (uniform, hemisphere, conical, stratified, scanline, sweep/radar-style, etc.)
-- **Visualization**: point-cloud + gradient rays, pluggable color strategies, optional "point-cloud-only" mode (solid background)
-- **Demos & debugging**: unified switch, preset configs, strategy cycler, optional bootstrap-on-start (disabled by default)
-- **Tools & extensions**: CSV export, sampling statistics/filters, scan-complete callbacks; supports logic-only scans without rendering (no Visualizer)
-
----
-
-## Project structure
-
-| Path | Purpose |
-|------|---------|
-| `scripts/Game/RDF/Lidar/Core/` | Scanning core: settings, types, scanner and sampling strategies |
-| `scripts/Game/RDF/Lidar/Visual/` | Visualization: point-cloud/ray rendering, color strategies, visual settings |
-| `scripts/Game/RDF/Lidar/Util/` | Utilities: subject resolution, CSV export, statistics/filters, scan-complete callbacks |
-| `scripts/Game/RDF/Lidar/Demo/` | Demos: single entry, preset configs, strategy cycler, bootstrap |
-| `scripts/Game/RDF/Lidar/Network/` | Network: server-authoritative synchronization API & components |
-
-See `docs/DEVELOPMENT.md` for module details and extension points, and `docs/API.md` for the full API reference.
-
----
-
-## Quick start
-
-The framework does **not auto-run** by default. Demos must be explicitly enabled to avoid interfering with other mods.
-
-### Unified switch (single entry point)
-
-```c
-// Enable demo (after setting DemoConfig or using StartWithConfig)
-RDF_LidarAutoRunner.SetDemoEnabled(true);
-
-// Disable demo
-RDF_LidarAutoRunner.SetDemoEnabled(false);
-
-// Query
-RDF_LidarAutoRunner.IsDemoEnabled();
-```
-
-### Start with a preset (recommended)
-
-All demos are driven via `RDF_LidarDemoConfig` presets + `RDF_LidarAutoRunner`:
-
-```c
-RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateDefault(256));
-RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateDefaultDebug(512)); // origin axis + console stats
-RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateHemisphere(256));
-RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateConical(25.0, 256));
-RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateStratified(256));
-RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateScanline(32, 256));
-RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateSweep(30.0, 20.0, 45.0, 512)); // radar sweep animation
-
-// Or set config then enable
-RDF_LidarDemoConfig cfg = RDF_LidarDemoConfig.CreateConical(25.0, 256);
-RDF_LidarAutoRunner.SetDemoConfig(cfg);
-RDF_LidarAutoRunner.SetDemoEnabled(true);
-```
-
-### Custom configuration
-
-```c
-RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
-cfg.m_Enable = true;
-cfg.m_SampleStrategy = new RDF_ConicalSampleStrategy(25.0);
-cfg.m_RayCount = 256;
-cfg.m_MinTickInterval = 0.25;
-cfg.m_ColorStrategy = new RDF_IndexColorStrategy();
-RDF_LidarAutoRunner.SetDemoConfig(cfg);
-RDF_LidarAutoRunner.SetDemoEnabled(true);
-```
-
-### Strategy cycler (Cycler)
-
-```c
-RDF_LidarDemoCycler.Cycle(256);                    // switch to next strategy and enable demo
-RDF_LidarDemoCycler.StartIndex(2, 256);            // start by index (e.g. 2 = conical)
-RDF_LidarDemoCycler.StartAutoCycle(10.0);          // auto-cycle every 10s
-RDF_LidarDemoCycler.StopAutoCycle();
-RDF_LidarDemoCycler.SetAutoCycleInterval(5.0);
-```
-
-### Bootstrap (optional auto-start at game start)
-
-Provided via a modded `SCR_BaseGameMode`. Disabled by default.
-
-```c
-SCR_BaseGameMode.SetBootstrapEnabled(true);
-SCR_BaseGameMode.SetBootstrapAutoCycle(true);
-SCR_BaseGameMode.SetBootstrapAutoCycleInterval(10.0);
-```
-
-### Common API examples
-
-```c
-RDF_LidarAutoRunner.SetMinTickInterval(0.2);
-RDF_LidarAutoRunner.SetDemoRayCount(128);
-RDF_LidarAutoRunner.SetDemoSampleStrategy(new RDF_HemisphereSampleStrategy());
-RDF_LidarAutoRunner.SetDemoColorStrategy(new RDF_IndexColorStrategy());
-// true = render game world + point cloud, false = point-cloud-only (solid background)
-RDF_LidarAutoRunner.SetDemoRenderWorld(true);
-RDF_LidarAutoRunner.GetDemoRenderWorld();
-```
-
-### Multiplayer network sync
-
-The framework includes a Network module for server-authoritative LiDAR scans and configuration synchronization.
-
-#### Setup
-1. Add `RDF_LidarNetworkComponent` to the prefab for the player-controlled entity.
-2. Bind the component to the AutoRunner (or rely on automatic binding):
-
-```c
-RDF_LidarAutoRunner.SetNetworkAPI(networkComponent);
-```
-
-or auto-bind to the local subject at game start:
-
-```c
-RDF_LidarNetworkUtils.BindAutoRunnerToLocalSubject(true);
-```
-
-#### Server-authoritative scans
-
-- Client requests a scan → server executes → results broadcast to clients
-- Visualizer renders the synchronized scan so all players see the same data
-- Configuration changes should be validated server-side to prevent malicious parameters
-
-#### Point-cloud-only recommended
-
-For multiplayer, consider point-cloud-only mode:
-
-```c
-RDF_LidarDemoConfig cfg = RDF_LidarDemoConfig.CreateDefault(128);
-cfg.m_RenderWorld = false; // point-cloud-only
-RDF_LidarAutoRunner.SetDemoConfig(cfg);
-```
-
-#### Non-demo scans (network-aware)
-
-```c
-RDF_LidarScanner scanner = new RDF_LidarScanner();
-array<ref RDF_LidarSample> samples = new array<ref RDF_LidarSample>();
-IEntity subject = RDF_LidarSubjectResolver.ResolveLocalSubject(true);
-
-// Automatically uses the bound network API (if set), otherwise performs a local scan
-bool updated = RDF_LidarNetworkScanner.ScanWithAutoRunnerAPI(subject, scanner, samples);
-```
-
-### Export & logic-only scans
-
-- **Export CSV**: `RDF_LidarExport.ExportLastScanToConsole(visualizer)` or `RDF_LidarExport.PrintCSVToConsole(samples)` — copy from console to external file.
-- **Scan-complete callback**: subclass `RDF_LidarScanCompleteHandler`, override `OnScanComplete(samples)`, and call `RDF_LidarAutoRunner.SetScanCompleteHandler(handler)`.
-- **Statistics/filters**: `RDF_LidarSampleUtils.GetClosestHit(samples)`, `GetHitCount(samples)`, `GetHitsInRange(...)`, `GetAverageDistance(...)`, see `docs/API.md`.
-- **Logic-only scans**: call `RDF_LidarScanner.Scan(subject, outSamples)` without creating a Visualizer (see `docs/API.md` "logic-only" section).
-- Retrieve last scan via `visualizer.GetLastSamples()` (returns a defensive copy), then export with `RDF_LidarExport.PrintCSVToConsole(samples)`.
-
----
-
-## Common settings
-
-- **Scan parameters** (range, ray count, update interval) are in `RDF_LidarSettings` (includes clamps and validation).
-- **Visualization** settings (point size, segments, alpha) are in `RDF_LidarVisualSettings`; enable `m_DrawOriginAxis = true` for origin axis debug.
-- **World+point-cloud vs point-cloud-only**: `m_RenderWorld = true` (default) renders the game world + point cloud; `false` renders point cloud only by drawing a black quad (uses NOZBUFFER so the point cloud renders on top) in front of the camera and disabling scene rendering.
-
----
-
-## Performance recommendations
-
-- Lower `m_RayCount` or `m_RaySegments` to reduce cost.
-- For dense point-clouds increase `m_UpdateInterval` or disable rendering when not needed.
-
----
-
-## Docs, migration & contribution
-
-- Developer architecture & extension points: `docs/DEVELOPMENT.md`
-- Full API & field documentation: `docs/API.md`
-- **Migration guide (important)**: recent network sync refactor contains breaking changes — see `docs/MIGRATION.md` to upgrade.
-
-Contributions welcome — please open PRs or Issues and describe purpose and performance impact. Contact: 747384120@qq.com.
-
+## 贡献
+
+欢迎提交 PR、Issue 或讨论扩展点。  
+PR 请说明变更目的、兼容性影响与性能影响（如有）。  
+联系：747384120@qq.com

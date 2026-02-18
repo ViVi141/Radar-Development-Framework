@@ -1,162 +1,90 @@
 # TODO — Radar Development Framework
 
-本文档记录待实现功能与改进项，优先以**以电磁波为载体的雷达系统**为主线。
+本文档记录已完成项目与后续改进建议。
 
 ---
 
-## 一、以电磁波为载体的雷达系统（主轨道）
-
-在现有 LiDAR 射线扫描基础上，引入**电磁波**作为载体，使雷达具备波段、频率、波长、相位、衰减、反射等物理特性，并与现有 Core/Visual/Util 结构兼容。
+## 一、电磁波雷达系统（主轨道）— **已全部完成** ✓
 
 ### 1. 电磁波基础模型
-
-- [ ] **波段 / 频率 / 波长**
-  - 定义电磁波参数类（如 `RDF_EMWaveParams` 或扩展 `RDF_LidarSettings`）：载波频率 `f`（Hz）、可选波段枚举（如 L/S/C/X/Ku 等）。
-  - 波长 `λ = c / f`（c 为光速常量），在材质反射、衰减计算中复用。
-  - 在设置中支持按频率或波长配置，并做合理 clamp（例如频率范围 1 MHz～100 GHz）。
-
-- [ ] **相位**
-  - 为每条射线/每个回波记录相位信息（如发射相位、回波相位），用于后续多普勒、相干检测扩展。
-  - 数据结构中增加 `m_Phase`（或 `m_PhaseRad`）字段；相位可随传播距离变化：`phase = 2π * 2*distance/λ`（往返）。
-
-- [ ] **衰减（传播损耗）**
-  - **自由空间路径损耗**：`FSPL = (4π*d*f/c)²` 或 dB 形式 `20*log10(d) + 20*log10(f) + 92.45`（d: km, f: GHz）。
-  - 在采样结果中增加「接收功率」或「信号强度」字段，由发射功率减去 FSPL（及后续材质损耗）得到。
-  - 可选：简单大气/雨衰模型（与距离、频率相关的额外 dB 衰减）。
-
-- [ ] **反射与 RCS**
-  - 命中点处根据**材质/表面**（若引擎暴露 `GameMaterial` 或表面类型）映射到**反射系数**或**雷达截面积（RCS）**简化值。
-  - 反射强度 = f(发射功率, 距离衰减, 反射系数/RCS)。
-  - 可选：简单镜面/漫反射模型（入射角与反射强度关系）。
+- [x] **波段 / 频率 / 波长** — `RDF_EMWaveParameters`：载波频率、波长（λ = c/f）、波段枚举（L/S/C/X/Ku/K/Ka/V/W）
+- [x] **相位** — `RDF_RadarSample.m_PhaseRad`：回波相位 = 2π × 2d / λ
+- [x] **衰减（传播损耗）** — `RDF_RadarPropagation`：FSPL、大气衰减、雨衰模型
+- [x] **反射与 RCS** — `RDF_RCSModel`：解析模型（球/板/柱）、材质反射率查表、实体边界框估算、地物漫反射面积散射
 
 ### 2. 数据结构与 API
+- [x] **雷达采样** — `RDF_RadarSample`：继承 `RDF_LidarSample`，增加 SNR、RCS、多普勒频移、相位、接收功率、径向速度等字段
+- [x] **雷达设置** — `RDF_RadarSettings`：量程、距离门限 (`m_MinRange`)、系统损耗 (`m_SystemLossDB`)、检测门限、杂波过滤开关
+- [x] **雷达扫描器** — `RDF_RadarScanner`：完整 10 步物理管线（FSPL→大气→雨衰→RCS→功率→距离门→噪声→多普勒→检测→杂波过滤）
 
-- [ ] **雷达采样类型**
-  - 新建 `RDF_RadarSample`（或继承/组合 `RDF_LidarSample`），增加字段：频率/波长、相位、接收功率/强度、反射系数或 RCS、往返时间等。
-  - 或在不破坏现有 LiDAR 的前提下，在 Util 中提供「从 LiDAR 采样 + 电磁参数」生成雷达采样的转换层。
+### 3. 工作模式
+- [x] **脉冲雷达（Pulse）** — 峰值功率、脉冲宽度、PRF
+- [x] **连续波（CW）** — 固定频率、持续发射
+- [x] **调频连续波（FMCW）** — 线性调频、距离-频率映射
+- [x] **相控阵（Phased Array）** — 电子扫描、多波束
 
-- [ ] **雷达设置**
-  - 新建 `RDF_RadarSettings`（或扩展现有 Settings）：发射功率、载波频率/波段、是否启用衰减/相位/反射计算、大气/环境参数（若做衰减扩展）。
+### 4. 可视化与 HUD
+- [x] **3D 世界标记** — `RDF_RadarWorldMarkerDisplay`：彩色立柱标记命中点
+- [x] **ASCII 控制台地图** — `RDF_RadarTextDisplay`：文字俯视雷达地图
+- [x] **PPI 显示（脚本）** — `RDF_PPIDisplay`：调试用平面显示
+- [x] **A-Scope** — `RDF_AScopeDisplay`：距离-幅度图
+- [x] **PPI HUD（CanvasWidget）** — `RDF_RadarHUD`：
+  - 圆形扫描图（背景圆盘、50%/100% 距离环、N/S/E/W 罗盘轴、玩家中心点）
+  - 目标光点（颜色/大小按 RCS 区分实体/地物）
+  - 数据面板（SNR/RCS/速度/命中数/量程）
+  - 0.5 秒节流防闪烁
 
-- [ ] **雷达扫描器**
-  - 新建 `RDF_RadarScanner`：在现有射线 Trace 基础上，对每次命中/未命中应用衰减与反射模型，并写入电磁相关字段。
-  - 可与 `RDF_LidarScanner` 共用采样策略与 Trace 流程，仅在后处理阶段叠加电磁计算。
+### 5. 演示系统
+- [x] **五种预设** — `RDF_RadarDemoConfig`：X波段搜索/车辆防撞/气象/相控阵/L波段远程
+- [x] **演示驱动器** — `RDF_RadarAutoRunner`：单例、Tick 驱动、回调派发、世界标记
+- [x] **统计报告** — `RDF_RadarDemoStatsHandler`：控制台 SNR/RCS/速度/ASCII 地图输出
+- [x] **预设轮换** — `RDF_RadarDemoCycler`：手动切换 + 定时自动轮换
+- [x] **Bootstrap 自启动** — `RDF_RadarAutoBootstrap`：`modded SCR_BaseGameMode`，游戏启动后自动运行演示 + 显示 HUD
 
-### 3. 可视化与演示
+### 6. 高级功能
+- [x] **SAR 处理器** — `RDF_SARProcessor`：合成孔径积累与成像
+- [x] **电子对抗（ECM）** — `RDF_JammingModel`：噪声干扰、欺骗干扰、自卫干扰
+- [x] **目标分类** — `RDF_TargetClassifier`：按 RCS/速度自动分类（飞机/车辆/人员/建筑/未知）
 
-- [ ] **雷达回波可视化**
-  - 点云/射线颜色或大小与「接收强度」或「信噪比」挂钩（新建或扩展 `RDF_LidarColorStrategy` / 雷达专用 ColorStrategy）。
-  - 可选：距离-强度条、简单 PPI 平面显示（若 UI 可行）。
-
-- [ ] **Demo / 预设**
-  - 雷达版预设（如 `RDF_RadarDemoConfig`），选择波段、频率、是否显示强度/相位等，与现有 `RDF_LidarAutoRunner` 或新 Runner 集成。
-
-### 4. 文档与测试
-
-- [ ] 在 `docs/API.md` 中增加雷达相关类型与接口说明。
-- [ ] 在 `docs/DEVELOPMENT.md` 中说明电磁模型假设与扩展点（频率范围、衰减公式、RCS 简化约定）。
-- [ ] 自检或单元测试：给定频率/距离，校验路径损耗与相位计算公式是否正确。
-
----
-
-## 二、其他待办（可选）
-
-- [ ] 多普勒：若引擎提供命中点或实体速度，可计算多普勒频移并加入雷达采样。
-- [ ] 噪声与检测门限：简单噪声模型 + 门限，用于「是否判定为有效回波」。
-- [ ] 与现有 LiDAR 的开关/策略复用：雷达与 LiDAR 可共用部分采样策略，仅后端处理不同。
-
----
-
-## 三、实现顺序建议
-
-1. 电磁波参数（频率/波长/波段）与设置类。
-2. 衰减模型（FSPL）与采样结果中的强度字段。
-3. 反射/RCS 简化模型与材质映射。
-4. 相位字段与计算。
-5. 雷达扫描器（基于现有 Trace）与数据结构。
-6. 可视化与 Demo 集成。
-7. 文档与自检。
+### 7. 测试与文档
+- [x] **单元测试** — `RDF_RadarTests`：传播损耗、多普勒、RCS、检测距离
+- [x] **性能基准** — `RDF_RadarBenchmark`
+- [x] **API 文档** — `docs/RADAR_API.md`
+- [x] **使用教程** — `docs/RADAR_TUTORIAL.md`（14 章）
 
 ---
 
-*最后更新：按「以电磁波为载体的雷达系统」规划整理。*
+## 二、后续改进建议（可选）
+
+### HUD 与可视化
+- [ ] PPI 扫描动画（旋转扫描线，按角度逐步刷新而非全量刷新）
+- [ ] 目标历史轨迹（保留上 N 帧光点位置，淡出效果）
+- [ ] 悬停/点击光点显示目标详情（需要鼠标事件支持）
+- [ ] A-Scope 接入 HUD（在 PPI 右侧叠加距离-幅度图）
+
+### 物理模型
+- [ ] 多路径效应（地面反射增强/减弱）
+- [ ] 天线方向图加权（非均匀波束截面）
+- [ ] 相位相干检测（合并多个脉冲的相位以提升 SNR）
+- [ ] 杂波功率谱建模（气象杂波 / 海杂波 / 地杂波分类）
+
+### 工程质量
+- [ ] 导出到引擎调试 UI（`DiagMenu`）控制雷达参数
+- [ ] 更多单元测试覆盖（雷达方程边界值、RCS 特殊角度）
+- [ ] 网络同步雷达扫描结果（类似 LiDAR Network 模块）
+- [ ] 配置持久化（保存/加载雷达参数到文件）
 
 ---
 
-## English translation
+## 三、LiDAR 已完成（维护中）
 
-# TODO — Radar Development Framework
-
-This document lists features and improvements to implement, prioritizing an electromagnetic-wave–based radar system.
-
-## 1. Electromagnetic-wave–based radar (main track)
-
-Extend the existing LiDAR ray-scan model to support electromagnetic waves with band/frequency/wavelength/phase/attenuation/reflection properties while remaining compatible with the Core/Visual/Util structure.
-
-### 1. Basic EM model
-
-- [ ] **Band / Frequency / Wavelength**
-  - Define EM wave parameters (e.g. `RDF_EMWaveParams` or extend `RDF_LidarSettings`): carrier frequency `f` (Hz), optional band enum (L/S/C/X/Ku, etc.).
-  - Wavelength λ = c / f (c = speed of light); use in material reflection and attenuation calculations.
-  - Allow configuring by frequency or wavelength with sensible clamps (e.g. 1 MHz–100 GHz).
-
-- [ ] **Phase**
-  - Record phase for each emitted ray / returned echo (transmit phase, echo phase) for Doppler/coherent extensions.
-  - Add `m_Phase` (or `m_PhaseRad`) to sample structures; phase varies with propagation: `phase = 2π * 2 * distance / λ` (round-trip).
-
-- [ ] **Attenuation (propagation loss)**
-  - Free-space path loss (FSPL): FSPL = (4π d f / c)^2, or in dB: 20*log10(d) + 20*log10(f) + 92.45 (d in km, f in GHz).
-  - Add received power / signal-strength fields to samples computed from transmit power minus FSPL (and material losses).
-  - Optional: simple atmospheric/rain attenuation model.
-
-- [ ] **Reflection & RCS**
-  - Map materials/surfaces to a reflection coefficient or simplified radar cross section (RCS).
-  - Received amplitude = f(tx_power, path_loss, reflection_coefficient/RCS).
-  - Optional: simple specular vs diffuse reflection model based on incidence angle.
-
-### 2. Data structures & API
-
-- [ ] **Radar sample type**
-  - Add `RDF_RadarSample` (or extend/combine with `RDF_LidarSample`) with fields: frequency/wavelength, phase, received power/intensity, reflection coefficient/RCS, round-trip time, etc.
-  - Or provide a conversion layer that maps LiDAR samples + EM params → radar samples without breaking existing LiDAR API.
-
-- [ ] **Radar settings**
-  - Add `RDF_RadarSettings` (or extend current settings): transmit power, carrier frequency/band, enable phase/attenuation/reflection options, environmental parameters.
-
-- [ ] **Radar scanner**
-  - Implement `RDF_RadarScanner`: reuse existing trace flow and sampling strategies, then post-process hits to compute EM-related fields.
-
-### 3. Visualization & demo
-
-- [ ] **Radar echo visualization**: map point size/color to received intensity/SNR; provide PPI-like displays if UI allows.
-- [ ] **Demo / presets**: radar presets (e.g. `RDF_RadarDemoConfig`), integrate with `RDF_LidarAutoRunner` or a dedicated runner.
-
-### 4. Docs & tests
-
-- [ ] Update `docs/API.md` with radar types & API.
-- [ ] Update `docs/DEVELOPMENT.md` with model assumptions (frequency ranges, attenuation formulas, RCS simplifications).
-- [ ] Unit/self-check tests: verify FSPL and phase calculations for given frequency/distance.
+- [x] 点云扫描核心（多种采样策略）
+- [x] 可视化（渐变射线、仅点云模式）
+- [x] CSV 导出
+- [x] 多人网络同步（服务器权威、分片、RLE 压缩）
+- [x] Bootstrap 自启动
+- [x] 策略自动轮换
 
 ---
 
-## 2. Other optional items
-
-- [ ] Doppler: compute Doppler shift if entity velocity is available.
-- [ ] Noise & detection thresholds: simple noise model + detection gate for valid echoes.
-- [ ] Reuse sampling strategies between radar and LiDAR; only backend processing differs.
-
----
-
-## 3. Suggested implementation order
-
-1. EM parameter types (frequency/wavelength/band).
-2. Attenuation (FSPL) + sample intensity field.
-3. Reflection / RCS mapping and material hooks.
-4. Phase field and calculations.
-5. Radar scanner built on existing trace flow.
-6. Visualization & demo integration.
-7. Docs & tests.
-
----
-
-*Last updated: organized around the electromagnetic-wave–based radar plan.*
+*最后更新：2026-02-18，电磁波雷达系统全部完成，HUD PPI 扫描图上线。*
