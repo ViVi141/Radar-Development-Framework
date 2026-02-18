@@ -258,30 +258,30 @@ if (localPower > sensitivityThreshold)
 
 ### Phase 1：基础体素场 (2–3 周)
 
-- [ ] `EMVoxelField` 类：世界坐标 ↔ 体素索引映射
-- [ ] 稀疏存储：`map` 或自定义稀疏结构
-- [ ] `EMVoxelCell` 基础结构（Power, Direction, FrequencyMask）
-- [ ] TTL 与清理逻辑
+- [x] `EMVoxelField` 类：世界坐标 ↔ 体素索引映射  ✓（PoC）
+- [x] 稀疏存储：`map` 或自定义稀疏结构  ✓（PoC）
+- [x] `EMVoxelCell` 基础结构（Power, Direction, FrequencyMask） ✓
+- [x] TTL 与清理逻辑 ✓
 
 ### Phase 2：主动雷达注入 (2–3 周)
 
-- [ ] 射线步进：在路径体素写入能量
-- [ ] 与现有 `RDF_RadarScanner` 集成
-- [ ] 回波路径写入
-- [ ] 碰撞 → RCS → 反射射线
+- [x] 射线步进：在路径体素写入能量  ✓（`EMVoxelField::InjectAlongRay` PoC）
+- [x] 与现有 `RDF_RadarScanner` 集成  ✓（每条射线注入发射能量）
+- [x] 回波路径写入  ✓（命中点反射注入 PoC）
+- [x] 碰撞 → RCS → 反射射线  ✓（基于 `ApplyRadarPhysics` 的回波注入）
 
 ### Phase 3：被动雷达与干扰 (1–2 周)
 
-- [ ] `GetPowerAt(pos)`、`GetDominantDirection(pos)`
-- [ ] 被动接收器采样逻辑
-- [ ] 干扰机：向体素注入噪声
-- [ ] RWR 显示接口
+- [x] `GetPowerAt(pos)`、`GetDominantDirection(pos)` ✓ (读取接口已实现)
+- [x] 被动接收器采样逻辑 ✓ (`EMPassiveSensor` PoC)
+- [x] 干扰机：向体素注入噪声 ✓ (`EMVoxelField::InjectJammer` + `RDF_JammingModel::InjectJammerIntoVoxelField`)
+- [ ] RWR 显示接口 (待实现 / UI 集成)
 
 ### Phase 4：进阶物理（可选）(3–4 周)
 
-- [ ] 旁瓣射线与增益模型
-- [ ] 多径反射射线
-- [ ] CFAR 与多普勒盲速
+- [x] 旁瓣射线与增益模型 ✓（antenna pattern + PoC sidelobe rays）
+- [x] 多径反射射线 ✓（地面反射 PoC：扫描器注入反射射线到体素场）
+- [x] CFAR 与多普勒盲速 ✓ (CA‑CFAR + OS‑CFAR + CA‑CFAR/OS‑CFAR Pfa 自动缩放 + 查表/缓存 PoC 已实现) 
 - [ ] 信号描述符（PRF/PW/LPI）
 
 ### Phase 5：优化与联调 (2 周)

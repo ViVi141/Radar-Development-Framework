@@ -115,4 +115,14 @@ class RDF_JammingModel
 
         return (float)numDipoles * wavelength * wavelength / (8.0 * Math.PI);
     }
+
+    // Inject jammer energy directly into the EM voxel field (server-side PoC).
+    static void InjectJammerIntoVoxelField(vector pos, float powerW, float radius, int freqMask = 0, float ttl = 1.0)
+    {
+        EMVoxelField ev = EMVoxelField.GetInstance();
+        if (!ev)
+            return;
+        ev.InjectJammer(pos, powerW, radius, freqMask, ttl);
+    }
 }
+

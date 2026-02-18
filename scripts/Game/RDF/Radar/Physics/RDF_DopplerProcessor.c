@@ -100,4 +100,21 @@ class RDF_DopplerProcessor
 
         return (prf * SPEED_OF_LIGHT) / (4.0 * carrierFrequency);
     }
+
+    // Blind-speed detection (PoC).
+    // Returns true when the Doppler shift for `radialVelocity` aliases to an
+    // integer multiple of PRF within `toleranceHz` — such velocities are
+    // effectively indistinguishable from zero-Doppler after PRF sampling.
+    static bool IsBlindSpeed(float radialVelocity, float prf, float carrierFrequency, float toleranceHz = 1.0)
+    {
+        if (prf <= 0 || carrierFrequency <= 0)
+            return false;
+
+        float fd = CalculateDopplerShift(radialVelocity, carrierFrequency);
+        // Residual after nearest-integer multiple of PRF
+        float nearest = Math.Round(fd / prf) * prf;
+        float resid = Math.AbsFloat(fd - nearest);
+        return resid <= Math.AbsFloat(toleranceHz);
+    }
 }
+

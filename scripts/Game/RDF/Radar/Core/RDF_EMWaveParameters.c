@@ -105,4 +105,30 @@ class RDF_EMWaveParameters
             m_AntennaGain,
             m_Wavelength);
     }
+
+    // Approximate antenna pattern multiplier (linear) for given off-axis angles (deg).
+    // - azOffDeg / elOffDeg: off-axis angles relative to boresight
+    // Returns linear gain (not dB) = peakLinearGain * pattern(az,el).
+    float GetAntennaGainLinear(float azOffDeg = 0.0, float elOffDeg = 0.0)
+    {
+        // Convert peak dBi to linear
+        float peakLin = RDF_RadarEquation.DBiToLinear(m_AntennaGain);
+
+        // Effective off-axis angle magnitude (deg)
+        float offDeg = Math.Sqrt(azOffDeg * azOffDeg + elOffDeg * elOffDeg);
+
+        // Convert beamwidth (FWHM) to sigma for Gaussian approximation
+        float bw = Math.Max(m_BeamwidthAzimuth, 0.0001);
+        float sigma = bw / (2.0 * Math.Sqrt(2.0 * Math.Log(2.0)));
+        if (sigma <= 0.0)
+            return peakLin;
+
+        float pattern = Math.Exp(-0.5 * Math.Pow(offDeg / sigma, 2.0));
+
+        // sidelobe floor approx -30 dB
+        float floorLin = RDF_RadarEquation.DBiToLinear(-30.0);
+        pattern = Math.Max(pattern, floorLin);
+
+        return peakLin * pattern;
+    }
 }

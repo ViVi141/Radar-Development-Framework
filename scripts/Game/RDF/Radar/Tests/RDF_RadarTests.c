@@ -66,6 +66,138 @@ class RDF_RadarTests
         Print("");
     }
 
+    static void TestBlindSpeed()
+    {
+        Print("[Test] Doppler Blind-Speed Detection");
+        float freq = 10000000000.0; // 10 GHz
+        float prf  = 1000.0;        // 1 kHz
+
+        // blind speed (n=1): v = PRF * c / (2*f0)
+        float expected = (prf * 299792458.0) / (2.0 * freq);
+        Print(string.Format("  Expected blind-speed (n=1) = %.3f m/s", expected));
+
+        bool isBlind = RDF_DopplerProcessor.IsBlindSpeed(expected, prf, freq, 1.0);
+        Print(string.Format("  IsBlindSpeed(%.3f m/s) = %1", expected, isBlind));
+        if (isBlind) Print("  [OK]"); else Print("  [FAIL]");
+
+        Print("");
+    }
+
+    static void TestCFAR()
+    {
+        Print("[Test] CA-CFAR (PoC)");
+
+        int N = 36;
+        array<ref RDF_LidarSample> samples = new array<ref RDF_LidarSample>();
+        for (int i = 0; i < N; ++i)
+        {
+            RDF_RadarSample s = new RDF_RadarSample();
+            float ang = (2.0 * Math.PI) * (float)i / (float)N;
+            s.m_Dir = Vector(Math.Cos(ang), 0.0, Math.Sin(ang));
+            s.m_Hit = true;
+            s.m_ReceivedPower = 1e-9; // background
+            samples.Insert(s);
+        }
+
+        // Insert a strong cell at index 0
+        RDF_RadarSample strong = RDF_RadarSample.Cast(samples.Get(0));
+        strong.m_ReceivedPower = 1e-7; // 100x background
+
+        // Apply CFAR: window=8, guard=5deg, multiplier=10
+        RDF_CFar.ApplyCA_CFAR(samples, 8, 5.0, 10.0);
+
+        bool strongOk = RDF_RadarSample.Cast(samples.Get(0)).m_Hit;
+        bool neighborSuppressed = !RDF_RadarSample.Cast(samples.Get(5)).m_Hit;
+
+        Print(string.Format("  strong cell detected = %1, neighbour suppressed = %1", strongOk, neighborSuppressed));
+        if (strongOk && neighborSuppressed) Print("  [OK]"); else Print("  [FAIL]");
+
+        Print("");
+    }
+
+    static void TestOSCFAR()
+    {
+        Print("[Test] OS-CFAR (PoC)");
+
+        int N = 36;
+        array<ref RDF_LidarSample> samples = new array<ref RDF_LidarSample>();
+        for (int i = 0; i < N; ++i)
+        {
+            RDF_RadarSample s = new RDF_RadarSample();
+            float ang = (2.0 * Math.PI) * (float)i / (float)N;
+            s.m_Dir = Vector(Math.Cos(ang), 0.0, Math.Sin(ang));
+            s.m_Hit = true;
+            s.m_ReceivedPower = 1e-9; // background
+            samples.Insert(s);
+        }
+
+        // Insert a strong cell at index 0
+        RDF_RadarSample strong = RDF_RadarSample.Cast(samples.Get(0));
+        strong.m_ReceivedPower = 1e-7; // 100x background
+
+        // Apply OS-CFAR: window=8, guard=5deg, multiplier=10, rank=4
+        RDF_CFar.ApplyOS_CFAR(samples, 8, 5.0, 10.0, 4);
+
+        bool strongOk = RDF_RadarSample.Cast(samples.Get(0)).m_Hit;
+        bool neighborSuppressed = !RDF_RadarSample.Cast(samples.Get(5)).m_Hit;
+
+        Print(string.Format("  strong cell detected = %1, neighbour suppressed = %1", strongOk, neighborSuppressed));
+        if (strongOk && neighborSuppressed) Print("  [OK]"); else Print("  [FAIL]");
+
+        Print("");
+    }
+
+    static void TestCFARAutoScale()
+    {
+        Print("[Test] CA-CFAR Auto-scale Multiplier");
+        int N = 16;
+        float pfa = 1e-6;
+        float alpha = RDF_CFar.CalculateCAThresholdMultiplier(N, pfa);
+        Print(string.Format("  N=%1, Pfa=%.1e -> alpha=%.3f", N, pfa, alpha));
+        if (alpha > 0.0) Print("  [OK]"); else Print("  [FAIL]");
+        Print("");
+    }
+
+    static void TestOSCFARAutoScale()
+    {
+        Print("[Test] OS-CFAR Auto-scale Estimation (Monte‑Carlo PoC)");
+        int N = 16;
+        int rank = 4;
+        float pfa = 1e-6;
+        float alpha = RDF_CFar.EstimateOSMultiplier(N, rank, pfa, 1024);
+        Print(string.Format("  N=%1, rank=%1, Pfa=%.1e -> alpha≈%.3f", N, rank, pfa, alpha));
+        if (alpha > 0.0) Print("  [OK]"); else Print("  [FAIL]");
+        Print("");
+    }
+
+    static void TestOSCFARCache()
+    {
+        Print("[Test] OS-CFAR Cache / Lookup Table (Precompute)");
+        array<int> windows = {8, 16};
+        array<int> ranks = {2, 4};
+        array<float> pfas = {1e-3, 1e-6};
+
+        RDF_CFar.PrecomputeOSMultiplierTable(windows, ranks, pfas, 512);
+
+        float v = RDF_CFar.GetCachedOSMultiplier(16, 4, 1e-6);
+        Print(string.Format("  Cached multiplier (16,4,1e-6) = %.6f", v));
+        if (v > 0.0) Print("  [OK]"); else Print("  [FAIL]");
+        Print("");
+    }
+
+    static void TestOSCFARFileLookup()
+    {
+        Print("[Test] OS-CFAR File Lookup (offline CSV)");
+        string path = "scripts/Game/RDF/Radar/Data/os_cfar_multipliers.csv";
+
+        // Explicitly load file (function should be idempotent)
+        RDF_CFar.LoadOSMultiplierTableFromFile(path);
+
+        float v = RDF_CFar.GetCachedOSMultiplier(16, 4, 1e-6);
+        Print(string.Format("  File lookup (16,4,1e-6) = %.6f", v));
+        if (v > 0.0) Print("  [OK]"); else Print("  [FAIL]");
+        Print("");
+    }
     // RCS models - sphere, plate, cylinder at X-band.
     static void TestRCS()
     {
@@ -122,6 +254,24 @@ class RDF_RadarTests
         em.CalculateWavelength();
         em.DetermineBand();
         Print(string.Format("  77 GHz -> lambda=%.5f m, band=%s  (expect ~0.00389 m, Ka)", em.m_Wavelength, em.m_BandName));
+        Print("");
+    }
+
+    static void TestAntennaPattern()
+    {
+        Print("[Test] Antenna Pattern Approximation");
+        RDF_EMWaveParameters em = new RDF_EMWaveParameters();
+        em.m_AntennaGain = 30.0;
+        em.m_BeamwidthAzimuth = 6.0;
+        em.m_BeamwidthElevation = 6.0;
+
+        float g0 = em.GetAntennaGainLinear(0.0, 0.0);
+        float gHalf = em.GetAntennaGainLinear(3.0, 0.0); // at half-beam (3 deg)
+        float gOff = em.GetAntennaGainLinear(30.0, 0.0);
+
+        Print(string.Format("  Peak gain (linear) = %.3f", g0));
+        Print(string.Format("  Gain at half-beam (3deg) = %.3f  (expect ~0.5*peak)", gHalf));
+        Print(string.Format("  Gain at 30deg off-axis = %.6f (sidelobe floor applied)", gOff));
         Print("");
     }
 
@@ -197,12 +347,23 @@ class RDF_RadarTests
         Print("");
 
         TestEMWaveParameters();
+        TestAntennaPattern();
         TestPropagation();
         TestRCS();
         TestRadarEquation();
         TestSNR();
         TestDoppler();
+        TestBlindSpeed();
+        TestCFAR();
+        TestOSCFAR();
+        TestCFARAutoScale();
+        TestOSCFARAutoScale();
+        TestOSCFARCache();
+        TestOSCFARFileLookup();
         TestDetectionRange();
+
+        // Run EM voxel field PoC tests (Phase‑1/2)
+        if (EMVoxelField) EMVoxelFieldTests.RunAllTests();
 
         Print("========================================");
         Print("  Tests complete.");

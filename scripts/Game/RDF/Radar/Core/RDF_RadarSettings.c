@@ -52,6 +52,38 @@ class RDF_RadarSettings : RDF_LidarSettings
     // Minimum radial speed (m/s) for a target to survive MTI / clutter filter.
     float m_MinTargetVelocity = 1.0;
 
+    // === Antenna pattern / sidelobes ===
+    // Enable emission of low-power sidelobe rays around main beam (PoC).
+    bool m_EnableSidelobes = false;
+    // Number of sidelobe samples around main beam (PoC).
+    int  m_SidelobeSampleCount = 6;
+    // Relative sidelobe power fraction per side ray (total sidelobe power = m_SidelobeFraction * Pt).
+    float m_SidelobeFraction = 0.01; // 1% of transmit power total, distributed across samples
+
+    // === CFAR (constant false alarm rate) detection ===
+    // Enable CFAR local-noise adaptive detection (post-scan).
+    bool  m_EnableCFAR = false;
+    // Use Order-Statistic CFAR (OS-CFAR) instead of CA-CFAR when true.
+    bool  m_CfarUseOrderStatistic = false;
+    // When true, compute CA‑CFAR multiplier from target Pfa automatically.
+    bool  m_CfarAutoScale = false;
+    // Target probability of false alarm used when m_CfarAutoScale == true.
+    float m_CfarTargetPfa = 1e-6;
+    // Number of reference cells to use for CFAR (nearest neighbours).
+    int   m_CfarWindowSize = 16;
+    // Angular guard radius (degrees) to exclude near neighbours from reference set.
+    float m_CfarGuardAngleDeg = 2.0;
+    // Detection threshold multiplier applied to the mean/reference power.
+    float m_CfarMultiplier = 6.0;
+    // OS-CFAR rank (1 = largest, windowSize = smallest). Default ~median.
+    int   m_CfarOrderRank = 8;
+
+    // === Blind-speed filtering ===
+    // Drop targets whose Doppler aliases to (near) zero due to PRF sampling.
+    bool  m_EnableBlindSpeedFilter = false;
+    // Tolerance for aliased doppler to be considered a blind speed (Hz).
+    float m_BlindSpeedToleranceHz = 1.0;
+
     // === Range gate ===
     // Minimum detection range (m). Returns closer than this are gated out.
     // Prevents near-field SNR saturation and models the radar blind zone
@@ -86,6 +118,13 @@ class RDF_RadarSettings : RDF_LidarSettings
         m_RainRate = Math.Max(m_RainRate, 0.0);
         m_MinTargetVelocity = Math.Max(m_MinTargetVelocity, 0.0);
         m_MinRange = Math.Clamp(m_MinRange, 0.0, m_Range);
+
+        // CFAR / blind-speed parameter clamping (PoC)
+        m_CfarWindowSize = Math.Clamp(m_CfarWindowSize, 1, 1024);
+        m_CfarGuardAngleDeg = Math.Clamp(m_CfarGuardAngleDeg, 0.0, 180.0);
+        m_CfarMultiplier = Math.Max(m_CfarMultiplier, 1.0);
+        m_CfarOrderRank = Math.Clamp(m_CfarOrderRank, 1, Math.Max(1, m_CfarWindowSize));
+        m_BlindSpeedToleranceHz = Math.Max(m_BlindSpeedToleranceHz, 0.0);
 
         if (!m_EMWaveParams)
             m_EMWaveParams = new RDF_EMWaveParameters();

@@ -127,6 +127,16 @@ scripts/Game/RDF/Radar/
 | `m_UseMaterialReflection` | `bool` | `true` | 材质反射修正 |
 | `m_EnableClutterFilter` | `bool` | `false` | 杂波（地面）抑制 |
 | `m_MinTargetVelocity` | `float` | `1.0` | MTI/MTD 最小速度 (m/s) |
+| `m_EnableCFAR` | `bool` | `false` | 启用 CFAR 局部噪声自适应检测（PoC） |
+| `m_CfarUseOrderStatistic` | `bool` | `false` | 使用 OS‑CFAR（Order‑Statistic）而非 CA‑CFAR |
+| `m_CfarAutoScale` | `bool` | `false` | 自动根据 `m_CfarTargetPfa` 计算 CA‑CFAR 阈值倍数 |
+| `m_CfarTargetPfa` | `float` | `1e-6` | 目标虚警率 Pfa（仅当 `m_CfarAutoScale`=true 生效） |
+| `m_CfarWindowSize` | `int` | `16` | CFAR 参考单元数量（最近邻采样数） |
+| `m_CfarOrderRank` | `int` | `8` | OS‑CFAR 排序阶位（1=最大, windowSize=最小，PoC） |
+| `m_CfarGuardAngleDeg` | `float` | `2.0` | CFAR 守护带角半径（度） |
+| `m_CfarMultiplier` | `float` | `6.0` | CFAR 门限倍数（线性功率倍率） |
+| `m_EnableBlindSpeedFilter` | `bool` | `false` | 启用盲速（Doppler alias）抑制 |
+| `m_BlindSpeedToleranceHz` | `float` | `1.0` | 盲速容差（Hz） |
 
 **`ERadarMode` 枚举**：
 
@@ -231,6 +241,22 @@ RDF_RadarMode GetRadarModeProcessor()
 | `IsMovingTarget(fd, minHz)` | MTI 判决：|fd| > minHz 则为运动目标 |
 | `MaxUnambiguousVelocity(prf, f0)` | 最大无模糊速度：v_max = PRF·c/(4·f0) |
 
+---
+
+### `RDF_CFar`（检测门限辅助，PoC）
+
+提供 CA‑CFAR 与 OS‑CFAR 的 PoC 实现，并支持基于目标 Pfa 的阈值查表/估计。
+
+| 方法 | 说明 |
+|------|------|
+| `ApplyCA_CFAR(samples, window, guardDeg, mult)` | CA‑CFAR（平均法）应用到扫描样本 |
+| `ApplyOS_CFAR(samples, window, guardDeg, mult, rank)` | OS‑CFAR（Order‑Statistic）应用 |
+| `CalculateCAThresholdMultiplier(N, Pfa)` | 解析式计算 CA‑CFAR 的阈值倍数 alpha |
+| `EstimateOSMultiplier(N, rank, Pfa, sims)` | Monte‑Carlo 估算 OS‑CFAR multiplier（会缓存结果） |
+| `PrecomputeOSMultiplierTable(windows, ranks, pfas, sims)` | 预计算并缓存常用 OS‑CFAR 查表值 |
+| `GetCachedOSMultiplier(N, rank, Pfa)` | 从缓存读取 OS‑CFAR multiplier，找不到返回 -1 |
+
+注：当前实现为 PoC，已包含缓存/查表以避免重复 Monte‑Carlo 计算；生产级使用建议用闭式近似或预计算查表文件。
 ---
 
 ## Modes — 工作模式

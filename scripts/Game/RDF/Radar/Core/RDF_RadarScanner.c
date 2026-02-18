@@ -101,6 +101,10 @@ class RDF_RadarScanner : RDF_LidarScanner
         int   rays    = Math.Max(m_Settings.m_RayCount, 1);
         float range   = Math.Clamp(m_Settings.m_Range, 0.1, 100000.0);
 
+        // PoC: prepare EM voxel field + EM params for ray injection (Phase‑2)
+        EMVoxelField evField = EMVoxelField.GetInstance();
+        RDF_EMWaveParameters emParams = m_RadarSettings.m_EMWaveParams;
+
         // Subject orientation matrix for direction transforms.
         vector worldMat[4];
         subject.GetWorldTransform(worldMat);
@@ -124,6 +128,42 @@ class RDF_RadarScanner : RDF_LidarScanner
             float  dlen = dir.Length();
             if (dlen > 0.0)
                 dir = dir / dlen;
+
+            // PoC Phase‑2: inject transmitted energy along the ray into EM voxel field
+            if (evField && emParams)
+            {
+                // Main lobe injection
+                evField.InjectAlongRay(origin, dir, range, emParams.m_TransmitPower, 0x1, 0.5);
+
+                // Optional sidelobe sampling (PoC)
+                if (m_RadarSettings && m_RadarSettings.m_EnableSidelobes && m_RadarSettings.m_SidelobeSampleCount > 0)
+                {
+                    int n = Math.Max(m_RadarSettings.m_SidelobeSampleCount, 1);
+                    float sidelobeTotalFrac = Math.Clamp(m_RadarSettings.m_SidelobeFraction, 0.0, 1.0);
+                    float perSamplePt = (emParams.m_TransmitPower * sidelobeTotalFrac) / (float)n;
+
+                    // Convert dir -> az/el
+                    float az = Math.Atan2(dir[2], dir[0]);
+                    float el = Math.Atan2(dir[1], Math.Sqrt(dir[0]*dir[0] + dir[2]*dir[2]));
+
+                    // radius for sidelobe (deg) — place sidelobes outside main beam
+                    float sidelobeOffsetDeg = Math.Max(emParams.m_BeamwidthAzimuth * 1.5, 5.0);
+
+                    for (int s = 0; s < n; ++s)
+                    {
+                        float theta = (2.0 * Math.PI) * (float)s / (float)n;
+                        float offAz = az + Math.Cos(theta) * sidelobeOffsetDeg * Math.DEG2RAD;
+                        float offEl = el + Math.Sin(theta) * (sidelobeOffsetDeg * 0.2) * Math.DEG2RAD; // small elevation spread
+
+                        // convert back to direction vector
+                        float cosEl = Math.Cos(offEl);
+                        vector sdir = Vector(cosEl * Math.Cos(offAz), Math.Sin(offEl), cosEl * Math.Sin(offAz));
+                        sdir = sdir.Normalized();
+
+                        evField.InjectAlongRay(origin, sdir, range, perSamplePt, 0x1, 0.5);
+                    }
+                }
+            }
 
             // Populate trace parameters.
             param.Start        = origin;
@@ -174,7 +214,56 @@ class RDF_RadarScanner : RDF_LidarScanner
 
             ApplyRadarPhysics(subject, sample);
 
+            // PoC Phase‑2: when ray hit an entity/terrain, write the echo energy into voxel field
+            if (sample.m_Hit)
+            {
+                float reflPower = sample.m_ReceivedPower;
+                if (reflPower > 0.0)
+                    EMVoxelField.GetInstance().InjectReflection(sample.m_HitPos, reflPower, 0x1, sample.m_Dir, 0.5);
+            }
+
             outSamples.Insert(sample);
+        }
+
+        // Post-scan CFAR processing — optionally suppress local false alarms.
+        if (m_RadarSettings && m_RadarSettings.m_EnableCFAR)
+        {
+            // Determine effective multiplier (support auto-scale for CA and OS)
+            float effectiveMultiplier = m_RadarSettings.m_CfarMultiplier;
+            if (m_RadarSettings.m_CfarAutoScale && m_RadarSettings.m_CfarTargetPfa > 0.0)
+            {
+                if (m_RadarSettings.m_CfarUseOrderStatistic)
+                {
+                    effectiveMultiplier = RDF_CFar.EstimateOSMultiplier(
+                        m_RadarSettings.m_CfarWindowSize,
+                        m_RadarSettings.m_CfarOrderRank,
+                        m_RadarSettings.m_CfarTargetPfa,
+                        2048);
+                }
+                else
+                {
+                    effectiveMultiplier = RDF_CFar.CalculateCAThresholdMultiplier(
+                        m_RadarSettings.m_CfarWindowSize,
+                        m_RadarSettings.m_CfarTargetPfa);
+                }
+                effectiveMultiplier = Math.Max(effectiveMultiplier, 1.0);
+            }
+
+            if (m_RadarSettings.m_CfarUseOrderStatistic)
+            {
+                RDF_CFar.ApplyOS_CFAR(outSamples,
+                                      m_RadarSettings.m_CfarWindowSize,
+                                      m_RadarSettings.m_CfarGuardAngleDeg,
+                                      effectiveMultiplier,
+                                      m_RadarSettings.m_CfarOrderRank);
+            }
+            else
+            {
+                RDF_CFar.ApplyCA_CFAR(outSamples,
+                                      m_RadarSettings.m_CfarWindowSize,
+                                      m_RadarSettings.m_CfarGuardAngleDeg,
+                                      effectiveMultiplier);
+            }
         }
     }
 
@@ -290,6 +379,67 @@ class RDF_RadarScanner : RDF_LidarScanner
             sample.m_DopplerFrequency = RDF_DopplerProcessor.CalculateDopplerShift(
                 sample.m_TargetVelocity,
                 emParams.m_CarrierFrequency);
+        }
+
+        // 5.5 Blind-speed suppression (optional PoC) — drop targets whose Doppler aliases to zero.
+        if (m_RadarSettings.m_EnableBlindSpeedFilter && sample.m_Hit && m_RadarSettings.m_EnableDopplerProcessing)
+        {
+            float prf = emParams.m_PRF;
+            float f0  = emParams.m_CarrierFrequency;
+            if (RDF_DopplerProcessor.IsBlindSpeed(sample.m_TargetVelocity, prf, f0, m_RadarSettings.m_BlindSpeedToleranceHz))
+                sample.m_Hit = false;
+        }
+
+        // Phase‑4 PoC: simple ground reflection / multipath injection into voxel field.
+        // - If the ray points downward or hits terrain, create a reflected ray about the
+        //   horizontal plane and inject a scaled portion of transmit energy into voxels.
+        if (evField && emParams)
+        {
+            // Determine an approximate ground intersection and normal.
+            vector groundNormal = Vector(0, 1, 0);
+            vector reflectOrigin;
+            bool doReflect = false;
+
+            if (!sample.m_Hit && sample.m_Dir[1] < 0.0)
+            {
+                // intersect horizontal plane y=0 (simple ground plane approximation)
+                float t = 0.0;
+                if (sample.m_Start[1] > 0.0 && sample.m_Dir[1] < 0.0)
+                {
+                    t = (0.0 - sample.m_Start[1]) / sample.m_Dir[1];
+                    if (t > 0.0)
+                    {
+                        reflectOrigin = sample.m_Start + sample.m_Dir * t;
+                        doReflect = true;
+                    }
+                }
+            }
+            else if (sample.m_Hit && sample.m_Surface)
+            {
+                // If hit terrain-like surface, use hit position as reflection origin
+                // (Material-based decision could be added later).
+                reflectOrigin = sample.m_HitPos;
+                doReflect = true;
+            }
+
+            if (doReflect)
+            {
+                // reflect direction about ground normal: r = d - 2*(d·n)*n
+                vector d = sample.m_Dir;
+                float dn = d[0]*groundNormal[0] + d[1]*groundNormal[1] + d[2]*groundNormal[2];
+                vector rdir = d - (groundNormal * (2.0 * dn));
+                rdir = rdir.Normalized();
+
+                // reflection coefficient (use ground material approx)
+                float reflCoeff = RDF_RCSModel.GetMaterialReflectivity("ground");
+                if (reflCoeff <= 0.0)
+                    reflCoeff = 0.2; // default weak ground reflection
+
+                float reflPt = emParams.m_TransmitPower * Math.Clamp(reflCoeff, 0.0, 1.0) * 0.001; // small fraction
+
+                // Inject along the reflected ray for a limited distance (PoC)
+                evField.InjectAlongRay(reflectOrigin, rdir, Math.Min(m_Settings.m_Range, 2000.0), reflPt, 0x1, 0.5, -1.0, 1e-5);
+            }
         }
 
         // 6. Range gate - only for terrain; keep entity hits for accuracy.
