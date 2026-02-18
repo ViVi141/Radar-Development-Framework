@@ -282,7 +282,7 @@ if (localPower > sensitivityThreshold)
 - [x] 旁瓣射线与增益模型 ✓（antenna pattern + PoC sidelobe rays）
 - [x] 多径反射射线 ✓（地面反射 PoC：扫描器注入反射射线到体素场）
 - [x] CFAR 与多普勒盲速 ✓ (CA‑CFAR + OS‑CFAR + CA‑CFAR/OS‑CFAR Pfa 自动缩放 + 查表/缓存 PoC 已实现) 
-- [ ] 信号描述符（PRF/PW/LPI）
+- [x] 信号描述符（PRF/PW/LPI） ✓（PoC）
 
 ### Phase 5：优化与联调 (2 周)
 
