@@ -4,6 +4,10 @@
 
 ---
 
+> **⚠️ 雷达模块开发中** — 请勿用于生产环境。Demo 默认关闭，需手动启用。
+
+---
+
 ## 一、电磁波雷达系统（主轨道）— **已全部完成** ✓
 
 ### 1. 电磁波基础模型
@@ -39,7 +43,7 @@
 - [x] **演示驱动器** — `RDF_RadarAutoRunner`：单例、Tick 驱动、回调派发、世界标记
 - [x] **统计报告** — `RDF_RadarDemoStatsHandler`：控制台 SNR/RCS/速度/ASCII 地图输出
 - [x] **预设轮换** — `RDF_RadarDemoCycler`：手动切换 + 定时自动轮换
-- [x] **Bootstrap 自启动** — `RDF_RadarAutoBootstrap`：`modded SCR_BaseGameMode`，游戏启动后自动运行演示 + 显示 HUD
+- [x] **Bootstrap 自启动** — `RDF_RadarAutoBootstrap`：`modded SCR_BaseGameMode`，默认关闭，需 `SetRadarBootstrapEnabled(true)` 启用
 
 ### 6. 高级功能
 - [x] **SAR 处理器** — `RDF_SARProcessor`：合成孔径积累与成像
@@ -87,4 +91,56 @@
 
 ---
 
-*最后更新：2026-02-18，电磁波雷达系统全部完成，HUD PPI 扫描图上线。*
+## 四、EM 体素场系统（EMVoxelField）— **Phase 1-5 已全部完成** ✓
+
+### Phase 1-4：基础体素场
+- [x] **稀疏哈希格** — `EMVoxelCell`（power / freqMask / mainDir / TTL / 脉冲历史）
+- [x] **注入 API** — `InjectPowerAt`、`InjectAlongRay`、`InjectReflection`、`InjectJammer`
+- [x] **读取 API** — `GetPowerAt`、`GetTopCells`、`GetSignalDescriptorAt`
+- [x] **时间衰减** — `TickDecay`（线性衰减 + TTL 过期清除）
+- [x] **被动传感器** — `EMPassiveSensor`：采样场功率、提取信号描述子、检测判断
+
+### Phase 5：扇区活跃化 / 服务端客户端架构 / 网络同步 / 调试可视化
+- [x] **扇区活跃化** — `RegisterActiveSector` / `EMActiveSector`（锥形区域，TTL 过期自动清除）
+- [x] **扇区外加速衰减** — `m_OutOfSectorDecayMul` × 基础衰减率，超出预算时 `PruneToBudget`
+- [x] **网络接口** — `EMFieldNetworkAPI`（接口基类）+ `EMDetectionResult`（可序列化，逗号分隔）
+- [x] **网络组件** — `EMFieldNetworkComponent`（服务器权威：Tick 衰减 + 广播；客户端：存储结果）
+  - `[RplProp]` 同步雷达原点；客户端 → 服务器 RPC 注册扇区
+  - 非可靠广播 RPC（`RplChannel.Unreliable`）广播检测结果包
+- [x] **调试可视化** — `EMVoxelDebugVisualizer`（静态类，`Draw()` 委托 `DebugDrawColorMapped`）
+  - `PowerToDebugColor`：蓝（噪底 <-90dBm）→ 绿（-90~-60）→ 黄（-60~-30）→ 红（≥-30）
+  - 方向卫星球 + 扇区内绿色高亮圈
+
+### 高级空间优化重构（两级分块网格 + 惰性光线 + 三线性插值 + 时序 LoD + Morton 码）
+- [x] **两级分块网格（SOA）** — `EMChunk`：200m 宏格 × 10m 微体素（20³=8000 个），平坦并行数组
+  - `m_Powers[]` / `m_FreqMasks[]` / `m_DirsX/Y/Z[]` / `m_TTLs[]`（纯 float/int 数组，缓存友好）
+  - 稀疏 `m_Descriptors` Map（仅存储有脉冲历史的格）
+  - `EMMorton` Z-order 编解码（10bit/轴，确保空间局部性）
+- [x] **惰性光线评估** — `EMRayDescriptor` + `PushRay()`：注入时零写入，`GetPowerAt` 时按需计算 1/R²×高斯波束
+- [x] **宏格占用跳过** — `ChunkHasEnergy()` + `m_OccupancyBits` 位掩码：空宏格直接跳过，光线游走无需进入
+- [x] **三线性插值** — `GetPowerAt`：对邻近 8 个微体素双线性混合（空间连续，消除格界不连续）
+- [x] **时序 LoD** — `EMUpdatePriority`（HIGH/MEDIUM/LOW）：`InjectAlongRay` 高优先级取 0.5 步长，低优先级取 4× 步长
+- [x] **块预算管理** — `m_MaxActiveChunks=256`，`EvictOldestChunk()` LRU 驱逐；空块自动释放
+
+### 优化后性能参数
+| 指标 | 旧架构（平坦哈希） | 新架构（两级分块） |
+|------|-------------------|-------------------|
+| 读取精度 | 10m（离散） | 10m（三线性连续） |
+| 空宏格跳过 | 无 | 位掩码 O(1) |
+| 内存峰值 | 无上限 | ≈9.6 MB (256 块) |
+| 缓存局部性 | 随机哈希 | Morton Z-order |
+| 光线注入开销 | 全量写入 | 惰性（零写开销） |
+
+---
+
+## 五、后续改进建议（EM 体素场）
+
+- [ ] **EMPassiveSensor 对接新 API**：将 `SampleSignalDescriptorAt` 改为对应新 `EMChunk` descriptor map
+- [ ] **EMFieldNetworkComponent 频率描述子**：`BroadcastDetections` 可补充频率/波形字段（需 `GetSignalDescriptorAt` 调用）
+- [ ] **体素场持久化**：场景保存/加载时序列化活跃块（用于任务脚本重放）
+- [ ] **多字段实例**：支持不同频段各有独立 `EMVoxelField`（如 ESM / EW 系统分离）
+- [ ] **GPU/并行解算**：将 `TickDecay` 分片到多帧（每帧处理 N 个块的衰减，摊销开销）
+
+---
+
+*最后更新：2026-07-14，EM 体素场 Phase 5 完成 + 高级空间优化重构（两级分块 SOA / 惰性光线 / 三线性插值 / 时序 LoD / Morton 码）。*

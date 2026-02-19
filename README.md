@@ -1,5 +1,8 @@
 # Radar Development Framework
 
+> **⚠️ 开发中 (IN DEVELOPMENT)** — 雷达模块与 Demo 尚在开发，请勿用于生产环境。  
+> LiDAR 模块相对稳定，可酌情使用。
+
 轻量、模块化的**双系统传感器框架**，用于在 **Arma Reforger** 中实现：
 
 - **LiDAR**：激光雷达射线点云扫描、可视化与演示
@@ -69,11 +72,14 @@ docs/
 
 ## 快速上手 — 雷达 Demo
 
-框架通过 `modded SCR_BaseGameMode` 在游戏启动时自动运行雷达演示（默认 **已开启**）：
+雷达 Demo 默认 **关闭**。需手动启用：
 
 ```c
-// 默认开启 X 波段搜索雷达 + PPI HUD
-// 如需关闭，在 RDF_RadarAutoBootstrap.c 中将 s_RadarBootstrapEnabled = false
+// 启用自启动
+SCR_BaseGameMode.SetRadarBootstrapEnabled(true);
+
+// 或以指定配置启动
+RDF_RadarAutoRunner.StartWithConfig(RDF_RadarDemoConfig.CreateHelicopterRadar());
 ```
 
 ### 手动控制

@@ -12,8 +12,14 @@ class RDF_LidarDemoConfig
     bool m_DrawOriginAxis = false; // when true, demo draws scan origin and X/Y/Z axes (debug)
     bool m_Verbose = false; // when true, demo prints hit count and closest distance after each scan
     bool m_RenderWorld = true; // when true: game view + point cloud; when false: point cloud only (solid background)
+    bool m_DrawRays = true;     // when false: hide 3D ray visualization
+    bool m_DrawPoints = true;   // when false: hide 3D point cloud visualization
     // When true: prefer VisualSettings' batched mesh renderer for performance in large point-clouds
     bool m_UseBatchedMesh = false;
+    // When true, show 2D point cloud HUD (RDF_LidarHUD).
+    bool m_ShowHUD = false;
+    // Scanner max range (m). When > 0, applied to scanner; HUD always syncs from scanner. 0 = leave scanner default (50).
+    float m_Range = 0.0;
 
     void RDF_LidarDemoConfig() {}
 
@@ -25,6 +31,7 @@ class RDF_LidarDemoConfig
         cfg.m_Enable = true;
         cfg.m_SampleStrategy = new RDF_UniformSampleStrategy();
         cfg.m_RayCount = Math.Max(rayCount, 1);
+        cfg.m_UseBatchedMesh = true;
         return cfg;
     }
 
@@ -36,6 +43,7 @@ class RDF_LidarDemoConfig
         cfg.m_SampleStrategy = new RDF_UniformSampleStrategy();
         cfg.m_RayCount = Math.Max(rayCount, 1);
         cfg.m_ColorStrategy = new RDF_ThreeColorStrategy(0xFF00FF00, 0xFFFFFF00, 0xFFFF0000);
+        cfg.m_UseBatchedMesh = true;
         return cfg;
     }
 
@@ -49,8 +57,25 @@ class RDF_LidarDemoConfig
         cfg.m_RayCount = Math.Max(rayCount, 1);
         cfg.m_DrawOriginAxis = true;
         cfg.m_Verbose = true;
-        // Do not enable batched mesh by default for debug preset to avoid surprising visual changes
-        cfg.m_UseBatchedMesh = false;
+        cfg.m_UseBatchedMesh = true;
+        return cfg;
+    }
+
+    // Preset with HUD enabled (2D point cloud display). Scanner and HUD use same range. 3D rays/points off.
+    static RDF_LidarDemoConfig CreateWithHUD(int rayCount = 512, float rangeM = 1000.0)
+    {
+        RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
+        cfg.m_Enable = true;
+        cfg.m_SampleStrategy = new RDF_UniformSampleStrategy();
+        cfg.m_RayCount = Math.Max(rayCount, 1);
+        cfg.m_ShowHUD = true;
+        cfg.m_DrawRays = false;
+        cfg.m_DrawPoints = false;
+        cfg.m_UseBatchedMesh = true;
+        if (rangeM > 0.0)
+            cfg.m_Range = rangeM;
+        else
+            cfg.m_Range = 1000.0;
         return cfg;
     }
 
@@ -60,6 +85,7 @@ class RDF_LidarDemoConfig
         cfg.m_Enable = true;
         cfg.m_SampleStrategy = new RDF_HemisphereSampleStrategy();
         cfg.m_RayCount = Math.Max(rayCount, 1);
+        cfg.m_UseBatchedMesh = true;
         return cfg;
     }
 
@@ -70,6 +96,7 @@ class RDF_LidarDemoConfig
         cfg.m_SampleStrategy = new RDF_ConicalSampleStrategy(halfAngleDeg);
         cfg.m_RayCount = Math.Max(rayCount, 1);
         cfg.m_ColorStrategy = new RDF_IndexColorStrategy();
+        cfg.m_UseBatchedMesh = true;
         return cfg;
     }
 
@@ -80,6 +107,7 @@ class RDF_LidarDemoConfig
         cfg.m_SampleStrategy = new RDF_StratifiedSampleStrategy();
         cfg.m_RayCount = Math.Max(rayCount, 1);
         cfg.m_ColorStrategy = new RDF_IndexColorStrategy();
+        cfg.m_UseBatchedMesh = true;
         return cfg;
     }
 
@@ -90,6 +118,7 @@ class RDF_LidarDemoConfig
         cfg.m_SampleStrategy = new RDF_ScanlineSampleStrategy(sectors);
         cfg.m_RayCount = Math.Max(rayCount, 1);
         cfg.m_ColorStrategy = new RDF_IndexColorStrategy();
+        cfg.m_UseBatchedMesh = true;
         return cfg;
     }
 
@@ -100,6 +129,7 @@ class RDF_LidarDemoConfig
         cfg.m_SampleStrategy = new RDF_SweepSampleStrategy(halfAngleDeg, sweepWidthDeg, sweepSpeedDegPerSec);
         cfg.m_RayCount = Math.Max(rayCount, 1);
         cfg.m_ColorStrategy = new RDF_IndexColorStrategy();
+        cfg.m_UseBatchedMesh = true;
         return cfg;
     }
 
@@ -111,6 +141,7 @@ class RDF_LidarDemoConfig
         cfg.m_Enable = true;
         cfg.m_SampleStrategy = strategy;
         cfg.m_RayCount = Math.Max(rayCount, 1);
+        cfg.m_UseBatchedMesh = true;
         if (colorStrategy)
             cfg.m_ColorStrategy = colorStrategy;
         return cfg;
@@ -125,6 +156,8 @@ class RDF_LidarDemoConfig
             RDF_LidarAutoRunner.SetDemoSampleStrategy(m_SampleStrategy);
         if (m_RayCount > 0)
             RDF_LidarAutoRunner.SetDemoRayCount(m_RayCount);
+        if (m_Range > 0.0)
+            RDF_LidarAutoRunner.SetDemoRange(m_Range);
         if (m_MinTickInterval > 0.0)
             RDF_LidarAutoRunner.SetMinTickInterval(m_MinTickInterval);
         if (m_ColorStrategy)
@@ -134,7 +167,21 @@ class RDF_LidarDemoConfig
         RDF_LidarAutoRunner.SetDemoDrawOriginAxis(m_DrawOriginAxis);
         RDF_LidarAutoRunner.SetDemoVerbose(m_Verbose);
         RDF_LidarAutoRunner.SetDemoRenderWorld(m_RenderWorld);
-        // Apply batched mesh preference (if visualizer supports it)
+        RDF_LidarAutoRunner.SetDemoDrawRays(m_DrawRays);
+        RDF_LidarAutoRunner.SetDemoDrawPoints(m_DrawPoints);
         RDF_LidarAutoRunner.SetDemoUseBatchedMesh(m_UseBatchedMesh);
+        // HUD takes precedence over verbose handler
+        if (m_ShowHUD)
+        {
+            RDF_LidarHUD.Show();
+            RDF_LidarHUD.SetDisplayRange(RDF_LidarAutoRunner.GetDemoScannerRange());
+            RDF_LidarAutoRunner.SetScanCompleteHandler(RDF_LidarHUD.GetInstance());
+        }
+        else
+        {
+            RDF_LidarHUD.Hide();
+            if (!m_Verbose)
+                RDF_LidarAutoRunner.SetScanCompleteHandler(null);
+        }
     }
 }

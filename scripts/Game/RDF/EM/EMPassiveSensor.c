@@ -26,7 +26,7 @@ class EMPassiveSensor
         outLastFrequency = 0.0;
         if (!ev)
             return false;
-        return ev.GetSignalDescriptorAt(pos, out outEstPRF, out outLastPulseWidth, out outWaveformType, out outLastFrequency);
+        return ev.GetSignalDescriptorAt(pos, outEstPRF, outLastPulseWidth, outWaveformType, outLastFrequency);
     }
 
     // Convenience: boolean detection against a linear-power sensitivity threshold (W)

@@ -167,6 +167,24 @@ class RDF_LidarAutoRunner
             vs.m_DrawOriginAxis = draw;
     }
 
+    static void SetDemoDrawRays(bool draw)
+    {
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (!inst || !inst.m_Visualizer) return;
+        RDF_LidarVisualSettings vs = inst.m_Visualizer.GetSettings();
+        if (vs)
+            vs.m_DrawRays = draw;
+    }
+
+    static void SetDemoDrawPoints(bool draw)
+    {
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (!inst || !inst.m_Visualizer) return;
+        RDF_LidarVisualSettings vs = inst.m_Visualizer.GetSettings();
+        if (vs)
+            vs.m_DrawPoints = draw;
+    }
+
     // When true: render game view + point cloud. When false: render point cloud only (solid background + disable scene render).
     static void SetDemoRenderWorld(bool renderWorld)
     {
@@ -227,6 +245,31 @@ class RDF_LidarAutoRunner
             if (inst.m_ScanCompleteHandler == inst.m_DemoStatsHandler)
                 inst.m_ScanCompleteHandler = null;
         }
+    }
+
+    // Get the demo scanner range (m). Used to sync HUD display range.
+    static float GetDemoScannerRange()
+    {
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (!inst || !inst.m_Scanner)
+            return 1000.0;
+        RDF_LidarSettings s = inst.m_Scanner.GetSettings();
+        if (!s)
+            return 1000.0;
+        s.Validate();
+        return s.m_Range;
+    }
+
+    // Set the demo scanner range (m).
+    static void SetDemoRange(float rangeM)
+    {
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (!inst || !inst.m_Scanner)
+            return;
+        RDF_LidarSettings s = inst.m_Scanner.GetSettings();
+        if (!s)
+            return;
+        s.m_Range = Math.Clamp(rangeM, 0.1, 100000.0);
     }
 
     // Set the demo scanner update interval safely (seconds)

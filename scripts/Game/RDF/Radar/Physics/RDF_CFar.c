@@ -53,10 +53,10 @@ class RDF_CFar
         }
 
         int loaded = 0;
-        while (!fh.EOF())
+        string line = "";
+        while (fh.ReadLine(line) >= 0)
         {
-            string line = fh.ReadLine();
-            if (!line || line == string.Empty) continue;
+            if (!line || line.Length() <= 0) continue;
             line = line.Trim();
             if (line.StartsWith("#")) continue;
 
@@ -155,17 +155,17 @@ class RDF_CFar
         int r = Math.Clamp(rank, 1, w);
         int S = Math.Clamp(sims, 128, 16384);
 
-        array<float> ordStats = new array<float>(S);
+        array<float> ordStats = new array<float>();
 
         // Monte-Carlo: generate exponential(1) reference windows and collect r-th largest
         for (int s = 0; s < S; ++s)
         {
-            array<float> refs = new array<float>(w);
+            array<float> refs = new array<float>();
             for (int i = 0; i < w; ++i)
             {
                 float u = Math.RandomFloat(0.0, 1.0);
                 float x = -Math.Log(Math.Max(u, 1e-12));
-                refs.InsertAt(i, x);
+                refs.Insert(x);
             }
 
             // selection-sort descending small-w
@@ -186,7 +186,7 @@ class RDF_CFar
             }
 
             float xr = refs.Get(Math.Min(r - 1, refs.Count() - 1));
-            ordStats.InsertAt(s, xr);
+            ordStats.Insert(xr);
         }
 
         // Binary search alpha so that mean(exp(-alpha * Xr)) == targetPfa
@@ -195,10 +195,10 @@ class RDF_CFar
         for (int iter = 0; iter < 40; ++iter)
         {
             float mid = 0.5 * (lo + hi);
-            double acc = 0.0;
+            float acc = 0.0;
             for (int i = 0; i < ordStats.Count(); ++i)
-                acc += Math.Exp(-mid * ordStats.Get(i));
-            double pfaEst = acc / (double)ordStats.Count();
+                acc += Math.Pow(2.718281828, -mid * ordStats.Get(i));
+            float pfaEst = acc / (float)ordStats.Count();
             if (pfaEst > targetPfa)
                 lo = mid;
             else
@@ -223,8 +223,8 @@ class RDF_CFar
         float mult = Math.Max(1.0, multiplier);
 
         // Precompute azimuths and received powers
-        array<float> az = new array<float>(n);
-        array<float> pwr = new array<float>(n);
+        array<float> az = new array<float>();
+        array<float> pwr = new array<float>();
         for (int i = 0; i < n; ++i)
         {
             RDF_RadarSample rs = RDF_RadarSample.Cast(samples.Get(i));
@@ -235,19 +235,19 @@ class RDF_CFar
                 a = Math.Atan2(rs.m_Dir[2], rs.m_Dir[0]);
                 pr = Math.Max(rs.m_ReceivedPower, 0.0);
             }
-            az.InsertAt(i, a);
-            pwr.InsertAt(i, pr);
+            az.Insert(a);
+            pwr.Insert(pr);
         }
 
         // Build order[] = indices sorted by az (selection sort - O(n^2) once)
-        array<int> order = new array<int>(n);
-        for (int i = 0; i < n; ++i) order.InsertAt(i, i);
+        array<int> order = new array<int>();
+        for (int i = 0; i < n; ++i) order.Insert(i);
         for (int i = 0; i < n - 1; ++i)
         {
             int minIdx = i;
             for (int j = i + 1; j < n; ++j)
             {
-                if (az[order.Get(j)] < az[order.Get(minIdx)])
+                if (az.Get(order.Get(j)) < az.Get(order.Get(minIdx)))
                     minIdx = j;
             }
             if (minIdx != i)
@@ -259,9 +259,10 @@ class RDF_CFar
         }
 
         // inverse mapping: posInOrder[originalIndex] = position in sorted array
-        array<int> posInOrder = new array<int>(n);
+        array<int> posInOrder = new array<int>();
+        for (int i = 0; i < n; ++i) posInOrder.Insert(-1);
         for (int i = 0; i < n; ++i)
-            posInOrder.InsertAt(order.Get(i), i);
+            posInOrder.Set(order.Get(i), i);
 
         // For each sample, gather up to w neighbours outside guard and compute mean
         for (int orig = 0; orig < n; ++orig)
@@ -286,7 +287,8 @@ class RDF_CFar
             int attempts = 0;
             while (collected < w && attempts < n)
             {
-                int pickPos = (attempts % 2 == 0) ? left : right;
+                int pickPos;
+                if (attempts % 2 == 0) pickPos = left; else pickPos = right;
                 if (attempts % 2 == 0) left = (left - 1 + n) % n; else right = (right + 1) % n;
                 int idx = order.Get(pickPos);
 
@@ -303,7 +305,10 @@ class RDF_CFar
             }
 
             if (collected == 0)
+            {
+                tgt.m_Hit = false;
                 continue;
+            }
 
             float meanNoise = sum / (float)collected;
             float threshold = meanNoise * mult;
@@ -325,8 +330,8 @@ class RDF_CFar
         float mult = Math.Max(1.0, multiplier);
 
         // Precompute azimuths and powers (re-use logic from CA implementation)
-        array<float> az = new array<float>(n);
-        array<float> pwr = new array<float>(n);
+        array<float> az = new array<float>();
+        array<float> pwr = new array<float>();
         for (int i = 0; i < n; ++i)
         {
             RDF_RadarSample rs = RDF_RadarSample.Cast(samples.Get(i));
@@ -337,19 +342,19 @@ class RDF_CFar
                 a = Math.Atan2(rs.m_Dir[2], rs.m_Dir[0]);
                 pr = Math.Max(rs.m_ReceivedPower, 0.0);
             }
-            az.InsertAt(i, a);
-            pwr.InsertAt(i, pr);
+            az.Insert(a);
+            pwr.Insert(pr);
         }
 
         // Sort indices by azimuth (selection sort once)
-        array<int> order = new array<int>(n);
-        for (int i = 0; i < n; ++i) order.InsertAt(i, i);
+        array<int> order = new array<int>();
+        for (int i = 0; i < n; ++i) order.Insert(i);
         for (int i = 0; i < n - 1; ++i)
         {
             int minIdx = i;
             for (int j = i + 1; j < n; ++j)
             {
-                if (az[order.Get(j)] < az[order.Get(minIdx)])
+                if (az.Get(order.Get(j)) < az.Get(order.Get(minIdx)))
                     minIdx = j;
             }
             if (minIdx != i)
@@ -361,9 +366,10 @@ class RDF_CFar
         }
 
         // inverse mapping
-        array<int> posInOrder = new array<int>(n);
+        array<int> posInOrder = new array<int>();
+        for (int i = 0; i < n; ++i) posInOrder.Insert(-1);
         for (int i = 0; i < n; ++i)
-            posInOrder.InsertAt(order.Get(i), i);
+            posInOrder.Set(order.Get(i), i);
 
         // For each cell, collect reference powers, compute order-statistic, compare
         for (int orig = 0; orig < n; ++orig)
@@ -386,7 +392,8 @@ class RDF_CFar
             int attempts = 0;
             while (refs.Count() < w && attempts < n)
             {
-                int pickPos = (attempts % 2 == 0) ? left : right;
+                int pickPos;
+                if (attempts % 2 == 0) pickPos = left; else pickPos = right;
                 if (attempts % 2 == 0) left = (left - 1 + n) % n; else right = (right + 1) % n;
                 int idx = order.Get(pickPos);
 
@@ -397,12 +404,15 @@ class RDF_CFar
                     continue;
                 }
 
-                refs.Insert(refs.Count(), pwr.Get(idx));
+                refs.Insert(pwr.Get(idx));
                 attempts++;
             }
 
             if (refs.Count() == 0)
+            {
+                tgt.m_Hit = false;
                 continue;
+            }
 
             // selection-sort refs (small w) and pick r-th largest (from top)
             int m = refs.Count();

@@ -37,6 +37,8 @@ class RDF_RadarDemoConfig : RDF_LidarDemoConfig
     {
         RDF_RadarSettings s = new RDF_RadarSettings();
 
+        s.m_Enabled = m_Enable;
+
         if (m_RayCount > 0)
             s.m_RayCount = m_RayCount;
 

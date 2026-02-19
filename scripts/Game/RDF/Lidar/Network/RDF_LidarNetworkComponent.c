@@ -41,6 +41,9 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 	[RplProp(condition: RplCondition.NoOwner, onRplName: "OnDemoRayCountChanged")]
 	protected int m_RayCount = 256;
 
+	[RplProp(condition: RplCondition.NoOwner, onRplName: "OnDemoRangeChanged")]
+	protected float m_Range = 1000.0;
+
 	[RplProp(condition: RplCondition.NoOwner, onRplName: "OnDemoUpdateIntervalChanged")]
 	protected float m_UpdateInterval = 5.0;
 
@@ -114,13 +117,13 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 		// Client -> server request via RPC with primitives
 		if (m_RplComponent.IsProxy())
 		{
-			// Extract primitive values to locals to avoid complex member expressions in RPC call
 			int rc = config.m_RayCount;
 			float ui = config.m_UpdateInterval;
+			float rng = config.m_Range;
 			bool rw = config.m_RenderWorld;
 			bool doa = config.m_DrawOriginAxis;
 			bool vb = config.m_Verbose;
-			Rpc(RpcAsk_SetDemoConfig, rc, ui, rw, doa, vb);
+			Rpc(RpcAsk_SetDemoConfig, rc, ui, rng, rw, doa, vb);
 			return;
 		}
 
@@ -128,6 +131,8 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 		m_RayCount = Math.Max(config.m_RayCount, 1);
 		if (config.m_UpdateInterval > 0)
 			m_UpdateInterval = Math.Max(0.01, config.m_UpdateInterval);
+		if (config.m_Range > 0)
+			m_Range = Math.Clamp(config.m_Range, 0.1, 100000.0);
 		m_RenderWorld = config.m_RenderWorld;
 		m_DrawOriginAxis = config.m_DrawOriginAxis;
 		m_Verbose = config.m_Verbose;
@@ -136,9 +141,8 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 
 	//------------------------------------------------------------------------------------------------
 	[RplRpc(RplChannel.Reliable, RplRcver.Server)]
-	protected void RpcAsk_SetDemoConfig(int rayCount, float updateInterval, bool renderWorld, bool drawOriginAxis, bool verbose)
+	protected void RpcAsk_SetDemoConfig(int rayCount, float updateInterval, float rangeM, bool renderWorld, bool drawOriginAxis, bool verbose)
 	{
-		// Server-side validation
 		rayCount = Math.Max(rayCount, 1);
 		if (updateInterval > 0 && updateInterval < 0.01)
 			updateInterval = 0.01;
@@ -146,6 +150,8 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 		m_RayCount = rayCount;
 		if (updateInterval > 0)
 			m_UpdateInterval = updateInterval;
+		if (rangeM > 0)
+			m_Range = Math.Clamp(rangeM, 0.1, 100000.0);
 		m_RenderWorld = renderWorld;
 		m_DrawOriginAxis = drawOriginAxis;
 		m_Verbose = verbose;
@@ -193,6 +199,7 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 		// Apply replicated primitive config
 		scanner.GetSettings().m_RayCount = Math.Max(m_RayCount, 1);
 		scanner.GetSettings().m_UpdateInterval = Math.Max(0.01, m_UpdateInterval);
+		scanner.GetSettings().m_Range = Math.Clamp(m_Range, 0.1, 100000.0);
 
 		scanner.Scan(subject, results);
 		UpdateScanResults(results);
@@ -403,6 +410,7 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 	{
 		RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
 		cfg.m_RayCount = m_RayCount;
+		cfg.m_Range = m_Range;
 		cfg.m_UpdateInterval = m_UpdateInterval;
 		cfg.m_RenderWorld = m_RenderWorld;
 		cfg.m_DrawOriginAxis = m_DrawOriginAxis;
@@ -412,6 +420,11 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 
 	// Individual RplProp change callbacks
 	void OnDemoRayCountChanged()
+	{
+		ApplyReplicatedConfigToRunner();
+	}
+
+	void OnDemoRangeChanged()
 	{
 		ApplyReplicatedConfigToRunner();
 	}

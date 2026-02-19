@@ -1,9 +1,8 @@
 // Unified bootstrap for LiDAR demo: single switch, opt-in. Uses only public API.
 modded class SCR_BaseGameMode
 {
-    // Master switch: when true, demo is started on game start. Default: false.
-    // Keep bootstrap disabled by default so production mods depending on this addon are unaffected.
-    protected static bool s_BootstrapEnabled = false;
+    // Master switch: when true, demo is started on game start.
+    protected static bool s_BootstrapEnabled = true;
     // When true, start in auto-cycle mode (rotate strategies). When false, start with default preset.
     protected static bool s_BootstrapAutoCycle = false;
     protected static float s_BootstrapAutoCycleInterval = 10.0;
@@ -25,7 +24,7 @@ modded class SCR_BaseGameMode
             RDF_LidarAutoRunner.SetDemoVerbose(true);
         }
         else
-            RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateDefaultDebug());
+            RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateWithHUD(4096, 50.0));
     }
 
     static void SetBootstrapEnabled(bool enabled)

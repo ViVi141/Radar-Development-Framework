@@ -2,6 +2,8 @@
 // Overrides Scan() to produce RDF_RadarSample objects and apply the
 // full radar equation pipeline after each geometry ray trace.
 //
+// WARNING: IN DEVELOPMENT — Do not use in production environments.
+//
 // Design note: Scan() does NOT call super.Scan() because the base implementation
 // allocates RDF_LidarSample objects that cannot be downcast to RDF_RadarSample.
 // Instead, the geometry tracing logic is replicated here, and RDF_RadarSample
@@ -197,6 +199,11 @@ class RDF_RadarScanner : RDF_LidarScanner
                     dist   = range;
                     hitPos = param.End;
                 }
+                // Treat max-range / far-plane as no hit (avoids sky or void reported as target).
+                else if (dist >= range * 0.9999)
+                {
+                    hit = false;
+                }
             }
             else
             {
@@ -269,6 +276,20 @@ class RDF_RadarScanner : RDF_LidarScanner
                                       m_RadarSettings.m_CfarWindowSize,
                                       m_RadarSettings.m_CfarGuardAngleDeg,
                                       effectiveMultiplier);
+            }
+        }
+
+        // Re-apply clutter and self-hit after CFAR so CFAR cannot re-enable terrain or platform.
+        if (m_RadarSettings)
+        {
+            foreach (RDF_LidarSample baseSample : outSamples)
+            {
+                RDF_RadarSample s = RDF_RadarSample.Cast(baseSample);
+                if (!s) continue;
+                if (m_RadarSettings.m_EnableClutterFilter && s.m_Entity == null)
+                    s.m_Hit = false;
+                if (s.m_Entity != null && subject != null && IsHitOnRadarPlatform(s.m_Entity, subject))
+                    s.m_Hit = false;
             }
         }
     }
@@ -399,6 +420,7 @@ class RDF_RadarScanner : RDF_LidarScanner
         // Phase‑4 PoC: simple ground reflection / multipath injection into voxel field.
         // - If the ray points downward or hits terrain, create a reflected ray about the
         //   horizontal plane and inject a scaled portion of transmit energy into voxels.
+        EMVoxelField evField = EMVoxelField.GetInstance();
         if (evField && emParams)
         {
             // Determine an approximate ground intersection and normal.
@@ -499,32 +521,42 @@ class RDF_RadarScanner : RDF_LidarScanner
             }
         }
 
-        // 10. Ground clutter filter - suppress stationary terrain returns.
-        // A terrain hit is identified solely by the absence of a game entity
-        // (SurfaceProps may be null even for valid terrain traces in this engine).
-        if (m_RadarSettings.m_EnableClutterFilter && sample.m_Hit)
-        {
-            if (sample.m_Entity == null)
-            {
-                float absDoppler = Math.AbsFloat(sample.m_DopplerFrequency);
-                float minDoppHz  = RDF_DopplerProcessor.CalculateDopplerShift(
-                    m_RadarSettings.m_MinTargetVelocity,
-                    emParams.m_CarrierFrequency);
-                if (absDoppler < minDoppHz)
-                    sample.m_Hit = false;
-            }
-        }
+        // 10. Ground clutter filter - suppress terrain-only returns (no entity).
+        // When enabled, any hit with no game entity is treated as clutter and not shown as target.
+        if (m_RadarSettings.m_EnableClutterFilter && sample.m_Hit && sample.m_Entity == null)
+            sample.m_Hit = false;
 
         // 11. Waveform-mode processing (range quantization, unambiguous range, beam losses).
         if (m_RadarModeProcessor)
             m_RadarModeProcessor.ProcessSample(sample, m_RadarSettings);
 
-        if (sample.m_Entity != null)
+        // 12. Reject self-hit only; do not force entity to true (MTI/MTD must remain effective).
+        if (sample.m_Entity != null && radarEntity != null && IsHitOnRadarPlatform(sample.m_Entity, radarEntity))
+            sample.m_Hit = false;
+        else if (sample.m_Entity != null && sample.m_SignalToNoiseRatio < 0)
+            sample.m_SignalToNoiseRatio = 0;
+    }
+
+    // Returns true if hitEntity is the radar platform or a child/part of it.
+    protected bool IsHitOnRadarPlatform(IEntity hitEntity, IEntity radarEntity)
+    {
+        if (!hitEntity || !radarEntity)
+            return false;
+        if (hitEntity == radarEntity)
+            return true;
+        IEntity cur = hitEntity;
+        int guard = 0;
+        while (cur && guard < 16)
         {
-            sample.m_Hit = true;
-            if (sample.m_SignalToNoiseRatio < 0)
-                sample.m_SignalToNoiseRatio = 0;
+            IEntity parent = cur.GetParent();
+            if (!parent)
+                break;
+            if (parent == radarEntity)
+                return true;
+            cur = parent;
+            guard++;
         }
+        return RDF_EntityPreClassifier.GetRootEntity(hitEntity) == radarEntity;
     }
 
     // Approximate surface normal from the ray direction (inward face).

@@ -74,6 +74,8 @@ class RDF_JammingModel
     {
         if (!samples || falseTargetCount <= 0)
             return;
+        if (maxRange <= minRange)
+            return;
 
         vector radarPos = Vector(radarOriginX, radarOriginY, radarOriginZ);
 

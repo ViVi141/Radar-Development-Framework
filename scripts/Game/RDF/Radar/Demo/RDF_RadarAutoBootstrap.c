@@ -1,17 +1,16 @@
 // Unified bootstrap for radar demo.
-// Chains onto SCR_BaseGameMode.OnGameStart() - kept disabled by default so
-// production mods that depend on this addon are unaffected.
+// Chains onto SCR_BaseGameMode.OnGameStart().
 //
-// To enable from another script at startup:
+// WARNING: Radar system is IN DEVELOPMENT. Do NOT use in production environments.
+//
+// To enable demo from another script at startup:
 //   SCR_BaseGameMode.SetRadarBootstrapEnabled(true);
 //   SCR_BaseGameMode.SetRadarBootstrapAutoCycle(true);   // optional
-//
-// Or flip s_RadarBootstrapEnabled = true here to always start on game start
-// (useful when developing / testing standalone).
 modded class SCR_BaseGameMode
 {
     // Master switch: when true the radar demo starts automatically on game start.
-    protected static bool  s_RadarBootstrapEnabled      = true;
+    // Default false — radar is in development, do not auto-start in production.
+    protected static bool  s_RadarBootstrapEnabled      = false;
     // When true the cycler rotates through all five presets.
     protected static bool  s_RadarBootstrapAutoCycle    = false;
     protected static float s_RadarBootstrapCycleInterval = 15.0;
@@ -21,6 +20,8 @@ modded class SCR_BaseGameMode
     protected static bool  s_RadarBootstrapShowAScope   = false;
     // When true the on-screen radar HUD panel is displayed.
     protected static bool  s_RadarBootstrapShowHUD      = true;
+    // When true the EM voxel field debug spheres are drawn (power colour, direction, sectors).
+    protected static bool  s_RadarBootstrapShowVoxel    = true;
 
     override void OnGameStart()
     {
@@ -57,7 +58,13 @@ modded class SCR_BaseGameMode
             }
         }
 
-        Print("[RDF] Radar bootstrap started  (autoCycle=" + s_RadarBootstrapAutoCycle.ToString() + "  hud=" + s_RadarBootstrapShowHUD.ToString() + ")");
+        // Enable EM voxel field debug visualization (power spheres, direction, sectors).
+        if (s_RadarBootstrapShowVoxel)
+            EMVoxelDebugVisualizer.SetEnabled(true);
+
+        RDF_RadarAutoRunner.SetShowVoxelViz(s_RadarBootstrapShowVoxel);
+
+        Print("[RDF] Radar bootstrap started  (autoCycle=" + s_RadarBootstrapAutoCycle.ToString() + "  hud=" + s_RadarBootstrapShowHUD.ToString() + "  voxel=" + s_RadarBootstrapShowVoxel.ToString() + ")");
     }
 
     // ---- configuration switches ----
@@ -101,5 +108,11 @@ modded class SCR_BaseGameMode
     static void SetRadarBootstrapShowHUD(bool show)
     {
         s_RadarBootstrapShowHUD = show;
+    }
+
+    // Toggle EM voxel field debug visualization.
+    static void SetRadarBootstrapShowVoxel(bool show)
+    {
+        s_RadarBootstrapShowVoxel = show;
     }
 }

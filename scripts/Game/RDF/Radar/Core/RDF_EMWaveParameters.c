@@ -123,7 +123,7 @@ class RDF_EMWaveParameters
         if (sigma <= 0.0)
             return peakLin;
 
-        float pattern = Math.Exp(-0.5 * Math.Pow(offDeg / sigma, 2.0));
+        float pattern = Math.Pow(2.718281828, -0.5 * Math.Pow(offDeg / sigma, 2.0));
 
         // sidelobe floor approx -30 dB
         float floorLin = RDF_RadarEquation.DBiToLinear(-30.0);

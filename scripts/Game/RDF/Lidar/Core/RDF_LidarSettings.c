@@ -16,8 +16,8 @@ class RDF_LidarSettings
     {
         // Ray count: minimum 1, no upper limit
         m_RayCount = Math.Max(m_RayCount, 1);
-        // Range: 0.1 .. 1000.0
-        m_Range = Math.Clamp(m_Range, 0.1, 1000.0);
+        // Range: 0.1 .. 100000.0 (100 km, aligned with radar for long-range scans)
+        m_Range = Math.Clamp(m_Range, 0.1, 100000.0);
         // Update interval: at least 0.01s
         m_UpdateInterval = Math.Max(0.01, m_UpdateInterval);
     }

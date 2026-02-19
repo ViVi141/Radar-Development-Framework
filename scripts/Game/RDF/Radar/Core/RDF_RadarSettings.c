@@ -47,8 +47,8 @@ class RDF_RadarSettings : RDF_LidarSettings
     bool m_UseMaterialReflection = true;
 
     // === Clutter rejection ===
-    // Enable clutter / ground-return suppression.
-    bool m_EnableClutterFilter = false;
+    // Enable clutter / ground-return suppression (terrain-only returns not shown as target).
+    bool m_EnableClutterFilter = true;
     // Minimum radial speed (m/s) for a target to survive MTI / clutter filter.
     float m_MinTargetVelocity = 1.0;
 

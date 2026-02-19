@@ -31,6 +31,8 @@ class RDF_RadarAutoRunner
     protected bool                              m_ShowPPI    = false;
     // When true the A-Scope is rendered alongside world markers.
     protected bool                              m_ShowAScope = false;
+    // When true the EM voxel field debug spheres are drawn each scan.
+    protected bool                              m_ShowVoxelViz = false;
 
     void RDF_RadarAutoRunner()
     {
@@ -154,6 +156,16 @@ class RDF_RadarAutoRunner
         return GetInstance().m_ShowAScope;
     }
 
+    static void SetShowVoxelViz(bool show)
+    {
+        GetInstance().m_ShowVoxelViz = show;
+    }
+
+    static bool GetShowVoxelViz()
+    {
+        return GetInstance().m_ShowVoxelViz;
+    }
+
     // Toggle the legacy PPI display (off by default; WorldMarker is the primary display).
     static void SetShowPPI(bool show)
     {
@@ -269,6 +281,10 @@ class RDF_RadarAutoRunner
 
         // Primary display: world-space poles at detected targets + compass rose.
         m_WorldDisplay.DrawWorldMarkers(m_LastSamples, subject);
+
+        // EM voxel field debug visualization (power spheres, direction, sectors).
+        if (m_ShowVoxelViz)
+            EMVoxelDebugVisualizer.Draw();
 
         // Optional legacy PPI (disabled by default - use SetShowPPI(true) to enable).
         if (m_ShowPPI)

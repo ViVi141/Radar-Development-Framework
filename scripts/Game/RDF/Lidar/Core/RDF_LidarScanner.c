@@ -53,7 +53,7 @@ class RDF_LidarScanner
 
         vector origin = GetSubjectOrigin(subject);
         int rays = Math.Max(m_Settings.m_RayCount, 1);
-        float range = Math.Clamp(m_Settings.m_Range, 0.1, 1000.0);
+        float range = m_Settings.m_Range;
 
         // get subject orientation for sample directions (strategies produce local-space directions)
         vector worldMat[4];
@@ -105,6 +105,11 @@ class RDF_LidarScanner
                     hit = false;
                     dist = range;
                     hitPos = param.End;
+                }
+                // Treat max-range / far-plane as no hit (avoids sky or void reported as target)
+                else if (dist >= range * 0.9999)
+                {
+                    hit = false;
                 }
             }
             else

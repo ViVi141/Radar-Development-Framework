@@ -2,9 +2,10 @@
 # EM Voxel Field System Implementation Plan
 
 **项目**: Radar Development Framework  
-**文档版本**: 1.0  
+**文档版本**: 1.1  
 **创建日期**: 2026-02-19  
-**状态**: 规划中 (Planning)
+**最后更新**: 2026-02-19  
+**状态**: Phase 5 完成 ✓ (全部阶段已实现)
 
 ---
 
@@ -286,10 +287,10 @@ if (localPower > sensitivityThreshold)
 
 ### Phase 5：优化与联调 (2 周)
 
-- [ ] 扇区活跃化
-- [ ] 服务端/客户端职责划分
-- [ ] 网络同步协议
-- [ ] 调试可视化（体素能量球）
+- [x] 扇区活跃化 ✓ (`EMActiveSector` + `RegisterActiveSector()` + 预算裁剪 `PruneToBudget()` + 出扇区快速衰减 in `EMVoxelField`)
+- [x] 服务端/客户端职责划分 ✓ (`EMFieldNetworkAPI` 接口契约：服务端持有体素场 + Tick/注入，客户端仅持有 `EMDetectionResult` 列表)
+- [x] 网络同步协议 ✓ (`EMFieldNetworkComponent`：unreliable broadcast RPC `RpcBroadcast_Detections`，`|` 分隔 token，节流间隔可配，含 bearing/elevation/dBm/waveform 字段)
+- [x] 调试可视化（体素能量球）✓ (`EMVoxelDebugVisualizer`：功率色彩球 + 方向卫星球 + 扇区光环 + 静态开关；`EMVoxelField.DebugDrawColorMapped()` 作为引擎层实现)
 
 ---
 
