@@ -99,15 +99,11 @@ class RDF_LidarScanner
             {
                 dist = hitFraction * range;
                 hitPos = origin + (dir * dist);
-                // Treat zero-distance hits as invalid (distance == 0 => ignore hit)
-                if (dist <= 0.0)
-                {
-                    hit = false;
-                    dist = range;
-                    hitPos = param.End;
-                }
-                // Treat max-range / far-plane as no hit (avoids sky or void reported as target)
-                else if (dist >= range * 0.9999)
+                // Treat max-range / far-plane hits as no-hit: avoids sky, terrain void, or
+                // engine far-clip plane being falsely reported as a real surface.
+                // NOTE: entities located exactly at the scan range boundary will also be
+                // filtered out by this guard; increase m_Range slightly if needed.
+                if (dist >= range * 0.9999)
                 {
                     hit = false;
                 }

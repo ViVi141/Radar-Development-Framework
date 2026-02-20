@@ -15,6 +15,9 @@ class RDF_ScanlineSampleStrategy : RDF_LidarSampleStrategy
         int lines = Math.Ceil(count / (float)m_Sectors);
 
         float t = 0.0;
+        // When count <= m_Sectors all rays fall in a single line (lines == 1).
+        // In that case t stays 0 and every ray points straight up (z = 1.0).
+        // To avoid this degenerate result, ensure count > m_Sectors when using this strategy.
         if (lines > 1)
             t = line / (float)(lines - 1); // 0..1 across lines
 

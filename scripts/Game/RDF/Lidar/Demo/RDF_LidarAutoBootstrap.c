@@ -2,7 +2,8 @@
 modded class SCR_BaseGameMode
 {
     // Master switch: when true, demo is started on game start.
-    protected static bool s_BootstrapEnabled = true;
+    // Default false — call SetBootstrapEnabled(true) or use StartWithConfig() to opt in.
+    protected static bool s_BootstrapEnabled = false;
     // When true, start in auto-cycle mode (rotate strategies). When false, start with default preset.
     protected static bool s_BootstrapAutoCycle = false;
     protected static float s_BootstrapAutoCycleInterval = 10.0;
