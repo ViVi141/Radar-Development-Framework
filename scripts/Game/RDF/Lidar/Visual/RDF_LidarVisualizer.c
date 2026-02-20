@@ -74,8 +74,16 @@ class RDF_LidarVisualizer
             rays = Math.Max(scanSettings.m_RayCount, 1);
         }
 
-        // Pre-allocate arrays to reduce per-frame reallocations
-        if (m_DebugShapes)
+        // Determine whether any 3-D visuals will actually be drawn this frame.
+        // In HUD-only mode (DrawRays=false, DrawPoints=false, RenderWorld=true,
+        // DrawOriginAxis=false) this is false and we skip all Shape allocation entirely.
+        bool hasVisuals = m_Settings.m_DrawRays
+                       || m_Settings.m_DrawPoints
+                       || m_Settings.m_DrawOriginAxis
+                       || !m_Settings.m_RenderWorld;
+
+        // Pre-allocate shape array only when something will actually be drawn.
+        if (hasVisuals && m_DebugShapes)
         {
             m_DebugShapes.Clear();
             int segs = Math.Max(1, m_Settings.m_RaySegments);
@@ -92,7 +100,12 @@ class RDF_LidarVisualizer
             m_Samples.Reserve(rays);
         }
 
+        // Always scan — scan results feed the HUD callback regardless of visuals.
         scanner.Scan(subject, m_Samples);
+
+        // Skip all Shape creation when in HUD-only mode to avoid unnecessary allocations.
+        if (!hasVisuals)
+            return;
 
         // When "point cloud only": draw a black quad in front of the camera to hide the world (point cloud uses NOZBUFFER so it draws on top).
         if (!m_Settings.m_RenderWorld && m_DebugShapes)

@@ -2,9 +2,9 @@
 modded class SCR_BaseGameMode
 {
     // Master switch: when true, demo is started on game start.
-    // Default false — call SetBootstrapEnabled(true) or use StartWithConfig() to opt in.
-    protected static bool s_BootstrapEnabled = false;
-    // When true, start in auto-cycle mode (rotate strategies). When false, start with default preset.
+    // HUD-only mode: DrawRays=false, DrawPoints=false, HUD enabled.
+    protected static bool s_BootstrapEnabled = true;
+    // Auto-cycle disabled — HUD-only mode does not use strategy cycling.
     protected static bool s_BootstrapAutoCycle = false;
     protected static float s_BootstrapAutoCycleInterval = 10.0;
 
@@ -25,7 +25,11 @@ modded class SCR_BaseGameMode
             RDF_LidarAutoRunner.SetDemoVerbose(true);
         }
         else
-            RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateWithHUD(4096, 50.0));
+        {
+            // HUD-only: no 3-D ray/point visuals, only the 2-D PPI HUD overlay.
+            // DrawRays=false and DrawPoints=false are set inside CreateWithHUD().
+            RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateWithHUD(512, 1000.0));
+        }
     }
 
     static void SetBootstrapEnabled(bool enabled)
