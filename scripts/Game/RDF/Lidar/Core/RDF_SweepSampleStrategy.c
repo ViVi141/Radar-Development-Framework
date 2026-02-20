@@ -26,9 +26,15 @@ class RDF_SweepSampleStrategy : RDF_LidarSampleStrategy
             frac = index / (float)(count - 1);
         float phi = currentAzimuthRad - sweepWidthRad * 0.5 + sweepWidthRad * frac;
 
+        // Distribute elevation uniformly over the spherical cap [0, halfAngle].
+        // Each ray gets a unique elevation tier so the sweep covers the full cone,
+        // not a single fixed horizontal ring.
         float halfRad = m_HalfAngleDeg * Math.DEG2RAD;
         float cosA = Math.Cos(halfRad);
-        float z = cosA + (1.0 - cosA) * 0.5;
+        float elevFrac = 0.5;
+        if (count > 1)
+            elevFrac = (index + 0.5) / count;  // (0, 1), varies per ray
+        float z = cosA + (1.0 - cosA) * elevFrac;
         z = Math.Clamp(z, -1.0, 1.0);
         float r = Math.Sqrt(Math.Max(0.0, 1.0 - z * z));
         return Vector(Math.Cos(phi) * r, Math.Sin(phi) * r, z);

@@ -95,17 +95,29 @@ class RDF_LidarScanner
 
             vector hitPos = param.End;
             float dist = range;
+            IEntity hitEntity = null;
+            string hitCollider = string.Empty;
+            GameMaterial hitSurface = null;
+
             if (hit && hitFraction > 0.0)
             {
-                dist = hitFraction * range;
-                hitPos = origin + (dir * dist);
+                float rawDist = hitFraction * range;
                 // Treat max-range / far-plane hits as no-hit: avoids sky, terrain void, or
                 // engine far-clip plane being falsely reported as a real surface.
                 // NOTE: entities located exactly at the scan range boundary will also be
                 // filtered out by this guard; increase m_Range slightly if needed.
-                if (dist >= range * 0.9999)
+                if (rawDist >= range * 0.9999)
                 {
                     hit = false;
+                    // dist / hitPos / entity stay at default "miss" values
+                }
+                else
+                {
+                    dist = rawDist;
+                    hitPos = origin + (dir * dist);
+                    hitEntity = param.TraceEnt;
+                    hitCollider = param.ColliderName;
+                    hitSurface = param.SurfaceProps;
                 }
             }
             else
@@ -122,9 +134,9 @@ class RDF_LidarScanner
             sample.m_Dir = dir;
             sample.m_HitPos = hitPos;
             sample.m_Distance = dist;
-            sample.m_Entity = param.TraceEnt;
-            sample.m_ColliderName = param.ColliderName;
-            sample.m_Surface = param.SurfaceProps;
+            sample.m_Entity = hitEntity;
+            sample.m_ColliderName = hitCollider;
+            sample.m_Surface = hitSurface;
             outSamples.Insert(sample);
         }
     }
