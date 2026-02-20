@@ -15,7 +15,7 @@
 //  | SNR  65.2 / 82.0 dB   Hits 23 / 512     |
 //  | RCS  +18.0 dBsm       Vel   3.2 m/s     |
 //  | Range   30 m  to  1447 m                 |
-//  +==========================================+  Y=1000
+//  +==========================================+  Y=1025  (PX_HDR_H 25 + PPI 210 + 4×ROW 84 + pad 6)
 
 class RDF_RadarHUD : RDF_LidarScanCompleteHandler
 {
@@ -130,6 +130,37 @@ class RDF_RadarHUD : RDF_LidarScanCompleteHandler
     static void SetMode(string name) { RDF_RadarHUD inst = GetInstance(); if (inst && inst.m_wMode) inst.m_wMode.SetText(name); }
     static void SetDisplayRange(float rangeM) { RDF_RadarHUD inst = GetInstance(); if (inst) inst.m_DisplayRange = rangeM; }
 
+    // Returns true if the HUD panel is currently built and visible.
+    static bool IsVisible()
+    {
+        RDF_RadarHUD inst = GetInstance();
+        return inst && inst.m_AllWidgets != null;
+    }
+
+    // Push a sample array into the HUD directly — works independently of AutoRunner.
+    // The HUD must be shown first via Show(); call SetDisplayRange() to set the PPI scale.
+    static void FeedSamples(array<ref RDF_LidarSample> samples)
+    {
+        if (!samples)
+            return;
+        RDF_RadarHUD inst = GetInstance();
+        if (inst)
+            inst.OnScanComplete(samples);
+    }
+
+    // Wire the HUD as the AutoRunner scan-complete handler so it updates every scan.
+    // Equivalent to: RDF_RadarAutoRunner.SetScanCompleteHandler(RDF_RadarHUD.GetInstance())
+    static void AttachToAutoRunner()
+    {
+        RDF_RadarAutoRunner.SetScanCompleteHandler(GetInstance());
+    }
+
+    // Detach from AutoRunner (clears the handler).
+    static void DetachFromAutoRunner()
+    {
+        RDF_RadarAutoRunner.SetScanCompleteHandler(null);
+    }
+
     // ---- scan callback ----
     override void OnScanComplete(array<ref RDF_LidarSample> samples)
     {
@@ -199,15 +230,22 @@ class RDF_RadarHUD : RDF_LidarScanCompleteHandler
             Print("[RDF_RadarHUD] WARN: CanvasWidget creation failed");
         }
 
-        // ---- compass labels at canvas edges ----
-        int cx     = PX_LEFT + PX_RADAR_W / 2 - 4;
-        int cy     = canvasTop + PX_RADAR_H / 2 - 8;
-        int cRight = PX_LEFT + PX_RADAR_W + 2;
-
-        MakeCompassLabel(ws, cx,     canvasTop - 14,     "N");
-        MakeCompassLabel(ws, cx,     canvasTop + PX_RADAR_H + 1, "S");
-        MakeCompassLabel(ws, PX_LEFT - 10, cy,           "W");
-        MakeCompassLabel(ws, cRight, cy,                  "E");
+        // ---- compass labels (Python-verified, integer literals only) ----
+        // PPI_CX=105, PPI_CY=105, PPI_R=100  →  canvas unit == screen px.
+        // circle centre screen : (PX_LEFT+105, canvasTop+105) = (125, canvasTop+105)
+        // arc top    (screen)  : canvasTop + (PPI_CY - PPI_R) = canvasTop + 5
+        // arc bottom (screen)  : canvasTop + (PPI_CY + PPI_R) = canvasTop + 205
+        // arc left   (screen)  : PX_LEFT   + (PPI_CX - PPI_R) = 25
+        // arc right  (screen)  : PX_LEFT   + (PPI_CX + PPI_R) = 225
+        // Label w=14 h=14, gap=3px.
+        // N  x=118  y=canvasTop+8   (arc top  +3, label bottom at canvasTop+22)
+        // S  x=118  y=canvasTop+188 (arc bot -14-3, label bottom at canvasTop+202)
+        // W  x=8    y=canvasTop+98  (arc lft -14-3, vertically centred on circle)
+        // E  x=228  y=canvasTop+98  (arc rgt +3)
+        MakeCompassLabel(ws, 118,  canvasTop + 8,    "N");
+        MakeCompassLabel(ws, 118,  canvasTop + 188,  "S");
+        MakeCompassLabel(ws, 8,    canvasTop + 98,   "W");
+        MakeCompassLabel(ws, 228,  canvasTop + 98,   "E");
 
         // Range ring annotation (50 % range)
         string ringLabel = F0(m_DisplayRange * 0.5 / 1000.0) + "km";

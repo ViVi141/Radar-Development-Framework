@@ -29,14 +29,35 @@ License: Apache-2.0
 
 ### 1.0 Bootstrap 自动演示（最推荐）
 
-**无需任何代码**。加载框架后，游戏启动时会自动：
+> **⚠️ Bootstrap 默认关闭** — LiDAR 与雷达的 Demo 均默认不自动启动，需显式启用。
+
+启用后，游戏启动时会自动：
 
 1. 以 X 波段搜索雷达配置（512 射线）开始周期性扫描
 2. 在屏幕**左下角**显示 PPI 圆形扫描图 HUD
 3. 每次扫描完成后在引擎日志中打印统计摘要
 
-这由 `RDF_RadarAutoBootstrap.c` 通过 `modded SCR_BaseGameMode` 实现。  
-如需关闭，在该文件中将 `s_RadarBootstrapEnabled = false`。
+**启用方式（在你自己的 modded SCR_BaseGameMode 中调用）**：
+
+```c
+// 启用雷达 Demo
+SCR_BaseGameMode.SetRadarBootstrapEnabled(true);
+
+// 启用 LiDAR Demo（可选）
+SCR_BaseGameMode.SetBootstrapEnabled(true);
+```
+
+或直接修改源文件中的静态变量：
+
+```c
+// RDF_RadarAutoBootstrap.c
+protected static bool s_RadarBootstrapEnabled = true;  // 改为 true
+
+// RDF_LidarAutoBootstrap.c
+protected static bool s_BootstrapEnabled = true;       // 改为 true
+```
+
+这由 `RDF_RadarAutoBootstrap.c` 与 `RDF_LidarAutoBootstrap.c` 通过 `modded SCR_BaseGameMode` 实现。
 
 ```
 +==========================================+
@@ -114,11 +135,12 @@ void QuickDemo(IEntity radarEntity)
 
 | 工厂方法 | 典型用途 | 波段 | 最大量程 |
 |---------|---------|------|---------|
-| `CreateXBandSearch()` | 地面搜索/监视 | X (10 GHz) | 2 500 m |
-| `CreateAutomotiveRadar()` | 车辆防撞（FMCW，77 GHz） | Ka | 200 m |
-| `CreateWeatherRadar()` | 气象探测（大功率 S 波段） | S | 50 000 m |
-| `CreatePhasedArrayRadar()` | 多目标跟踪（相控阵） | C | 10 000 m |
-| `CreateLBandSurveillance()` | 远程预警（L 波段） | L | 100 000 m |
+| `CreateHelicopterRadar()` | 直升机前向扇博·地面目标 | X (10 GHz) | 8 000 m |
+| `CreateXBandSearch()` | 地面搜索/监视 | X (10 GHz) | 3 000 m |
+| `CreateAutomotiveRadar()` | 车辆防撞（FMCW，77 GHz） | Ka | 150 m |
+| `CreateWeatherRadar()` | 气象探测（大功率 S 波段） | S | 5 000 m |
+| `CreatePhasedArrayRadar()` | 多目标跟踪（相控阵） | C | 2 000 m |
+| `CreateLBandSurveillance()` | 远程预警（L 波段） | L | 5 000 m |
 
 ---
 

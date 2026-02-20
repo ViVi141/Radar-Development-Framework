@@ -7,7 +7,7 @@
 ### RDF_LidarSettings
 字段：
 - `m_Enabled` (bool): 是否启用扫描（默认 true）
-- `m_Range` (float): 扫描半径（默认 50.0）。在运行时会被 clamp 到 [0.1, 1000.0]
+- `m_Range` (float): 扫描半径（默认 50.0）。在运行时会被 clamp 到 [0.1, 100000.0]（100 km，与雷达远程配置对齐）
 - `m_RayCount` (int): 射线数量（默认 512）。在运行时保证至少为 1，无上限
 - `m_UpdateInterval` (float): 扫描间隔（秒，默认 5.0），最小值 0.01
 - `m_OriginOffset` (vector): 扫描原点偏移（默认 "0 0 0"），与 `m_UseLocalOffset` 配合使用
@@ -229,6 +229,93 @@ Network 模块内置实现，基于 Rpl 同步状态与扫描结果。
 
 ---
 
+## UI — HUD
+
+### RDF_LidarHUD : RDF_LidarScanCompleteHandler
+
+完全基于脚本的 LiDAR HUD，使用 `WorkspaceWidget.CreateWidgetInWorkspace` 动态创建所有控件，无需 `.layout` 文件。蓝/青色主题，PPI 俯视点云图 + 命中数 / 量程数据行。
+
+**单例与显示控制**：
+
+```c
+static RDF_LidarHUD GetInstance()              // 获取（或懒创建）单例
+static void Show()                             // 创建并显示 HUD
+static void Hide()                             // 销毁 HUD 所有控件
+static bool IsVisible()                        // HUD 当前是否可见
+```
+
+**配置**：
+
+```c
+static void SetMode(string modeName)           // 更新标题栏模式文本（如 "Sweep 512"）
+static void SetDisplayRange(float rangeM)      // 设置 PPI 显示量程（米），决定 PPI 比例尺
+```
+
+**手动推送数据（脱离 AutoRunner 使用）**：
+
+```c
+// 自行获取 samples 后直接驱动 HUD，无需开启 Demo。
+// 调用前须先 Show()，并通过 SetDisplayRange() 设置与 scanner 相符的量程。
+static void FeedSamples(array<ref RDF_LidarSample> samples)
+```
+
+示例（纯逻辑扫描 + HUD 显示）：
+
+```c
+RDF_LidarScanner scanner = new RDF_LidarScanner();
+scanner.GetSettings().m_Range = 500.0;
+scanner.GetSettings().m_RayCount = 256;
+
+RDF_LidarHUD.Show();
+RDF_LidarHUD.SetDisplayRange(500.0);
+RDF_LidarHUD.SetMode("Custom 256");
+
+array<ref RDF_LidarSample> samples = new array<ref RDF_LidarSample>();
+IEntity subject = RDF_LidarSubjectResolver.ResolveLocalSubject();
+scanner.Scan(subject, samples);
+RDF_LidarHUD.FeedSamples(samples);
+```
+
+**与 AutoRunner 对接**：
+
+```c
+// 将 HUD 注册为 AutoRunner 扫描回调，每次 AutoRunner 扫描完成后自动刷新 HUD。
+static void AttachToAutoRunner()               // 等价于 RDF_LidarAutoRunner.SetScanCompleteHandler(GetInstance())
+static void DetachFromAutoRunner()             // 清除 AutoRunner 的 handler 引用
+```
+
+示例（开启 Demo 并同步显示 HUD）：
+
+```c
+RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateDefault(512));
+RDF_LidarHUD.Show();
+RDF_LidarHUD.AttachToAutoRunner();  // HUD 自此随每次扫描自动更新
+```
+
+**布局（屏幕左下角）**：
+
+```
+位置：X=20, Y=700（相对 1920×1080 参考分辨率）
+尺寸：215 × (头部 25 px + PPI 210 px + 数据行 2×21 px)
+```
+
+| 子控件 | 类型 | 说明 |
+|--------|------|------|
+| 背景面板 | `FrameWidget` | 深蓝半透明背景 |
+| 标题栏 | `TextWidget` | `[>] LiDAR` + 当前模式 |
+| PPI 圆盘 | `CanvasWidget` (210×210) | 俯视点云图（相机朝向对齐） |
+| 距离环 | `LineDrawCommand` | 50% / 100% 量程环 |
+| 光点 | `PolygonDrawCommand` | 命中点，颜色编码距离（绿→黄→红） |
+| 数据行 1 | `TextWidget` | Hits N/M，Range min–max |
+| 数据行 2 | `TextWidget` | 图例：Green=near Yellow=mid Red=far |
+
+**注意事项**：
+- PPI 视角与玩家**摄像机朝向**对齐（非世界 N 方向），罗盘标记为 F/B/L/R。
+- 刷新节流 `UPDATE_INTERVAL = 0.5 s`，防止高频回调导致闪烁。
+- `FeedSamples` 调用时若 AutoRunner 未在运行，`m_DisplayRange` 保持 `SetDisplayRange` 设置的值不变。
+
+---
+
 ## 仅逻辑不渲染（无可视化）
 
 若只需要扫描数据做逻辑（威胁检测、距离判断等），**不必使用 RDF_LidarVisualizer**，直接使用 Scanner 即可，避免创建 debug shapes：
@@ -270,7 +357,7 @@ This document is the first-version API summary covering the main public classes 
 ### RDF_LidarSettings
 Fields:
 - `m_Enabled` (bool): enable scanning (default true)
-- `m_Range` (float): scan radius (default 50.0). Clamped at runtime to [0.1, 1000.0]
+- `m_Range` (float): scan radius (default 50.0). Clamped at runtime to [0.1, 100000.0] (100 km, aligned with radar long-range configurations)
 - `m_RayCount` (int): number of rays (default 512). At runtime guaranteed to be at least 1.
 - `m_UpdateInterval` (float): scan interval in seconds (default 5.0), minimum 0.01
 - `m_OriginOffset` (vector): origin offset (default "0 0 0"), used with `m_UseLocalOffset`
@@ -451,6 +538,81 @@ Methods: `void ApplyTo(RDF_LidarAutoRunner runner)` — apply config to runner.
 - `static bool IsBootstrapEnabled()`
 - `static void SetBootstrapAutoCycle(bool enabled)`
 - `static void SetBootstrapAutoCycleInterval(float intervalSeconds)`
+
+## UI — HUD
+
+### RDF_LidarHUD : RDF_LidarScanCompleteHandler
+
+Fully script-driven LiDAR HUD. All widgets are created dynamically via `WorkspaceWidget.CreateWidgetInWorkspace`; no `.layout` file required. Blue/cyan theme with a top-down PPI point-cloud view and hit/range data rows.
+
+**Singleton & visibility**:
+
+```c
+static RDF_LidarHUD GetInstance()              // get (or lazy-create) the singleton
+static void Show()                             // build and show the HUD panel
+static void Hide()                             // destroy all HUD widgets
+static bool IsVisible()                        // returns true when panel is built
+```
+
+**Configuration**:
+
+```c
+static void SetMode(string modeName)           // update the header mode label (e.g. "Sweep 512")
+static void SetDisplayRange(float rangeM)      // set PPI display range (metres), controls PPI scale
+```
+
+**Manual sample feed (use without AutoRunner)**:
+
+```c
+// Drive the HUD with your own samples without running a Demo.
+// Call Show() first and SetDisplayRange() to match your scanner range.
+static void FeedSamples(array<ref RDF_LidarSample> samples)
+```
+
+Example (logic scan + HUD display without demo):
+
+```c
+RDF_LidarScanner scanner = new RDF_LidarScanner();
+scanner.GetSettings().m_Range = 500.0;
+scanner.GetSettings().m_RayCount = 256;
+
+RDF_LidarHUD.Show();
+RDF_LidarHUD.SetDisplayRange(500.0);
+RDF_LidarHUD.SetMode("Custom 256");
+
+array<ref RDF_LidarSample> samples = new array<ref RDF_LidarSample>();
+IEntity subject = RDF_LidarSubjectResolver.ResolveLocalSubject();
+scanner.Scan(subject, samples);
+RDF_LidarHUD.FeedSamples(samples);
+```
+
+**AutoRunner integration**:
+
+```c
+// Register the HUD as the AutoRunner scan-complete handler.
+static void AttachToAutoRunner()               // equivalent to RDF_LidarAutoRunner.SetScanCompleteHandler(GetInstance())
+static void DetachFromAutoRunner()             // clears the handler reference
+```
+
+Example (start demo and auto-update HUD):
+
+```c
+RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateDefault(512));
+RDF_LidarHUD.Show();
+RDF_LidarHUD.AttachToAutoRunner();
+```
+
+**Layout** (bottom-left, 1920×1080 reference):
+
+```
+Position: X=20, Y=700
+Size: 215 × (header 25 px + PPI 210 px + 2 data rows × 21 px)
+```
+
+**Notes**:
+- PPI orientation is **camera-aligned** (not world-north); compass markers are F/B/L/R.
+- Refresh is throttled: `UPDATE_INTERVAL = 0.5 s` to prevent high-frequency flicker.
+- When using `FeedSamples` without AutoRunner, `m_DisplayRange` keeps the value set by `SetDisplayRange`.
 
 ## Logic-only (no visualizer)
 

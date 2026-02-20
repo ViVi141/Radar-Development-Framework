@@ -20,6 +20,7 @@ scripts/Game/RDF/Radar/
     RDF_RCSModel.c              // 目标雷达截面积模型
     RDF_RadarEquation.c         // 雷达方程与 SNR 计算
     RDF_DopplerProcessor.c      // 多普勒效应处理
+    RDF_CFar.c                  // CA-CFAR / OS-CFAR 恒虚警检测（PoC）
   Modes/
     RDF_RadarMode.c             // 工作模式基类 + 四种具体模式
   Visual/
@@ -30,7 +31,8 @@ scripts/Game/RDF/Radar/
   ECM/
     RDF_JammingModel.c          // 电子对抗干扰模型
   Classification/
-    RDF_TargetClassifier.c      // 目标自动分类器
+    RDF_EntityPreClassifier.c   // 实体预分类（结构层次 / 名称启发式）
+    RDF_TargetClassifier.c      // 目标自动分类器（SNR / 速度规则，8 类）
   Demo/
     RDF_RadarDemoConfig.c       // 预设演示配置工厂
   Tests/
@@ -125,7 +127,7 @@ scripts/Game/RDF/Radar/
 | `m_RainRate` | `float` | `0.0` | 降雨率 (mm/h) |
 | `m_UseRCSModel` | `bool` | `true` | 启用 RCS 估算 |
 | `m_UseMaterialReflection` | `bool` | `true` | 材质反射修正 |
-| `m_EnableClutterFilter` | `bool` | `false` | 杂波（地面）抑制 |
+| `m_EnableClutterFilter` | `bool` | `true` | 杂波（地面）抑制 |
 | `m_MinTargetVelocity` | `float` | `1.0` | MTI/MTD 最小速度 (m/s) |
 | `m_EnableCFAR` | `bool` | `false` | 启用 CFAR 局部噪声自适应检测（PoC） |
 | `m_CfarUseOrderStatistic` | `bool` | `false` | 使用 OS‑CFAR（Order‑Statistic）而非 CA‑CFAR |
@@ -139,6 +141,9 @@ scripts/Game/RDF/Radar/
 | `m_CfarOfflineTablePath` | `string` | `"scripts/Game/RDF/Radar/Data/os_cfar_multipliers.csv"` | 离线查表文件路径 |
 | `m_EnableBlindSpeedFilter` | `bool` | `false` | 启用盲速（Doppler alias）抑制 |
 | `m_BlindSpeedToleranceHz` | `float` | `1.0` | 盲速容差（Hz） |
+| `m_EnableSidelobes` | `bool` | `false` | 启用主波束周围旁瓣射线仿真（PoC）|
+| `m_SidelobeSampleCount` | `int` | `6` | 旁瓣射线数量（PoC）|
+| `m_SidelobeFraction` | `float` | `0.01` | 旁瓣总功率占发射功率比例（1%，均分到各旁瓣射线）|
 
 **`ERadarMode` 枚举**：
 
@@ -397,13 +402,16 @@ int  GetSnapshotCount()
 
 ### `RDF_RadarDemoConfig : RDF_LidarDemoConfig`
 
-| 工厂方法 | 频段 | 功率 | 增益 | 模式 | 采样策略 |
-|---------|------|------|------|------|---------|
-| `CreateXBandSearch(rayCount=512)` | X (10 GHz) | 1 kW | 30 dBi | PULSE | SweepStrategy 60°×30° |
-| `CreateAutomotiveRadar(rayCount=256)` | Ka (77 GHz) | 100 mW | 25 dBi | FMCW | ConicalStrategy 15° |
-| `CreateWeatherRadar(rayCount=1024)` | S (3 GHz) | 50 kW | 40 dBi | PULSE | HemisphereStrategy |
-| `CreatePhasedArrayRadar(rayCount=2048)` | C (5.6 GHz) | 10 kW | 35 dBi | PHASED_ARRAY | SweepStrategy 60°×30° |
-| `CreateLBandSurveillance(rayCount=512)` | L (1.3 GHz) | 500 kW | 33 dBi | PULSE | UniformStrategy |
+| 工厂方法 | 频段 | 功率 | 增益 | 模式 | 采样策略 | 量程 |
+|---------|------|------|------|------|---------|------|
+| `CreateHelicopterRadar(rayCount=512)` | X (10 GHz) | 500 W | 28 dBi | PULSE | SweepStrategy 60°×30° | 8 km |
+| `CreateXBandSearch(rayCount=512)` | X (10 GHz) | 5 W¹ | 30 dBi | PULSE | SweepStrategy 60°×30° | 3 km |
+| `CreateAutomotiveRadar(rayCount=256)` | Ka (77 GHz) | 100 mW | 25 dBi | FMCW | ConicalStrategy 15° | 150 m |
+| `CreateWeatherRadar(rayCount=1024)` | S (3 GHz) | 50 kW | 40 dBi | PULSE | HemisphereStrategy | 5 km |
+| `CreatePhasedArrayRadar(rayCount=2048)` | C (5.6 GHz) | 10 kW | 35 dBi | PHASED_ARRAY | SweepStrategy 60°×30° | 2 km |
+| `CreateLBandSurveillance(rayCount=512)` | L (1.3 GHz) | 500 kW | 33 dBi | PULSE | UniformStrategy | 5 km |
+
+¹ 演示缩放值，场景建筑物约 97 dB SNR。
 
 ```c
 // 构建纯配置对象（需要手动创建 Scanner）
@@ -425,13 +433,13 @@ RDF_RadarScanner BuildRadarScanner()
 | `StartWithConfig(cfg)` | 以指定预设启动演示 |
 | `Stop()` | 停止演示并清理 |
 | `SetScanCompleteHandler(handler)` | 注册 `RDF_LidarScanCompleteHandler` 回调 |
-| `GetLastSamples(out samples)` | 获取上次扫描结果副本 |
+| `GetLastSamples()` | 获取上次扫描结果副本（返回 `array<ref RDF_LidarSample>`，防御性复制）|
 | `IsRunning()` | 是否正在运行 |
 
 **Bootstrap 控制变量**（在 `RDF_RadarAutoBootstrap.c` 中设置）：
 
 ```c
-static bool s_RadarBootstrapEnabled    = true;   // 游戏启动时自动运行演示
+static bool s_RadarBootstrapEnabled    = false;  // 默认关闭，需调用 SetRadarBootstrapEnabled(true) 启用
 static bool s_RadarBootstrapShowHUD    = true;   // 显示 HUD
 static int  s_RadarBootstrapConfigIdx  = 0;      // 默认预设索引（0=XBandSearch）
 ```
@@ -451,21 +459,30 @@ override void OnScanComplete(array<ref RDF_LidarSample> samples)
 五种预设的轮换控制器。
 
 ```c
-static void CycleNext()                          // 切换到下一预设
-static void StartIndex(int idx)                  // 按索引启动（0–4）
-static void StartAutoCycle(float intervalSec)    // 定时自动轮换
+static void Cycle()                                    // 切换到下一预设
+static void StartIndex(int idx, int rayCount = -1)     // 按索引启动（0–5）
+static void Stop()                                     // 停止演示
+static void StartAutoCycle(float intervalSec, int rayCount = -1)  // 定时自动轮换
 static void StopAutoCycle()
-static string GetConfigName(int idx)             // 获取预设名称
+static void SetAutoCycleInterval(float intervalSec)
+static bool IsAutoCycling()
+static string GetPresetName(int idx)                   // 获取预设名称
+static int  GetPresetCount()                           // 预设总数（当前 6）
+static int  GetCurrentIndex()                          // 当前预设索引（-1=未启动）
+static void RebuildList(int rayCount)                  // 以不同射线数重建预设列表
 ```
 
 ### `RDF_RadarAutoBootstrap`
 
-通过 `modded class SCR_BaseGameMode` 实现游戏启动时自动运行雷达演示。默认**已开启**。
+通过 `modded class SCR_BaseGameMode` 实现游戏启动时自动运行雷达演示。默认**已关闭**，需显式启用。
 
 ```c
-// 控制开关（修改源文件中的静态变量）
-static bool s_RadarBootstrapEnabled = true;
+// 控制开关（在运行时调用或修改源文件静态变量）
+static bool s_RadarBootstrapEnabled = false;  // 默认关闭，需手动启用
 static bool s_RadarBootstrapShowHUD = true;
+
+// 运行时启用：
+SCR_BaseGameMode.SetRadarBootstrapEnabled(true);
 ```
 
 启动序列：
@@ -493,9 +510,57 @@ static void Hide()    // 销毁 HUD 所有控件
 **配置方法**：
 
 ```c
-static void SetMode(string modeName)        // 更新标题栏模式文本
-static void SetDisplayRange(float rangeM)   // 更新 PPI 显示量程（默认 2500 m）
+static void SetMode(string modeName)        // 更新标题栏模式文本（如 "Heli Radar"）
+static void SetDisplayRange(float rangeM)   // 设置 PPI 显示量程（米），控制 PPI 比例尺（默认 8000 m）
 ```
+
+**可见性查询**：
+
+```c
+static bool IsVisible()                     // HUD 当前是否可见（控件已创建）
+```
+
+**手动推送数据（脱离 AutoRunner 使用）**：
+
+```c
+// 自行扫描后直接驱动 HUD，无需开启 Demo。
+// 调用前须先 Show()，并通过 SetDisplayRange() 设置与 scanner 相符的量程。
+static void FeedSamples(array<ref RDF_LidarSample> samples)
+```
+
+示例（纯逻辑扫描 + HUD 显示）：
+
+```c
+RDF_RadarScanner scanner = RDF_RadarDemoConfig.CreateHelicopterRadar().BuildRadarScanner();
+array<ref RDF_LidarSample> samples = new array<ref RDF_LidarSample>();
+IEntity subject = RDF_LidarSubjectResolver.ResolveLocalSubject(true);
+scanner.Scan(subject, samples);
+
+RDF_RadarHUD.Show();
+RDF_RadarHUD.SetDisplayRange(8000.0);
+RDF_RadarHUD.SetMode("Heli Radar");
+RDF_RadarHUD.FeedSamples(samples);    // 立即刷新 PPI 与数据行
+```
+
+**与 AutoRunner 对接**：
+
+```c
+// 将 HUD 注册为 AutoRunner 扫描回调，每次 AutoRunner 扫描完成后自动刷新 HUD。
+static void AttachToAutoRunner()            // 等价于 RDF_RadarAutoRunner.SetScanCompleteHandler(GetInstance())
+static void DetachFromAutoRunner()          // 清除 AutoRunner 的 handler 引用
+```
+
+示例（开启 Demo 并同步显示 HUD）：
+
+```c
+RDF_RadarAutoRunner.StartWithConfig(RDF_RadarDemoConfig.CreateHelicopterRadar());
+RDF_RadarHUD.Show();
+RDF_RadarHUD.AttachToAutoRunner();          // HUD 自此随每次扫描自动更新
+RDF_RadarHUD.SetDisplayRange(8000.0);
+RDF_RadarHUD.SetMode("Heli Radar");
+```
+
+> **提示**：`Bootstrap` 在 `s_RadarBootstrapShowHUD = true` 时已自动调用 `Show()` + `AttachToAutoRunner()`，手动控制时可跳过 Bootstrap 直接使用以上 API。
 
 **布局（屏幕左下角）**：
 

@@ -137,13 +137,49 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
     static void SetMode(string name) { RDF_LidarHUD inst = GetInstance(); if (inst && inst.m_wMode) inst.m_wMode.SetText(name); }
     static void SetDisplayRange(float rangeM) { RDF_LidarHUD inst = GetInstance(); if (inst) inst.m_DisplayRange = rangeM; }
 
+    // Returns true if the HUD panel is currently built and visible.
+    static bool IsVisible()
+    {
+        RDF_LidarHUD inst = GetInstance();
+        return inst && inst.m_AllWidgets != null;
+    }
+
+    // Push a sample array into the HUD directly — works independently of AutoRunner.
+    // The HUD must be shown first via Show(); SetDisplayRange() should be set to match
+    // the scanner's range so the PPI scale is correct.
+    static void FeedSamples(array<ref RDF_LidarSample> samples)
+    {
+        if (!samples)
+            return;
+        RDF_LidarHUD inst = GetInstance();
+        if (inst)
+            inst.OnScanComplete(samples);
+    }
+
+    // Wire the HUD as the AutoRunner scan-complete handler so it updates every scan.
+    // Equivalent to: RDF_LidarAutoRunner.SetScanCompleteHandler(RDF_LidarHUD.GetInstance())
+    static void AttachToAutoRunner()
+    {
+        RDF_LidarAutoRunner.SetScanCompleteHandler(GetInstance());
+    }
+
+    // Detach from AutoRunner (clears the handler).
+    static void DetachFromAutoRunner()
+    {
+        RDF_LidarAutoRunner.SetScanCompleteHandler(null);
+    }
+
     // ---- scan callback ----
     override void OnScanComplete(array<ref RDF_LidarSample> samples)
     {
         if (!m_AllWidgets || !samples)
             return;
 
-        m_DisplayRange = RDF_LidarAutoRunner.GetDemoScannerRange();
+        // Only pull the range from AutoRunner when the demo is actually driving scans;
+        // if FeedSamples() is used standalone, m_DisplayRange keeps the value set by
+        // SetDisplayRange() so the PPI scale is controlled by the caller.
+        if (RDF_LidarAutoRunner.IsRunning())
+            m_DisplayRange = RDF_LidarAutoRunner.GetDemoScannerRange();
 
         float now = System.GetTickCount() * 0.001;
         if (now - m_LastUpdateTime < UPDATE_INTERVAL)
@@ -207,15 +243,22 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
             Print("[RDF_LidarHUD] WARN: CanvasWidget creation failed");
         }
 
-        // ---- compass labels ----
-        int cx     = PX_LEFT + PX_RADAR_W / 2 - 4;
-        int cy     = canvasTop + PX_RADAR_H / 2 - 8;
-        int cRight = PX_LEFT + PX_RADAR_W + 2;
-
-        MakeCompassLabel(ws, cx,     canvasTop - 14,     "F");
-        MakeCompassLabel(ws, cx,     canvasTop + PX_RADAR_H + 1, "B");
-        MakeCompassLabel(ws, PX_LEFT - 10, cy,           "L");
-        MakeCompassLabel(ws, cRight, cy,                  "R");
+        // ---- compass labels (Python-verified, integer literals only) ----
+        // PPI_CX=105, PPI_CY=105, PPI_R=100  →  canvas unit == screen px.
+        // circle centre screen : (PX_LEFT+105, canvasTop+105) = (125, canvasTop+105)
+        // arc top    (screen)  : canvasTop + (PPI_CY - PPI_R) = canvasTop + 5
+        // arc bottom (screen)  : canvasTop + (PPI_CY + PPI_R) = canvasTop + 205
+        // arc left   (screen)  : PX_LEFT   + (PPI_CX - PPI_R) = 25
+        // arc right  (screen)  : PX_LEFT   + (PPI_CX + PPI_R) = 225
+        // Label w=14 h=14, gap=3px.
+        // F  x=118  y=canvasTop+8   (arc top  +3, label bottom at canvasTop+22)
+        // B  x=118  y=canvasTop+188 (arc bot -14-3, label bottom at canvasTop+202)
+        // L  x=8    y=canvasTop+98  (arc lft -14-3, vertically centred on circle)
+        // R  x=228  y=canvasTop+98  (arc rgt +3)
+        MakeCompassLabel(ws, 118,  canvasTop + 8,    "F");
+        MakeCompassLabel(ws, 118,  canvasTop + 188,  "B");
+        MakeCompassLabel(ws, 8,    canvasTop + 98,   "L");
+        MakeCompassLabel(ws, 228,  canvasTop + 98,   "R");
 
         // Range ring annotation
         string ringLabel = F0(m_DisplayRange * 0.5 / 1000.0) + "km";

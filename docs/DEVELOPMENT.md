@@ -41,7 +41,8 @@ scripts/Game/RDF/
 │   │   ├── RDF_LidarNetworkAPI.c      网络同步基类
 │   │   ├── RDF_LidarNetworkComponent.c Rpl 实现（服务器权威）
 │   │   ├── RDF_LidarNetworkUtils.c    网络辅助工具
-│   │   └── RDF_LidarNetworkScanner.c  网络扫描适配器
+│   │   ├── RDF_LidarNetworkScanner.c  网络扫描适配器
+│   │   └── RDF_LidarNetworkSetupExample.c 网络接入示例（ScriptComponent）
 │   ├── Util/
 │   │   ├── RDF_LidarSubjectResolver.c 解析扫描主体（玩家/载具）
 │   │   ├── RDF_LidarExport.c          CSV 导出
@@ -64,7 +65,8 @@ scripts/Game/RDF/
     │   ├── RDF_RadarPropagation.c     传播损耗：FSPL / 大气衰减 / 雨衰
     │   ├── RDF_RCSModel.c             目标 RCS 模型（解析 + 估算 + 地物）
     │   ├── RDF_RadarEquation.c        雷达方程与 SNR 计算
-    │   └── RDF_DopplerProcessor.c     多普勒频移 + MTI 处理
+    │   ├── RDF_DopplerProcessor.c     多普勒频移 + MTI 处理
+    │   └── RDF_CFar.c                 CA-CFAR / OS-CFAR 恒虚警检测（PoC）
     ├── Modes/
     │   └── RDF_RadarMode.c            工作模式：Pulse / CW / FMCW / PhasedArray
     ├── Visual/
@@ -76,7 +78,8 @@ scripts/Game/RDF/
     ├── ECM/
     │   └── RDF_JammingModel.c         电子对抗干扰模型
     ├── Classification/
-    │   └── RDF_TargetClassifier.c     目标自动分类（5 类）
+    │   ├── RDF_EntityPreClassifier.c  实体预分类（结构层次/名称启发式）
+    │   └── RDF_TargetClassifier.c     目标自动分类（SNR/速度规则，8 类）
     ├── Demo/
     │   ├── RDF_RadarDemoConfig.c      五种预设配置工厂
     │   ├── RDF_RadarAutoRunner.c      雷达演示主驱动器（单例）

@@ -1,5 +1,69 @@
 # CHANGELOG
 
+## 2026-02-20（二）— HUD API 化
+
+### 概述
+
+为 `RDF_LidarHUD` 和 `RDF_RadarHUD` 补充完整的公共静态 API，使 HUD 可在 Demo 体系之外被直接调用，并同步更新了 API.md 与 RADAR_API.md。
+
+### 代码变更
+
+**`RDF_LidarHUD`**（`Lidar/UI/RDF_LidarHUD.c`）新增 4 个静态方法：
+
+| 方法 | 说明 |
+|------|------|
+| `static bool IsVisible()` | 检查 HUD 面板是否已创建并可见 |
+| `static void FeedSamples(array<ref RDF_LidarSample>)` | 手动推送样本直接刷新 HUD，不依赖 AutoRunner |
+| `static void AttachToAutoRunner()` | 将 HUD 注册为 AutoRunner 扫描回调 |
+| `static void DetachFromAutoRunner()` | 从 AutoRunner 注销 HUD 回调 |
+
+同步修复：`OnScanComplete` 仅在 `RDF_LidarAutoRunner.IsRunning()` 为真时才从 AutoRunner 读取量程，避免独立调用时 `m_DisplayRange` 被覆盖。
+
+**`RDF_RadarHUD`**（`Radar/UI/RDF_RadarHUD.c`）同样新增 4 个静态方法（同上，对应 `RDF_RadarAutoRunner`）。
+
+### 文档更新
+
+- **API.md**：新增 `## UI — HUD` 节（中/英文），完整记录 `RDF_LidarHUD` 全部 API 与使用示例
+- **RADAR_API.md**：扩写 `RDF_RadarHUD` 配置方法块，补充 `IsVisible`、`FeedSamples`、`AttachToAutoRunner`、`DetachFromAutoRunner` 及示例
+
+---
+
+## 2026-02-20 — 项目结构整理 & Demo 默认关闭
+
+### 概述
+
+对项目目录结构进行了整理，统一 Demo 默认为关闭状态，并同步更新了全部文档。
+
+### 文件结构变更
+
+| 操作 | 详情 |
+|------|------|
+| 移动 | `Lidar/Demo/RDF_LidarNetworkSetupExample.c` → `Lidar/Network/`（职责归位）|
+| 删除 | `scripts/Game/RDF/Tests/`（空目录）|
+| 删除 | `scripts/Game/RDF/Util/`（空目录）|
+| 删除 | `Radar/Network/`（空目录，功能待规划）|
+| 保留 | `Radar/Data/os_cfar_multipliers.csv` 原位不动（引擎 VFS 运行时读取，不可移出 scripts 树）|
+
+### 行为变更
+
+- **`RDF_LidarAutoBootstrap`**：`s_BootstrapEnabled` 由 `true` 改为 **`false`**（与雷达 Bootstrap 保持一致，全框架默认静默）
+- **`RDF_RadarAutoBootstrap`**：已是 `false`，无变化
+
+两套系统均须显式调用方可启动：
+```c
+SCR_BaseGameMode.SetBootstrapEnabled(true);       // LiDAR
+SCR_BaseGameMode.SetRadarBootstrapEnabled(true);  // 雷达
+```
+
+### 文档更新
+
+- `DEVELOPMENT.md`：修复文件树（新增 `RDF_CFar.c`、`RDF_EntityPreClassifier.c`、`RDF_LidarNetworkSetupExample.c`；移除已删空目录）
+- `RADAR_API.md`：模块总览补入缺失文件；`RDF_RadarAutoBootstrap` 默认值文档由 `true` 修正为 `false`
+- `RADAR_TUTORIAL.md`：第 1.0 节说明 Bootstrap 默认关闭，补充显式启用代码示例
+- `docs/` 清理：删除内部规划/宣传性文档（`DISCORD_ANNOUNCEMENT.md`、`EM_FIELD_PLAN.md`、`LIDAR_RADAR_BORROW_PLAN.md`、`REMAINING_LIMITATIONS.md`、`REQUIRED_ENGINE_APIs.md`），只保留面向开发者的参考文档
+
+---
+
 ## 2026-02-18 — 电磁波雷达系统：完整实现 + HUD PPI 扫描图
 
 ### 概述

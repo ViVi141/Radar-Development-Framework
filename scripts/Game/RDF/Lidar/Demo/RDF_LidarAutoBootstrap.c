@@ -2,8 +2,9 @@
 modded class SCR_BaseGameMode
 {
     // Master switch: when true, demo is started on game start.
+    // Default false — opt-in only. Enable via SetBootstrapEnabled(true).
     // HUD-only mode: DrawRays=false, DrawPoints=false, HUD enabled.
-    protected static bool s_BootstrapEnabled = true;
+    protected static bool s_BootstrapEnabled = false;
     // Auto-cycle disabled — HUD-only mode does not use strategy cycling.
     protected static bool s_BootstrapAutoCycle = false;
     protected static float s_BootstrapAutoCycleInterval = 10.0;
