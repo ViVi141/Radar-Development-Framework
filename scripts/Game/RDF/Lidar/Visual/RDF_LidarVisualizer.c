@@ -37,6 +37,17 @@ class RDF_LidarVisualizer
         return m_ColorStrategy;
     }
 
+    // Release all cached Shape refs and sample refs.
+    // Call when scanning stops to prevent stale Shape objects (each holding GPU resources)
+    // and stale IEntity refs from living until the next Render() — which may never come.
+    void Reset()
+    {
+        if (m_DebugShapes)
+            m_DebugShapes.Clear();
+        if (m_Samples)
+            m_Samples.Clear();
+    }
+
     // Return a defensive copy of the most recent scan samples after Render().
     // Caller may modify the returned array without affecting visualizer internal state.
     ref array<ref RDF_LidarSample> GetLastSamples()

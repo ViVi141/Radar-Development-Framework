@@ -98,7 +98,13 @@ class RDF_LidarAutoRunner
 
     static void StopAutoRun()
     {
-        GetInstance().m_Running = false;
+        RDF_LidarAutoRunner inst = GetInstance();
+        inst.m_Running = false;
+        // Release stale Shape refs and IEntity-holding sample refs immediately.
+        // Without this, the last frame's shapes (ONCE flag shapes still occupy memory
+        // as ref-counted objects) and sample IEntity refs survive until the next Render().
+        if (inst.m_Visualizer)
+            inst.m_Visualizer.Reset();
     }
 
     // Single code switch to enable/disable the demo auto-run.
