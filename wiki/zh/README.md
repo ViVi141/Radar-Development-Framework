@@ -1,6 +1,6 @@
-# 雷达开发框架 — Wiki（英文）
+# 雷达开发框架 — Wiki（中文）
 
-**雷达开发框架（RDF）** Arma Reforger 插件的英文文档。
+**雷达开发框架（RDF）** Arma Reforger 插件的中英文文档。
 
 ---
 
