@@ -118,6 +118,21 @@ class RDF_LidarScanner
                     hitEntity = param.TraceEnt;
                     hitCollider = param.ColliderName;
                     hitSurface = param.SurfaceProps;
+
+                    // ENTITIES_ONLY: filter out hits at or below terrain (e.g. underground rocks).
+                    if (m_Settings.m_TraceTargetMode == ETraceTargetMode.ENTITIES_ONLY)
+                    {
+                        float surfaceY = world.GetSurfaceY(hitPos[0], hitPos[2]);
+                        if (hitPos[1] <= surfaceY)
+                        {
+                            hit = false;
+                            hitPos = origin + (dir * range);
+                            dist = range;
+                            hitEntity = null;
+                            hitCollider = string.Empty;
+                            hitSurface = null;
+                        }
+                    }
                 }
             }
             else

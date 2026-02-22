@@ -149,6 +149,11 @@ RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateDefault(256));
 RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateConical(25.0, 256));
 RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateSweep(30.0, 20.0, 45.0, 512));
 
+// 可选：创建配置后设置 Trace 目标（0=仅地形, 1=全部, 2=仅实体）
+RDF_LidarDemoConfig cfg = RDF_LidarDemoConfig.CreateDefault(256);
+cfg.m_TraceTargetMode = 0;
+RDF_LidarAutoRunner.StartWithConfig(cfg);
+
 // 轮换策略
 RDF_LidarDemoCycler.StartAutoCycle(10.0);
 

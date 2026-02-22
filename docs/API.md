@@ -11,7 +11,8 @@
 - `m_RayCount` (int): 射线数量（默认 512）。在运行时保证至少为 1，无上限
 - `m_UpdateInterval` (float): 扫描间隔（秒，默认 5.0），最小值 0.01
 - `m_OriginOffset` (vector): 扫描原点偏移（默认 "0 0 0"），与 `m_UseLocalOffset` 配合使用
-- `m_TraceFlags` (int): 射线检测标志（默认 `TraceFlags.WORLD | TraceFlags.ENTS`）
+- `m_TraceTargetMode` (ETraceTargetMode): 射线检测目标，对应 0=仅地形, 1=全部, 2=仅实体。Validate() 据此更新 m_TraceFlags
+- `m_TraceFlags` (int): 射线检测标志（由 `m_TraceTargetMode` 推导，默认 `TraceFlags.WORLD | TraceFlags.ENTS`）
 - `m_LayerMask` (int): 物理层掩码（默认 `EPhysicsLayerPresets.Projectile`）
 - `m_UseBoundsCenter` (bool): 是否使用实体包围盒中心作为扫描原点（默认 true）
 - `m_UseLocalOffset` (bool): 是否将 `m_OriginOffset` 视为实体局部空间偏移（默认 true）
@@ -177,6 +178,7 @@ Network 模块内置实现，基于 Rpl 同步状态与扫描结果。
 - `static void SetDemoRayCount(int rays)` — 设置演示射线数（clamp）
 - `static void SetDemoColorStrategy(RDF_LidarColorStrategy strategy)` — 设置演示颜色策略
 - `static void SetDemoUpdateInterval(float interval)` — 设置演示扫描更新间隔（秒）
+- `static void SetDemoTraceTargetMode(int mode)` — 设置 Trace 目标（0=仅地形, 1=全部, 2=仅实体）
 - `static void SetScanCompleteHandler(RDF_LidarScanCompleteHandler handler)` — 设置扫描完成回调（传 null 清除）
 - `static RDF_LidarScanCompleteHandler GetScanCompleteHandler()` — 获取当前回调
 - `static void SetDemoDrawOriginAxis(bool draw)` — 是否在 demo 中绘制扫描原点与三轴（对应 VisualSettings.m_DrawOriginAxis）
@@ -191,7 +193,16 @@ Network 模块内置实现，基于 Rpl 同步状态与扫描结果。
 ---
 
 ### RDF_LidarDemoConfig
-配置对象，**推荐通过静态预设工厂创建**，再配合 `SetDemoConfig` / `StartWithConfig` 使用：
+**统一管理** demo 参数。中央默认值（射线数、量程、更新间隔、Trace 模式）与 Bootstrap 开关均由此类管理。Bootstrap 通过 `GetBootstrapConfig()` 获取配置。
+
+中央参数（修改后影响 Bootstrap 启动的 preset）：
+- `static void SetBootstrapEnabled(bool)` / `static bool IsBootstrapEnabled()`
+- `static void SetBootstrapAutoCycle(bool)` / `static bool IsBootstrapAutoCycle()`
+- `static void SetBootstrapCycleInterval(float)` / `static float GetBootstrapCycleInterval()`
+- `static void SetDefaultRayCount(int)` / `static void SetDefaultRange(float)` / `static void SetDefaultUpdateInterval(float)` / `static void SetDefaultTraceMode(int)`
+- `static RDF_LidarDemoConfig GetBootstrapConfig()` — 由中央参数构建的预设（HUD 模式）
+
+实例字段（per-preset 覆盖），**推荐通过静态预设工厂创建**，再配合 `SetDemoConfig` / `StartWithConfig` 使用：
 - `bool m_Enable` — 是否启用 demo（默认 false）
 - `RDF_LidarSampleStrategy m_SampleStrategy` — 采样策略
 - `RDF_LidarColorStrategy m_ColorStrategy` — 颜色策略（可选）
@@ -201,6 +212,7 @@ Network 模块内置实现，基于 Rpl 同步状态与扫描结果。
 - `bool m_DrawOriginAxis` — 为 true 时 demo 绘制扫描原点与三轴（ApplyTo 时通过 SetDemoDrawOriginAxis 应用）
 - `bool m_Verbose` — 为 true 时 demo 每帧打印命中数与最近距离（ApplyTo 时通过 SetDemoVerbose 应用）
 - `bool m_RenderWorld` — 为 true 时渲染游戏画面+点云，为 false 时仅渲染点云（ApplyTo 时通过 SetDemoRenderWorld 应用）
+- `int m_TraceTargetMode` — Trace 目标：0=仅地形, 1=全部, 2=仅实体（ApplyTo 时通过 SetDemoTraceTargetMode 应用）
 
 **预设工厂（替代原 RDF_*Demo.Start）：**
 - `static RDF_LidarDemoConfig CreateDefault(int rayCount = 256)`

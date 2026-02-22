@@ -188,6 +188,7 @@ class RDF_RadarScanner : RDF_LidarScanner
 
             vector hitPos = param.End;
             float  dist   = range;
+            IEntity hitEntity = param.TraceEnt;
 
             if (hit && hitFraction > 0.0)
             {
@@ -204,6 +205,18 @@ class RDF_RadarScanner : RDF_LidarScanner
                 {
                     hit = false;
                 }
+                // ENTITIES_ONLY: filter out hits at or below terrain (e.g. underground rocks).
+                else if (hit && m_RadarSettings.m_TraceTargetMode == ETraceTargetMode.ENTITIES_ONLY)
+                {
+                    float surfaceY = world.GetSurfaceY(hitPos[0], hitPos[2]);
+                    if (hitPos[1] <= surfaceY)
+                    {
+                        hit       = false;
+                        dist      = range;
+                        hitPos    = origin + (dir * range);
+                        hitEntity = null;
+                    }
+                }
             }
             else
             {
@@ -219,9 +232,17 @@ class RDF_RadarScanner : RDF_LidarScanner
             sample.m_Dir          = dir;
             sample.m_HitPos       = hitPos;
             sample.m_Distance     = dist;
-            sample.m_Entity       = param.TraceEnt;
-            sample.m_ColliderName = param.ColliderName;
-            sample.m_Surface      = param.SurfaceProps;
+            sample.m_Entity       = hitEntity;
+            if (hit)
+            {
+                sample.m_ColliderName = param.ColliderName;
+                sample.m_Surface      = param.SurfaceProps;
+            }
+            else
+            {
+                sample.m_ColliderName = string.Empty;
+                sample.m_Surface      = null;
+            }
 
             sample.m_EntityKind  = RDF_EntityPreClassifier.ClassifyEntity(sample.m_Entity);
 

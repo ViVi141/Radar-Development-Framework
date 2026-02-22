@@ -288,6 +288,23 @@ class RDF_LidarAutoRunner
         s.m_UpdateInterval = Math.Max(0.01, interval);
     }
 
+    // Set trace target mode: 0=terrain only, 1=all (terrain+entities), 2=entities only.
+    static void SetDemoTraceTargetMode(int mode)
+    {
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (!inst || !inst.m_Scanner) return;
+        RDF_LidarSettings s = inst.m_Scanner.GetSettings();
+        if (!s) return;
+        int m = Math.Clamp(mode, 0, 2);
+        if (m == 0)
+            s.m_TraceTargetMode = ETraceTargetMode.TERRAIN_ONLY;
+        else if (m == 1)
+            s.m_TraceTargetMode = ETraceTargetMode.ALL;
+        else
+            s.m_TraceTargetMode = ETraceTargetMode.ENTITIES_ONLY;
+        s.Validate();
+    }
+
     static void SetDemoConfig(RDF_LidarDemoConfig cfg, bool sync = true)
     {
         RDF_LidarAutoRunner inst = GetInstance();
