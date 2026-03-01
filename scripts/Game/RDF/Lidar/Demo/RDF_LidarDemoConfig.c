@@ -4,7 +4,7 @@ class RDF_LidarDemoConfig
 {
     // ---------- Central demo params (single source of truth for bootstrap & defaults) ----------
     protected static bool s_BootstrapEnabled = flase;
-    protected static bool s_BootstrapAutoCycle = false;
+    protected static bool s_BootstrapAutoCycle = flase;
     protected static float s_BootstrapCycleInterval = 10.0;
     protected static int s_DefaultRayCount = 4096;
     protected static float s_DefaultRange = 50.0;
