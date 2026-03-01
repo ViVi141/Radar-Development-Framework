@@ -257,11 +257,9 @@ RDF_LidarAutoRunner.SetDemoTraceTargetMode(0);
 
 ## 十、烟雾遮挡激光（TraceFlags.VISIBILITY）
 
-为让烟雾、粒子效果等遮挡激光探测，需在 Trace 中加入 `TraceFlags.VISIBILITY`。引擎会将 visibility occluders（如粒子）参与射线检测，射线在命中烟雾时提前终止。
+为让烟雾、粒子效果等遮挡激光探测，需在 Trace 中加入 `TraceFlags.VISIBILITY`。现实语义：烟雾阻挡 = 无有效回波，烟雾及后方区域视为未命中。
 
-RDF 通过 `RDF_LidarSettings.m_TraceSmokeOcclusion` 控制：
-- `m_TraceSmokeOcclusion = true` 时，`Validate()` 会将 `TraceFlags.VISIBILITY` 并入 `m_TraceFlags`
-- 烟雾弹、烟幕粒子等需在 Workbench 中配置为 visibility occluder 才会生效
+RDF 通过 `RDF_LidarSettings.m_TraceSmokeOcclusion` 控制，采用双 Trace 区分烟雾与实体：若 visibility 先于几何命中，则 `hit=false`，不返回数据。原版烟雾弹已验证有效。
 
 ---
 

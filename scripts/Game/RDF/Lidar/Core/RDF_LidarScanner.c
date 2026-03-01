@@ -81,17 +81,49 @@ class RDF_LidarScanner
             // Populate reusable TraceParam
             param.Start = origin;
             param.End = origin + (dir * range);
-            param.Flags = m_Settings.m_TraceFlags;
             param.LayerMask = m_Settings.m_LayerMask;
             param.Exclude = subject;
-            // Clear previous trace result fields (safety)
             param.TraceEnt = null;
             param.SurfaceProps = null;
             param.ColliderName = string.Empty;
 
-            float hitFraction = world.TraceMove(param, null);
-            // Conservative hit validation: rely on TraceEnt or SurfaceProps; ignore ColliderName checks to avoid type incompat.
-            bool hit = (param.TraceEnt != null) || (param.SurfaceProps != null);
+            float hitFraction;
+            bool hit;
+            if (m_Settings.m_TraceSmokeOcclusion)
+            {
+                param.Flags = m_Settings.m_TraceFlags;
+                float hitFractionVis = world.TraceMove(param, null);
+                if (hitFractionVis >= 0.9999)
+                {
+                    hit = false;
+                    hitFraction = 1.0;
+                }
+                else
+                {
+                    int geomFlags = m_Settings.m_TraceFlags & ~TraceFlags.VISIBILITY;
+                    param.Flags = geomFlags;
+                    param.TraceEnt = null;
+                    param.SurfaceProps = null;
+                    param.ColliderName = string.Empty;
+                    float hitFractionGeom = world.TraceMove(param, null);
+                    if (hitFractionVis < hitFractionGeom - 0.0001)
+                    {
+                        hit = false;
+                        hitFraction = 1.0;
+                    }
+                    else
+                    {
+                        hitFraction = hitFractionGeom;
+                        hit = (param.TraceEnt != null) || (param.SurfaceProps != null);
+                    }
+                }
+            }
+            else
+            {
+                param.Flags = m_Settings.m_TraceFlags;
+                hitFraction = world.TraceMove(param, null);
+                hit = (param.TraceEnt != null) || (param.SurfaceProps != null);
+            }
 
             vector hitPos = param.End;
             float dist = range;
