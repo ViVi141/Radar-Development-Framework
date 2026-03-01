@@ -165,6 +165,28 @@ modded SCR_BaseGameMode
 
 ---
 
+## 烟雾遮挡激光探测
+
+激光/LiDAR 与电磁波雷达的射线检测均可受烟雾阻挡。启用 `m_TraceSmokeOcclusion` 后，`Validate()` 会向 `m_TraceFlags` 加入 `TraceFlags.VISIBILITY`，引擎的 visibility occluders（如粒子效果、烟雾弹）将参与 Trace 检测，射线在命中烟雾时提前终止，实现烟雾阻挡激光探测。
+
+```c
+// 直接启用
+scanner.GetSettings().m_TraceSmokeOcclusion = true;
+scanner.GetSettings().Validate();
+
+// Demo 预设
+RDF_LidarDemoConfig cfg = RDF_LidarDemoConfig.CreateDefault(256);
+cfg.m_TraceSmokeOcclusion = true;
+RDF_LidarAutoRunner.StartWithConfig(cfg);
+
+// 运行时切换
+RDF_LidarAutoRunner.SetDemoTraceSmokeOcclusion(true);
+```
+
+注意：粒子效果需被配置为 visibility occluder 才会参与 Trace；烟雾弹等预制体需在 Workbench 中正确设置。
+
+---
+
 ## 扩展点
 
 ### 采样策略

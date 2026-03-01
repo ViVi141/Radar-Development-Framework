@@ -305,6 +305,18 @@ class RDF_LidarAutoRunner
         s.Validate();
     }
 
+    // Enable smoke/particle occlusion: when true, TraceFlags.VISIBILITY is added so
+    // visibility occluders (e.g. smoke grenades) block laser rays.
+    static void SetDemoTraceSmokeOcclusion(bool enable)
+    {
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (!inst || !inst.m_Scanner) return;
+        RDF_LidarSettings s = inst.m_Scanner.GetSettings();
+        if (!s) return;
+        s.m_TraceSmokeOcclusion = enable;
+        s.Validate();
+    }
+
     static void SetDemoConfig(RDF_LidarDemoConfig cfg, bool sync = true)
     {
         RDF_LidarAutoRunner inst = GetInstance();

@@ -3,7 +3,7 @@
 class RDF_LidarDemoConfig
 {
     // ---------- Central demo params (single source of truth for bootstrap & defaults) ----------
-    protected static bool s_BootstrapEnabled = false;
+    protected static bool s_BootstrapEnabled = true;
     protected static bool s_BootstrapAutoCycle = false;
     protected static float s_BootstrapCycleInterval = 10.0;
     protected static int s_DefaultRayCount = 4096;
@@ -79,6 +79,8 @@ class RDF_LidarDemoConfig
     float m_Range = 0.0;
     // Trace target: 0=terrain only, 1=all (terrain+entities), 2=entities only. Applied when preset is used.
     int m_TraceTargetMode = 1;
+    // When true, smoke/particles (visibility occluders) block laser rays. Applied when preset is used.
+    bool m_TraceSmokeOcclusion = true;
 
     void RDF_LidarDemoConfig() {}
 
@@ -224,6 +226,7 @@ class RDF_LidarDemoConfig
         if (m_UpdateInterval > 0.0)
             RDF_LidarAutoRunner.SetDemoUpdateInterval(Math.Max(0.01, m_UpdateInterval));
         RDF_LidarAutoRunner.SetDemoTraceTargetMode(m_TraceTargetMode);
+        RDF_LidarAutoRunner.SetDemoTraceSmokeOcclusion(m_TraceSmokeOcclusion);
         RDF_LidarAutoRunner.SetDemoDrawOriginAxis(m_DrawOriginAxis);
         RDF_LidarAutoRunner.SetDemoVerbose(m_Verbose);
         RDF_LidarAutoRunner.SetDemoRenderWorld(m_RenderWorld);

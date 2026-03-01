@@ -149,9 +149,10 @@ RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateDefault(256));
 RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateConical(25.0, 256));
 RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateSweep(30.0, 20.0, 45.0, 512));
 
-// 可选：创建配置后设置 Trace 目标（0=仅地形, 1=全部, 2=仅实体）
+// 可选：创建配置后设置 Trace 目标（0=仅地形, 1=全部, 2=仅实体）及烟雾遮挡
 RDF_LidarDemoConfig cfg = RDF_LidarDemoConfig.CreateDefault(256);
 cfg.m_TraceTargetMode = 0;
+cfg.m_TraceSmokeOcclusion = true;  // 烟雾/粒子阻挡激光射线
 RDF_LidarAutoRunner.StartWithConfig(cfg);
 
 // 轮换策略

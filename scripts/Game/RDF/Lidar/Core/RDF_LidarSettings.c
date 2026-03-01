@@ -16,6 +16,8 @@ class RDF_LidarSettings
     // Switch: terrain-only, all (terrain+entities), or entities-only. Overrides m_TraceFlags when Validate() runs.
     ETraceTargetMode m_TraceTargetMode = ETraceTargetMode.ALL;
     int m_TraceFlags = TraceFlags.WORLD | TraceFlags.ENTS;
+    // When true, add TraceFlags.VISIBILITY so smoke/particles (visibility occluders) block laser rays.
+    bool m_TraceSmokeOcclusion = false;
     int m_LayerMask = EPhysicsLayerPresets.Projectile;
     float m_UpdateInterval = 5.0;
     bool m_UseBoundsCenter = true;
@@ -47,5 +49,7 @@ class RDF_LidarSettings
                 m_TraceFlags = TraceFlags.WORLD | TraceFlags.ENTS;
                 break;
         }
+        if (m_TraceSmokeOcclusion)
+            m_TraceFlags = m_TraceFlags | TraceFlags.VISIBILITY;
     }
 }
