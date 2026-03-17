@@ -35,6 +35,7 @@ scripts/Game/RDF/
 │   │   ├── RDF_LidarVisualSettings.c  可视化参数（含仅点云开关）
 │   │   ├── RDF_LidarVisualizer.c      渲染与数据获取
 │   │   ├── RDF_LidarColorStrategy.c   颜色策略接口与默认实现
+│   │   ├── RDF_LidarMaterialColorStrategy.c  按密度 g/cm³ 着色、透明度随距离
 │   │   ├── RDF_IndexColorStrategy.c
 │   │   └── RDF_ThreeColorStrategy.c   近/中/远三段渐变
 │   ├── Network/

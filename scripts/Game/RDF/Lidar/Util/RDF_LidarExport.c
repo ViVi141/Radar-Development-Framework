@@ -30,6 +30,64 @@ class RDF_LidarExport
         return row;
     }
 
+    // Live CSV: same as base CSV plus surface material columns (append-only stream).
+    static string GetLiveCSVHeader()
+    {
+        return "index,hit,startX,startY,startZ,endX,endY,endZ,dirX,dirY,dirZ,hitPosX,hitPosY,hitPosZ,distance,colliderName,materialName,reflectivity,density,isWaterSurface";
+    }
+
+    static string SampleToLiveCSVRow(RDF_LidarSample sample)
+    {
+        string baseRow = RDF_LidarExport.SampleToCSVRow(sample);
+        if (baseRow == "")
+            return "";
+        string matName = "";
+        float refl = 0.0;
+        float density = -1.0;
+        int isWater = 0;
+        if (sample.m_Surface)
+        {
+            string n = sample.m_Surface.GetName();
+            if (n)
+                matName = n;
+            refl = RDF_RCSModel.GetReflectivityFromGameMaterial(sample.m_Surface, "");
+            BallisticInfo bi = sample.m_Surface.GetBallisticInfo();
+            if (bi)
+            {
+                density = bi.GetDensity();
+                if (bi.IsWaterSurface())
+                    isWater = 1;
+            }
+        }
+        return baseRow + ",\"" + matName + "\"," + refl.ToString() + "," + density.ToString() + "," + isWater.ToString();
+    }
+
+    // Append samples to live CSV (with material columns). New file gets header; existing file gets rows only.
+    static bool AppendLiveCSVToFile(array<ref RDF_LidarSample> samples, string path)
+    {
+        if (!samples || !path || path == "")
+            return false;
+        bool exists = FileIO.FileExist(path);
+        FileMode mode;
+        if (exists)
+            mode = FileMode.APPEND;
+        else
+            mode = FileMode.WRITE;
+        FileHandle f = FileIO.OpenFile(path, mode);
+        if (!f)
+            return false;
+        if (!exists)
+            f.WriteLine(RDF_LidarExport.GetLiveCSVHeader());
+        for (int i = 0; i < samples.Count(); i++)
+        {
+            RDF_LidarSample s = samples.Get(i);
+            if (s)
+                f.WriteLine(RDF_LidarExport.SampleToLiveCSVRow(s));
+        }
+        f.Close();
+        return true;
+    }
+
     // Print full CSV (header + all rows) to console. Copy from log for external files.
     static void PrintCSVToConsole(array<ref RDF_LidarSample> samples)
     {

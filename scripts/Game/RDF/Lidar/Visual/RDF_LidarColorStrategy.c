@@ -50,17 +50,38 @@ class RDF_DefaultColorStrategy : RDF_LidarColorStrategy
     // Forward compatibility: implement sample-based overrides
     override int BuildPointColorFromSample(RDF_LidarSample sample, float lastRange, RDF_LidarVisualSettings settings)
     {
+        if (settings.m_UseMaterialEffect && sample && sample.m_Hit && sample.m_Surface)
+        {
+            float refl = RDF_RCSModel.GetReflectivityFromGameMaterial(sample.m_Surface, "");
+            float brightness = 0.5 + 0.5 * refl;
+            float alpha = 0.5 + 0.5 * refl;
+            if (alpha > 1.0)
+                alpha = 1.0;
+            float t = sample.m_Distance / Math.Max(0.1, lastRange);
+            t = Math.Clamp(t, 0.0, 1.0);
+            float r = Math.Lerp(1.0, 0.0, t) * brightness;
+            float g = Math.Lerp(0.0, 1.0, t) * brightness;
+            float b = 0.2 * brightness;
+            if (r > 1.0) r = 1.0;
+            if (g > 1.0) g = 1.0;
+            if (b > 1.0) b = 1.0;
+            return ARGBF(alpha, r, g, b);
+        }
         return BuildPointColor(sample.m_Distance, sample.m_Hit, lastRange, settings);
     }
 
     override float BuildPointSizeFromSample(RDF_LidarSample sample, float lastRange, RDF_LidarVisualSettings settings)
     {
         float baseSize = settings.m_PointSize;
+        if (settings.m_UseMaterialEffect && sample && sample.m_Hit && sample.m_Surface)
+        {
+            float refl = RDF_RCSModel.GetReflectivityFromGameMaterial(sample.m_Surface, "");
+            baseSize = baseSize * (0.85 + 0.3 * refl);
+        }
         if (settings.m_UseDistanceGradient)
         {
             float t = sample.m_Distance / Math.Max(0.1, lastRange);
             t = Math.Clamp(t, 0.0, 1.0);
-            // Closer points slightly larger for depth cue
             return baseSize * (1.0 + (1.0 - t) * 0.5);
         }
         return baseSize;

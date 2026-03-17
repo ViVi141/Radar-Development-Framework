@@ -403,9 +403,10 @@ class RDF_RadarScanner : RDF_LidarScanner
                 sample.m_Dir,
                 GetSurfaceNormal(sample));
 
-            if (m_RadarSettings.m_UseMaterialReflection && sample.m_Surface)
+            if (m_RadarSettings.m_UseMaterialReflection)
             {
-                float reflectivity = RDF_RCSModel.GetMaterialReflectivity(sample.m_MaterialType);
+                float reflectivity = RDF_RCSModel.GetReflectivityFromGameMaterial(
+                    sample.m_Surface, sample.m_MaterialType);
                 sample.m_ReflectionCoefficient = reflectivity;
             }
         }

@@ -1,5 +1,22 @@
 # CHANGELOG
 
+## 2026-03-17 — 文档与 LiDAR 行为说明更新
+
+### 文档更新
+
+- **API.md**
+  - **颜色策略**：`RDF_LidarMaterialColorStrategy` 改为按表面**密度**（g/cm³）着色、**透明度随距离**降低；同步更新 `m_UseMaterialEffect` 说明与 RDF_LidarColorStrategy 实现列表。
+  - **HUD**：PPI 光点与图例改为「按密度（g/cm³）、透明度随距离」；中英文布局表与注意事项补充对应说明。
+  - **Live CSV**：已记录 `SetDemoWriteLiveCSV`、`AppendLiveCSVToFile`、`GetLiveCSVHeader`、`SampleToLiveCSVRow` 及 `lidar_live_1.csv` 追加写入与材质列。
+- **DEVELOPMENT.md**：在 Visual 模块列表中增加 `RDF_LidarMaterialColorStrategy.c`（按密度 g/cm³ 着色、透明度随距离）。
+
+### 行为说明（与代码一致）
+
+- LiDAR Demo 默认使用 `RDF_LidarMaterialColorStrategy`：低密度 → 蓝/青，高密度 → 红/白；alpha = 1 − 0.7×(dist/range)，范围 [0.2, 1]。
+- 实时 CSV：每次扫描**追加**写入 `$profile:LiDAR/lidar_live_1.csv`，列含 materialName、reflectivity、density、isWaterSurface。
+
+---
+
 ## 2026-02-20（二）— HUD API 化
 
 ### 概述

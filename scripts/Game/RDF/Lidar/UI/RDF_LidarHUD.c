@@ -13,7 +13,7 @@
 //  |                   B (back)               |
 //  +------------------------------------------+  Y=935
 //  | Hits  123 / 512    Range  30 m to 1.2 km |
-//  | Green=near  Yellow=mid  Red=far  (distance) |
+//  | By density (g/cm³), alpha by distance      |
 //  +==========================================+  Y=957
 
 class RDF_LidarHUD : RDF_LidarScanCompleteHandler
@@ -114,6 +114,59 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
         if (t < 0.66)
             return InterpColor(COL_MID, COL_FAR, (t - 0.33) / 0.33);
         return COL_FAR;
+    }
+
+    // HUD point color by surface density (g/cm³), alpha by distance (same logic as RDF_LidarMaterialColorStrategy).
+    protected int ColorByMaterial(RDF_LidarSample sample)
+    {
+        if (!sample || !sample.m_Hit)
+            return ARGB(128, 128, 128, 128);
+
+        float density = -1.0;
+        if (sample.m_Surface)
+        {
+            BallisticInfo bi = sample.m_Surface.GetBallisticInfo();
+            if (bi)
+                density = bi.GetDensity();
+        }
+
+        float t = 0.5;
+        float densityMax = 8.0;
+        if (density >= 0.0 && densityMax > 0.0)
+        {
+            t = density / densityMax;
+            if (t > 1.0)
+                t = 1.0;
+        }
+
+        float r = Math.Lerp(0.2, 1.0, t);
+        float g = Math.Lerp(0.5, 0.4, t);
+        float b = Math.Lerp(1.0, 0.3, t);
+        if (r > 1.0) r = 1.0;
+        if (g > 1.0) g = 1.0;
+        if (b > 1.0) b = 1.0;
+
+        float range = Math.Max(0.1, m_DisplayRange);
+        float distNorm = sample.m_Distance / range;
+        if (distNorm > 1.0)
+            distNorm = 1.0;
+        if (distNorm < 0.0)
+            distNorm = 0.0;
+        float alpha = 1.0 - 0.7 * distNorm;
+        if (alpha < 0.2)
+            alpha = 0.2;
+        if (alpha > 1.0)
+            alpha = 1.0;
+
+        int ar = (int)(alpha * 255.0);
+        int rr = (int)(r * 255.0);
+        int gg = (int)(g * 255.0);
+        int bb = (int)(b * 255.0);
+        if (ar > 255) ar = 255;
+        if (rr > 255) rr = 255;
+        if (gg > 255) gg = 255;
+        if (bb > 255) bb = 255;
+        return (ar << 24) | (rr << 16) | (gg << 8) | bb;
     }
 
     // ---- float helpers ----
@@ -271,7 +324,7 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
 
         // ---- data rows ----
         m_wHits   = TextWidget.Cast(MakeDataRow(ws, 0, "Hits  --   Range --"));
-        m_wLegend = TextWidget.Cast(MakeDataRow(ws, 1, "Green=near  Yellow=mid  Red=far"));
+        m_wLegend = TextWidget.Cast(MakeDataRow(ws, 1, "By density (g/cm³), alpha by distance"));
         TextWidget.Cast(m_wLegend).SetExactFontSize(11);
 
         Print("[RDF_LidarHUD] HUD built  widgets=" + m_AllWidgets.Count().ToString());
@@ -420,7 +473,7 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
             float blipR = 2.5 - t * 1.0;
             if (blipR < 0.8) blipR = 0.8;
 
-            int blipCol = ColorByDistance(dist);
+            int blipCol = ColorByMaterial(s);
 
             array<float> blipVerts = new array<float>();
             m_Canvas.TessellateCircle(Vector(bx, by, 0), blipR, 6, blipVerts);

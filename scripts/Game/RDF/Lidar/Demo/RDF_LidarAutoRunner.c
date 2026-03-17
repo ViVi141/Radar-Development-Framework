@@ -8,7 +8,6 @@ class RDF_LidarAutoRunner
     // Network API for synchronization (optional, for multiplayer)
     // Use a plain reference (no strong ref) to avoid Enforce strong-ref restriction on static fields.
     protected static RDF_LidarNetworkAPI s_NetworkAPI;
-
     protected ref RDF_LidarScanner m_Scanner;
     protected ref RDF_LidarVisualizer m_Visualizer;
     protected ref RDF_LidarDemoConfig m_DemoConfig;
@@ -16,11 +15,14 @@ class RDF_LidarAutoRunner
     protected ref RDF_LidarDemoStatsHandler m_DemoStatsHandler;
     protected float m_LastScanTime = -1.0;
     protected bool m_Running = false;
+    protected bool m_WriteLiveCSV = false;
 
     void RDF_LidarAutoRunner()
     {
         m_Scanner = new RDF_LidarScanner();
         m_Visualizer = new RDF_LidarVisualizer();
+        // Demo default: material-based coloring (metal/vegetation/water etc.). Configs can override via SetDemoColorStrategy.
+        m_Visualizer.SetColorStrategy(new RDF_LidarMaterialColorStrategy());
         // recurring tick; scanning is gated by m_Running. Use a non-zero min tick interval to avoid per-frame overhead.
         GetGame().GetCallqueue().CallLater(StaticTick, s_MinTickInterval, true);
     }
@@ -191,6 +193,16 @@ class RDF_LidarAutoRunner
             vs.m_DrawPoints = draw;
     }
 
+    // When true: only draw rays/points that hit (sample.m_Hit == true). Skips missed rays.
+    static void SetDemoShowHitsOnly(bool showHitsOnly)
+    {
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (!inst || !inst.m_Visualizer) return;
+        RDF_LidarVisualSettings vs = inst.m_Visualizer.GetSettings();
+        if (vs)
+            vs.m_ShowHitsOnly = showHitsOnly;
+    }
+
     // When true: render game view + point cloud. When false: render point cloud only (solid background + disable scene render).
     static void SetDemoRenderWorld(bool renderWorld)
     {
@@ -307,6 +319,14 @@ class RDF_LidarAutoRunner
 
     // Enable smoke/particle occlusion: when true, TraceFlags.VISIBILITY is added so
     // visibility occluders (e.g. smoke grenades) block laser rays.
+    // When true, each scan overwrites $profile:LiDAR/lidar_live_1.csv with current samples (no dedup).
+    static void SetDemoWriteLiveCSV(bool enable)
+    {
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (inst)
+            inst.m_WriteLiveCSV = enable;
+    }
+
     static void SetDemoTraceSmokeOcclusion(bool enable)
     {
         RDF_LidarAutoRunner inst = GetInstance();
@@ -408,6 +428,11 @@ class RDF_LidarAutoRunner
                 // Update visualizer with server results
                 m_Visualizer.RenderWithSamples(subject, syncedSamples);
 
+                if (m_WriteLiveCSV && syncedSamples.Count() > 0)
+                {
+                    FileIO.MakeDirectory("$profile:LiDAR");
+                    RDF_LidarExport.AppendLiveCSVToFile(syncedSamples, "$profile:LiDAR/lidar_live_1.csv");
+                }
                 if (m_ScanCompleteHandler)
                     m_ScanCompleteHandler.OnScanComplete(syncedSamples);
             }
@@ -416,13 +441,14 @@ class RDF_LidarAutoRunner
         {
             // Local scanning (single-player or no network component)
             m_Visualizer.Render(subject, m_Scanner);
-
-            if (m_ScanCompleteHandler)
+            ref array<ref RDF_LidarSample> samples = m_Visualizer.GetLastSamples();
+            if (m_WriteLiveCSV && samples && samples.Count() > 0)
             {
-                ref array<ref RDF_LidarSample> samples = m_Visualizer.GetLastSamples();
-                if (samples)
-                    m_ScanCompleteHandler.OnScanComplete(samples);
+                FileIO.MakeDirectory("$profile:LiDAR");
+                RDF_LidarExport.AppendLiveCSVToFile(samples, "$profile:LiDAR/lidar_live_1.csv");
             }
+            if (m_ScanCompleteHandler && samples)
+                m_ScanCompleteHandler.OnScanComplete(samples);
         }
     }
 }

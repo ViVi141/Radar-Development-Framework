@@ -94,6 +94,40 @@ class RDF_RCSModel
         return 0.5;
     }
 
+    // Reflectivity from engine GameMaterial, using BallisticInfo when available.
+    // API: GameMaterial.GetBallisticInfo() -> BallisticInfo with GetDensity(), IsWaterSurface(), etc.
+    // When BallisticInfo exists: map density (e.g. steel ~7.87, concrete ~2.5, wood ~0.6) to 0.05..1.0;
+    // water surface uses fixed 0.6. Otherwise falls back to GetMaterialReflectivity(material name).
+    // \param surface Hit surface from TraceParam.SurfaceProps; can be null (e.g. wave-based has no hit).
+    // \param materialNameFallback Used when surface is null or has no BallisticInfo; empty = use 0.5.
+    static float GetReflectivityFromGameMaterial(GameMaterial surface, string materialNameFallback = "")
+    {
+        if (!surface)
+        {
+            if (materialNameFallback != string.Empty)
+                return GetMaterialReflectivity(materialNameFallback);
+            return 0.5;
+        }
+
+        BallisticInfo bi = surface.GetBallisticInfo();
+        if (bi)
+        {
+            if (bi.IsWaterSurface())
+                return 0.6;
+
+            float density = bi.GetDensity();
+            // Typical: steel ~7.87, concrete ~2.5, wood ~0.5..1, plastic ~1. Map to [0.05, 1.0].
+            float refl = 0.05 + (density / 8.0) * 0.95;
+            if (refl > 1.0)
+                refl = 1.0;
+            if (refl < 0.05)
+                refl = 0.05;
+            return refl;
+        }
+
+        return GetMaterialReflectivity(surface.GetName());
+    }
+
     // Angle-dependent reflection factor.
     // Metallic surfaces: near-constant (Fresnel).
     // Non-metallic: cos^2(theta) roll-off with incidence angle.

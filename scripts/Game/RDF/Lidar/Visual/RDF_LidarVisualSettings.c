@@ -16,4 +16,8 @@ class RDF_LidarVisualSettings
     // When true: use batched triangle-mesh rendering (fewer Shape calls) to draw points/rays.
     // Recommended for high `m_RayCount` / large point-clouds to reduce draw-call overhead.
     bool m_UseBatchedMesh = false;
+    // When true (and using RDF_DefaultColorStrategy): point brightness/alpha scaled by hit surface
+    // reflectivity (GameMaterial/BallisticInfo). For full material-based colors use
+    // SetColorStrategy(new RDF_LidarMaterialColorStrategy()) instead.
+    bool m_UseMaterialEffect = false;
 }

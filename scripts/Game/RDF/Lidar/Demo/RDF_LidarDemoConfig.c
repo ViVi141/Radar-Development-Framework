@@ -10,8 +10,8 @@ class RDF_LidarDemoConfig
     protected static float s_DefaultRange = 50.0;
     protected static float s_DefaultUpdateInterval = 1.0;
     protected static int s_DefaultTraceMode = 2;
-    protected static bool s_DefaultDrawRays = true;
-    protected static bool s_DefaultDrawPoints = true;
+    protected static bool s_DefaultDrawRays = false;
+    protected static bool s_DefaultDrawPoints = true;  
     protected static bool s_DefaultDrawOriginAxis = false;
     protected static bool s_DefaultVerbose = false;
     protected static bool s_DefaultRenderWorld = true;
@@ -71,6 +71,7 @@ class RDF_LidarDemoConfig
     bool m_RenderWorld = true; // when true: game view + point cloud; when false: point cloud only (solid background)
     bool m_DrawRays = true;     // when false: hide 3D ray visualization
     bool m_DrawPoints = true;   // when false: hide 3D point cloud visualization
+    bool m_ShowHitsOnly = true; // when true: only draw rays/points that hit (valid returns)
     // When true: prefer VisualSettings' batched mesh renderer for performance in large point-clouds
     bool m_UseBatchedMesh = false;
     // When true, show 2D point cloud HUD (RDF_LidarHUD).
@@ -81,6 +82,8 @@ class RDF_LidarDemoConfig
     int m_TraceTargetMode = 1;
     // When true, smoke/particles (visibility occluders) block laser rays. Applied when preset is used.
     bool m_TraceSmokeOcclusion = true;
+    // When true, each scan overwrites $profile:LiDAR/lidar_live_1.csv with current ray data (no dedup).
+    bool m_WriteLiveCSV = false;
 
     void RDF_LidarDemoConfig() {}
 
@@ -232,7 +235,9 @@ class RDF_LidarDemoConfig
         RDF_LidarAutoRunner.SetDemoRenderWorld(m_RenderWorld);
         RDF_LidarAutoRunner.SetDemoDrawRays(m_DrawRays);
         RDF_LidarAutoRunner.SetDemoDrawPoints(m_DrawPoints);
+        RDF_LidarAutoRunner.SetDemoShowHitsOnly(m_ShowHitsOnly);
         RDF_LidarAutoRunner.SetDemoUseBatchedMesh(m_UseBatchedMesh);
+        RDF_LidarAutoRunner.SetDemoWriteLiveCSV(m_WriteLiveCSV);
         // HUD takes precedence over verbose handler
         if (m_ShowHUD)
         {

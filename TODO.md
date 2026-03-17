@@ -133,7 +133,20 @@
 
 ---
 
-## 五、后续改进建议（EM 体素场）
+## 五、完全波/场基雷达（抛弃射线检测）— 设计已定，待实现
+
+- 目标：雷达检测**完全不再使用** `TraceMove` 等扫描射线，改为体素场传播 + 占位网格 + 场采样。
+- 设计文档：**`docs/WAVE_BASED_RADAR_DESIGN.md`**（体素占位、传播、接收与检测、与现有 API 对接、分阶段实现）。
+- 待办（可选，按设计文档阶段推进）：
+  - [ ] **体素占位网格**：与 EM 网格对齐，用 GetSurfaceY + 实体 AABB 填充，零射线
+  - [ ] **TickPropagate**：6 邻扩散 + 固体反射，无射线
+  - [ ] **发射时间戳** + 接收端按时延→距离 bin
+  - [ ] **场采样 → (距离, 方位, 功率) 聚类** → 输出 RDF_RadarSample
+  - [ ] **检测点→实体**：占位表或每点一次查询（可选）
+
+---
+
+## 六、后续改进建议（EM 体素场）
 
 - [ ] **EMPassiveSensor 对接新 API**：将 `SampleSignalDescriptorAt` 改为对应新 `EMChunk` descriptor map
 - [ ] **EMFieldNetworkComponent 频率描述子**：`BroadcastDetections` 可补充频率/波形字段（需 `GetSignalDescriptorAt` 调用）
@@ -143,4 +156,4 @@
 
 ---
 
-*最后更新：2026-07-14，EM 体素场 Phase 5 完成 + 高级空间优化重构（两级分块 SOA / 惰性光线 / 三线性插值 / 时序 LoD / Morton 码）。*
+*最后更新：2026-03-17，新增「完全波/场基雷达」设计（docs/WAVE_BASED_RADAR_DESIGN.md），雷达检测可完全抛弃射线。*

@@ -59,6 +59,7 @@
 - `m_OriginAxisLength` (float): 三轴长度（默认 0.8）
 - `m_RenderWorld` (bool): 为 true 时渲染游戏画面+点云；为 false 时仅渲染点云（在相机前绘制黑色四边形遮挡场景，并通过 `SetCharacterCameraRenderActive(false)` 关闭场景渲染，默认 true）
 - `m_UseBatchedMesh` (bool): 为 true 时启用批量三角网格渲染（按颜色桶合并点/射线为较少的 Shape.CreateTris 调用），推荐在高射线计数 / 大点云场景下使用以减少绘制调用（默认 false）
+- `m_UseMaterialEffect` (bool): 为 true 且使用默认颜色策略时，点亮度/透明度按命中表面反射率（GameMaterial/BallisticInfo）缩放；若需按表面密度（g/cm³）着色且透明度随距离降低，请使用 `SetColorStrategy(new RDF_LidarMaterialColorStrategy())`（默认 false）
 
 ### RDF_LidarVisualizer
 主要方法：
@@ -84,7 +85,7 @@
 - `int BuildPointColor(float dist, bool hit, float lastRange, RDF_LidarVisualSettings settings)`
 - `int BuildRayColorAtT(float t, bool hit, RDF_LidarVisualSettings settings)`
 
-实现：`RDF_DefaultColorStrategy`、`RDF_IndexColorStrategy`、`RDF_ThreeColorStrategy`（近/中/远三段渐变，默认绿→黄→红）。
+实现：`RDF_DefaultColorStrategy`、`RDF_IndexColorStrategy`、`RDF_ThreeColorStrategy`（近/中/远三段渐变，默认绿→黄→红）、`RDF_LidarMaterialColorStrategy`（按表面密度 g/cm³ 着色：低密度蓝/青、高密度红/白，透明度随距离降低；点大小随密度微调，使用 `GameMaterial.GetBallisticInfo().GetDensity()`）。
 
 ## Util
 
@@ -102,6 +103,9 @@
 - `static void ExportLastScanToConsole(RDF_LidarVisualizer visualizer)` — 从 visualizer 取上次扫描并打印 CSV
 - `static bool ExportToFile(array<ref RDF_LidarSample> samples, string path)` — 将样本写入 CSV 文件（覆盖），成功返回 true
 - `static bool AppendToFile(array<ref RDF_LidarSample> samples, string path, bool writeHeaderIfNew = true)` — 追加样本到 CSV 文件，文件不存在时创建并可选写入表头
+- `static string GetLiveCSVHeader()` — 实时 CSV 表头（在基础列后增加 materialName, reflectivity, density, isWaterSurface）
+- `static string SampleToLiveCSVRow(RDF_LidarSample sample)` — 单条样本格式化为带材质列的 CSV 行
+- `static bool AppendLiveCSVToFile(array<ref RDF_LidarSample> samples, string path)` — 追加到实时 CSV（新文件写表头，已有文件只追加行）
 - `static string GetExtendedCSVHeader()` — 扩展 CSV 表头（含 time、origin、elevation、azimuth、subjectVel、subjectYaw、subjectPitch、scanId、frameIndex、entityClass，适用于 AI 训练）
 - `static string SampleToExtendedCSVRow(sample, currentTime, maxRange, subjectVel, subjectYaw, subjectPitch, scanId, frameIndex)` — 将单条样本格式化为扩展 CSV 行
 
@@ -181,6 +185,7 @@ Network 模块内置实现，基于 Rpl 同步状态与扫描结果。
 - `static void SetDemoUpdateInterval(float interval)` — 设置演示扫描更新间隔（秒）
 - `static void SetDemoTraceTargetMode(int mode)` — 设置 Trace 目标（0=仅地形, 1=全部, 2=仅实体）
 - `static void SetDemoTraceSmokeOcclusion(bool enable)` — 启用/禁用烟雾遮挡（TraceFlags.VISIBILITY）
+- `static void SetDemoWriteLiveCSV(bool enable)` — 为 true 时每次扫描将当前射线数据**追加**写入 `$profile:LiDAR/lidar_live_1.csv`（含表面材质：materialName, reflectivity, density, isWaterSurface）
 - `static void SetScanCompleteHandler(RDF_LidarScanCompleteHandler handler)` — 设置扫描完成回调（传 null 清除）
 - `static RDF_LidarScanCompleteHandler GetScanCompleteHandler()` — 获取当前回调
 - `static void SetDemoDrawOriginAxis(bool draw)` — 是否在 demo 中绘制扫描原点与三轴（对应 VisualSettings.m_DrawOriginAxis）
@@ -216,6 +221,7 @@ Network 模块内置实现，基于 Rpl 同步状态与扫描结果。
 - `bool m_RenderWorld` — 为 true 时渲染游戏画面+点云，为 false 时仅渲染点云（ApplyTo 时通过 SetDemoRenderWorld 应用）
 - `int m_TraceTargetMode` — Trace 目标：0=仅地形, 1=全部, 2=仅实体（ApplyTo 时通过 SetDemoTraceTargetMode 应用）
 - `bool m_TraceSmokeOcclusion` — 烟雾遮挡：为 true 时烟雾/粒子阻挡激光射线（ApplyTo 时通过 SetDemoTraceSmokeOcclusion 应用）
+- `bool m_WriteLiveCSV` — 为 true 时每次扫描**追加**写入 `$profile:LiDAR/lidar_live_1.csv`（默认 true；含表面材质列，不覆盖上次扫描）
 
 **预设工厂（替代原 RDF_*Demo.Start）：**
 - `static RDF_LidarDemoConfig CreateDefault(int rayCount = 256)`
@@ -320,11 +326,12 @@ RDF_LidarHUD.AttachToAutoRunner();  // HUD 自此随每次扫描自动更新
 | 标题栏 | `TextWidget` | `[>] LiDAR` + 当前模式 |
 | PPI 圆盘 | `CanvasWidget` (210×210) | 俯视点云图（相机朝向对齐） |
 | 距离环 | `LineDrawCommand` | 50% / 100% 量程环 |
-| 光点 | `PolygonDrawCommand` | 命中点，颜色编码距离（绿→黄→红） |
+| 光点 | `PolygonDrawCommand` | 命中点，按表面密度（g/cm³）着色，透明度随距离降低 |
 | 数据行 1 | `TextWidget` | Hits N/M，Range min–max |
-| 数据行 2 | `TextWidget` | 图例：Green=near Yellow=mid Red=far |
+| 数据行 2 | `TextWidget` | 图例：By density (g/cm³), alpha by distance |
 
 **注意事项**：
+- PPI 光点颜色：按表面**密度**（g/cm³）着色，**透明度随距离**降低（与 `RDF_LidarMaterialColorStrategy` 一致）；图例为 "By density (g/cm³), alpha by distance"。
 - PPI 视角与玩家**摄像机朝向**对齐（非世界 N 方向），罗盘标记为 F/B/L/R。
 - 刷新节流 `UPDATE_INTERVAL = 0.5 s`，防止高频回调导致闪烁。
 - `FeedSamples` 调用时若 AutoRunner 未在运行，`m_DisplayRange` 保持 `SetDisplayRange` 设置的值不变。
@@ -518,6 +525,7 @@ Network-aware scanner adapter:
 - `static void SetDemoRayCount(int rays)`
 - `static void SetDemoColorStrategy(RDF_LidarColorStrategy strategy)`
 - `static void SetDemoUpdateInterval(float interval)`
+- `static void SetDemoWriteLiveCSV(bool enable)` — when true, each scan **appends** to `$profile:LiDAR/lidar_live_1.csv` (with material columns; does not overwrite)
 - `static void SetScanCompleteHandler(RDF_LidarScanCompleteHandler handler)`
 - `static RDF_LidarScanCompleteHandler GetScanCompleteHandler()`
 - `static void SetDemoDrawOriginAxis(bool draw)`
@@ -538,6 +546,7 @@ Configuration object with factory presets (use `Create*()`):
 - `bool m_DrawOriginAxis`
 - `bool m_Verbose`
 - `bool m_RenderWorld`
+- `bool m_WriteLiveCSV` — when true, each scan **appends** to `$profile:LiDAR/lidar_live_1.csv` with material columns (default true)
 
 Factory presets: `CreateDefault`, `CreateThreeColor`, `CreateDefaultDebug`, `CreateHemisphere`, `CreateConical`, `CreateStratified`, `CreateScanline`, `CreateSweep`.
 
@@ -625,6 +634,7 @@ Size: 215 × (header 25 px + PPI 210 px + 2 data rows × 21 px)
 ```
 
 **Notes**:
+- PPI blip color: by surface **density** (g/cm³), **alpha by distance** (same as `RDF_LidarMaterialColorStrategy`); legend "By density (g/cm³), alpha by distance".
 - PPI orientation is **camera-aligned** (not world-north); compass markers are F/B/L/R.
 - Refresh is throttled: `UPDATE_INTERVAL = 0.5 s` to prevent high-frequency flicker.
 - When using `FeedSamples` without AutoRunner, `m_DisplayRange` keeps the value set by `SetDisplayRange`.
