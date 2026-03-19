@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## 2026-03-19（二）— 雷达模块具体实现
+
+### 新增（Radar）
+
+- **Core**：`RDF_RadarTypes.c`（目标类型枚举与 `RDF_RadarTarget`）、`RDF_RadarSettings.c`（范围、间隔、扇区、过滤开关）、`RDF_RadarEmitterRegistry.c`（主动雷达辐射注册表，可被其他雷达查询）、`RDF_RadarScanner.c`（实体优先 + 球内候选 + 射线判可见）、`RDF_RadarProjectileTracker.c`（抛射物多帧轨迹）。
+- **Util**：`RDF_RadarEntityClassifier.c`（抛射物/载具分类：ProjectileMoveComponent + 预制类名）。
+- **Demo**：`RDF_RadarComponent.c`（挂载到实体，扫描时在注册表标记发射）、`RDF_RadarAutoRunner.c`（本地主体 Demo 入口）、`RDF_RadarDemoConfig.c`（预设配置）、`RDF_RadarBootstrap.c`（每帧 Tick 驱动）。
+- 行为：扫描输出 `RDF_RadarTarget`（位置、距离、速度、类型：载具/抛射物/雷达辐射源）；抛射物通过 `RDF_RadarProjectileTracker` 维持轨迹；主动扫描时通过 `RDF_RadarEmitterRegistry` 注册，供对方雷达探测。
+
+### 说明
+
+- 雷达与 LiDAR 并存；雷达不依赖已移除的旧雷达代码，实现遵循 [RADAR_PLAN.md](RADAR_PLAN.md) 与 [RADAR_REQUIRED_APIS.md](RADAR_REQUIRED_APIS.md)。
+
+---
+
 ## 2026-03-19 — 移除雷达与体素场模块
 
 ### 移除内容

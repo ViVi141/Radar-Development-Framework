@@ -639,6 +639,65 @@ Size: 215 × (header 25 px + PPI 210 px + 2 data rows × 21 px)
 - Refresh is throttled: `UPDATE_INTERVAL = 0.5 s` to prevent high-frequency flicker.
 - When using `FeedSamples` without AutoRunner, `m_DisplayRange` keeps the value set by `SetDisplayRange`.
 
+## Radar (entity-first, projectiles + vehicles + emitting radars)
+
+### RDF_RadarTarget
+单条雷达目标。字段：`m_Entity`, `m_Position`, `m_Distance`, `m_Velocity`, `m_Type`（ERDF_RadarTargetType）, `m_Time`。
+
+### ERDF_RadarTargetType
+- `RDF_RADAR_TARGET_VEHICLE` — 载具/角色  
+- `RDF_RADAR_TARGET_PROJECTILE` — 炮弹/子弹  
+- `RDF_RADAR_TARGET_RADAR_EMITTER` — 正在辐射的雷达
+
+### RDF_RadarSettings
+- `m_Range`, `m_UpdateInterval`, `m_SectorHalfAngleDeg`, `m_IncludeVehicles`, `m_IncludeProjectiles`, `m_IncludeRadarEmitters`, `m_MaxTargets`, `m_MinDistance`；`void Validate()`。
+
+### RDF_RadarScanner
+- `void Scan(IEntity subject, array<ref RDF_RadarTarget> outTargets)` — 实体优先：GetActiveEntities + 扇区过滤 + 射线判可见，输出载具/抛射物/辐射雷达目标；抛射物取 `ProjectileMoveComponent.GetVelocity()`。
+
+### RDF_RadarEmitterRegistry（静态）
+- `Register(IEntity owner, vector worldPos, bool emitting, float strength)` — 注册/更新雷达辐射状态  
+- `Unregister(IEntity owner)` — 注销  
+- `SetEmitting(IEntity owner, bool emitting)` — 仅改发射状态  
+- `GetEmittingInSphere(center, radius, outTargets, worldTime)` — 在球内取正在辐射的雷达目标并写入 `array<ref RDF_RadarTarget>`。
+
+### RDF_RadarProjectileTracker
+- `void Update(array<ref RDF_RadarTarget> targets, float worldTimeSec)` — 用本帧扫描结果更新轨迹  
+- `RDF_RadarTrack GetTrajectory(IEntity entity)` — 取某实体的轨迹（最近 N 点）  
+- `array<ref RDF_RadarTrack> GetAllTracks()` — 全部轨迹。
+
+### RDF_RadarComponent（挂载到实体）
+- `SetEnabled(bool)` / `IsEnabled()`  
+- `GetSettings()`, `GetLastTargets()`, `GetTracker()`  
+- 扫描时在注册表标记发射，便于被其他雷达探测。
+
+### RDF_RadarVisualSettings
+- `m_DrawRays` (bool，默认 true)、`m_DrawPoints` (bool，默认 true)、`m_PointSize`、`m_RayAlpha`、`m_DrawOriginAxis`、`m_OriginAxisLength`。
+
+### RDF_RadarVisualizer
+- `void Render(IEntity subject, array<ref RDF_RadarTarget> targets)` — 从 subject 原点向每个目标画射线和点；颜色按类型：载具=绿、抛射物=红、辐射雷达=黄。  
+- `void Reset()` — 清空 Shape 缓存。  
+- `GetSettings()` — 返回 RDF_RadarVisualSettings。
+
+### RDF_RadarAutoRunner（Demo）
+- `SetDemoEnabled(bool)` / `IsDemoEnabled()` / `IsRunning()`  
+- `StartWithConfig(RDF_RadarSettings config)` / `SetDemoConfig(RDF_RadarSettings config)`  
+- `SetMinTickInterval(float)` / `GetMinTickInterval()` — 与 LiDAR 一致，Callqueue 节拍间隔。  
+- `GetLastTargets()`, `GetTracker()`, `GetDemoConfig()`  
+- `GetVisualizer()`, `GetVisualSettings()` — 默认**开启射线与点云绘制**（与 LiDAR 一致）；可通过 `GetVisualSettings().m_DrawRays` / `m_DrawPoints` 关闭。  
+- **默认与 LiDAR 一致**：单例 + CallLater 自驱动，**默认绘制射线+点云**，无需挂载 Bootstrap。
+
+### RDF_RadarDemoConfig
+- `CreateDefault(maxTargets)`  
+- `CreateLongRange(range, maxTargets)`  
+- `CreateProjectileOnly(maxTargets)`  
+
+### RDF_RadarEntityClassifier（静态）
+- `IsProjectile(IEntity)` — ProjectileMoveComponent 或预制类名含 Projectile/Missile  
+- `IsVehicleOrCharacter(IEntity)` — ChimeraCharacter 或类名含 Car/Vehicle/Tank/Character。
+
+---
+
 ## Logic-only (no visualizer)
 
 Use `RDF_LidarScanner` directly for logic-only scans; avoid creating a Visualizer to skip debug shapes. Example usage is provided in the README and above.

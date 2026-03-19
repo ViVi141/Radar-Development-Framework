@@ -27,6 +27,11 @@ scripts/Game/RDF/
     Util/       工具：主体解析、CSV 导出、统计/过滤、回调
     Demo/       演示：AutoRunner、DemoConfig、Cycler、Bootstrap
     Network/    网络：服务器权威同步
+  Radar/
+    Core/       雷达核心：类型、设置、辐射注册表、扫描器、抛射物追踪
+    Visual/    可视化：射线与点云绘制（RDF_RadarVisualSettings、RDF_RadarVisualizer）
+    Util/       实体分类（抛射物/载具）
+    Demo/       组件、AutoRunner、DemoConfig、Bootstrap
 
 docs/
   API.md                  LiDAR API 参考
@@ -72,6 +77,38 @@ SCR_BaseGameMode.SetBootstrapEnabled(true);
 
 ---
 
+## 快速上手 — 雷达（与 LiDAR 一致，Callqueue 自驱动，默认绘制射线+点云）
+
+**要让雷达 Demo 在进图后自动显示**，任选其一即可：
+
+1. **GameMode 里启用雷达 Bootstrap**（与 LiDAR 同一处）：在游戏模式或初始化里调用  
+   `SCR_BaseGameMode.SetRadarBootstrapEnabled(true);`  
+   则 `OnGameStart()` 时会自动执行 `StartWithConfig` + `SetDemoEnabled(true)`。
+2. **在场景里挂组件**：给任意实体挂上 **RDF_RadarBootstrap** 组件，该实体会在 EOnInit 时启动雷达 Demo。
+
+```c
+// 或在脚本里手动一步启动（无需挂组件时）
+RDF_RadarAutoRunner.StartWithConfig(RDF_RadarDemoConfig.CreateDefault(64));
+RDF_RadarAutoRunner.StartWithConfig(RDF_RadarDemoConfig.CreateLongRange(5000.0, 32));
+RDF_RadarAutoRunner.StartWithConfig(RDF_RadarDemoConfig.CreateProjectileOnly(128));
+
+// 开关
+RDF_RadarAutoRunner.SetDemoEnabled(true);
+RDF_RadarAutoRunner.SetDemoEnabled(false);
+
+// 取结果与轨迹
+array<ref RDF_RadarTarget> targets = RDF_RadarAutoRunner.GetLastTargets();
+RDF_RadarProjectileTracker tracker = RDF_RadarAutoRunner.GetTracker();
+
+// 可选：关闭/开启射线或点云
+RDF_RadarAutoRunner.GetVisualSettings().m_DrawRays = false;
+RDF_RadarAutoRunner.GetVisualSettings().m_DrawPoints = true;
+```
+
+雷达 Demo 默认通过 Callqueue 自驱动，**默认开启射线与点云绘制**（载具=绿、抛射物=红、辐射雷达=黄）；可通过 `GetVisualSettings()` 调节。
+
+---
+
 ## 扩展点
 
 - **采样策略**：实现 `RDF_LidarSampleStrategy::BuildDirection()` 并注入
@@ -88,6 +125,8 @@ SCR_BaseGameMode.SetBootstrapEnabled(true);
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 架构、模块布局、数据流、扩展指南 |
 | [docs/OPTIMIZATION_AND_MEMORY.md](docs/OPTIMIZATION_AND_MEMORY.md) | 优化与内存防护 |
 | [docs/VEHICLE_RADAR_LOCK_GUIDE.md](docs/VEHICLE_RADAR_LOCK_GUIDE.md) | 载具扫描/锁定/武器打击实现指南（通用，不依赖已移除的雷达模块） |
+| [docs/RADAR_PLAN.md](docs/RADAR_PLAN.md) | 雷达模块计划需求（炮弹追踪、雷达可被探测、主动/被动） |
+| [docs/RADAR_REQUIRED_APIS.md](docs/RADAR_REQUIRED_APIS.md) | 雷达系统所需游戏 API 列表与验证（api_search） |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本更新历史 |
 
 ---

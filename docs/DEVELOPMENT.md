@@ -195,6 +195,12 @@ canvas.SetDrawCommands(drawCmds);
 
 ---
 
+## 已知控制台警告（与 RDF 无关）
+
+- `SCR_CustomArrayEditableEntityUIComponent tried to set the UI color but the EditableEntity is not using SCR_ColorUIInfo`：来自基 game 的编辑器/UI 脚本，与 RDF 雷达/LiDAR 无关，可忽略。
+
+---
+
 ## 性能建议
 
 - 降低 `m_RayCount`（默认 512）或增大 `m_MinTickInterval`
