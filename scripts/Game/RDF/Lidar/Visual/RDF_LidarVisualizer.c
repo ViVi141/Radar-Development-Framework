@@ -319,9 +319,9 @@ class RDF_LidarVisualizer
         // Use a much thinner quad for ray geometry so it visually matches debug lines more closely.
         float rayHalfWidth = defaultPointSize * 0.2; // visual thickness for ray-quads
 
-        for (int si = 0; si < drawLimit; si++)
+        for (int sampleIdx = 0; sampleIdx < drawLimit; sampleIdx++)
         {
-            RDF_LidarSample sample = samples.Get(si);
+            RDF_LidarSample sample = samples.Get(sampleIdx);
             if (m_Settings.m_ShowHitsOnly && !sample.m_Hit)
                 continue;
 
