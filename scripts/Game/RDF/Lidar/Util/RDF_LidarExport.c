@@ -199,7 +199,6 @@ class RDF_LidarExport
     }
 
     // Serialize samples to compact CSV string for network broadcast (see RFC in code comments).
-    // Serialize samples to compact CSV string for network broadcast (see RFC in code comments).
     // Optional: quantize floats to reduce size and optionally apply simple RLE compression.
     static string SamplesToCSV(array<ref RDF_LidarSample> samples, bool compress = false, int decimalPlaces = 3)
     {
@@ -251,9 +250,11 @@ class RDF_LidarExport
 
         array<string> parts = new array<string>();
         csv.Split(";", parts, false);
+        array<string> f = new array<string>();
+        array<string> vals = new array<string>();
         foreach (string part : parts)
         {
-            array<string> f = new array<string>();
+            f.Clear();
             part.Split("|", f, false);
             if (f.Count() < 6)
                 continue;
@@ -261,8 +262,8 @@ class RDF_LidarExport
             int idx = f.Get(0).ToInt();
             bool hit = f.Get(1) == "1";
 
-            array<string> vals = new array<string>();
             // start
+            vals.Clear();
             f.Get(2).Split(",", vals, false);
             if (vals.Count() < 3) continue; // malformed start
             vector start = Vector(vals.Get(0).ToFloat(), vals.Get(1).ToFloat(), vals.Get(2).ToFloat());

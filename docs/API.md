@@ -8,7 +8,7 @@
 字段：
 - `m_Enabled` (bool): 是否启用扫描（默认 true）
 - `m_Range` (float): 扫描半径（默认 50.0）。在运行时会被 clamp 到 [0.1, 100000.0]（100 km，与雷达远程配置对齐）
-- `m_RayCount` (int): 射线数量（默认 512）。在运行时保证至少为 1，无上限
+- `m_RayCount` (int): 射线数量（默认 512）。在运行时保证至少为 1，无上限。建议不超过 100000，3D 绘制时单帧最多绘制 50000 条（见 OPTIMIZATION_AND_MEMORY.md）
 - `m_UpdateInterval` (float): 扫描间隔（秒，默认 5.0），最小值 0.01
 - `m_OriginOffset` (vector): 扫描原点偏移（默认 "0 0 0"），与 `m_UseLocalOffset` 配合使用
 - `m_TraceTargetMode` (ETraceTargetMode): 射线检测目标，对应 0=仅地形, 1=全部, 2=仅实体。Validate() 据此更新 m_TraceFlags
@@ -66,7 +66,7 @@
 - `RDF_LidarVisualizer(RDF_LidarVisualSettings settings = null)` — 构造函数
 - `void Render(IEntity subject, RDF_LidarScanner scanner)` — 执行扫描并绘制点云。
 - `RDF_LidarVisualSettings GetSettings()`
-- `ref array<ref RDF_LidarSample> GetLastSamples()` — 返回最近一次渲染样本的防御性副本（对返回数组的修改不会影响 visualizer 内部状态）
+- `ref array<ref RDF_LidarSample> GetLastSamples()` — 返回最近一次渲染样本的防御性副本（对返回数组的修改不会影响 visualizer 内部状态）。每次调用会分配新数组，避免每帧频繁调用以减轻 GC 压力（见 OPTIMIZATION_AND_MEMORY.md）。
 
 颜色策略：可用 `RDF_LidarColorStrategy` 替换默认色彩映射。需自定义导出时，使用 `GetLastSamples()` 取得数据后自行处理（如 CSV/JSON）。
 

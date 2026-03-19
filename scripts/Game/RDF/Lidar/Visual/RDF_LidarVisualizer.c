@@ -1,6 +1,9 @@
 // LiDAR point cloud visualizer using debug shapes.
 class RDF_LidarVisualizer
 {
+    // Cap samples drawn per frame to avoid memory overflow with huge ray counts
+    protected static const int MAX_DRAW_RAYS = 50000;
+
     protected ref RDF_LidarVisualSettings m_Settings;
     protected ref array<ref Shape> m_DebugShapes;
     protected ref array<ref RDF_LidarSample> m_Samples;
@@ -82,15 +85,16 @@ class RDF_LidarVisualizer
                        || m_Settings.m_DrawOriginAxis
                        || !m_Settings.m_RenderWorld;
 
-        // Pre-allocate shape array only when something will actually be drawn.
+        // Pre-allocate shape array only when something will actually be drawn. Cap to avoid OOM.
         if (hasVisuals && m_DebugShapes)
         {
             m_DebugShapes.Clear();
+            int drawRays = Math.Min(rays, MAX_DRAW_RAYS);
             int segs = Math.Max(1, m_Settings.m_RaySegments);
             int extraPoint = 0;
             if (m_Settings.m_DrawPoints)
                 extraPoint = 1;
-            int estShapes = 16 + rays * (segs + extraPoint);
+            int estShapes = 16 + drawRays * (segs + extraPoint);
             m_DebugShapes.Reserve(estShapes);
         }
 
@@ -114,14 +118,16 @@ class RDF_LidarVisualizer
         if (m_Settings.m_DrawOriginAxis && m_Samples.Count() > 0)
             DrawOriginAxis(subject, m_Samples.Get(0).m_Start);
 
+        int drawLimit = Math.Min(m_Samples.Count(), MAX_DRAW_RAYS);
         if (m_Settings.m_UseBatchedMesh)
         {
-            DrawBatchedMeshes(subject, m_Samples);
+            DrawBatchedMeshes(subject, m_Samples, drawLimit);
         }
         else
         {
-            foreach (RDF_LidarSample sample : m_Samples)
+            for (int i = 0; i < drawLimit; i++)
             {
+                RDF_LidarSample sample = m_Samples.Get(i);
                 if (m_Settings.m_ShowHitsOnly && !sample.m_Hit)
                     continue;
 
@@ -155,7 +161,8 @@ class RDF_LidarVisualizer
                 m_LastRange = 50.0;
         }
 
-        // Pre-allocate arrays to reduce per-frame reallocations
+        // Pre-allocate arrays to reduce per-frame reallocations. Cap draw count to avoid OOM.
+        int drawLimit = Math.Min(samples.Count(), MAX_DRAW_RAYS);
         if (m_DebugShapes)
         {
             m_DebugShapes.Clear();
@@ -163,7 +170,7 @@ class RDF_LidarVisualizer
             int extraPoint = 0;
             if (m_Settings.m_DrawPoints)
                 extraPoint = 1;
-            int estShapes = 16 + samples.Count() * (segs + extraPoint);
+            int estShapes = 16 + drawLimit * (segs + extraPoint);
             m_DebugShapes.Reserve(estShapes);
         }
 
@@ -185,12 +192,13 @@ class RDF_LidarVisualizer
 
         if (m_Settings.m_UseBatchedMesh)
         {
-            DrawBatchedMeshes(subject, m_Samples);
+            DrawBatchedMeshes(subject, m_Samples, drawLimit);
         }
         else
         {
-            foreach (RDF_LidarSample sample : m_Samples)
+            for (int i = 0; i < drawLimit; i++)
             {
+                RDF_LidarSample sample = m_Samples.Get(i);
                 if (m_Settings.m_ShowHitsOnly && !sample.m_Hit)
                     continue;
 
@@ -272,9 +280,17 @@ class RDF_LidarVisualizer
     // Batched mesh renderer: builds GPU-friendly triangle lists per-color-bucket and issues far fewer Shape calls.
     // - Groups ray-segments and point billboards into color buckets (<= m_RaySegments buckets).
     // - Produces one Shape.CreateTris() call per non-empty bucket (hits / misses separate), drastically reducing overhead.
-    protected void DrawBatchedMeshes(IEntity subject, array<ref RDF_LidarSample> samples)
+    // - maxSamplesToDraw caps how many samples are drawn to avoid memory overflow (use samples.Count() for no cap).
+    protected void DrawBatchedMeshes(IEntity subject, array<ref RDF_LidarSample> samples, int maxSamplesToDraw = -1)
     {
         if (!m_DebugShapes || !samples || samples.Count() == 0 || !m_Settings)
+            return;
+        int drawLimit;
+        if (maxSamplesToDraw >= 0)
+            drawLimit = Math.Min(samples.Count(), maxSamplesToDraw);
+        else
+            drawLimit = samples.Count();
+        if (drawLimit <= 0)
             return;
 
         PlayerController controller = GetGame().GetPlayerController();
@@ -303,8 +319,9 @@ class RDF_LidarVisualizer
         // Use a much thinner quad for ray geometry so it visually matches debug lines more closely.
         float rayHalfWidth = defaultPointSize * 0.2; // visual thickness for ray-quads
 
-        foreach (RDF_LidarSample sample : samples)
+        for (int si = 0; si < drawLimit; si++)
         {
+            RDF_LidarSample sample = samples.Get(si);
             if (m_Settings.m_ShowHitsOnly && !sample.m_Hit)
                 continue;
 
@@ -370,8 +387,9 @@ class RDF_LidarVisualizer
         // Draw spherical points (preserve original point/sphere appearance)
         if (m_Settings.m_DrawPoints)
         {
-            foreach (RDF_LidarSample spt : samples)
+            for (int pi = 0; pi < drawLimit; pi++)
             {
+                RDF_LidarSample spt = samples.Get(pi);
                 if (m_Settings.m_ShowHitsOnly && !spt.m_Hit)
                     continue;
                 DrawPointFromSample(spt);

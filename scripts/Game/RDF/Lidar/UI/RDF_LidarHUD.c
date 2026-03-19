@@ -66,6 +66,8 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
 
     // Min update interval (seconds) to prevent flickering
     static const float UPDATE_INTERVAL = 0.5;
+    // Max blips drawn per PPI update to avoid memory overflow from huge scans
+    static const int PPI_MAX_BLIPS = 1024;
 
     // ---- singleton ----
     protected static ref RDF_LidarHUD s_Instance;
@@ -389,7 +391,11 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
         if (!m_Canvas || !m_StaticCmds || !samples || samples.Count() == 0)
             return;
 
-        m_AllCmds = new array<ref CanvasWidgetCommand>();
+        // Reuse m_AllCmds to avoid per-frame allocation (memory optimization)
+        if (m_AllCmds)
+            m_AllCmds.Clear();
+        else
+            m_AllCmds = new array<ref CanvasWidgetCommand>();
         foreach (CanvasWidgetCommand cmd : m_StaticCmds)
             m_AllCmds.Insert(cmd);
 
@@ -435,8 +441,11 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
             step = 1;
 
         int hitIndex = 0;
+        int blipsAdded = 0;
         foreach (RDF_LidarSample s : samples)
         {
+            if (blipsAdded >= PPI_MAX_BLIPS)
+                break;
             if (!s || !s.m_Hit)
                 continue;
             if (hitIndex % step != 0)
@@ -481,6 +490,7 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
             blip.m_iColor   = blipCol;
             blip.m_Vertices = blipVerts;
             m_AllCmds.Insert(blip);
+            blipsAdded = blipsAdded + 1;
         }
 
         m_Canvas.SetDrawCommands(m_AllCmds);

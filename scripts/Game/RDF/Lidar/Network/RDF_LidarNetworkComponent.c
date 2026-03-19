@@ -31,6 +31,7 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 
 	// Chunking and assembly helpers
 	const int RDF_MAX_CSV_CHUNK = 1000; // bytes per unreliable RPC chunk
+	const int RDF_MAX_PAYLOAD_BUFFERS = 16; // cap to prevent unbounded memory growth
 	protected int m_ScanSerial = 0;
 	protected ref array<ref RDF_ScanPayloadBuffer> m_PayloadBuffers;
 
@@ -295,6 +296,9 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 
 		if (!buf)
 		{
+			// Cap buffer count to avoid unbounded memory growth (e.g. missing last chunk)
+			while (m_PayloadBuffers.Count() >= RDF_MAX_PAYLOAD_BUFFERS)
+				m_PayloadBuffers.Remove(0);
 			buf = new RDF_ScanPayloadBuffer(serial);
 			m_PayloadBuffers.Insert(buf);
 		}
@@ -345,11 +349,13 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
 				assembled += part;
 			}
 
-			array<ref RDF_LidarSample> samples = RDF_LidarExport.ParseCSVToSamples(assembled);		if (!samples || samples.Count() == 0)
-		{
-			if (m_Verbose)
-				Print("RDF_LidarNetworkComponent: Parsed assembled CSV but got 0 samples (possible corruption)", LogLevel.WARNING);
-		}			ApplyLocalScanResults(samples);
+			array<ref RDF_LidarSample> samples = RDF_LidarExport.ParseCSVToSamples(assembled);
+			if (!samples || samples.Count() == 0)
+			{
+				if (m_Verbose)
+					Print("RDF_LidarNetworkComponent: Parsed assembled CSV but got 0 samples (possible corruption)", LogLevel.WARNING);
+			}
+			ApplyLocalScanResults(samples);
 			// cleanup buffer
 			m_PayloadBuffers.RemoveItem(buf);
 		}

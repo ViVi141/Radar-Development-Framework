@@ -170,6 +170,16 @@ class RDF_LidarNetworkScanner
 			return;
 		}
 
+		// Cap poller count to prevent unbounded growth if ScanAsync is called repeatedly
+		const int RDF_MAX_POLLERS = 8;
+		if (s_Pollers && s_Pollers.Count() >= RDF_MAX_POLLERS)
+		{
+			scanner.Scan(subject, outSamples);
+			if (handler)
+				handler.OnScanComplete(outSamples);
+			return;
+		}
+
 		// Request server scan once, then poll for results asynchronously
 		api.RequestScan();
 		RDF_LidarNetworkScannerPoller p = new RDF_LidarNetworkScannerPoller(subject, scanner, outSamples, api, timeoutSeconds, handler);
