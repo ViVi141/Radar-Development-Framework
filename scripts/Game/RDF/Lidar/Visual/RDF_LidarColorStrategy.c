@@ -52,7 +52,7 @@ class RDF_DefaultColorStrategy : RDF_LidarColorStrategy
     {
         if (settings.m_UseMaterialEffect && sample && sample.m_Hit && sample.m_Surface)
         {
-            float refl = RDF_RCSModel.GetReflectivityFromGameMaterial(sample.m_Surface, "");
+            float refl = RDF_LidarMaterialReflectivity.GetReflectivityFromGameMaterial(sample.m_Surface, "");
             float brightness = 0.5 + 0.5 * refl;
             float alpha = 0.5 + 0.5 * refl;
             if (alpha > 1.0)
@@ -75,7 +75,7 @@ class RDF_DefaultColorStrategy : RDF_LidarColorStrategy
         float baseSize = settings.m_PointSize;
         if (settings.m_UseMaterialEffect && sample && sample.m_Hit && sample.m_Surface)
         {
-            float refl = RDF_RCSModel.GetReflectivityFromGameMaterial(sample.m_Surface, "");
+            float refl = RDF_LidarMaterialReflectivity.GetReflectivityFromGameMaterial(sample.m_Surface, "");
             baseSize = baseSize * (0.85 + 0.3 * refl);
         }
         if (settings.m_UseDistanceGradient)

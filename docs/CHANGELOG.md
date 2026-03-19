@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## 2026-03-19 — 移除雷达与体素场模块
+
+### 移除内容
+
+- **Radar 模块**：删除 `scripts/Game/RDF/Radar/` 下全部代码与数据（核心、物理、模式、可视化、Demo、HUD、测试、ECM、分类、工具等），以及 `RDF_RadarAutoBootstrap` 对 `SCR_BaseGameMode` 的 modded 雷达自启动。
+- **EM 体素场模块**：删除 `scripts/Game/RDF/EM/` 下全部代码（EMVoxelField、EMChunk、EMPassiveSensor、网络组件、调试可视化、测试）。
+- **文档**：删除 `WAVE_BASED_RADAR_DESIGN.md`、`RADAR_TUTORIAL.md`、`RADAR_API.md`、`DESIGN_EVALUATION.md`。
+
+### 保留与更新
+
+- **LiDAR**：完整保留，为当前唯一传感器模块。
+- **文档**：README、API.md、DEVELOPMENT.md、FUTURE_PLAN.md、TODO.md、VEHICLE_RADAR_LOCK_GUIDE.md 已更新为仅 LiDAR 或通用实现指南（载具锁定见 VEHICLE_RADAR_LOCK_GUIDE，不再引用已移除的雷达/体素场）。
+
+---
+
 ## 2026-03-17 — 文档与 LiDAR 行为说明更新
 
 ### 文档更新

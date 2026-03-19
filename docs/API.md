@@ -1,4 +1,4 @@
-# API Reference — Radar Development Framework (LiDAR)
+# API Reference — RDF (LiDAR)
 
 此文档为第一版 API 摘要，覆盖主要公开类与要点。
 
@@ -7,7 +7,7 @@
 ### RDF_LidarSettings
 字段：
 - `m_Enabled` (bool): 是否启用扫描（默认 true）
-- `m_Range` (float): 扫描半径（默认 50.0）。在运行时会被 clamp 到 [0.1, 100000.0]（100 km，与雷达远程配置对齐）
+- `m_Range` (float): 扫描半径（默认 50.0）。在运行时会被 clamp 到 [0.1, 100000.0]（100 km）
 - `m_RayCount` (int): 射线数量（默认 512）。在运行时保证至少为 1，无上限。建议不超过 100000，3D 绘制时单帧最多绘制 50000 条（见 OPTIMIZATION_AND_MEMORY.md）
 - `m_UpdateInterval` (float): 扫描间隔（秒，默认 5.0），最小值 0.01
 - `m_OriginOffset` (vector): 扫描原点偏移（默认 "0 0 0"），与 `m_UseLocalOffset` 配合使用
@@ -370,7 +370,7 @@ if (closest)
 
 ## English translation
 
-# API Reference — Radar Development Framework (LiDAR)
+# API Reference — RDF (LiDAR)
 
 This document is the first-version API summary covering the main public classes and highlights.
 
@@ -379,7 +379,7 @@ This document is the first-version API summary covering the main public classes 
 ### RDF_LidarSettings
 Fields:
 - `m_Enabled` (bool): enable scanning (default true)
-- `m_Range` (float): scan radius (default 50.0). Clamped at runtime to [0.1, 100000.0] (100 km, aligned with radar long-range configurations)
+- `m_Range` (float): scan radius (default 50.0). Clamped at runtime to [0.1, 100000.0] (100 km)
 - `m_RayCount` (int): number of rays (default 512). At runtime guaranteed to be at least 1.
 - `m_UpdateInterval` (float): scan interval in seconds (default 5.0), minimum 0.01
 - `m_OriginOffset` (vector): origin offset (default "0 0 0"), used with `m_UseLocalOffset`

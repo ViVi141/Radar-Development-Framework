@@ -50,7 +50,7 @@ class RDF_LidarExport
             string n = sample.m_Surface.GetName();
             if (n)
                 matName = n;
-            refl = RDF_RCSModel.GetReflectivityFromGameMaterial(sample.m_Surface, "");
+            refl = RDF_LidarMaterialReflectivity.GetReflectivityFromGameMaterial(sample.m_Surface, "");
             BallisticInfo bi = sample.m_Surface.GetBallisticInfo();
             if (bi)
             {
