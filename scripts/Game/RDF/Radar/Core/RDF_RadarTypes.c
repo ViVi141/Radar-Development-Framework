@@ -29,6 +29,12 @@ class RDF_RadarTarget
     float m_ClutterToNoiseDb;
     float m_SnrDb;
     bool m_Detected;
+    // True when TraceMove was blocked before the target (terrain/entity occluder).
+    bool m_LosBlocked;
+    // Trace hit fraction toward the target point (1 = reached end / clear).
+    float m_LosHitFraction;
+    // Power scale: 1 for direct path; <1 for NLOS ground-bounce approximation.
+    float m_MultipathFactor;
     string m_BeamName;
     int m_ScanNumber;
 }

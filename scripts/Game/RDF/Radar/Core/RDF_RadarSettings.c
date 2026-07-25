@@ -1,4 +1,4 @@
-// Core scan settings for radar (entity-first, visibility ray).
+// Core scan settings for radar (entity-first, visibility ray + optional NLOS).
 class RDF_RadarSettings
 {
     bool m_Enabled = true;
@@ -22,6 +22,14 @@ class RDF_RadarSettings
     int m_DemCacheMaxTiles = RDF_DemBakeConstants.RUNTIME_DEM_CACHE_MAX_TILES;
     int m_DemTileLoadsPerScan = RDF_DemBakeConstants.RUNTIME_DEM_LOADS_PER_SCAN;
     float m_DemClutterScale = 1.0;
+    // When Trace is blocked, still attempt a weakened ground-bounce path.
+    bool m_EnableNlosMultipath = true;
+    // |Gamma| for NLOS-only bounce power (~Gamma^2 * geometric path factor).
+    float m_NlosReflectionAbs = 0.55;
+    // Discard NLOS candidates weaker than this power scale.
+    float m_NlosMinFactor = 0.008;
+    // Skip bounce model for high-flying targets (AGL).
+    float m_NlosMaxTargetAglM = 800.0;
     // Optional receiver-side EW/noise injection after processing.
     float m_AdditionalNoisePowerW = 0.0;
     ref RDF_RadarEwStack m_EwStack;
@@ -43,6 +51,9 @@ class RDF_RadarSettings
         m_DemCacheMaxTiles = Math.Clamp(m_DemCacheMaxTiles, 1, 256);
         m_DemTileLoadsPerScan = Math.Clamp(m_DemTileLoadsPerScan, 0, 64);
         m_DemClutterScale = Math.Clamp(m_DemClutterScale, 0.0, 1000.0);
+        m_NlosReflectionAbs = Math.Clamp(m_NlosReflectionAbs, 0.0, 1.0);
+        m_NlosMinFactor = Math.Clamp(m_NlosMinFactor, 0.0, 1.0);
+        m_NlosMaxTargetAglM = Math.Clamp(m_NlosMaxTargetAglM, 10.0, 20000.0);
         m_AdditionalNoisePowerW = Math.Max(0.0, m_AdditionalNoisePowerW);
         if (!m_Hardware)
             m_Hardware = RDF_RadarHardware.CreateShorad();

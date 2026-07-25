@@ -5,6 +5,7 @@
 ### 新增与增强（Radar / DEM）
 
 - **物理链路**：硬件参数、雷达方程、多普勒、MTI、SNR；α-β 跟踪；EW 附加噪声钩子。
+- **NLOS 多径**：`TraceMove` 遮挡后不再一律丢弃；默认启用地面反射弱检（`m_EnableNlosMultipath`），功率按 image-method 路径与 `|Gamma|^2` 衰减后再过 SNR；PPI 青色为 NLOS 检出。
 - **DEM**：Workbench 烘焙 V3 CSV；运行时 `RDF_DemRuntimeLoader` / `RDF_DemRuntimeCache`（LRU）；雷达杂波功率接入。
 - **UI / 测试**：PPI HUD；`RDF_RadarAutoTest`（DEM 杂波回归）；`RDF_RadarAirborneScanTest`（空中目标）。
 - **离线**：`tools/dem/` Python 雷达物理框架与 Demo。

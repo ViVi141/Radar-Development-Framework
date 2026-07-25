@@ -1,5 +1,6 @@
-// Radar scanner: entity-first scan with visibility ray. Detects vehicles, projectiles,
-// and emitting radars (from registry). Uses GetActiveEntities + sector + TraceMove.
+// Radar scanner: entity-first scan with Trace LOS gate and optional NLOS ground-bounce.
+// Detects vehicles, projectiles, and emitting radars. Uses GetActiveEntities + sector
+// + TraceMove; blocked targets may still pass via weakened multipath + SNR.
 class RDF_RadarScanner
 {
     protected static const float DEG_TO_RAD = 0.0174532925199;
@@ -137,7 +138,8 @@ class RDF_RadarScanner
             param.End = pos;
             param.TraceEnt = null;
             float hitFraction = world.TraceMove(param, null);
-            if (param.TraceEnt != ent)
+            bool losClear = IsLineOfSightClear(hitFraction, param.TraceEnt, ent);
+            if (!losClear && !m_Settings.m_EnableNlosMultipath)
                 continue;
 
             RDF_RadarTarget t = new RDF_RadarTarget();
@@ -150,7 +152,10 @@ class RDF_RadarScanner
             else
                 t.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_VEHICLE;
             t.m_Time = worldTime;
-            ProcessPhysicalDetection(t, origin, forward, worldTime);
+            t.m_LosBlocked = !losClear;
+            t.m_LosHitFraction = hitFraction;
+            t.m_MultipathFactor = 1.0;
+            ProcessPhysicalDetection(t, origin, forward, worldTime, world);
             if (t.m_Detected || m_Settings.m_KeepUndetected)
                 outTargets.Insert(t);
         }
@@ -172,12 +177,33 @@ class RDF_RadarScanner
                 float dotE = forward[0] * toENorm[0] + forward[1] * toENorm[1] + forward[2] * toENorm[2];
                 if (dotE < cosHalfAngle)
                     continue;
+
+                param.Start = origin;
+                param.End = et.m_Position;
+                param.TraceEnt = null;
+                float hitFractionE = world.TraceMove(param, null);
+                bool losClearE = IsLineOfSightClear(hitFractionE, param.TraceEnt, et.m_Entity);
+                if (!losClearE && !m_Settings.m_EnableNlosMultipath)
+                    continue;
+
                 et.m_Velocity = GetEntityVelocity(et.m_Entity);
-                ProcessPhysicalDetection(et, origin, forward, worldTime);
+                et.m_LosBlocked = !losClearE;
+                et.m_LosHitFraction = hitFractionE;
+                et.m_MultipathFactor = 1.0;
+                ProcessPhysicalDetection(et, origin, forward, worldTime, world);
                 if (et.m_Detected || m_Settings.m_KeepUndetected)
                     outTargets.Insert(et);
             }
         }
+    }
+
+    protected static bool IsLineOfSightClear(float hitFraction, IEntity traceEnt, IEntity target)
+    {
+        if (traceEnt == target)
+            return true;
+        if (hitFraction >= 0.999)
+            return true;
+        return false;
     }
 
     protected static vector GetEntityPosition(IEntity entity)
@@ -210,7 +236,8 @@ class RDF_RadarScanner
         RDF_RadarTarget target,
         vector origin,
         vector scanForward,
-        float worldTime)
+        float worldTime,
+        BaseWorld world)
     {
         if (!target)
             return;
@@ -221,12 +248,17 @@ class RDF_RadarScanner
         target.m_DemSampleValid = false;
         target.m_ClutterPowerW = 0.0;
         target.m_ClutterToNoiseDb = -300.0;
+        if (target.m_LosHitFraction <= 0.0 && !target.m_LosBlocked)
+            target.m_LosHitFraction = 1.0;
+        if (target.m_MultipathFactor <= 0.0)
+            target.m_MultipathFactor = 1.0;
 
         vector toTarget = target.m_Position - origin;
         float distance = toTarget.Length();
         if (distance <= 0.001)
         {
             target.m_Detected = false;
+            target.m_MultipathFactor = 0.0;
             return;
         }
 
@@ -248,6 +280,25 @@ class RDF_RadarScanner
             + target.m_Velocity[1] * los[1]
             + target.m_Velocity[2] * los[2]);
 
+        if (target.m_LosBlocked)
+        {
+            target.m_MultipathFactor = ComputeNlosMultipathFactor(
+                origin,
+                target.m_Position,
+                distance,
+                target.m_LosHitFraction,
+                world);
+            if (target.m_MultipathFactor <= 0.0)
+            {
+                target.m_Detected = false;
+                return;
+            }
+        }
+        else
+        {
+            target.m_MultipathFactor = 1.0;
+        }
+
         RDF_RadarHardware hardware = m_Settings.m_Hardware;
         if (!m_Settings.m_EnablePhysicalDetection || !hardware)
             return;
@@ -259,6 +310,8 @@ class RDF_RadarScanner
             elevationDeg,
             beamName);
         target.m_BeamName = beamName;
+        if (target.m_LosBlocked)
+            target.m_BeamName = beamName + "/nlos";
 
         target.m_RcsM2 = RDF_RadarRcsModel.GetEntityRcsM2(
             target.m_Entity,
@@ -271,6 +324,7 @@ class RDF_RadarScanner
             target.m_RcsM2,
             distance,
             patternGain);
+        target.m_ReceivedPowerW = target.m_ReceivedPowerW * target.m_MultipathFactor;
 
         float wavelength = hardware.GetWavelengthM();
         target.m_DopplerHz = RDF_RadarClutterModel.DopplerHz(
@@ -405,6 +459,73 @@ class RDF_RadarScanner
             clutterMti = 0.000001;
 
         return receivedClutter * processingGain * clutterMti;
+    }
+
+    // NLOS-only bounce scale using image-method path length and |Gamma|^2.
+    // Early Trace blockers further weaken the return (hitFraction small).
+    protected float ComputeNlosMultipathFactor(
+        vector origin,
+        vector targetPos,
+        float distance,
+        float hitFraction,
+        BaseWorld world)
+    {
+        if (!m_Settings || !m_Settings.m_EnableNlosMultipath)
+            return 0.0;
+        if (distance < 1.0)
+            return 0.0;
+
+        float originTerrainY = SampleTerrainY(origin[0], origin[2], world);
+        float targetTerrainY = SampleTerrainY(targetPos[0], targetPos[2], world);
+
+        float hr = origin[1] - originTerrainY;
+        float ht = targetPos[1] - targetTerrainY;
+        if (hr < 0.5)
+            hr = 0.5;
+        if (ht < 0.5)
+            ht = 0.5;
+        if (ht > m_Settings.m_NlosMaxTargetAglM)
+            return 0.0;
+
+        float sumH = hr + ht;
+        float bounceRange = Math.Sqrt(distance * distance + sumH * sumH);
+        if (bounceRange < 1.0)
+            return 0.0;
+
+        float ratio = distance / bounceRange;
+        float geom = ratio * ratio * ratio * ratio;
+        float gamma = m_Settings.m_NlosReflectionAbs;
+        float factor = gamma * gamma * geom;
+
+        float depthScale = hitFraction;
+        if (depthScale < 0.2)
+            depthScale = 0.2;
+        if (depthScale > 1.0)
+            depthScale = 1.0;
+        factor = factor * depthScale;
+
+        if (factor < m_Settings.m_NlosMinFactor)
+            return 0.0;
+        if (factor > 1.0)
+            factor = 1.0;
+        return factor;
+    }
+
+    protected float SampleTerrainY(float worldX, float worldZ, BaseWorld world)
+    {
+        RDF_DemRuntimeCellSample demSample;
+        if (m_DemCache && m_Settings && m_Settings.m_EnableDemClutter)
+        {
+            if (m_DemCache.TrySampleAt(worldX, worldZ, demSample))
+            {
+                if (demSample && demSample.m_Valid)
+                    return demSample.m_TerrainY;
+            }
+        }
+
+        if (world)
+            return world.GetSurfaceY(worldX, worldZ);
+        return 0.0;
     }
 
     protected float EstimateRangeResolutionM(RDF_RadarHardware hardware)

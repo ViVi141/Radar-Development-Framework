@@ -13,7 +13,7 @@
 //  |                   S (south)              |
 //  +------------------------------------------+
 //  | Det 3/7   Trk 2   Best VEH 1.2km 14dB   |
-//  | Green veh / orange proj / magenta emitter|
+//  | Green veh / orange proj / magenta emit / cyan NLOS|
 //  +==========================================+
 
 class RDF_RadarHUD
@@ -60,6 +60,7 @@ class RDF_RadarHUD
     static const int COL_VEHICLE  = ARGB(255,  60, 255, 120);   // green
     static const int COL_PROJ     = ARGB(255, 255, 170,  40);   // orange
     static const int COL_EMITTER  = ARGB(255, 255,  90, 230);   // magenta
+    static const int COL_MULTIPATH = ARGB(255, 80, 220, 255);  // cyan NLOS bounce
     static const int COL_UNDET    = ARGB(120, 110, 130, 110);   // dim grey-green
 
     static const float UPDATE_INTERVAL = 0.15;
@@ -234,7 +235,7 @@ class RDF_RadarHUD
         TextWidget.Cast(wRingLbl).SetExactFontSize(12);
 
         m_wStats  = TextWidget.Cast(MakeDataRow(ws, 0, "Det --   Trk --"));
-        m_wLegend = TextWidget.Cast(MakeDataRow(ws, 1, "green veh / orange proj / magenta emit"));
+        m_wLegend = TextWidget.Cast(MakeDataRow(ws, 1, "veh/proj/emit + cyan NLOS"));
         TextWidget.Cast(m_wLegend).SetExactFontSize(11);
 
         Print("[RDF_RadarHUD] HUD built  widgets=" + m_AllWidgets.Count().ToString());
@@ -370,6 +371,8 @@ class RDF_RadarHUD
     {
         if (!t.m_Detected)
             return COL_UNDET;
+        if (t.m_LosBlocked)
+            return COL_MULTIPATH;
         if (t.m_Type == ERDF_RadarTargetType.RDF_RADAR_TARGET_PROJECTILE)
             return COL_PROJ;
         if (t.m_Type == ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER)

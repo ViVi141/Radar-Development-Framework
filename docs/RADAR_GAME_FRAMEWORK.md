@@ -7,14 +7,17 @@ prototype while remaining entity-first for real-time performance.
 
 1. Resolve radar origin and current boresight.
 2. Enumerate active vehicle/projectile/emitter candidates.
-3. Apply range, azimuth dwell, and `TraceMove` visibility.
-4. Read projectile or rigid-body velocity.
-5. Estimate entity RCS.
-6. Select the strongest configured elevation beam.
-7. Evaluate monostatic received power, Doppler, MTI, processing gain, noise,
+3. Apply range and azimuth dwell.
+4. `TraceMove` line-of-sight check. Clear path → direct detection.
+   Blocked path → optional NLOS ground-bounce (default on): image-method path
+   length + `|Gamma|^2` + early-blocker depth scale; mark `m_LosBlocked`.
+5. Read projectile or rigid-body velocity.
+6. Estimate entity RCS; scale received power by `m_MultipathFactor`.
+7. Select the strongest configured elevation beam.
+8. Evaluate monostatic received power, Doppler, MTI, processing gain, noise,
    DEM clutter power, and SNR.
-8. Keep detections over the configured SNR threshold.
-9. Feed accepted detections to the alpha-beta entity tracker.
+9. Keep detections over the configured SNR threshold.
+10. Feed accepted detections to the alpha-beta entity tracker.
 
 ## Main configuration
 
@@ -29,6 +32,8 @@ prototype while remaining entity-first for real-time performance.
 - `m_DemCacheMaxTiles`
 - `m_DemTileLoadsPerScan`
 - `m_DemClutterScale`
+- `m_EnableNlosMultipath` (default true)
+- `m_NlosReflectionAbs`, `m_NlosMinFactor`, `m_NlosMaxTargetAglM`
 - `m_AdditionalNoisePowerW`
 - `m_EwStack`
 
@@ -83,14 +88,16 @@ Each `RDF_RadarTarget` now includes:
 - RCS, received/processed power, MTI gain
 - sampled DEM surface class and clutter power contribution
 - SNR, detection flag, and selected beam name
+- `m_LosBlocked`, `m_LosHitFraction`, `m_MultipathFactor` (NLOS bounce scale)
 
 ## PPI HUD
 
 `RDF_RadarHUD` draws a north-up plan-position display (green phosphor theme,
 bottom-right) with range rings, a boresight sweep line, and one blip per target.
 
-- Blip colour: green vehicle, orange projectile, magenta emitter; dim grey for
-  undetected returns when `m_KeepUndetected` is on.
+- Blip colour: green vehicle, orange projectile, magenta emitter; cyan for
+  detected NLOS multipath (`m_LosBlocked`); dim grey for undetected returns when
+  `m_KeepUndetected` is on.
 - Blip size scales with SNR.
 - Data row shows detected/total, confirmed track count, and the strongest target
   (type, range, SNR).

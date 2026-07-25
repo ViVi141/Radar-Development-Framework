@@ -645,10 +645,10 @@ Size: 215 × (header 25 px + PPI 210 px + 2 data rows × 21 px)
 
 ### 核心类型
 
-- `RDF_RadarTarget`：`m_Entity`, `m_Position`, `m_Distance`, `m_Velocity`, `m_Type`, `m_Time`, 以及 SNR / 检测标志等物理字段（见类型文件）。
+- `RDF_RadarTarget`：几何 + SNR / 检测标志；含 `m_LosBlocked`、`m_MultipathFactor`（NLOS）。
 - `ERDF_RadarTargetType`：载具 / 抛射物 / 辐射源（emitter）。
-- `RDF_RadarSettings`：量程、扇区、过滤开关外，含 `m_Hardware`、`m_EnablePhysicalDetection`、`m_EnableDemClutter`、`m_DemClutterScale`、`m_EwStack` 等。
-- `RDF_RadarScanner.Scan(subject, outTargets)`：候选 → Trace → RCS/功率/多普勒/MTI/杂波 → SNR 门限 → 跟踪器。
+- `RDF_RadarSettings`：另含 `m_EnableNlosMultipath`、`m_EnableDemClutter`、`m_Hardware`、`m_EwStack` 等。
+- `RDF_RadarScanner.Scan`：候选 → Trace（通视或 NLOS 弱检）→ RCS/功率×多径 → 多普勒/MTI/杂波 → SNR。
 
 ### 注册与跟踪
 
