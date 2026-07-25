@@ -13,7 +13,7 @@
 ### 文档整理
 
 - 删除过时计划稿 `RADAR_PLAN.md`、`FUTURE_PLAN.md`（实现以代码与下列文档为准）。
-- 重写 [README.md](../README.md)、[TODO.md](../TODO.md)；新增 [DEM.md](DEM.md)；更新本 CHANGELOG 与开发者指南。
+- 重写 [README.md](../README.md)、[TODO.md](../TODO.md)；新增 [DEM.md](DEM.md)、[RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md)（能力边界与可做事项）；更新本 CHANGELOG 与开发者指南。
 
 ---
 

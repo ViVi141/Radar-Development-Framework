@@ -3,6 +3,9 @@
 The Enforce implementation now follows the same contracts as the offline
 prototype while remaining entity-first for real-time performance.
 
+Capabilities vs real EM radar (what works / what is missing / what is still
+feasible): [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md).
+
 ## Runtime chain
 
 1. Resolve radar origin and current boresight.

@@ -42,4 +42,5 @@
 
 ---
 
+能力边界与可做事项见 [docs/RADAR_CAPABILITIES.md](docs/RADAR_CAPABILITIES.md)。  
 文档入口见 [README.md](README.md)。

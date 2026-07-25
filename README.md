@@ -92,6 +92,7 @@ python tools\dem\rdf_dem_pack.py --world GM_Eden
 | [docs/API.md](docs/API.md) | LiDAR API |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 架构与扩展 |
 | [docs/RADAR_GAME_FRAMEWORK.md](docs/RADAR_GAME_FRAMEWORK.md) | 游戏内雷达框架 |
+| [docs/RADAR_CAPABILITIES.md](docs/RADAR_CAPABILITIES.md) | 能力边界：已有 / 相对现实缺什么 / 还能做什么 |
 | [docs/DEM.md](docs/DEM.md) | DEM 烘焙与运行时 |
 | [docs/RADAR_REQUIRED_APIS.md](docs/RADAR_REQUIRED_APIS.md) | 引擎 API 对照 |
 | [docs/VEHICLE_RADAR_LOCK_GUIDE.md](docs/VEHICLE_RADAR_LOCK_GUIDE.md) | 载具锁定/打击思路 |
