@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## 2026-07-26 — 雷达物理 / DEM 运行时 / 文档整理
+
+### 新增与增强（Radar / DEM）
+
+- **物理链路**：硬件参数、雷达方程、多普勒、MTI、SNR；α-β 跟踪；EW 附加噪声钩子。
+- **DEM**：Workbench 烘焙 V3 CSV；运行时 `RDF_DemRuntimeLoader` / `RDF_DemRuntimeCache`（LRU）；雷达杂波功率接入。
+- **UI / 测试**：PPI HUD；`RDF_RadarAutoTest`（DEM 杂波回归）；`RDF_RadarAirborneScanTest`（空中目标）。
+- **离线**：`tools/dem/` Python 雷达物理框架与 Demo。
+
+### 文档整理
+
+- 删除过时计划稿 `RADAR_PLAN.md`、`FUTURE_PLAN.md`（实现以代码与下列文档为准）。
+- 重写 [README.md](../README.md)、[TODO.md](../TODO.md)；新增 [DEM.md](DEM.md)；更新本 CHANGELOG 与开发者指南。
+
+---
+
 ## 2026-03-19（二）— 雷达模块具体实现
 
 ### 新增（Radar）
@@ -11,22 +27,18 @@
 
 ### 说明
 
-- 雷达与 LiDAR 并存；雷达不依赖已移除的旧雷达代码，实现遵循 [RADAR_PLAN.md](RADAR_PLAN.md) 与 [RADAR_REQUIRED_APIS.md](RADAR_REQUIRED_APIS.md)。
+- 雷达与 LiDAR 并存。实现约定见 [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md) 与 [RADAR_REQUIRED_APIS.md](RADAR_REQUIRED_APIS.md)。
 
 ---
 
-## 2026-03-19 — 移除雷达与体素场模块
+## 2026-03-19 — 移除旧雷达与体素场模块（历史）
+
+> 注：此后雷达已按新架构重新落地；本节仅保留历史记录。
 
 ### 移除内容
 
-- **Radar 模块**：删除 `scripts/Game/RDF/Radar/` 下全部代码与数据（核心、物理、模式、可视化、Demo、HUD、测试、ECM、分类、工具等），以及 `RDF_RadarAutoBootstrap` 对 `SCR_BaseGameMode` 的 modded 雷达自启动。
-- **EM 体素场模块**：删除 `scripts/Game/RDF/EM/` 下全部代码（EMVoxelField、EMChunk、EMPassiveSensor、网络组件、调试可视化、测试）。
-- **文档**：删除 `WAVE_BASED_RADAR_DESIGN.md`、`RADAR_TUTORIAL.md`、`RADAR_API.md`、`DESIGN_EVALUATION.md`。
-
-### 保留与更新
-
-- **LiDAR**：完整保留，为当前唯一传感器模块。
-- **文档**：README、API.md、DEVELOPMENT.md、FUTURE_PLAN.md、TODO.md、VEHICLE_RADAR_LOCK_GUIDE.md 已更新为仅 LiDAR 或通用实现指南（载具锁定见 VEHICLE_RADAR_LOCK_GUIDE，不再引用已移除的雷达/体素场）。
+- **旧 Radar 模块**与 **EM 体素场模块**曾整目录删除；文档中旧设计稿一并移除。
+- 当时文档曾短暂改为「仅 LiDAR」；当前仓库再次包含 Radar + DEM。
 
 ---
 
@@ -51,7 +63,7 @@
 
 ### 概述
 
-为 `RDF_LidarHUD` 和 `RDF_RadarHUD` 补充完整的公共静态 API，使 HUD 可在 Demo 体系之外被直接调用，并同步更新了 API.md 与 RADAR_API.md。
+为 `RDF_LidarHUD` 和 `RDF_RadarHUD` 补充完整的公共静态 API，使 HUD 可在 Demo 体系之外被直接调用，并同步更新了 API.md（当时另有已删除的 `RADAR_API.md`）。
 
 ### 代码变更
 
@@ -71,7 +83,7 @@
 ### 文档更新
 
 - **API.md**：新增 `## UI — HUD` 节（中/英文），完整记录 `RDF_LidarHUD` 全部 API 与使用示例
-- **RADAR_API.md**：扩写 `RDF_RadarHUD` 配置方法块，补充 `IsVisible`、`FeedSamples`、`AttachToAutoRunner`、`DetachFromAutoRunner` 及示例
+- 当时的 `RADAR_API.md`（已删除）曾扩写 `RDF_RadarHUD`：`IsVisible`、`FeedSamples`、`AttachToAutoRunner`、`DetachFromAutoRunner`；现归入 [API.md](API.md) / [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md)
 
 ---
 
@@ -105,7 +117,7 @@ SCR_BaseGameMode.SetRadarBootstrapEnabled(true);  // 雷达
 ### 文档更新
 
 - `DEVELOPMENT.md`：修复文件树（新增 `RDF_CFar.c`、`RDF_EntityPreClassifier.c`、`RDF_LidarNetworkSetupExample.c`；移除已删空目录）
-- `RADAR_API.md`：模块总览补入缺失文件；`RDF_RadarAutoBootstrap` 默认值文档由 `true` 修正为 `false`
+- 历史 `RADAR_API.md`：模块总览补入缺失文件；`RDF_RadarAutoBootstrap` 默认值文档由 `true` 修正为 `false`
 - `RADAR_TUTORIAL.md`：第 1.0 节说明 Bootstrap 默认关闭，补充显式启用代码示例
 - `docs/` 清理：删除内部规划/宣传性文档（`DISCORD_ANNOUNCEMENT.md`、`EM_FIELD_PLAN.md`、`LIDAR_RADAR_BORROW_PLAN.md`、`REMAINING_LIMITATIONS.md`、`REQUIRED_ENGINE_APIs.md`），只保留面向开发者的参考文档
 

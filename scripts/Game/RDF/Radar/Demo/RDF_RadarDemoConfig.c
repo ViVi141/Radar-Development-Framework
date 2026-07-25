@@ -11,6 +11,22 @@ class RDF_RadarDemoConfig
         s.m_IncludeVehicles = true;
         s.m_IncludeProjectiles = true;
         s.m_IncludeRadarEmitters = true;
+        s.m_Hardware = RDF_RadarHardware.CreateShorad();
+        s.m_EnablePhysicalDetection = true;
+        s.m_DetectionSnrDb = 8.0;
+        s.Validate();
+        return s;
+    }
+
+    static RDF_RadarSettings CreateP18Like(int maxTargets = 128)
+    {
+        RDF_RadarSettings s = CreateDefault(maxTargets);
+        s.m_Range = 13000.0;
+        s.m_UpdateInterval = 0.1;
+        s.m_SectorHalfAngleDeg = 180.0;
+        s.m_Hardware = RDF_RadarHardware.CreateP18Like();
+        s.m_EnableMechanicalScan = true;
+        s.m_DetectionSnrDb = 6.0;
         s.Validate();
         return s;
     }

@@ -1,6 +1,6 @@
 # 雷达系统所需游戏 API — 列表与验证
 
-本文档列出实现完整雷达系统（见 [RADAR_PLAN.md](RADAR_PLAN.md)）所需的 Enfusion / Arma Reforger 脚本 API，并通过 **api_search**（user-enfusion-mcp）进行验证。验证日期：按文档编写时 MCP 查询结果为准。
+本文档列出当前游戏内雷达实现（见 [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md)）所用的 Enfusion / Arma Reforger 脚本 API，并通过引擎 API 检索进行验证。验证日期：按文档编写时查询结果为准。
 
 ---
 
@@ -121,4 +121,4 @@
 - **抛射物**：用 **Projectile**、**ProjectileMoveComponent.GetVelocity()** 及 **IEntity.GetID()** 做检测与多帧追踪；轨迹用 **GetWorldTime()** 打时间戳。
 - **雷达可被探测**：自维护“主动雷达”注册表 + 在对方扫描时合并进目标列表，无需新引擎 API。
 
-所有上表标为 ✅ 的 API 均已在 **api_search** 中验证存在；❓/⚠️ 项依赖项目内已有用法或 BIKI 文档。实现雷达系统时以本列表与 [RADAR_PLAN.md](RADAR_PLAN.md)、[VEHICLE_RADAR_LOCK_GUIDE.md](VEHICLE_RADAR_LOCK_GUIDE.md) 为准。
+所有上表标为 ✅ 的 API 均已在检索中验证存在；❓/⚠️ 项依赖项目内已有用法或 BIKI 文档。实现约定以本列表、[RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md)、[VEHICLE_RADAR_LOCK_GUIDE.md](VEHICLE_RADAR_LOCK_GUIDE.md) 为准。

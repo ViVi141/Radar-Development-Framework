@@ -1,6 +1,13 @@
 # 载具雷达扫描、锁定与武器打击 — 实现指南
 
-本文档面向目标：**让载具和武器具备扫描/锁定能力 — 扫描载具、锁定载具、武器锁定并打击**。RDF 仅提供 **LiDAR 射线扫描**；你可选用“先射线后结果”的 LiDAR 扫描，或“先查实体、再射线判可见”的简化方案；再自行实现**锁定状态**和与武器的对接即可。
+本文档面向目标：**让载具和武器具备扫描/锁定能力 — 扫描载具、锁定载具、武器锁定并打击**。
+
+RDF 现已提供：
+
+- **雷达**：`RDF_RadarScanner`（实体优先 + Trace + 物理检测），输出 `RDF_RadarTarget`；Demo 入口 `RDF_RadarAutoRunner` / `RDF_RadarComponent`。见 [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md)。
+- **LiDAR**：`RDF_LidarScanner` 射线点云，仍可用于近距感知或备用扫描。
+
+**锁定状态**与**武器制导对接**仍需模组侧自行实现；本文给出最小路径与分工。
 
 ---
 
@@ -8,9 +15,9 @@
 
 | 目标 | RDF 已有 | 需要你补充 |
 |------|----------|------------|
-| 载具能扫描载具 | ✅ `RDF_LidarScanner.Scan()`：射线命中得到 `m_Entity`、`m_Distance`、`m_HitPos`；或采用第五节“实体优先”方案（引擎 Query + 射线判可见） | 将扫描挂到载具（组件或脚本），按需设置扇区/射线数 |
-| 锁定载具 | ❌ 无“当前锁定目标”状态 | **锁定管理器**：维护当前锁定的 `IEntity`，从扫描结果中选目标（自动最近/最强或手动选），断锁条件（丢失、超距、超出扇区） |
-| 武器锁定并打击 | ❌ RDF 不包含武器/弹道 | **武器/导弹脚本**：每帧读取“当前锁定目标”（实体或位置），驱动弹体朝向目标或使用制导 API |
+| 载具能扫描载具 | ✅ `RDF_RadarScanner` / `RDF_RadarAutoRunner`；或 `RDF_LidarScanner.Scan()`；或第五节实体优先方案 | 将扫描挂到载具（组件或脚本），配置扇区/量程/硬件 |
+| 锁定载具 | ❌ 无“当前锁定目标”状态（跟踪器只维持航迹） | **锁定管理器**：维护当前锁定的 `IEntity`，从扫描结果选目标，断锁条件 |
+| 武器锁定并打击 | ❌ RDF 不包含武器/弹道 | **武器/导弹脚本**：每帧读取锁定目标，驱动制导 |
 
 ---
 
@@ -18,8 +25,9 @@
 
 ### 2.1 扫描：只关心载具时
 
-- **方案 A（射线优先）**：使用 `RDF_LidarScanner`，配置为只打实体（`m_TraceTargetMode = ETraceTargetMode.ENTITIES_ONLY`），扇区用 `RDF_ConicalSampleStrategy` 或 `RDF_SweepSampleStrategy`。扫描结果中每条 `RDF_LidarSample` 带 `m_Entity`、`m_Distance`、`m_HitPos`，按 `m_Distance` 做“最近”自动锁即可。
-- **方案 B（实体优先，更省）**：采用第五节“先查实体、再射线判可见”：用引擎 `QueryEntitiesBySphere` 等筛出范围内候选，再对每个候选打 1～多条射线判可见；输出格式与 `RDF_LidarSample` 兼容即可接入同一套锁定与 HUD。
+- **方案 A（推荐，雷达）**：挂 `RDF_RadarComponent` 或调用 `RDF_RadarAutoRunner`，从 `RDF_RadarTarget` 列表过滤载具类型，按距离或 SNR 选锁。
+- **方案 B（LiDAR 射线优先）**：使用 `RDF_LidarScanner`，配置为只打实体，扇区用锥形/扫掠策略；按 `m_Distance` 自动锁。
+- **方案 C（自研实体优先）**：第五节 Query + Trace；输出接到同一套锁定层即可。
 
 ### 2.2 锁定层（需自行实现）
 

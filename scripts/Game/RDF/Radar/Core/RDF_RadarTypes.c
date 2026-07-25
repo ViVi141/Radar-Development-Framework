@@ -6,7 +6,7 @@ enum ERDF_RadarTargetType
     RDF_RADAR_TARGET_RADAR_EMITTER
 }
 
-// Single radar detection: position, distance, velocity, entity, type.
+// Single radar detection: geometry + physical/video processing fields.
 class RDF_RadarTarget
 {
     IEntity m_Entity;
@@ -15,4 +15,20 @@ class RDF_RadarTarget
     vector m_Velocity;
     ERDF_RadarTargetType m_Type;
     float m_Time;
+    float m_AzimuthDeg;
+    float m_ElevationDeg;
+    float m_RadialSpeedMs;
+    float m_RcsM2;
+    float m_ReceivedPowerW;
+    float m_ProcessedPowerW;
+    float m_DopplerHz;
+    float m_MtiGain;
+    int m_DemSurfaceClass = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
+    bool m_DemSampleValid;
+    float m_ClutterPowerW;
+    float m_ClutterToNoiseDb;
+    float m_SnrDb;
+    bool m_Detected;
+    string m_BeamName;
+    int m_ScanNumber;
 }

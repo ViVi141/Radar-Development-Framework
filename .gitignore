@@ -23,3 +23,9 @@ Desktop.ini
 
 # Logs
 *.log
+
+# DEM / offline radar generated outputs
+tools/dem/out/
+tools/dem/**/__pycache__/
+*.npz
+TrainData/

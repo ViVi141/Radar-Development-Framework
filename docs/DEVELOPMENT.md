@@ -1,8 +1,10 @@
-# RDF — 开发者指南（LiDAR）
+# RDF — 开发者指南
 
 Repository: https://github.com/ViVi141/Radar-Development-Framework  
 Contact: 747384120@qq.com  
 License: Apache-2.0
+
+入口文档：[README.md](../README.md) · 雷达：[RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md) · DEM：[DEM.md](DEM.md)
 
 ---
 
@@ -10,11 +12,26 @@ License: Apache-2.0
 
 - 框架默认**静默**，只有在明确启用时才运行，不干扰其他模组。
 - 扫描核心、可视化与演示驱动相互隔离，可独立替换。
+- LiDAR / Radar / DEM 并列；雷达检测可走物理链路，DEM 杂波缺失时安全退化。
 - 对外暴露稳定的扩展接口（采样策略、颜色策略、扫描完成回调）。
 
 ---
 
-## 模块布局
+## 模块布局 — 总览
+
+```
+scripts/Game/RDF/
+├── Lidar/     点云扫描、可视化、网络、HUD
+├── Radar/     实体扫描、物理检测、EW、PPI、自动化测试
+└── DEM/       Workbench 烘焙 + Runtime 加载
+scripts/WorkbenchGame/RDF/
+└── RDF_DemBakePlugin.c
+tools/dem/     离线打包与雷达物理原型
+```
+
+---
+
+## 模块布局 — LiDAR
 
 ```
 scripts/Game/RDF/
@@ -57,7 +74,52 @@ scripts/Game/RDF/
 
 ---
 
-## 数据流
+## 模块布局 — Radar
+
+```
+scripts/Game/RDF/Radar/
+├── Core/
+│   ├── RDF_RadarSettings.c / RDF_RadarTypes.c / RDF_RadarHardware.c
+│   ├── RDF_RadarScanner.c              实体优先 + Trace + 物理检测
+│   ├── RDF_RadarEmitterRegistry.c      主动辐射注册
+│   └── RDF_RadarProjectileTracker.c    抛射物多帧轨迹 / α-β
+├── Physics/
+│   ├── RDF_RadarRcsModel.c
+│   └── RDF_RadarClutterModel.c         DEM σ⁰ → 杂波功率
+├── EW/
+│   └── RDF_RadarEwModel.c              附加噪声钩子
+├── Visual/ / UI/
+│   ├── RDF_RadarVisualizer.c
+│   └── RDF_RadarHUD.c                  PPI（品红=emitter）
+├── Util/
+│   └── RDF_RadarEntityClassifier.c
+└── Demo/
+    ├── RDF_RadarAutoRunner.c / Bootstrap / Component / DemoConfig
+    ├── RDF_RadarAutoTest.c             DEM 杂波回归
+    └── RDF_RadarAirborneScanTest.c     空中目标扫描
+```
+
+数据流摘要见 [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md)。
+
+---
+
+## 模块布局 — DEM
+
+```
+scripts/Game/RDF/DEM/
+├── RDF_DemTileBake.c / RDF_DemBakeConstants.c / RDF_DemMaterialTable.c
+├── RDF_DemColumnSpans.c / RDF_DemWorldKey.c
+└── Runtime/
+    ├── RDF_DemRuntimeTypes.c
+    ├── RDF_DemRuntimeLoader.c          manifest / tile CSV
+    └── RDF_DemRuntimeCache.c           世界坐标采样 + LRU
+```
+
+烘焙与 `$profile` 路径见 [DEM.md](DEM.md)。
+
+---
+
+## LiDAR 数据流
 
 ```
 RDF_LidarSettings

@@ -23,7 +23,7 @@ class RDF_RadarComponent : ScriptComponent
         m_LastTargets = new array<ref RDF_RadarTarget>();
 
         vector pos = GetOwnerOrigin(owner);
-        RDF_RadarEmitterRegistry.Register(owner, pos, false, 1.0);
+        RDF_RadarEmitterRegistry.Register(owner, pos, m_Enabled, 1.0);
     }
 
     override void EOnFrame(IEntity owner, float timeSlice)
@@ -48,7 +48,9 @@ class RDF_RadarComponent : ScriptComponent
         m_Scanner.Scan(owner, m_LastTargets);
         m_Tracker.Update(m_LastTargets, now);
 
-        RDF_RadarEmitterRegistry.Register(owner, pos, false, 1.0);
+        // Keep the emitter active between dwells; otherwise another radar can
+        // almost never observe the sub-frame "emitting" window.
+        RDF_RadarEmitterRegistry.Register(owner, pos, true, 1.0);
     }
 
     void SetEnabled(bool enabled)

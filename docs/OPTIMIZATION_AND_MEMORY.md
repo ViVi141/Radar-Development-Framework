@@ -1,6 +1,6 @@
 # LiDAR 优化与内存防溢出方案
 
-本文档针对 RDF LiDAR 模块（不含电磁波雷达与体素场）的优化与**内存溢出防护**给出方案与实施要点。
+本文档针对 **LiDAR** 模块的优化与**内存溢出防护**。雷达 / DEM 性能要点见 [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md) 与 [DEM.md](DEM.md)。
 
 ---
 

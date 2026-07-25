@@ -1,0 +1,433 @@
+// Airborne scan test:
+// 1) auto-select radar start location near player,
+// 2) spawn Mi-8 prefab in air,
+// 3) force circular motion,
+// 4) verify radar can recognize and detect the airborne target.
+//
+// Usage (Script Debugger): RDF_RadarAirborneScanTest.Start();
+class RDF_RadarAirborneScanTest
+{
+    protected static ref RDF_RadarAirborneScanTest s_Instance;
+    protected static bool s_TickRegistered;
+    protected static bool s_KeepSpawnedTargetAfterTest;
+
+    protected static const ResourceName AIR_TARGET_PREFAB =
+        "{6BDF7D3E72D31F29}Prefabs/Scenarios/SP01/SP01_Mi8MT_unarmed_transport.et";
+
+    protected bool m_Running;
+    protected float m_StartWallS;
+    protected float m_LastProgressWallS;
+    protected float m_DurationS = 18.0;
+    protected int m_LastScanSerial = -1;
+
+    protected IEntity m_Subject;
+    protected IEntity m_AirTarget;
+    protected vector m_RadarOrigin;
+
+    protected float m_OrbitRadiusM = 320.0;
+    protected float m_OrbitAltitudeM = 120.0;
+    protected float m_OrbitRateRadS = 0.18;
+    protected float m_OrbitPhaseRad = 0.0;
+    protected float m_LastDebugPrintWallS;
+
+    protected int m_ScanCount;
+    protected int m_TargetSeenCount;
+    protected int m_TargetDetectedCount;
+    protected int m_TargetSeenAsVehicle;
+    protected int m_TargetSeenAsEmitter;
+    protected float m_MaxTargetSnrDb = -300.0;
+    protected int m_RespawnCount;
+
+    protected ref RDF_RadarSettings m_PrevConfig;
+    protected bool m_PrevDemoEnabled;
+    protected bool m_PrevHudEnabled;
+
+    static RDF_RadarAirborneScanTest GetInstance()
+    {
+        if (!s_Instance)
+            s_Instance = new RDF_RadarAirborneScanTest();
+        return s_Instance;
+    }
+
+    static void Start()
+    {
+        s_KeepSpawnedTargetAfterTest = false;
+        GetInstance().StartInternal();
+    }
+
+    // Start test and keep spawned airborne target after PASS/FAIL for visual checks.
+    static void StartKeepTarget()
+    {
+        s_KeepSpawnedTargetAfterTest = true;
+        GetInstance().StartInternal();
+    }
+
+    static void Stop()
+    {
+        RDF_RadarAirborneScanTest inst = GetInstance();
+        if (!inst)
+            return;
+        inst.StopInternal(true);
+        Print("[RDF Radar AirTest] stopped by user.");
+    }
+
+    static bool IsRunning()
+    {
+        RDF_RadarAirborneScanTest inst = GetInstance();
+        if (!inst)
+            return false;
+        return inst.m_Running;
+    }
+
+    protected static void StaticTick()
+    {
+        RDF_RadarAirborneScanTest inst = GetInstance();
+        if (!inst)
+            return;
+        inst.OnTick();
+    }
+
+    protected void StartInternal()
+    {
+        if (m_Running)
+        {
+            Print("[RDF Radar AirTest] already running.");
+            return;
+        }
+
+        BaseWorld world = GetGame().GetWorld();
+        if (!world)
+        {
+            Print("[RDF Radar AirTest] no world.", LogLevel.WARNING);
+            return;
+        }
+
+        m_Subject = RDF_LidarSubjectResolver.ResolveLocalSubject(true);
+        if (!m_Subject)
+        {
+            Print("[RDF Radar AirTest] no local subject.", LogLevel.WARNING);
+            return;
+        }
+
+        m_PrevConfig = RDF_RadarAutoRunner.GetDemoConfig();
+        m_PrevDemoEnabled = RDF_RadarAutoRunner.IsDemoEnabled();
+        m_PrevHudEnabled = RDF_RadarAutoRunner.IsHudEnabled();
+
+        if (!ChooseAndApplyRadarOrigin())
+        {
+            Print("[RDF Radar AirTest] failed to choose radar origin.", LogLevel.ERROR);
+            return;
+        }
+
+        if (!SpawnAirTarget())
+        {
+            Print("[RDF Radar AirTest] failed to spawn target prefab.", LogLevel.ERROR);
+            StopInternal(true);
+            return;
+        }
+
+        ApplyTestRadarConfig();
+        RDF_RadarAutoRunner.SetHudEnabled(true);
+        RDF_RadarAutoRunner.SetDemoEnabled(true);
+        RDF_RadarAutoRunner.StartAutoRun();
+
+        m_ScanCount = 0;
+        m_TargetSeenCount = 0;
+        m_TargetDetectedCount = 0;
+        m_TargetSeenAsVehicle = 0;
+        m_TargetSeenAsEmitter = 0;
+        m_MaxTargetSnrDb = -300.0;
+        m_RespawnCount = 0;
+        m_LastScanSerial = RDF_RadarAutoRunner.GetLastScanSerial();
+
+        m_StartWallS = System.GetTickCount() * 0.001;
+        m_LastProgressWallS = m_StartWallS;
+        m_LastDebugPrintWallS = m_StartWallS;
+        m_Running = true;
+
+        if (!s_TickRegistered)
+        {
+            s_TickRegistered = true;
+            GetGame().GetCallqueue().CallLater(StaticTick, 200, true);
+        }
+
+        Print(string.Format(
+            "[RDF Radar AirTest] started radarOrigin=%1 targetPrefab=%2",
+            m_RadarOrigin.ToString(),
+            AIR_TARGET_PREFAB));
+    }
+
+    protected void StopInternal(bool restore)
+    {
+        m_Running = false;
+
+        if (m_AirTarget && !s_KeepSpawnedTargetAfterTest)
+        {
+            RDF_RadarEmitterRegistry.SetEmitting(m_AirTarget, false);
+            RDF_RadarEmitterRegistry.Unregister(m_AirTarget);
+            SCR_EntityHelper.DeleteEntityAndChildren(m_AirTarget);
+            m_AirTarget = null;
+        }
+
+        if (!restore)
+            return;
+
+        if (m_PrevConfig)
+            RDF_RadarAutoRunner.SetDemoConfig(m_PrevConfig);
+        RDF_RadarAutoRunner.SetDemoEnabled(m_PrevDemoEnabled);
+        RDF_RadarAutoRunner.SetHudEnabled(m_PrevHudEnabled);
+    }
+
+    protected void OnTick()
+    {
+        if (!m_Running)
+            return;
+
+        float nowS = System.GetTickCount() * 0.001;
+        UpdateAirTargetMotion(nowS);
+        AccumulateLatestScan(nowS);
+
+        if (nowS - m_StartWallS < m_DurationS)
+            return;
+
+        FinalizeAndReport();
+        StopInternal(true);
+    }
+
+    protected bool ChooseAndApplyRadarOrigin()
+    {
+        if (!m_Subject)
+            return false;
+
+        BaseWorld world = GetGame().GetWorld();
+        if (!world)
+            return false;
+
+        vector mat[4];
+        m_Subject.GetWorldTransform(mat);
+        vector center = mat[3];
+
+        vector best = center;
+        float bestScore = 9999999.0;
+        float searchRadius = 220.0;
+        float sampleOffset = 20.0;
+
+        for (int i = 0; i < 12; i++)
+        {
+            float angle = i * Math.PI * 2.0 / 12.0;
+            float x = center[0] + Math.Cos(angle) * searchRadius;
+            float z = center[2] + Math.Sin(angle) * searchRadius;
+            float y = world.GetSurfaceY(x, z);
+
+            float hx1 = world.GetSurfaceY(x + sampleOffset, z);
+            float hx2 = world.GetSurfaceY(x - sampleOffset, z);
+            float hz1 = world.GetSurfaceY(x, z + sampleOffset);
+            float hz2 = world.GetSurfaceY(x, z - sampleOffset);
+            float score = Math.AbsFloat(hx1 - hx2) + Math.AbsFloat(hz1 - hz2);
+            if (score < bestScore)
+            {
+                bestScore = score;
+                best = Vector(x, y + 8.0, z);
+            }
+        }
+
+        // Safety: do not teleport/move local player in test, to avoid collision-death
+        // side effects that stop the scanner subject resolver.
+        m_RadarOrigin = best;
+        return true;
+    }
+
+    protected bool SpawnAirTarget()
+    {
+        BaseWorld world = GetGame().GetWorld();
+        if (!world)
+            return false;
+
+        Resource prefabRes = Resource.Load(AIR_TARGET_PREFAB);
+        if (!prefabRes)
+            return false;
+
+        EntitySpawnParams spawnParams = new EntitySpawnParams();
+        Math3D.AnglesToMatrix(Vector(0, 0, 0), spawnParams.Transform);
+        vector spawnPos = Vector(
+            m_RadarOrigin[0] + m_OrbitRadiusM,
+            m_RadarOrigin[1] + m_OrbitAltitudeM,
+            m_RadarOrigin[2]);
+        spawnParams.Transform[3] = spawnPos;
+
+        m_AirTarget = GetGame().SpawnEntityPrefab(prefabRes, world, spawnParams);
+        if (!m_AirTarget)
+            return false;
+
+        RDF_RadarEmitterRegistry.Register(m_AirTarget, spawnPos, true, 1.0);
+        Print("[RDF Radar AirTest] spawned Mi-8 at " + spawnPos.ToString());
+        return true;
+    }
+
+    protected void ApplyTestRadarConfig()
+    {
+        RDF_RadarSettings cfg = RDF_RadarDemoConfig.CreateDefault(128);
+        cfg.m_Range = 6000.0;
+        cfg.m_SectorHalfAngleDeg = 180.0;
+        cfg.m_UpdateInterval = 0.2;
+        cfg.m_IncludeVehicles = true;
+        cfg.m_IncludeProjectiles = true;
+        cfg.m_IncludeRadarEmitters = true;
+        cfg.m_EnablePhysicalDetection = true;
+        cfg.m_KeepUndetected = true;
+        cfg.m_DetectionSnrDb = -40.0;
+        cfg.m_EnableDemClutter = false;
+
+        RDF_RadarHardware hw = RDF_RadarHardware.CreateShorad();
+        hw.m_AzimuthBeamwidthDeg = 40.0;
+        hw.ClearElevationBeams();
+        hw.AddElevationBeam("air_low", 8.0, 30.0, 0.0);
+        hw.AddElevationBeam("air_mid", 18.0, 36.0, 0.0);
+        hw.AddElevationBeam("air_high", 28.0, 44.0, -1.0);
+        hw.Validate();
+        cfg.m_Hardware = hw;
+
+        cfg.Validate();
+        RDF_RadarAutoRunner.SetDemoConfig(cfg);
+    }
+
+    protected void UpdateAirTargetMotion(float nowS)
+    {
+        if (!m_AirTarget)
+        {
+            if (SpawnAirTarget())
+            {
+                m_RespawnCount = m_RespawnCount + 1;
+                Print("[RDF Radar AirTest] target respawned count=" + m_RespawnCount.ToString());
+            }
+            return;
+        }
+
+        m_OrbitPhaseRad = nowS * m_OrbitRateRadS;
+        vector pos = Vector(
+            m_RadarOrigin[0] + Math.Cos(m_OrbitPhaseRad) * m_OrbitRadiusM,
+            m_RadarOrigin[1] + m_OrbitAltitudeM + 15.0 * Math.Sin(nowS * 0.07),
+            m_RadarOrigin[2] + Math.Sin(m_OrbitPhaseRad) * m_OrbitRadiusM);
+        m_AirTarget.SetOrigin(pos);
+
+        float vx = -Math.Sin(m_OrbitPhaseRad) * m_OrbitRadiusM * m_OrbitRateRadS;
+        float vz = Math.Cos(m_OrbitPhaseRad) * m_OrbitRadiusM * m_OrbitRateRadS;
+        float vy = 15.0 * 0.07 * Math.Cos(nowS * 0.07);
+        Physics physics = m_AirTarget.GetPhysics();
+        if (physics)
+            physics.SetVelocity(Vector(vx, vy, vz));
+
+        RDF_RadarEmitterRegistry.Register(m_AirTarget, pos, true, 1.0);
+
+        // Always draw a bright debug marker so visibility tests do not depend on
+        // whether the scenario prefab contains a rendered mesh.
+        int markerFlags = ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.TRANSP | ShapeFlags.ONCE;
+        Shape.CreateSphere(ARGBF(1, 1, 0.2, 0.2), markerFlags, pos, 6.0);
+        vector markerLine[2];
+        markerLine[0] = pos;
+        markerLine[1] = pos + "0 25 0";
+        Shape.CreateLines(ARGBF(1, 1, 0.2, 0.2), markerFlags, markerLine, 2);
+
+        if (nowS - m_LastDebugPrintWallS > 3.0)
+        {
+            m_LastDebugPrintWallS = nowS;
+            float dx = pos[0] - m_RadarOrigin[0];
+            float dy = pos[1] - m_RadarOrigin[1];
+            float dz = pos[2] - m_RadarOrigin[2];
+            float dist = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+            Print("[RDF Radar AirTest] marker pos=" + pos.ToString() + " range=" + dist.ToString());
+        }
+    }
+
+    protected void AccumulateLatestScan(float nowS)
+    {
+        int serial = RDF_RadarAutoRunner.GetLastScanSerial();
+        if (serial == m_LastScanSerial)
+        {
+            if (nowS - m_LastProgressWallS > 5.0)
+            {
+                m_LastProgressWallS = nowS;
+                Print("[RDF Radar AirTest] waiting for scan progress; ensure Play mode is running.");
+            }
+            return;
+        }
+
+        m_LastScanSerial = serial;
+        m_LastProgressWallS = nowS;
+        m_ScanCount = m_ScanCount + 1;
+
+        array<ref RDF_RadarTarget> targets = RDF_RadarAutoRunner.GetLastTargets();
+        if (!targets || !m_AirTarget)
+            return;
+
+        foreach (RDF_RadarTarget t : targets)
+        {
+            if (!t || t.m_Entity != m_AirTarget)
+                continue;
+
+            m_TargetSeenCount = m_TargetSeenCount + 1;
+            if (t.m_Detected)
+                m_TargetDetectedCount = m_TargetDetectedCount + 1;
+            if (t.m_SnrDb > m_MaxTargetSnrDb)
+                m_MaxTargetSnrDb = t.m_SnrDb;
+            if (t.m_Type == ERDF_RadarTargetType.RDF_RADAR_TARGET_VEHICLE)
+                m_TargetSeenAsVehicle = m_TargetSeenAsVehicle + 1;
+            if (t.m_Type == ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER)
+                m_TargetSeenAsEmitter = m_TargetSeenAsEmitter + 1;
+        }
+    }
+
+    protected void FinalizeAndReport()
+    {
+        bool passScans = m_ScanCount > 8;
+        bool passSeen = m_TargetSeenCount > 0;
+        bool passDetected = m_TargetDetectedCount > 0;
+        bool passClassified = m_TargetSeenAsVehicle > 0 || m_TargetSeenAsEmitter > 0;
+        bool allPass = passScans && passSeen && passDetected && passClassified;
+
+        array<string> lines = new array<string>();
+        lines.Insert("RDF Radar Airborne Scan Test");
+        lines.Insert("prefab " + AIR_TARGET_PREFAB);
+        lines.Insert("result " + BoolLabel(allPass));
+        lines.Insert("");
+        lines.Insert("checks:");
+        lines.Insert("  scans_present " + BoolLabel(passScans));
+        lines.Insert("  target_seen " + BoolLabel(passSeen));
+        lines.Insert("  target_detected " + BoolLabel(passDetected));
+        lines.Insert("  target_classified " + BoolLabel(passClassified));
+        lines.Insert("");
+        lines.Insert("metrics:");
+        lines.Insert("  scan_count " + m_ScanCount.ToString());
+        lines.Insert("  target_seen_count " + m_TargetSeenCount.ToString());
+        lines.Insert("  target_detected_count " + m_TargetDetectedCount.ToString());
+        lines.Insert("  seen_as_vehicle " + m_TargetSeenAsVehicle.ToString());
+        lines.Insert("  seen_as_emitter " + m_TargetSeenAsEmitter.ToString());
+        lines.Insert("  max_target_snr_db " + m_MaxTargetSnrDb.ToString());
+        lines.Insert("  target_respawn_count " + m_RespawnCount.ToString());
+        lines.Insert("  radar_origin " + m_RadarOrigin.ToString());
+
+        FileIO.MakeDirectory("$profile:RDF");
+        FileIO.MakeDirectory("$profile:RDF/RadarTests");
+        string reportPath = "$profile:RDF/RadarTests/radar_airborne_scan_"
+            + System.GetTickCount().ToString() + ".txt";
+        SCR_FileIOHelper.WriteFileContent(reportPath, lines);
+
+        Print("[RDF Radar AirTest] " + BoolLabel(allPass) + "  report=" + reportPath);
+        Print(string.Format(
+            "[RDF Radar AirTest] scans=%1 seen=%2 detected=%3 vehicle=%4 emitter=%5 maxSnr=%6 respawn=%7",
+            m_ScanCount.ToString(),
+            m_TargetSeenCount.ToString(),
+            m_TargetDetectedCount.ToString(),
+            m_TargetSeenAsVehicle.ToString(),
+            m_TargetSeenAsEmitter.ToString(),
+            m_MaxTargetSnrDb.ToString(),
+            m_RespawnCount.ToString()));
+    }
+
+    protected string BoolLabel(bool value)
+    {
+        if (value)
+            return "PASS";
+        return "FAIL";
+    }
+}

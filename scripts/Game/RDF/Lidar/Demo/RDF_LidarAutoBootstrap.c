@@ -1,4 +1,5 @@
-// Bootstrap for LiDAR and Radar demo. Reads LiDAR params from RDF_LidarDemoConfig (single source of truth).
+// Bootstrap for LiDAR, Radar demo, and RDF DEM tile bake.
+// LiDAR params: RDF_LidarDemoConfig. DEM bake: create $profile:RDF/BakeDemFull.flag.
 modded class SCR_BaseGameMode
 {
     protected static bool s_RadarBootstrapEnabled = false;
@@ -28,6 +29,23 @@ modded class SCR_BaseGameMode
             RDF_RadarAutoRunner.StartWithConfig(RDF_RadarDemoConfig.CreateDefault(64));
             RDF_RadarAutoRunner.SetDemoEnabled(true);
         }
+
+        if (RDF_DemTileBake.IsBakeRequested())
+        {
+            GetGame().GetCallqueue().CallLater(
+                RdfTryStartDemBake, RDF_DemBakeConstants.START_DELAY_MS, false);
+        }
+    }
+
+    override void EOnFrame(IEntity owner, float timeSlice)
+    {
+        super.EOnFrame(owner, timeSlice);
+        RDF_DemTileBake.OnFrame(timeSlice);
+    }
+
+    protected void RdfTryStartDemBake()
+    {
+        RDF_DemTileBake.TryStartBake();
     }
 
     static void SetBootstrapEnabled(bool enabled)
@@ -58,5 +76,11 @@ modded class SCR_BaseGameMode
     static bool IsRadarBootstrapEnabled()
     {
         return s_RadarBootstrapEnabled;
+    }
+
+    // Convenience: write BakeDemFull.flag then call this, or just create the flag and restart Play.
+    static void RequestDemBake()
+    {
+        RDF_DemTileBake.WriteBakeRequest();
     }
 }

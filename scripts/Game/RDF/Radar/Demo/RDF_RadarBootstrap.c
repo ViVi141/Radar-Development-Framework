@@ -12,11 +12,7 @@ class RDF_RadarBootstrap : ScriptComponent
         super.EOnInit(owner);
         RDF_RadarAutoRunner.StartWithConfig(RDF_RadarDemoConfig.CreateDefault(64));
         RDF_RadarAutoRunner.SetDemoEnabled(true);
-    }
-
-    override void EOnFrame(IEntity owner, float timeSlice)
-    {
-        if (RDF_RadarAutoRunner.IsDemoEnabled())
-            RDF_RadarAutoRunner.GetInstance().RadarTick();
+        RDF_RadarAutoRunner.SetHudEnabled(true);
+        RDF_RadarHUD.SetMode("SHORAD");
     }
 }

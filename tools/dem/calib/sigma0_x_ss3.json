@@ -1,0 +1,34 @@
+{
+  "band": "X",
+  "sea_state": 3,
+  "theta_ref_deg": 29.999999999999996,
+  "sigma0_ref_db": {
+    "unknown": -18.0,
+    "water": -22.0,
+    "vegetation": -14.0,
+    "soil": -18.0,
+    "sand": -20.0,
+    "gravel": -16.0,
+    "asphalt": -12.0,
+    "hard": -10.0,
+    "wood": -18.0,
+    "metal": -5.0,
+    "snow_ice": -20.0,
+    "fabric": -24.0
+  },
+  "exponent": {
+    "unknown": 1.0,
+    "water": 1.4,
+    "vegetation": 0.8,
+    "soil": 1.0,
+    "sand": 1.1,
+    "gravel": 1.0,
+    "asphalt": 1.0,
+    "hard": 1.0,
+    "wood": 1.0,
+    "metal": 0.5,
+    "snow_ice": 1.0,
+    "fabric": 1.0
+  },
+  "notes": "Edit sigma0_ref_db / exponent then pass --sigma0-calib <file>"
+}

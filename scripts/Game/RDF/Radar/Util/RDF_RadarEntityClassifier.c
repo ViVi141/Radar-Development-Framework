@@ -43,6 +43,14 @@ class RDF_RadarEntityClassifier
             return true;
         if (className.IndexOf("Tank") >= 0)
             return true;
+        if (className.IndexOf("Helicopter") >= 0)
+            return true;
+        if (className.IndexOf("Aircraft") >= 0)
+            return true;
+        if (className.IndexOf("Plane") >= 0)
+            return true;
+        if (className.IndexOf("Rotor") >= 0)
+            return true;
         if (className.IndexOf("Character") >= 0)
             return true;
 
