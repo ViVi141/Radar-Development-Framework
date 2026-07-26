@@ -83,6 +83,28 @@ class RDF_RadarComponent : ScriptComponent
         return GetSensor().GetTracker();
     }
 
+    RDF_RadarLockManager GetLockManager()
+    {
+        return GetSensor().GetLockManager();
+    }
+
+    // Manual lock onto a specific track id (e.g. HUD pick). Auto-acquire also works.
+    bool LockTrackId(int trackId)
+    {
+        return GetLockManager().LockTrackId(trackId);
+    }
+
+    void Unlock()
+    {
+        GetLockManager().Unlock();
+    }
+
+    // Current locked target for weapon / fire-control code.
+    bool GetLockedTarget(out IEntity entity, out vector worldPos)
+    {
+        return GetSensor().GetLockedTarget(entity, worldPos);
+    }
+
     protected void RegisterEmitter(IEntity owner, vector pos, bool emitting)
     {
         RDF_RadarSettings settings = null;

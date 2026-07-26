@@ -49,12 +49,16 @@ class RDF_RadarSensor
     protected ref RDF_RadarSettings m_Settings;
     protected ref RDF_RadarScanner m_Scanner;
     protected ref RDF_RadarProjectileTracker m_Tracker;
+    protected ref RDF_RadarLockManager m_LockManager;
     protected ref array<ref RDF_RadarTarget> m_Plots;
     protected ref RDF_RadarScanContext m_Context;
     protected ref RDF_RadarScanCompleteHandler m_Handler;
     protected ERDF_RadarSensorMode m_Mode;
     protected bool m_Enabled;
     protected bool m_ForceLocalScan;
+    // Wall-clock gate for Tick intervals. World time freezes in GM editor /
+    // pause, which would otherwise stall scan serial forever.
+    protected float m_LastScanWallS;
     protected float m_LastScanTimeS;
     protected int m_ScanSerial;
 
@@ -64,11 +68,13 @@ class RDF_RadarSensor
         m_Scanner = new RDF_RadarScanner(m_Settings);
         m_Tracker = new RDF_RadarProjectileTracker();
         m_Tracker.ConfigureFromSettings(m_Settings);
+        m_LockManager = new RDF_RadarLockManager();
         m_Plots = new array<ref RDF_RadarTarget>();
         m_Context = new RDF_RadarScanContext();
         m_Mode = ERDF_RadarSensorMode.RDF_RADAR_MODE_SEARCH;
         m_Enabled = true;
         m_ForceLocalScan = false;
+        m_LastScanWallS = -1000.0;
         m_LastScanTimeS = -1000.0;
         m_ScanSerial = 0;
     }
@@ -109,6 +115,8 @@ class RDF_RadarSensor
         if (!m_Tracker)
             m_Tracker = new RDF_RadarProjectileTracker();
         m_Tracker.ConfigureFromSettings(m_Settings);
+        // Force the next Tick to run immediately after a reconfigure.
+        m_LastScanWallS = -1000.0;
     }
 
     void SetMode(ERDF_RadarSensorMode mode)
@@ -235,6 +243,21 @@ class RDF_RadarSensor
         return m_Tracker;
     }
 
+    RDF_RadarLockManager GetLockManager()
+    {
+        if (!m_LockManager)
+            m_LockManager = new RDF_RadarLockManager();
+        return m_LockManager;
+    }
+
+    // Convenience: current locked target for weapon / fire-control code.
+    bool GetLockedTarget(out IEntity entity, out vector worldPos)
+    {
+        if (!m_LockManager)
+            return false;
+        return m_LockManager.GetLockedTarget(entity, worldPos);
+    }
+
     array<ref RDF_RadarTarget> GetPlots()
     {
         return m_Plots;
@@ -307,6 +330,8 @@ class RDF_RadarSensor
     }
 
     // Interval-gated tick. Returns true when a scan actually ran.
+    // Gate on wall clock so Workbench GM editor / pause (frozen world time)
+    // still advances scan serial for HUD and AutoTests.
     bool Tick(IEntity subject, RDF_RadarNetworkAPI networkAPI)
     {
         if (!m_Enabled || !m_Settings || !subject)
@@ -318,11 +343,14 @@ class RDF_RadarSensor
         if (!world)
             return false;
 
-        float now = world.GetWorldTime() * 0.001;
-        if (now - m_LastScanTimeS < m_Settings.m_UpdateInterval)
+        float wallNowS = System.GetTickCount() * 0.001;
+        if (wallNowS - m_LastScanWallS < m_Settings.m_UpdateInterval)
             return false;
+        m_LastScanWallS = wallNowS;
 
-        ScanOnce(subject, networkAPI, now);
+        // Tracker / ballistics still prefer simulation time when it advances.
+        float worldTimeS = world.GetWorldTime() * 0.001;
+        ScanOnce(subject, networkAPI, worldTimeS);
         return true;
     }
 
@@ -389,6 +417,16 @@ class RDF_RadarSensor
         m_Tracker.UpdateWithOrigin(m_Plots, worldTimeS, trackOrigin);
         m_Tracker.RefreshWeaponLocates(trackOrigin[1]);
 
+        if (m_LockManager)
+        {
+            m_LockManager.Update(
+                m_Tracker.GetAllTracks(),
+                trackOrigin,
+                forward,
+                rangeM,
+                worldTimeS);
+        }
+
         m_Context.m_Origin = trackOrigin;
         m_Context.m_Forward = forward;
         m_Context.m_RangeM = rangeM;
@@ -413,9 +451,14 @@ class RDF_RadarSensor
         if (m_Scanner)
             dem = m_Scanner.GetDemStatusShort();
 
+        string lock = "";
+        if (m_LockManager)
+            lock = " | " + m_LockManager.GetStatusShort();
+
         return modeName + " | " + dem
             + " | plots=" + CountDetectedPlots().ToString()
             + " tracks=" + CountConfirmedTracks().ToString()
-            + " wlr=" + CountWlrFixes().ToString();
+            + " wlr=" + CountWlrFixes().ToString()
+            + lock;
     }
 }

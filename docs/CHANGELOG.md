@@ -1,5 +1,48 @@
 # CHANGELOG
 
+## 2026-07-27 — AutoTest 互斥 + 顺序套件
+
+- 根因：DEM / Lock / Air / ShellFire 共用 `RDF_RadarAutoRunner`；并行启动会互相覆盖配置 → 假 FAIL（clutter=0、acquire=0、tracks=0、分类为 0）
+- 新增 `RDF_RadarAutoTestGate`：同一时间只允许一个 AutoRunner 测试持有门闩
+- 新增 `RDF_RadarAutoTestSuite.StartAll()`：Ballistics → DEM → Lock → Air → ShellFire 顺序执行
+- README 标明不可并行
+
+---
+
+## 2026-07-27 — AutoTest scans=0：墙钟驱动扫描间隔
+
+- 根因：`RDF_RadarSensor.Tick` 用 `GetWorldTime` 做更新间隔；Workbench GM 编辑器下世界时间常冻结，扫描序号不涨，AutoTest 全部 `scans=0`（弹道数学单测不受影响）
+- 修复：Tick 间隔改用 `System.GetTickCount` 墙钟；`Configure` 后强制立即下一扫
+- `RDF_RadarAutoRunner`：GM 自由相机导致 `ControlledEntity` 为空时，回退到上次成功的 subject
+- `RDF_RadarScattererRegistry.Tick`：同帧去重与发现间隔也改墙钟，避免 `pend` 分类在冻结世界时间下停摆
+
+---
+
+## 2026-07-26 — 存量测试同类问题修复
+
+- `RDF_RadarScanner.IsLineOfSightClear`：命中目标**子碰撞体**（车轮 / 车体分件）也视为通视；LOS 端点改用几何包围盒中心（`GetScattererLosEnd`），修复地面载具被自身/地形误判遮挡 —— 该修复对全部测试生效
+- 强制本地扫描补齐：`RDF_RadarAirborneScanTest` / `RDF_RadarAutoTest` 之前未调 `SetForceLocalScan(true)`，Workbench 角色带 `RplComponent` 时会走网络扫描器、测试配置整体被绕过（与炮弹测试同一根因）；三个测试统一改为**保存并还原**先前状态，不再硬置 false
+- `RDF_RadarAirborneScanTest`：
+  - 轨道相位改为**相对开机时间**，首帧不再把 Mi-8 从生成点瞬移到圆周另一侧（与载具撞毁同源问题）；重生沿用当前相位
+  - 关闭 CFAR 门（空距离单元尚无热噪声填充，孤立真批可能被窗口否掉），显式 `m_KeepEntityTruth=true`
+  - `target_classified` 不再等价于 `target_detected`，改为真正校验 VEHICLE / RADAR_EMITTER 分类；新增 `seen_as_anonymous` 指标
+  - `seen` 统计所有落在目标门内的批，`detected` 只统计通过检测链路的批，"看见但未检出" 可从报告直接读出
+
+---
+
+## 2026-07-26 — 锁定层与搜索→截获→跟踪状态机（P0）
+
+- 新增 `RDF_RadarLockManager`：`SEARCH → ACQUIRING → TRACKING → COAST` 状态机
+  - 自动截获最近合规目标 / 手动 `LockTrackId`；类型过滤、最大锁距、扇区门、确认帧数、丢批 coast
+  - `GetLockedTarget(out entity, out worldPos)` 供武器 / 火控读取；coast 期间外推瞄点
+- `RDF_RadarSensor`：持有并每次扫描驱动锁定层；`GetLockManager` / `GetLockedTarget`；`GetStatusShort` 追加锁定状态
+- `RDF_RadarComponent`：`GetLockManager` / `LockTrackId` / `Unlock` / `GetLockedTarget`
+- 新增 `RDF_RadarLockAutoTest`：放置**静止**载具（不 `SetOrigin` 传送），验证 SEARCH→ACQUIRING→TRACKING
+- 修复：自动截获允许未确认航迹进入 ACQUIRING；测试选平坦通视点，避免物理撞毁
+- 文档：[RADAR_API.md](RADAR_API.md) 锁定层节；[VEHICLE_RADAR_LOCK_GUIDE.md](VEHICLE_RADAR_LOCK_GUIDE.md) 更新
+
+---
+
 ## 2026-07-26 — RDF_RadarSensor 公共门面 API
 
 - 新增 `RDF_RadarSensor`：`ConfigureMode(SEARCH/STARE/WLR)` → `Tick`/`ScanOnce` → `GetPlots`/`GetTracks`/`CountWlrFixes`

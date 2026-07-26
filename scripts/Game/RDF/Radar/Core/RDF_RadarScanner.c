@@ -228,7 +228,10 @@ class RDF_RadarScanner
             }
 
             vector pos = entry.m_Position;
-            vector toTarget = pos - origin;
+            // Aim LOS at the geometric center so ground vehicles are not
+            // blocked by terrain before their chassis origin (often on the ground).
+            vector losEnd = GetScattererLosEnd(entry);
+            vector toTarget = losEnd - origin;
             float distSq = toTarget.LengthSq();
             if (distSq < minDistSq || distSq > rangeSq)
                 continue;
@@ -245,7 +248,7 @@ class RDF_RadarScanner
                 break;
 
             param.Start = origin;
-            param.End = pos;
+            param.End = losEnd;
             param.TraceEnt = null;
             float hitFraction = world.TraceMove(param, null);
             losUsed = losUsed + 1;
@@ -269,7 +272,7 @@ class RDF_RadarScanner
             RDF_RadarTarget t = new RDF_RadarTarget();
             t.m_Entity = entry.m_Entity;
             t.m_ScattererId = entry.m_ScattererId;
-            t.m_Position = pos;
+            t.m_Position = losEnd;
             t.m_Distance = dist;
             t.m_Velocity = entry.m_Velocity;
             if (isEmitter)
@@ -325,7 +328,7 @@ class RDF_RadarScanner
             if (!ent || ent == subject)
                 continue;
 
-            vector pos = GetEntityPosition(ent);
+            vector pos = GetEntityLosEnd(ent);
             vector toTarget = pos - origin;
             float distSq = toTarget.LengthSq();
             if (distSq < minDistSq || distSq > rangeSq)
@@ -900,11 +903,63 @@ class RDF_RadarScanner
 
     protected static bool IsLineOfSightClear(float hitFraction, IEntity traceEnt, IEntity target)
     {
-        if (traceEnt == target)
-            return true;
+        // Reached the end point with no earlier blocker.
         if (hitFraction >= 0.999)
             return true;
+        if (!traceEnt || !target)
+            return false;
+        // Hit the target root, or any child collider under it (common for vehicles).
+        if (IsEntityOrChildOf(traceEnt, target))
+            return true;
         return false;
+    }
+
+    // True when hitEntity is target, or a descendant of target in the entity tree.
+    protected static bool IsEntityOrChildOf(IEntity hitEntity, IEntity target)
+    {
+        if (!hitEntity || !target)
+            return false;
+        IEntity cur = hitEntity;
+        int guard = 0;
+        while (cur && guard < 16)
+        {
+            if (cur == target)
+                return true;
+            cur = cur.GetParent();
+            guard = guard + 1;
+        }
+        return false;
+    }
+
+    // Prefer geometric center for Trace / range. Chassis origins often sit on
+    // the ground plane and lose LOS to terrain before the vehicle body.
+    protected static vector GetScattererLosEnd(RDF_RadarScatterer entry)
+    {
+        if (!entry)
+            return "0 0 0";
+        if (!entry.m_Entity)
+            return entry.m_Position;
+
+        vector worldMat[4];
+        entry.m_Entity.GetWorldTransform(worldMat);
+        vector mins;
+        vector maxs;
+        entry.m_Entity.GetBounds(mins, maxs);
+        vector centerLocal = (mins + maxs) * 0.5;
+        vector size = maxs - mins;
+        float extent = Math.AbsFloat(size[0]) + Math.AbsFloat(size[1]) + Math.AbsFloat(size[2]);
+        if (extent < 0.05)
+        {
+            // Degenerate bounds: lift a little above origin.
+            vector lifted = entry.m_Position;
+            lifted[1] = lifted[1] + 1.2;
+            return lifted;
+        }
+
+        return worldMat[3]
+            + (worldMat[0] * centerLocal[0])
+            + (worldMat[1] * centerLocal[1])
+            + (worldMat[2] * centerLocal[2]);
     }
 
     protected static vector GetEntityPosition(IEntity entity)
@@ -914,6 +969,30 @@ class RDF_RadarScanner
         vector mat[4];
         entity.GetWorldTransform(mat);
         return mat[3];
+    }
+
+    protected static vector GetEntityLosEnd(IEntity entity)
+    {
+        if (!entity)
+            return "0 0 0";
+        vector worldMat[4];
+        entity.GetWorldTransform(worldMat);
+        vector mins;
+        vector maxs;
+        entity.GetBounds(mins, maxs);
+        vector centerLocal = (mins + maxs) * 0.5;
+        vector size = maxs - mins;
+        float extent = Math.AbsFloat(size[0]) + Math.AbsFloat(size[1]) + Math.AbsFloat(size[2]);
+        if (extent < 0.05)
+        {
+            vector lifted = worldMat[3];
+            lifted[1] = lifted[1] + 1.2;
+            return lifted;
+        }
+        return worldMat[3]
+            + (worldMat[0] * centerLocal[0])
+            + (worldMat[1] * centerLocal[1])
+            + (worldMat[2] * centerLocal[2]);
     }
 
     protected static vector GetEntityVelocity(IEntity entity)
@@ -985,6 +1064,18 @@ class RDF_RadarScanner
             + target.m_Velocity[1] * los[1]
             + target.m_Velocity[2] * los[2]);
 
+        // Geometry-only mode: keep Detected=true after polar fill. Do not apply
+        // NLOS / SNR / CFAR rejects (used by lock-layer and other regressions).
+        RDF_RadarHardware hardware = m_Settings.m_Hardware;
+        if (!m_Settings.m_EnablePhysicalDetection || !hardware)
+        {
+            if (target.m_LosBlocked)
+                target.m_MultipathFactor = 0.25;
+            else
+                target.m_MultipathFactor = 1.0;
+            return;
+        }
+
         if (target.m_LosBlocked)
         {
             target.m_MultipathFactor = ComputeNlosMultipathFactor(
@@ -1006,10 +1097,6 @@ class RDF_RadarScanner
         {
             target.m_MultipathFactor = 1.0;
         }
-
-        RDF_RadarHardware hardware = m_Settings.m_Hardware;
-        if (!m_Settings.m_EnablePhysicalDetection || !hardware)
-            return;
 
         string beamName;
         float patternGain = RDF_RadarClutterModel.GetStrongestBeamGain(

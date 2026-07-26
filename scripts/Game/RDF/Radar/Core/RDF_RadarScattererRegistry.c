@@ -58,7 +58,9 @@ class RDF_RadarScattererRegistry
     protected static ref array<IEntity> s_DiscoveryScratch;
 
     protected static float s_LastTickTime = -1000.0;
+    protected static float s_LastTickWallS = -1000.0;
     protected static float s_LastDiscoveryTime = -1000.0;
+    protected static float s_LastDiscoveryWallS = -1000.0;
     protected static vector s_FocusOrigin = "0 0 0";
     protected static float s_DiscoveryRadiusM = 4000.0;
     protected static int s_RefreshCursor = 0;
@@ -242,10 +244,14 @@ class RDF_RadarScattererRegistry
         s_Pending.Clear();
         s_RefreshCursor = 0;
         s_LastDiscoveryTime = -1000.0;
+        s_LastDiscoveryWallS = -1000.0;
+        s_LastTickWallS = -1000.0;
     }
 
     //------------------------------------------------------------------------------------------------
     // Advance the table. Guarded so N radars in one frame cost the same as one.
+    // Frame / discovery cadence uses wall clock so GM editor (frozen world time)
+    // still classifies and refreshes entries for AutoTests.
     static void Tick(
         BaseWorld world,
         float worldTimeS,
@@ -256,17 +262,21 @@ class RDF_RadarScattererRegistry
             return;
 
         EnsureContainers();
-        if (worldTimeS == s_LastTickTime)
+        float wallS = System.GetTickCount() * 0.001;
+        // Collapse multiple callers in the same ~frame without relying on world time.
+        if (wallS - s_LastTickWallS < 0.001)
             return;
+        s_LastTickWallS = wallS;
         s_LastTickTime = worldTimeS;
 
         s_FocusOrigin = focusOrigin;
         if (radiusHintM > 0.0)
             s_DiscoveryRadiusM = Math.Clamp(radiusHintM, 100.0, 60000.0);
 
-        bool intervalElapsed = worldTimeS - s_LastDiscoveryTime >= s_DiscoveryIntervalS;
+        bool intervalElapsed = wallS - s_LastDiscoveryWallS >= s_DiscoveryIntervalS;
         if (intervalElapsed && s_Pending.Count() == 0)
         {
+            s_LastDiscoveryWallS = wallS;
             s_LastDiscoveryTime = worldTimeS;
             RunDiscovery(world);
         }

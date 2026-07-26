@@ -8,8 +8,10 @@ RDF 现已提供：
   `RDF_RadarTarget` plot 与 `RDF_RadarTrack` 航迹；实体入口为
   `RDF_RadarComponent`。见 [RADAR_API.md](RADAR_API.md)。
 - **LiDAR**：`RDF_LidarScanner` 射线点云，仍可用于近距感知或备用扫描。
+- **锁定层**：`RDF_RadarLockManager`（内置于 Sensor）已提供
+  `SEARCH → ACQUIRING → TRACKING → COAST` 状态机、自动/手动选锁、断锁与瞄点续航。
 
-**锁定状态**与**武器制导对接**仍需模组侧自行实现；本文给出最小路径与分工。
+现在只剩**武器制导对接**需模组侧实现；本文给出最小路径与分工。
 
 ---
 
@@ -18,8 +20,8 @@ RDF 现已提供：
 | 目标 | RDF 已有 | 需要你补充 |
 |------|----------|------------|
 | 载具能扫描载具 | ✅ `RDF_RadarSensor` / `RDF_RadarComponent`；或 `RDF_LidarScanner.Scan()` | 将扫描挂到载具，配置模式/量程/硬件 |
-| 锁定载具 | ❌ 无“当前锁定目标”状态（跟踪器只维持航迹） | **锁定管理器**：维护当前锁定的 `IEntity`，从扫描结果选目标，断锁条件 |
-| 武器锁定并打击 | ⚠️ RDF 有轨迹预测/WLR，但不含武器制导 | **武器/导弹脚本**：每帧读取锁定目标，驱动制导 |
+| 锁定载具 | ✅ `RDF_RadarLockManager`：自动/手动选锁、断锁、coast、`GetLockedTarget` | 按需调过滤/门限，或改手动选锁 |
+| 武器锁定并打击 | ⚠️ RDF 有轨迹预测/WLR + 锁定目标，但不含武器制导 | **武器/导弹脚本**：每帧读 `GetLockedTarget` 驱动制导 |
 
 ---
 
@@ -34,40 +36,39 @@ RDF 现已提供：
 - **方案 C（底层扩展）**：直接扩展 `RDF_RadarScanner` 或第五节 Query +
   Trace；仅在公共 Sensor 无法满足需求时采用。
 
-### 2.2 锁定层（需自行实现）
+### 2.2 锁定层（已内置 `RDF_RadarLockManager`）
 
-在载具上挂一个**锁定管理组件**（或单例 + 当前载具引用），逻辑要点：
+锁定层已随 Sensor 提供，无需自研。它维护单一“当前锁定目标”，并实现
+`SEARCH → ACQUIRING → TRACKING → COAST` 状态机（丢批时按速度外推瞄点）。
 
-1. **输入**：每次扫描得到 `array<ref RDF_RadarTarget>`，按
-   `m_Type == ERDF_RadarTargetType.RDF_RADAR_TARGET_VEHICLE` 过滤载具；
-   需要平滑位置和短时丢批续航时改读 `RDF_RadarTrack`。
-2. **选目标**：
-   - **自动锁**：在过滤后的列表中选“最近”（`m_Distance` 最小）；
-   - **手动锁**：从 HUD/PPI 上点选一个 blip，对应到某条 sample 的 `m_Entity`。
-3. **输出**：对外提供“当前锁定目标”，例如 `IEntity GetLockedTarget()` 或 `bool GetLockedTarget(out IEntity entity, out vector worldPos)`。
-4. **断锁**：若本帧扫描结果中不再包含该实体（丢失）、或距离 &gt; 最大锁定距离、或超出波束扇区，则清空锁定。
-
-示例（伪代码）：
+配置与读取：
 
 ```c
-// 每帧或每扫描周期调用
-void UpdateLock(array<ref RDF_RadarTarget> plots)
+RDF_RadarLockManager lockMgr = radarComponent.GetLockManager();
+lockMgr.SetAutoAcquire(true);              // 自动锁最近合规目标
+lockMgr.SetTypeFilter(true, false, false); // 仅载具
+lockMgr.SetMaxLockRange(4000.0);           // 0 = 用扫描量程
+lockMgr.SetLockSector(0.0);                // 0 = 不做扇区门
+lockMgr.SetAcquireHits(2);                 // 进入 TRACKING 所需帧数
+lockMgr.SetCoastMaxSec(2.0);               // 丢批后保持时间
+
+// 手动选锁（HUD blip）：lockMgr.LockTrackId(id); lockMgr.Unlock();
+
+// 武器每帧读取：
+IEntity target;
+vector aimPos;
+if (radarComponent.GetLockedTarget(target, aimPos))
 {
-    if (m_LockedEntity == null) { /* 可选：自动选最近载具 */ return; }
-    bool stillVisible = false;
-    foreach (RDF_RadarTarget plot : plots)
-    {
-        if (plot.m_Entity == m_LockedEntity)
-        {
-            stillVisible = true;
-            m_LockedPosition = plot.m_Position;  // 用于武器
-            break;
-        }
-    }
-    if (!stillVisible || GetDistance(m_LockedEntity) > m_MaxLockRange)
-        m_LockedEntity = null;
+    // 用 aimPos 驱动制导；COAST 期间为外推瞄点
 }
 ```
+
+断锁规则（自动）：目标航迹消失超过 `CoastMaxSec`、超出最大锁距、或超出扇区门。
+
+选锁默认取**最近**的已确认合规航迹；需要不同策略时可读
+`GetEligibleTrackIds(...)` 自行挑选后 `LockTrackId`。
+
+回归示例：`RDF_RadarLockAutoTest.Start()`。
 
 ### 2.3 武器打击：与 Reforger 武器系统对接
 

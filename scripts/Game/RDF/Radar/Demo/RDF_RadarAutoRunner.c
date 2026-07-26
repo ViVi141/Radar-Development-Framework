@@ -14,6 +14,9 @@ class RDF_RadarAutoRunner
     protected ref RDF_RadarVisualizer m_Visualizer;
     protected ref RDF_RadarVisualSettings m_VisualSettings;
     protected bool m_Running = false;
+    // Cached when ResolveLocalSubject succeeds; reused while GM free-cam makes
+    // ControlledEntity null so scans do not stall mid-AutoTest.
+    protected IEntity m_LastSubject;
 
     void RDF_RadarAutoRunner()
     {
@@ -204,6 +207,10 @@ class RDF_RadarAutoRunner
             return;
 
         IEntity subject = RDF_LidarSubjectResolver.ResolveLocalSubject(true);
+        if (subject)
+            m_LastSubject = subject;
+        else
+            subject = m_LastSubject;
         if (!subject)
             return;
 

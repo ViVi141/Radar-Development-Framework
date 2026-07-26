@@ -46,6 +46,7 @@ class RDF_RadarAutoTest
     protected ref RDF_RadarSettings m_PreviousConfig;
     protected bool m_PreviousDemoEnabled;
     protected bool m_PreviousHudEnabled;
+    protected bool m_PreviousForceLocal;
     protected ref array<IEntity> m_TestEmitterOwners;
     protected ref array<float> m_TestEmitterBaseAngles;
 
@@ -93,17 +94,21 @@ class RDF_RadarAutoTest
             Print("[RDF Radar AutoTest] already running.");
             return;
         }
+        if (!RDF_RadarAutoTestGate.TryAcquire("DEM"))
+            return;
 
         BaseWorld world = GetGame().GetWorld();
         if (!world)
         {
             Print("[RDF Radar AutoTest] no world.", LogLevel.WARNING);
+            RDF_RadarAutoTestGate.Release("DEM");
             return;
         }
 
         m_PreviousConfig = RDF_RadarAutoRunner.GetDemoConfig();
         m_PreviousDemoEnabled = RDF_RadarAutoRunner.IsDemoEnabled();
         m_PreviousHudEnabled = RDF_RadarAutoRunner.IsHudEnabled();
+        m_PreviousForceLocal = RDF_RadarAutoRunner.IsForceLocalScan();
 
         m_Results = new array<ref RDF_RadarAutoTestCaseResult>();
         m_TestEmitterOwners = new array<IEntity>();
@@ -113,6 +118,9 @@ class RDF_RadarAutoTest
         m_LastScanProgressWallS = System.GetTickCount() * 0.001;
         m_Running = true;
 
+        // A Workbench character carrying RplComponent makes AutoRunner pick the
+        // networked scanner, which ignores the per-phase configs below.
+        RDF_RadarAutoRunner.SetForceLocalScan(true);
         RDF_RadarAutoRunner.SetHudEnabled(false);
         RDF_RadarAutoRunner.SetDemoEnabled(true);
 
@@ -138,6 +146,7 @@ class RDF_RadarAutoTest
         m_Running = false;
         m_Current = null;
         CleanupSyntheticEmitters();
+        RDF_RadarAutoTestGate.Release("DEM");
 
         if (!restorePrevious)
             return;
@@ -146,6 +155,7 @@ class RDF_RadarAutoTest
             RDF_RadarAutoRunner.SetDemoConfig(m_PreviousConfig);
         RDF_RadarAutoRunner.SetDemoEnabled(m_PreviousDemoEnabled);
         RDF_RadarAutoRunner.SetHudEnabled(m_PreviousHudEnabled);
+        RDF_RadarAutoRunner.SetForceLocalScan(m_PreviousForceLocal);
     }
 
     protected void OnTick()

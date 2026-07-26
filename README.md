@@ -68,13 +68,18 @@ RDF_RadarAutoRunner.SetDemoEnabled(true);
 RDF_RadarAutoRunner.SetHudEnabled(true);   // PPI HUD（品红=辐射源 / 绿=载具 / 橙=弹丸）
 ```
 
-自动化测试（Script Debugger）：
+自动化测试（Script Debugger，**一次只跑一个**；共用 AutoRunner，并行会互相覆盖配置）：
 
 ```c
+// 推荐：顺序跑完全部
+RDF_RadarAutoTestSuite.StartAll();
+
+// 或单独跑：
 RDF_RadarAutoTest.Start();                 // DEM 杂波回归
 RDF_RadarBallisticsAutoTest.Start();       // 弹道/WLR 数学
 RDF_RadarShellFireAutoTest.Start();        // 实弹放炮 + WLR
 RDF_RadarAirborneScanTest.StartKeepTarget(); // 空中目标 + PPI
+RDF_RadarLockAutoTest.Start();             // 载具锁定状态机
 ```
 
 公共 API：[docs/RADAR_API.md](docs/RADAR_API.md)  

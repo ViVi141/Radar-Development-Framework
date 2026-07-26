@@ -1,0 +1,142 @@
+// Sequential AutoTest runner. Ballistics is sync; the rest share AutoRunner
+// and must never overlap.
+//
+// Usage: RDF_RadarAutoTestSuite.StartAll();
+class RDF_RadarAutoTestSuite
+{
+    protected static bool s_TickRegistered;
+    protected static bool s_Running;
+    protected static int s_Step = -1;
+    protected static float s_StepStartWallS;
+    protected static float s_StepTimeoutS = 120.0;
+
+    static void StartAll()
+    {
+        if (s_Running)
+        {
+            Print("[RDF Radar AutoTestSuite] already running.");
+            return;
+        }
+        if (RDF_RadarAutoTestGate.IsBusy())
+        {
+            Print("[RDF Radar AutoTestSuite] gate busy by "
+                + RDF_RadarAutoTestGate.GetOwner()
+                + "; stop that test first.", LogLevel.WARNING);
+            return;
+        }
+
+        s_Running = true;
+        Print("[RDF Radar AutoTestSuite] begin (sequential)");
+
+        if (!s_TickRegistered)
+        {
+            s_TickRegistered = true;
+            GetGame().GetCallqueue().CallLater(StaticTick, 500, true);
+        }
+
+        RunStep(0);
+    }
+
+    static void Stop()
+    {
+        s_Running = false;
+        s_Step = -1;
+        Print("[RDF Radar AutoTestSuite] stopped.");
+    }
+
+    static bool IsRunning()
+    {
+        return s_Running;
+    }
+
+    protected static void StaticTick()
+    {
+        if (!s_Running)
+            return;
+        if (s_Step < 0)
+            return;
+
+        float nowS = System.GetTickCount() * 0.001;
+        if (nowS - s_StepStartWallS > s_StepTimeoutS)
+        {
+            Print(string.Format(
+                "[RDF Radar AutoTestSuite] step %1 timed out after %2s",
+                s_Step.ToString(),
+                s_StepTimeoutS.ToString()), LogLevel.ERROR);
+            s_Running = false;
+            s_Step = -1;
+            return;
+        }
+
+        if (IsStepRunning(s_Step))
+            return;
+
+        int next = s_Step + 1;
+        if (next > 4)
+        {
+            Print("[RDF Radar AutoTestSuite] done");
+            s_Running = false;
+            s_Step = -1;
+            return;
+        }
+
+        RunStep(next);
+    }
+
+    protected static bool IsStepRunning(int step)
+    {
+        if (step == 0)
+            return false;
+        if (step == 1)
+            return RDF_RadarAutoTest.IsRunning();
+        if (step == 2)
+            return RDF_RadarLockAutoTest.IsRunning();
+        if (step == 3)
+            return RDF_RadarAirborneScanTest.IsRunning();
+        if (step == 4)
+            return RDF_RadarShellFireAutoTest.IsRunning();
+        return false;
+    }
+
+    protected static void RunStep(int step)
+    {
+        s_Step = step;
+        s_StepStartWallS = System.GetTickCount() * 0.001;
+
+        if (step == 0)
+        {
+            Print("[RDF Radar AutoTestSuite] step 1/5 Ballistics");
+            RDF_RadarBallisticsAutoTest.Start();
+            RunStep(1);
+            return;
+        }
+
+        if (step == 1)
+        {
+            Print("[RDF Radar AutoTestSuite] step 2/5 DEM AutoTest");
+            RDF_RadarAutoTest.Start();
+            return;
+        }
+
+        if (step == 2)
+        {
+            Print("[RDF Radar AutoTestSuite] step 3/5 Lock");
+            RDF_RadarLockAutoTest.Start();
+            return;
+        }
+
+        if (step == 3)
+        {
+            Print("[RDF Radar AutoTestSuite] step 4/5 Airborne");
+            RDF_RadarAirborneScanTest.Start();
+            return;
+        }
+
+        if (step == 4)
+        {
+            Print("[RDF Radar AutoTestSuite] step 5/5 ShellFire");
+            RDF_RadarShellFireAutoTest.Start();
+            return;
+        }
+    }
+}

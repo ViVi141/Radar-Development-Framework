@@ -117,6 +117,52 @@ Default synthesis clears entity identity (`m_KeepEntityTruth = false`). Plots ar
 
 ---
 
+## Lock layer (search → acquire → track)
+
+`RDF_RadarLockManager` turns tracks into a single **current locked target** with a
+state machine and break-lock rules. The Sensor drives it every scan; read the
+locked target from weapon / fire-control code.
+
+```c
+enum ERDF_RadarLockState
+{
+    RDF_RADAR_LOCK_SEARCH,     // no target held; optionally auto-acquiring
+    RDF_RADAR_LOCK_ACQUIRING,  // candidate held, waiting for confirm hits
+    RDF_RADAR_LOCK_TRACKING,   // stable lock
+    RDF_RADAR_LOCK_COAST       // target briefly missing; dead-reckoning before drop
+}
+```
+
+```c
+RDF_RadarLockManager lockMgr = sensor.GetLockManager();
+lockMgr.SetAutoAcquire(true);                 // auto-lock nearest eligible
+lockMgr.SetTypeFilter(true, false, false);    // vehicles only
+lockMgr.SetMaxLockRange(4000.0);              // 0 = use scan range
+lockMgr.SetLockSector(0.0);                   // 0 = no sector gating
+lockMgr.SetAcquireHits(2);                    // hits before TRACKING
+lockMgr.SetCoastMaxSec(2.0);                  // coast before dropping
+
+// Manual pick (e.g. HUD blip): lockMgr.LockTrackId(id); lockMgr.Unlock();
+
+// Each frame in weapon code:
+IEntity target;
+vector aimPos;
+if (sensor.GetLockedTarget(target, aimPos))
+{
+    // drive guidance toward aimPos (dead-reckoned while coasting)
+}
+```
+
+`GetStatusShort()` appends the lock state, e.g. `LOCK TRACKING id=3 r=812m az=41`.
+
+Entity component convenience: `RDF_RadarComponent.LockTrackId`, `Unlock`,
+`GetLockedTarget`, `GetLockManager`.
+
+Demo / regression: `RDF_RadarLockAutoTest.Start()` spawns a moving vehicle and
+verifies SEARCH → ACQUIRING → TRACKING with a usable aim point.
+
+---
+
 ## Demo shell vs Sensor
 
 | Class | Role |

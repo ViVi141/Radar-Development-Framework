@@ -62,6 +62,7 @@ class RDF_RadarShellFireAutoTest
     protected ref RDF_RadarSettings m_PrevConfig;
     protected bool m_PrevDemoEnabled;
     protected bool m_PrevHudEnabled;
+    protected bool m_PrevForceLocal;
 
     static RDF_RadarShellFireAutoTest GetInstance()
     {
@@ -107,11 +108,14 @@ class RDF_RadarShellFireAutoTest
             Print("[RDF ShellFire AutoTest] already running.");
             return;
         }
+        if (!RDF_RadarAutoTestGate.TryAcquire("ShellFire"))
+            return;
 
         BaseWorld world = GetGame().GetWorld();
         if (!world)
         {
             Print("[RDF ShellFire AutoTest] no world.", LogLevel.WARNING);
+            RDF_RadarAutoTestGate.Release("ShellFire");
             return;
         }
 
@@ -119,12 +123,14 @@ class RDF_RadarShellFireAutoTest
         if (!m_Subject)
         {
             Print("[RDF ShellFire AutoTest] no local subject.", LogLevel.WARNING);
+            RDF_RadarAutoTestGate.Release("ShellFire");
             return;
         }
 
         m_PrevConfig = RDF_RadarAutoRunner.GetDemoConfig();
         m_PrevDemoEnabled = RDF_RadarAutoRunner.IsDemoEnabled();
         m_PrevHudEnabled = RDF_RadarAutoRunner.IsHudEnabled();
+        m_PrevForceLocal = RDF_RadarAutoRunner.IsForceLocalScan();
 
         vector mat[4];
         m_Subject.GetWorldTransform(mat);
@@ -189,13 +195,14 @@ class RDF_RadarShellFireAutoTest
     {
         m_Running = false;
         CleanupLiveShells();
+        RDF_RadarAutoTestGate.Release("ShellFire");
 
         if (!restore)
             return;
 
         if (m_PrevConfig)
             RDF_RadarAutoRunner.SetDemoConfig(m_PrevConfig);
-        RDF_RadarAutoRunner.SetForceLocalScan(false);
+        RDF_RadarAutoRunner.SetForceLocalScan(m_PrevForceLocal);
         RDF_RadarAutoRunner.SetDemoEnabled(m_PrevDemoEnabled);
         RDF_RadarAutoRunner.SetHudEnabled(m_PrevHudEnabled);
     }

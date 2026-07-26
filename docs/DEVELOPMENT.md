@@ -85,7 +85,8 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarScattererRegistry.c    全局散射体/辐射源表（增量维护）
 │   ├── RDF_RadarEmitterRegistry.c      辐射标记门面（转发到散射体表）
 │   ├── RDF_RadarProjectileTracker.c    量测关联 / α-β / 弹道 PredictAt / WLR fix
-│   └── RDF_RadarSensor.c               公共门面 SEARCH/STARE/WLR → Plots/Tracks
+│   ├── RDF_RadarLockManager.c          锁定层 SEARCH/ACQUIRING/TRACKING/COAST
+│   └── RDF_RadarSensor.c               公共门面 SEARCH/STARE/WLR → Plots/Tracks/Lock
 ├── Physics/
 │   ├── RDF_RadarRcsModel.c
 │   ├── RDF_RadarBallistics.c           重力+AirDrag+全局风；DEM/地表 WLR 交点
@@ -108,7 +109,8 @@ scripts/Game/RDF/Radar/
     ├── RDF_RadarAutoTest.c             DEM 杂波回归
     ├── RDF_RadarBallisticsAutoTest.c   弹道/WLR 数学回归
     ├── RDF_RadarShellFireAutoTest.c    实弹 Spawn+Launch + WLR
-    └── RDF_RadarAirborneScanTest.c     空中目标扫描
+    ├── RDF_RadarAirborneScanTest.c     空中目标扫描
+    └── RDF_RadarLockAutoTest.c         载具锁定状态机演示/回归
 ```
 
 数据流摘要见 [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md)。

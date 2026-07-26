@@ -35,12 +35,14 @@ class RDF_RadarAirborneScanTest
     protected int m_TargetDetectedCount;
     protected int m_TargetSeenAsVehicle;
     protected int m_TargetSeenAsEmitter;
+    protected int m_TargetSeenAsAnonymous;
     protected float m_MaxTargetSnrDb = -300.0;
     protected int m_RespawnCount;
 
     protected ref RDF_RadarSettings m_PrevConfig;
     protected bool m_PrevDemoEnabled;
     protected bool m_PrevHudEnabled;
+    protected bool m_PrevForceLocal;
 
     static RDF_RadarAirborneScanTest GetInstance()
     {
@@ -94,11 +96,14 @@ class RDF_RadarAirborneScanTest
             Print("[RDF Radar AirTest] already running.");
             return;
         }
+        if (!RDF_RadarAutoTestGate.TryAcquire("Air"))
+            return;
 
         BaseWorld world = GetGame().GetWorld();
         if (!world)
         {
             Print("[RDF Radar AirTest] no world.", LogLevel.WARNING);
+            RDF_RadarAutoTestGate.Release("Air");
             return;
         }
 
@@ -106,18 +111,25 @@ class RDF_RadarAirborneScanTest
         if (!m_Subject)
         {
             Print("[RDF Radar AirTest] no local subject.", LogLevel.WARNING);
+            RDF_RadarAutoTestGate.Release("Air");
             return;
         }
 
         m_PrevConfig = RDF_RadarAutoRunner.GetDemoConfig();
         m_PrevDemoEnabled = RDF_RadarAutoRunner.IsDemoEnabled();
         m_PrevHudEnabled = RDF_RadarAutoRunner.IsHudEnabled();
+        m_PrevForceLocal = RDF_RadarAutoRunner.IsForceLocalScan();
 
         if (!ChooseAndApplyRadarOrigin())
         {
             Print("[RDF Radar AirTest] failed to choose radar origin.", LogLevel.ERROR);
+            RDF_RadarAutoTestGate.Release("Air");
             return;
         }
+
+        // Clock must start before the spawn so the initial orbit phase is 0 and
+        // the first motion tick does not teleport the target.
+        m_StartWallS = System.GetTickCount() * 0.001;
 
         if (!SpawnAirTarget())
         {
@@ -126,6 +138,9 @@ class RDF_RadarAirborneScanTest
             return;
         }
 
+        // A Workbench character carrying RplComponent makes AutoRunner pick the
+        // networked scanner, which ignores this test config.
+        RDF_RadarAutoRunner.SetForceLocalScan(true);
         ApplyTestRadarConfig();
         RDF_RadarAutoRunner.SetHudEnabled(true);
         RDF_RadarAutoRunner.SetDemoEnabled(true);
@@ -136,11 +151,11 @@ class RDF_RadarAirborneScanTest
         m_TargetDetectedCount = 0;
         m_TargetSeenAsVehicle = 0;
         m_TargetSeenAsEmitter = 0;
+        m_TargetSeenAsAnonymous = 0;
         m_MaxTargetSnrDb = -300.0;
         m_RespawnCount = 0;
         m_LastScanSerial = RDF_RadarAutoRunner.GetLastScanSerial();
 
-        m_StartWallS = System.GetTickCount() * 0.001;
         m_LastProgressWallS = m_StartWallS;
         m_LastDebugPrintWallS = m_StartWallS;
         m_Running = true;
@@ -160,6 +175,7 @@ class RDF_RadarAirborneScanTest
     protected void StopInternal(bool restore)
     {
         m_Running = false;
+        RDF_RadarAutoTestGate.Release("Air");
 
         if (m_AirTarget && !s_KeepSpawnedTargetAfterTest)
         {
@@ -176,6 +192,7 @@ class RDF_RadarAirborneScanTest
             RDF_RadarAutoRunner.SetDemoConfig(m_PrevConfig);
         RDF_RadarAutoRunner.SetDemoEnabled(m_PrevDemoEnabled);
         RDF_RadarAutoRunner.SetHudEnabled(m_PrevHudEnabled);
+        RDF_RadarAutoRunner.SetForceLocalScan(m_PrevForceLocal);
     }
 
     protected void OnTick()
@@ -237,6 +254,28 @@ class RDF_RadarAirborneScanTest
         return true;
     }
 
+    // Orbit position for an elapsed-since-start time. Elapsed 0 == spawn point,
+    // so the first motion tick continues smoothly instead of teleporting the
+    // target across the circle (absolute tick counts caused a huge first jump).
+    protected vector ComputeOrbitPos(float elapsedS)
+    {
+        float phase = elapsedS * m_OrbitRateRadS;
+        return Vector(
+            m_RadarOrigin[0] + Math.Cos(phase) * m_OrbitRadiusM,
+            m_RadarOrigin[1] + m_OrbitAltitudeM + 15.0 * Math.Sin(elapsedS * 0.07),
+            m_RadarOrigin[2] + Math.Sin(phase) * m_OrbitRadiusM);
+    }
+
+    protected float GetElapsedS()
+    {
+        if (m_StartWallS <= 0.0)
+            return 0.0;
+        float elapsed = System.GetTickCount() * 0.001 - m_StartWallS;
+        if (elapsed < 0.0)
+            return 0.0;
+        return elapsed;
+    }
+
     protected bool SpawnAirTarget()
     {
         BaseWorld world = GetGame().GetWorld();
@@ -249,10 +288,8 @@ class RDF_RadarAirborneScanTest
 
         EntitySpawnParams spawnParams = new EntitySpawnParams();
         Math3D.AnglesToMatrix(Vector(0, 0, 0), spawnParams.Transform);
-        vector spawnPos = Vector(
-            m_RadarOrigin[0] + m_OrbitRadiusM,
-            m_RadarOrigin[1] + m_OrbitAltitudeM,
-            m_RadarOrigin[2]);
+        // Respawn keeps the current orbit phase; initial spawn is phase 0.
+        vector spawnPos = ComputeOrbitPos(GetElapsedS());
         spawnParams.Transform[3] = spawnPos;
 
         m_AirTarget = GetGame().SpawnEntityPrefab(prefabRes, world, spawnParams);
@@ -277,6 +314,12 @@ class RDF_RadarAirborneScanTest
         cfg.m_KeepUndetected = true;
         cfg.m_DetectionSnrDb = -40.0;
         cfg.m_EnableDemClutter = false;
+        // Empty range cells carry no thermal-noise fill yet, so the CFAR window can
+        // reject a lone genuine plot. This test measures detection, not false alarms.
+        cfg.m_EnableCfarGate = false;
+        // Synthesis otherwise rewrites the type to ANONYMOUS, which makes the
+        // classification check meaningless.
+        cfg.m_KeepEntityTruth = true;
 
         RDF_RadarHardware hw = RDF_RadarHardware.CreateShorad();
         hw.m_AzimuthBeamwidthDeg = 40.0;
@@ -303,16 +346,14 @@ class RDF_RadarAirborneScanTest
             return;
         }
 
-        m_OrbitPhaseRad = nowS * m_OrbitRateRadS;
-        vector pos = Vector(
-            m_RadarOrigin[0] + Math.Cos(m_OrbitPhaseRad) * m_OrbitRadiusM,
-            m_RadarOrigin[1] + m_OrbitAltitudeM + 15.0 * Math.Sin(nowS * 0.07),
-            m_RadarOrigin[2] + Math.Sin(m_OrbitPhaseRad) * m_OrbitRadiusM);
+        float elapsedS = GetElapsedS();
+        m_OrbitPhaseRad = elapsedS * m_OrbitRateRadS;
+        vector pos = ComputeOrbitPos(elapsedS);
         m_AirTarget.SetOrigin(pos);
 
         float vx = -Math.Sin(m_OrbitPhaseRad) * m_OrbitRadiusM * m_OrbitRateRadS;
         float vz = Math.Cos(m_OrbitPhaseRad) * m_OrbitRadiusM * m_OrbitRateRadS;
-        float vy = 15.0 * 0.07 * Math.Cos(nowS * 0.07);
+        float vy = 15.0 * 0.07 * Math.Cos(elapsedS * 0.07);
         Physics physics = m_AirTarget.GetPhysics();
         if (physics)
             physics.SetVelocity(Vector(vx, vy, vz));
@@ -362,17 +403,21 @@ class RDF_RadarAirborneScanTest
 
         foreach (RDF_RadarTarget t : targets)
         {
-            if (!t || !t.m_Detected)
+            if (!t)
                 continue;
 
-            // Measurement synthesis clears entity refs; match by measured range gate.
+            // Plots may keep the entity ref; synthesized ones only match by gate.
             float matchGateM = 250.0;
             if (!IsPlotNearEntity(t, m_AirTarget, m_RadarOrigin, matchGateM))
                 continue;
 
+            // Seen counts every plot on the target, detected only those that pass
+            // the detection pipeline, so a "seen but not detected" run is visible.
             m_TargetSeenCount = m_TargetSeenCount + 1;
-            if (t.m_Detected)
-                m_TargetDetectedCount = m_TargetDetectedCount + 1;
+            if (!t.m_Detected)
+                continue;
+
+            m_TargetDetectedCount = m_TargetDetectedCount + 1;
             if (t.m_SnrDb > m_MaxTargetSnrDb)
                 m_MaxTargetSnrDb = t.m_SnrDb;
             if (t.m_Type == ERDF_RadarTargetType.RDF_RADAR_TARGET_VEHICLE)
@@ -380,7 +425,7 @@ class RDF_RadarAirborneScanTest
             if (t.m_Type == ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER)
                 m_TargetSeenAsEmitter = m_TargetSeenAsEmitter + 1;
             if (t.m_Type == ERDF_RadarTargetType.RDF_RADAR_TARGET_ANONYMOUS)
-                m_TargetSeenAsVehicle = m_TargetSeenAsVehicle + 1;
+                m_TargetSeenAsAnonymous = m_TargetSeenAsAnonymous + 1;
         }
     }
 
@@ -422,8 +467,7 @@ class RDF_RadarAirborneScanTest
         bool passScans = m_ScanCount > 8;
         bool passSeen = m_TargetSeenCount > 0;
         bool passDetected = m_TargetDetectedCount > 0;
-        // Soft ID tags are stripped under measurement synthesis; any near-plot is enough.
-        bool passClassified = passDetected;
+        bool passClassified = m_TargetSeenAsVehicle > 0 || m_TargetSeenAsEmitter > 0;
         bool allPass = passScans && passSeen && passDetected && passClassified;
 
         array<string> lines = new array<string>();
@@ -443,6 +487,7 @@ class RDF_RadarAirborneScanTest
         lines.Insert("  target_detected_count " + m_TargetDetectedCount.ToString());
         lines.Insert("  seen_as_vehicle " + m_TargetSeenAsVehicle.ToString());
         lines.Insert("  seen_as_emitter " + m_TargetSeenAsEmitter.ToString());
+        lines.Insert("  seen_as_anonymous " + m_TargetSeenAsAnonymous.ToString());
         lines.Insert("  max_target_snr_db " + m_MaxTargetSnrDb.ToString());
         lines.Insert("  target_respawn_count " + m_RespawnCount.ToString());
         lines.Insert("  radar_origin " + m_RadarOrigin.ToString());
@@ -455,12 +500,13 @@ class RDF_RadarAirborneScanTest
 
         Print("[RDF Radar AirTest] " + BoolLabel(allPass) + "  report=" + reportPath);
         Print(string.Format(
-            "[RDF Radar AirTest] scans=%1 seen=%2 detected=%3 vehicle=%4 emitter=%5 maxSnr=%6 respawn=%7",
+            "[RDF Radar AirTest] scans=%1 seen=%2 detected=%3 vehicle=%4 emitter=%5 anon=%6 maxSnr=%7 respawn=%8",
             m_ScanCount.ToString(),
             m_TargetSeenCount.ToString(),
             m_TargetDetectedCount.ToString(),
             m_TargetSeenAsVehicle.ToString(),
             m_TargetSeenAsEmitter.ToString(),
+            m_TargetSeenAsAnonymous.ToString(),
             m_MaxTargetSnrDb.ToString(),
             m_RespawnCount.ToString()));
     }
