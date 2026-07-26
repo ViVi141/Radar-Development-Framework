@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-07-27 — 手动摆车 PPI 无点：MTI + 球查询回退
+
+- 静止载具多普勒≈0 时 `MtiTwoPulseGain→0`，物理检测 SNR 被压穿门限 → `Det 0/0`
+- `QueryEntitiesBySphere(DYNAMIC)` 常漏掉 GM 编辑器放置的车；球查询空结果时回退 `GetActiveEntities`
+
+---
+
 ## 2026-07-27 — DEM AutoTest budget0 清缓存
 
 - 杂波已正确：`scale1→scale5` 约 5×（7.9e-18 → 3.9e-17）

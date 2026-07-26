@@ -491,12 +491,14 @@ class RDF_RadarScanner
             haveSphere = outCandidates.Count() > 0;
         }
 
-        // Active-entity dump is expensive; only use as fallback when sphere is
-        // disabled, or when sphere returned nothing and AlsoActive is set.
+        // Active-entity dump is expensive; use when sphere is off, or when the
+        // DYNAMIC sphere misses editor-placed / static vehicles (empty result).
         bool needActive = false;
         if (!m_Settings.m_UseSphereQuery)
             needActive = true;
-        else if (m_Settings.m_SphereQueryAlsoActive && !haveSphere)
+        else if (!haveSphere)
+            needActive = true;
+        else if (m_Settings.m_SphereQueryAlsoActive)
             needActive = true;
 
         if (!needActive)

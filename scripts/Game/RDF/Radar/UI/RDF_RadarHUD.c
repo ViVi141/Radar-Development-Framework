@@ -18,21 +18,19 @@
 
 class RDF_RadarHUD
 {
-    // ---- panel geometry (reference px) ----
-    static const int PX_LEFT    = 1685;
-    static const int PX_TOP     = 700;
+    // ---- panel geometry (reference px; origin computed at Build from workspace) ----
     static const int PX_W       = 215;
     static const int PX_HDR_H   = 25;
 
     static const int PX_RADAR_H = 210;
     static const int PX_RADAR_W = 210;
 
-    static const int PX_DATA_Y  = PX_TOP + PX_HDR_H + PX_RADAR_H + 2;
     static const int PX_ROW_H   = 21;
     static const int PX_PAD_X   = 7;
     static const int PX_PAD_Y   = 4;
 
     static const int PX_H       = PX_HDR_H + PX_RADAR_H + 2 * PX_ROW_H + 6;
+    static const int PX_MARGIN  = 24;
 
     // ---- PPI canvas internals (unit coords == pixel coords 1:1) ----
     static const float PPI_CX   = 105.0;
@@ -42,6 +40,11 @@ class RDF_RadarHUD
 
     // Real-world range corresponding to PPI_R pixels.
     float m_DisplayRange = 2000.0;
+
+    // Resolved at BuildWidgets() from WorkspaceWidget size (bottom-right).
+    protected int m_PxLeft = 20;
+    protected int m_PxTop = 700;
+    protected int m_PxDataY = 937;
 
     // ---- ARGB colours (green phosphor theme) ----
     static const int COL_PANEL    = ARGB(210,  6,  16,  8);
@@ -112,7 +115,15 @@ class RDF_RadarHUD
         return s_Instance;
     }
 
-    static void Show() { GetInstance().BuildWidgets(); }
+    static void Show()
+    {
+        // Always rebuild: stale m_AllWidgets after Hide/workspace swap would
+        // otherwise leave the PPI invisible with no console error.
+        RDF_RadarHUD inst = GetInstance();
+        inst.DestroyWidgets();
+        inst.BuildWidgets();
+    }
+
     static void Hide()
     {
         RDF_RadarHUD inst = GetInstance();
@@ -184,30 +195,32 @@ class RDF_RadarHUD
         WorkspaceWidget ws = GetGame().GetWorkspace();
         if (!ws)
         {
-            Print("[RDF_RadarHUD] ERROR: GetWorkspace() returned null");
+            Print("[RDF_RadarHUD] ERROR: GetWorkspace() returned null — close GM editor / return to character HUD", LogLevel.ERROR);
             return;
         }
 
+        ResolveLayoutOrigin(ws);
+
         m_AllWidgets = new array<ref Widget>();
 
-        MakeFrame(ws, PX_LEFT, PX_TOP, PX_W, PX_H, 90, COL_PANEL);
-        MakeFrame(ws, PX_LEFT, PX_TOP, PX_W, PX_HDR_H, 91, COL_HDR);
+        MakeFrame(ws, m_PxLeft, m_PxTop, PX_W, PX_H, 90, COL_PANEL);
+        MakeFrame(ws, m_PxLeft, m_PxTop, PX_W, PX_HDR_H, 91, COL_HDR);
 
-        Widget wTitle = MakeText(ws, PX_LEFT + PX_PAD_X, PX_TOP + PX_PAD_Y,
+        Widget wTitle = MakeText(ws, m_PxLeft + PX_PAD_X, m_PxTop + PX_PAD_Y,
                                  110, PX_HDR_H - PX_PAD_Y, 95, COL_TITLE);
         TextWidget.Cast(wTitle).SetText("(o) RADAR");
         TextWidget.Cast(wTitle).SetExactFontSize(17);
 
-        Widget wMode = MakeText(ws, PX_LEFT + 110, PX_TOP + PX_PAD_Y,
+        Widget wMode = MakeText(ws, m_PxLeft + 110, m_PxTop + PX_PAD_Y,
                                 PX_W - 116, PX_HDR_H - PX_PAD_Y, 95, COL_MODE);
         m_wMode = TextWidget.Cast(wMode);
         m_wMode.SetText("PPI");
         m_wMode.SetExactFontSize(15);
 
-        int canvasTop = PX_TOP + PX_HDR_H;
+        int canvasTop = m_PxTop + PX_HDR_H;
         Widget wCanvas = ws.CreateWidgetInWorkspace(
             WidgetType.CanvasWidgetTypeID,
-            PX_LEFT, canvasTop, PX_RADAR_W, PX_RADAR_H,
+            m_PxLeft, canvasTop, PX_RADAR_W, PX_RADAR_H,
             0, null, 92);
         if (wCanvas)
         {
@@ -219,18 +232,18 @@ class RDF_RadarHUD
         }
         else
         {
-            Print("[RDF_RadarHUD] WARN: CanvasWidget creation failed");
+            Print("[RDF_RadarHUD] WARN: CanvasWidget creation failed", LogLevel.WARNING);
         }
 
         // Compass labels (north-up plan display).
-        MakeCompassLabel(ws, PX_LEFT + 118, canvasTop + 8,   "N");
-        MakeCompassLabel(ws, PX_LEFT + 118, canvasTop + 188, "S");
-        MakeCompassLabel(ws, PX_LEFT + 8,   canvasTop + 98,  "W");
-        MakeCompassLabel(ws, PX_LEFT + 228, canvasTop + 98,  "E");
+        MakeCompassLabel(ws, m_PxLeft + 98, canvasTop + 8,   "N");
+        MakeCompassLabel(ws, m_PxLeft + 98, canvasTop + 188, "S");
+        MakeCompassLabel(ws, m_PxLeft + 8,   canvasTop + 98, "W");
+        MakeCompassLabel(ws, m_PxLeft + 192, canvasTop + 98, "E");
 
         string ringLabel = RangeLabel(m_DisplayRange * 0.5);
         Widget wRingLbl = MakeText(ws,
-            PX_LEFT + (int)PPI_CX + 3,
+            m_PxLeft + (int)PPI_CX + 3,
             canvasTop + (int)(PPI_CY - PPI_RING) - 1,
             48, 14, 96, ARGB(130, 70, 200, 110));
         TextWidget.Cast(wRingLbl).SetText(ringLabel);
@@ -240,7 +253,38 @@ class RDF_RadarHUD
         m_wLegend = TextWidget.Cast(MakeDataRow(ws, 1, "veh/proj/emit/anon + white false"));
         TextWidget.Cast(m_wLegend).SetExactFontSize(11);
 
-        Print("[RDF_RadarHUD] HUD built  widgets=" + m_AllWidgets.Count().ToString());
+        Print(string.Format(
+            "[RDF_RadarHUD] HUD built widgets=%1 at left=%2 top=%3 (workspace %4x%5) — look BOTTOM-RIGHT",
+            m_AllWidgets.Count().ToString(),
+            m_PxLeft.ToString(),
+            m_PxTop.ToString(),
+            ws.GetWidth().ToString(),
+            ws.GetHeight().ToString()));
+    }
+
+    protected void ResolveLayoutOrigin(WorkspaceWidget ws)
+    {
+        int screenW = 1920;
+        int screenH = 1080;
+        if (ws)
+        {
+            int w = ws.GetWidth();
+            int h = ws.GetHeight();
+            if (w > 200)
+                screenW = w;
+            if (h > 200)
+                screenH = h;
+        }
+
+        m_PxLeft = screenW - PX_W - PX_MARGIN;
+        if (m_PxLeft < PX_MARGIN)
+            m_PxLeft = PX_MARGIN;
+
+        m_PxTop = screenH - PX_H - PX_MARGIN;
+        if (m_PxTop < PX_MARGIN)
+            m_PxTop = PX_MARGIN;
+
+        m_PxDataY = m_PxTop + PX_HDR_H + PX_RADAR_H + 2;
     }
 
     // ---- build PPI static draw commands ----
@@ -516,8 +560,8 @@ class RDF_RadarHUD
 
     protected Widget MakeDataRow(WorkspaceWidget ws, int rowIdx, string defaultText)
     {
-        int y = PX_DATA_Y + rowIdx * PX_ROW_H + PX_PAD_Y;
-        Widget w = MakeText(ws, PX_LEFT + PX_PAD_X, y, PX_W - PX_PAD_X * 2, PX_ROW_H - 2, 95, COL_DATA);
+        int y = m_PxDataY + rowIdx * PX_ROW_H + PX_PAD_Y;
+        Widget w = MakeText(ws, m_PxLeft + PX_PAD_X, y, PX_W - PX_PAD_X * 2, PX_ROW_H - 2, 95, COL_DATA);
         if (w)
         {
             TextWidget tw = TextWidget.Cast(w);
