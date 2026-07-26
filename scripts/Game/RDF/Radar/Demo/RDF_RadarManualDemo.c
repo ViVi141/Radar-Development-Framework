@@ -1,11 +1,12 @@
-// One-shot manual PPI demo for placing vehicles and verifying physical radar
-// detection (SNR / LOS / DEM clutter). Not geometry-only.
+// One-shot manual PPI demo for placing vehicles / firing shells and verifying
+// physical radar detection. Not geometry-only.
 //
 // Uses RDF_RadarSensor for configure / read; AutoRunner only hosts Tick + HUD.
 //
 // Usage (Script Debugger):
 //   RDF_RadarManualDemo.Start();
-//   RDF_RadarManualDemo.Probe();   // print why Det is 0/N
+//   // place vehicles / fire shells, then:
+//   RDF_RadarManualDemo.Probe();
 //   RDF_RadarManualDemo.Stop();
 class RDF_RadarManualDemo
 {
@@ -33,7 +34,8 @@ class RDF_RadarManualDemo
         RDF_RadarHUD.Show();
         s_Active = true;
 
-        Print("[RDF ManualDemo] started physical SEARCH (MTI off, omni beam, world search)");
+        Print("[RDF ManualDemo] started physical SEARCH (MTI off, wide beam, DEM clutter OFF, world search)");
+        Print("[RDF ManualDemo] tip: keep Play running; close GM free-cam or possess a character; Probe() after placing targets");
         Probe();
     }
 
@@ -69,26 +71,34 @@ class RDF_RadarManualDemo
         cfg.m_SectorHalfAngleDeg = 180.0;
         cfg.m_UpdateInterval = 0.2;
         cfg.m_IncludeVehicles = true;
-        cfg.m_IncludeProjectiles = false;
+        // Live mortar / gun fire is discoverable; Zeus-placed inert shells are not.
+        cfg.m_IncludeProjectiles = true;
         cfg.m_IncludeRadarEmitters = false;
         cfg.m_EnablePhysicalDetection = true;
         cfg.m_DetectionSnrDb = 8.0;
-        cfg.m_EnableDemClutter = true;
+        // 360° / wide beams make the DEM clutter cell huge and bury skin returns
+        // (same ~70 dB hit seen in LockTest). Clutter has its own AutoTest; this
+        // demo is for seeing vehicles and fired shells on the PPI.
+        cfg.m_EnableDemClutter = false;
         cfg.m_EnableCfarGate = false;
         cfg.m_UseScattererRegistry = false;
         cfg.m_UseSphereQuery = true;
+        // Editor-placed vehicles are often missing from DYNAMIC sphere results.
         cfg.m_SphereQueryAlsoActive = true;
         cfg.m_MaxLosTracesPerScan = 128;
-        cfg.m_KeepUndetected = false;
-        cfg.m_KeepEntityTruth = false;
+        // Keep misses so Probe can show SNR instead of Det 0/0 with no plots.
+        cfg.m_KeepUndetected = true;
+        cfg.m_KeepEntityTruth = true;
         cfg.m_OriginOffset = Vector(0.0, 12.0, 0.0);
 
         RDF_RadarHardware hw = RDF_RadarHardware.CreateShorad();
-        hw.m_AzimuthBeamwidthDeg = 360.0;
+        // Wide stare for manual placement, not a true omni cell for clutter math.
+        hw.m_AzimuthBeamwidthDeg = 90.0;
         hw.m_ScanRpm = 0.0;
         hw.m_EnableMti = false;
         hw.ClearElevationBeams();
-        hw.AddElevationBeam("manual_omni", 0.0, 90.0, 0.0);
+        hw.AddElevationBeam("manual_low", 0.0, 30.0, 0.0);
+        hw.AddElevationBeam("manual_mid", 15.0, 40.0, 0.0);
         hw.Validate();
         cfg.m_Hardware = hw;
         cfg.Validate();
@@ -115,22 +125,38 @@ class RDF_RadarManualDemo
         RDF_RadarSettings cfg = sensor.GetSettings();
         bool mti = false;
         float azBw = -1.0;
-        if (cfg && cfg.m_Hardware)
+        bool demClutter = false;
+        if (cfg)
         {
-            mti = cfg.m_Hardware.m_EnableMti;
-            azBw = cfg.m_Hardware.m_AzimuthBeamwidthDeg;
+            demClutter = cfg.m_EnableDemClutter;
+            if (cfg.m_Hardware)
+            {
+                mti = cfg.m_Hardware.m_EnableMti;
+                azBw = cfg.m_Hardware.m_AzimuthBeamwidthDeg;
+            }
         }
 
         array<ref RDF_RadarTarget> plots = sensor.GetPlots();
         int plotN = 0;
         int detN = sensor.CountDetectedPlots();
+        float maxSnr = -300.0;
         if (plots)
+        {
             plotN = plots.Count();
+            foreach (RDF_RadarTarget t : plots)
+            {
+                if (!t)
+                    continue;
+                if (t.m_SnrDb > maxSnr)
+                    maxSnr = t.m_SnrDb;
+            }
+        }
 
         BaseWorld world = GetGame().GetWorld();
         int activeN = 0;
         int vehicleN = 0;
         int nearVehicleN = 0;
+        int projectileN = 0;
         if (world)
         {
             array<IEntity> active = new array<IEntity>();
@@ -142,6 +168,11 @@ class RDF_RadarManualDemo
                 IEntity ent = active.Get(i);
                 if (!ent || ent == subject)
                     continue;
+                if (RDF_RadarEntityClassifier.IsProjectile(ent))
+                {
+                    projectileN = projectileN + 1;
+                    continue;
+                }
                 if (!RDF_RadarEntityClassifier.IsVehicleOrCharacter(ent))
                     continue;
                 if (ChimeraCharacter.Cast(ent))
@@ -154,21 +185,22 @@ class RDF_RadarManualDemo
         }
 
         Print(string.Format(
-            "[RDF ManualDemo] Probe subject=%1 plots=%2 det=%3 forceLocal=%4 mti=%5 azBw=%6 registry=%7 physical=%8 status=%9",
+            "[RDF ManualDemo] Probe subject=%1 plots=%2 det=%3 maxSnr=%4 forceLocal=%5 mti=%6 azBw=%7 demClutter=%8 status=%9",
             subject.GetOrigin().ToString(),
             plotN.ToString(),
             detN.ToString(),
+            maxSnr.ToString(),
             sensor.IsForceLocalScan().ToString(),
             mti.ToString(),
             azBw.ToString(),
-            (cfg && cfg.m_UseScattererRegistry).ToString(),
-            (cfg && cfg.m_EnablePhysicalDetection).ToString(),
+            demClutter.ToString(),
             sensor.GetStatusShort()));
         Print(string.Format(
-            "[RDF ManualDemo] Probe world active=%1 vehicles=%2 vehicles<2km=%3 serial=%4",
+            "[RDF ManualDemo] Probe world active=%1 vehicles=%2 vehicles<2km=%3 projectiles=%4 serial=%5",
             activeN.ToString(),
             vehicleN.ToString(),
             nearVehicleN.ToString(),
+            projectileN.ToString(),
             sensor.GetScanSerial().ToString()));
 
         if (plots)
@@ -188,6 +220,10 @@ class RDF_RadarManualDemo
                     t.m_BeamName));
                 printed = printed + 1;
             }
+        }
+        else if (nearVehicleN > 0)
+        {
+            Print("[RDF ManualDemo] vehicles are in the world but no plots yet — wait 1s and Probe again (scan interval 0.2s)", LogLevel.WARNING);
         }
     }
 }
