@@ -352,7 +352,8 @@ class RDF_RadarHUD
         foreach (CanvasWidgetCommand cmd : m_StaticCmds)
             m_AllCmds.Insert(cmd);
 
-        // Sweep line: world forward projected to north-up plan (screen up = +Z north).
+        // Sweep line: radar boresight on a north-up plan (screen up = world +Z).
+        // This is entity facing (transform[2]), not free-look camera direction.
         float fx = forward[0];
         float fz = forward[2];
         float flen = Math.Sqrt(fx * fx + fz * fz);

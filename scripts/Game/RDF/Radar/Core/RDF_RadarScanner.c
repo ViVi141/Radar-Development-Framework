@@ -1454,15 +1454,17 @@ class RDF_RadarScanner
         return origin;
     }
 
+    // Entity facing direction in Enfusion is transform[2] (same as heading /
+    // mortar / LOS helpers in vanilla). transform[0] is local right.
     protected vector GetSubjectForward(IEntity subject)
     {
         vector worldMat[4];
         subject.GetWorldTransform(worldMat);
-        vector fwd = worldMat[0];
+        vector fwd = worldMat[2];
         float len = fwd.Length();
         if (len > 0.001)
             return fwd / len;
-        return "1 0 0";
+        return "0 0 1";
     }
 
     protected vector GetScanForward(IEntity subject, float worldTime)

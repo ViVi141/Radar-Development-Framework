@@ -278,8 +278,8 @@ class RDF_RadarLockAutoTest
         float surfaceY = world.GetSurfaceY(center[0], center[2]);
         m_RadarOrigin = Vector(center[0], surfaceY + 8.0, center[2]);
 
-        // Scanner boresight is the subject's mat[0]; park the racetrack on it.
-        vector fwd = mat[0];
+        // Scanner boresight is the subject's mat[2] (Enfusion forward).
+        vector fwd = mat[2];
         float flatLen = Math.Sqrt(fwd[0] * fwd[0] + fwd[2] * fwd[2]);
         vector flatFwd;
         if (flatLen < 0.001)

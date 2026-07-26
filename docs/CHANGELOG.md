@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 2026-07-27 — PPI 扫线 / 雷达视轴用错了坐标轴
+
+Enfusion 实体朝向是 `GetWorldTransform()[2]`（与原版 heading / 迫击炮方位 / LOS 一致），
+`[0]` 是右侧。RDF 此前把 `[0]` 当 boresight，导致：
+
+- PPI 绿色扫线相对角色朝向偏约 90°
+- 测试把目标放在 `mat[0]` 上仍能自洽通过，但和玩家视角对不齐
+
+已改为 `mat[2]`：`GetSubjectForward`、Visualizer、ScattererRegistry、Lock/DEM/ShellFire 测试布置。
+
+PPI 仍是**北向上**图：绿线指向世界中的雷达视轴，不是自由视角相机方向；角色扭头时绿线跟身体朝向，不跟准星。
+
+---
+
 ## 2026-07-27 — 测试用例改走 `RDF_RadarSensor` 公共 API
 
 按 [docs/RADAR_API.md](RADAR_API.md) 分层：测试 / 玩法代码应优先用 Sensor facade；

@@ -511,8 +511,8 @@ class RDF_RadarScattererRegistry
 
         vector mat[4];
         entity.GetWorldTransform(mat);
-        // Same convention as RDF_RadarVisualizer: mat[0] is forward.
-        vector forward = mat[0];
+        // Same convention as RDF_RadarScanner.GetSubjectForward: mat[2] is facing.
+        vector forward = mat[2];
         float flen = forward.Length();
         if (flen < 0.001)
             forward = "1 0 0";

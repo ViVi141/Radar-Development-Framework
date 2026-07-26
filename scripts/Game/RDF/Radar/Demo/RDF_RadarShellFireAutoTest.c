@@ -141,8 +141,8 @@ class RDF_RadarShellFireAutoTest
         vector mat[4];
         m_Subject.GetWorldTransform(mat);
         m_RadarHintOrigin = mat[3];
-        // Match RDF_RadarScanner.GetSubjectForward: mat[0] is scan boresight.
-        vector fwd = mat[0];
+        // Match RDF_RadarScanner.GetSubjectForward: mat[2] is scan boresight.
+        vector fwd = mat[2];
         float flatLen = Math.Sqrt(fwd[0] * fwd[0] + fwd[2] * fwd[2]);
         if (flatLen < 0.001)
         {

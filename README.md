@@ -66,6 +66,7 @@ array<ref RDF_RadarTrack> tracks = sensor.GetTracks();
 RDF_RadarAutoRunner.StartWithConfig(RDF_RadarDemoConfig.CreateDefault(64));
 RDF_RadarAutoRunner.SetDemoEnabled(true);
 RDF_RadarAutoRunner.SetHudEnabled(true);   // PPI HUD（品红=辐射源 / 绿=载具 / 橙=弹丸）
+// PPI 为北向上：绿色扫线 = 实体朝向(transform[2])，不是自由视角相机方向
 ```
 
 自动化测试（Script Debugger，**一次只跑一个**；共用 AutoRunner 作 Tick/HUD 宿主，并行会互相覆盖配置）：

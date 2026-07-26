@@ -539,7 +539,7 @@ class RDF_RadarAutoTest
         vector mat[4];
         subject.GetWorldTransform(mat);
         vector origin = mat[3];
-        vector fwd = mat[0];
+        vector fwd = mat[2];
         float flatLen = Math.Sqrt(fwd[0] * fwd[0] + fwd[2] * fwd[2]);
         vector flatFwd;
         if (flatLen < 0.001)

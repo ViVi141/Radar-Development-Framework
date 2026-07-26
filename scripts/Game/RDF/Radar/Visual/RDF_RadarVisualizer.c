@@ -40,10 +40,11 @@ class RDF_RadarVisualizer
 
         vector worldMat[4];
         subject.GetWorldTransform(worldMat);
-        vector forward = worldMat[0];
+        // Enfusion forward is mat[2]; mat[0] is right.
+        vector forward = worldMat[2];
         float flen = forward.Length();
         if (flen < 0.001)
-            forward = "1 0 0";
+            forward = "0 0 1";
         else
             forward = forward / flen;
 
