@@ -1,5 +1,70 @@
 # CHANGELOG
 
+## 2026-07-27 — LockTest `plots=0`：90° 波束 + DEM 杂波把目标埋了
+
+根因由 DEM 测试自己的输出坐实：同一套 Shorad、同样 90° 方位波束
+
+- `dem_on_scale1` `avgSNR=-28.6 dB`（杂波开）
+- `dem_on_budget0` `avgSNR=+41.8 dB`（杂波关）
+
+70 dB 的差距来自波束宽度：300 m 处 90° 波束的杂波单元横向 471 m，杂波截面比 Mi-8 本体大一个量级。
+Lock 用的正是"90° 波束 + `EnableDemClutter=true` + `DetectionSnrDb=8`"，每个目标算出来 ≈ -28 dB，
+全被门限刷掉，`KeepUndetected=false` 再丢弃 → `plots=0`。这不是 bug，是宽波束的物理后果。
+
+修复 —— 给锁定测试真实的火控几何：
+
+- 目标改飞**视轴中心跑道**：圆心在 boresight 上 800 m，半径 120 m → 方位摆动仅 ±8.5°
+- 硬件改窄波束火控：方位 20°、带宽 20 MHz（距离分辨率 37.5 m → 7.5 m）、俯仰波束对准 11°
+- 关 DEM 杂波并注明理由：杂波模型用目标的方向图增益照射地面块，没有俯仰分辨力，会把空中目标埋掉；
+  杂波本身有独立回归（`RDF_RadarAutoTest`），此处测的是锁定状态机
+- `KeepUndetected=true` 且 SNR 统计不再只取已检测点迹 —— 漏检时能看到差门限多少，而不是永远 -300
+
+顺带修掉两个会造成**假通过**的问题：
+
+- 套件里上一步遗留的航迹被 LockTest 继承：日志开头 `tracks=15` / `LOCK TRACKING` / `locked=14` 全是 DEM 阶段的残留，
+  掩盖了真实的零检测。新增 `RDF_RadarProjectileTracker.ClearTracks()`，Lock 与 ShellFire 启动时清空
+- DEM 的 `dem_off` 阶段 `targets=0`（发现扫掠还没找到目标），"低杂波"检查空转通过。
+  改为先预热等待全部目标进表再进入 phase 0，并新增 `discovered_unaided` 检查
+
+---
+
+## 2026-07-27 — 移除测试对被探测物体的一切"探测助攻"
+
+原则：测试不得给目标加辐射源、抬 RCS，或绕过发现流程直接写进散射体表。
+目标只能靠自身回波被发现和检测。
+
+清除的后门：
+
+- `RDF_RadarAirborneScanTest`：Mi-8 之前 `Register(..., emitting=true)` 被当成雷达辐射源；改为纯蒙皮回波，`IncludeRadarEmitters=false`，分类断言收紧为"必须判为 VEHICLE 且 emitter 计数为 0"
+- `RDF_RadarShellFireAutoTest`：删除 `TEST_SHELL_RCS_M2=0.5` 的 RCS 抬升（真实 82mm 迫击炮弹约 0.01 m²）与逐帧强制写表；反炮兵功率预算本身足够，无需给弹丸加成
+- `RDF_RadarLockAutoTest`：删除 `Register()` 预置，Mi-8 必须被发现扫掠自行找到
+- `RDF_RadarAutoTest`（DEM）：不再劫持 `MusicManager` / `MapEntity` 之类的世界实体当合成辐射源并瞬移；改为沿 boresight 阶梯距离生成 3 架真实 Mi-8，用它们自身回波测杂波
+
+四个测试新增 `discovered_unaided` 检查：目标出现在散射体表即证明是发现扫掠自己找到的。
+
+根因修复 —— 散射体表发现积压：
+
+- 每轮扫掠把全世界实体重新入队（Eden 上 `pend=11428`），128/tick 分类要约 15 s 才排空，随后又整批重入队；新生成的目标实际上永远排在队尾。这正是各测试当初改用强制注册的原因
+- `RDF_RadarScattererRegistry` 增加 `s_Seen` 备忘表：扫掠只入队没见过的实体。被距离裁剪或反注册时从备忘表移除，以便重新拾取
+- 实体删除后键指针置空且无法按键删除，所以备忘表按 20 s 节奏由存活键重建
+- 统计行新增 `seen=`
+
+配套调整（属于雷达配置，不是目标加成）：
+
+- 三个生成目标的测试延长时长（Lock / Air 35 s，DEM 每阶段 8 s），给冷启动的散射体表分类时间
+- DEM 与 Airborne 关 MTI：DEM 目标按设计静止，且 MTI 会把杂波压到底噪，正是被测量；Airborne 轨道目标径向速度过零，MTI 盲速会掩盖真实漏检
+- `RDF_RadarScattererRegistry.Register` 补充文档：仅供实体自报（如雷达把自己标为辐射源），禁止用于注入目标
+
+---
+
+## 2026-07-27 — LockAutoTest 改为物理检测 + 轨道 Mi-8
+
+- 不再用静止地面车 + `EnablePhysicalDetection=false`（几何糊弄锁定状态机）
+- 改为轨道 Mi-8、`EnablePhysicalDetection=true`；报告新增 `physical_snr` / `max_snr_db`
+- 宽波束、关 CFAR；直升机可 `SetOrigin` 运动（地面车禁止）
+
+---
+
 ## 2026-07-27 — 手动摆车 PPI 无点：MTI + 球查询回退
 
 - 静止载具多普勒≈0 时 `MtiTwoPulseGain→0`，物理检测 SNR 被压穿门限 → `Det 0/0`

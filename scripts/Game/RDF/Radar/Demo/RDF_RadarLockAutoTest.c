@@ -1,9 +1,10 @@
-// Lock-layer demo / test: spawn a STATIONARY ground vehicle near the player on
-// flat terrain with clear LOS, run SEARCH with auto-acquire, and verify
-// SEARCH -> ACQUIRING -> TRACKING with a usable aim point.
+// Lock-layer test: orbit a Mi-8 under PHYSICAL radar detection (SNR / LOS /
+// optional DEM clutter), then verify SEARCH -> ACQUIRING -> TRACKING.
+// Helicopters can be SetOrigin-moved in air; ground vehicles must not.
 //
-// Do NOT teleport vehicles with SetOrigin every tick — that drives them into
-// terrain and triggers damage / explosion in Reforger physics.
+// The target gets no detection aid: no emitter flag, no RCS override, no
+// registry pre-seeding. It must be found by the normal discovery sweep and
+// detected from its own signature.
 //
 // Usage (Script Debugger):
 //   RDF_RadarLockAutoTest.Start();
@@ -14,19 +15,30 @@ class RDF_RadarLockAutoTest
     protected static bool s_TickRegistered;
     protected static bool s_KeepTargetAfterTest;
 
-    protected static const ResourceName GROUND_TARGET_PREFAB =
-        "{94DE32169691AC34}Prefabs/Vehicles/Wheeled/M151A2/M151A2_transport_MERDC.et";
+    protected static const ResourceName AIR_TARGET_PREFAB =
+        "{6BDF7D3E72D31F29}Prefabs/Scenarios/SP01/SP01_Mi8MT_unarmed_transport.et";
 
     protected bool m_Running;
     protected float m_StartWallS;
-    protected float m_DurationS = 16.0;
+    // Long enough for a cold scatterer table to classify the freshly spawned
+    // airframe without any registry pre-seeding.
+    protected float m_DurationS = 35.0;
     protected int m_LastScanSerial = -1;
 
     protected IEntity m_Subject;
     protected IEntity m_Target;
     protected vector m_RadarOrigin;
-    protected vector m_TargetSpawnPos;
-    protected float m_PlaceRangeM = 90.0;
+    protected vector m_OrbitCenter;
+
+    // Racetrack centred down the boresight instead of a ring around the radar:
+    // 120 m of lateral swing at 800 m is +-8.5 deg, so a realistic pencil beam
+    // keeps the target illuminated for the whole run.
+    protected float m_OrbitCenterRangeM = 800.0;
+    protected float m_OrbitRadiusM = 120.0;
+    protected float m_OrbitAltitudeM = 150.0;
+    protected float m_OrbitRateRadS = 0.16;
+    protected float m_OrbitPhaseRad = 0.0;
+    protected float m_LastDebugPrintWallS;
 
     protected int m_ScanCount;
     protected int m_AcquireScans;
@@ -38,11 +50,14 @@ class RDF_RadarLockAutoTest
     protected int m_MaxDetectedPlots;
     protected int m_MaxAnyPlots;
     protected int m_MaxTracks;
+    protected float m_MaxSnrDb = -300.0;
+    protected bool m_TargetDiscovered;
     protected bool m_ReachedAcquiring;
     protected bool m_ReachedTracking;
     protected bool m_TargetAliveAtEnd;
     protected int m_LastLoggedState = -1;
     protected float m_LastProgressWallS;
+    protected int m_RespawnCount;
 
     protected ref RDF_RadarSettings m_PrevConfig;
     protected bool m_PrevDemoEnabled;
@@ -122,23 +137,25 @@ class RDF_RadarLockAutoTest
         m_PrevConfig = RDF_RadarAutoRunner.GetDemoConfig();
         m_PrevDemoEnabled = RDF_RadarAutoRunner.IsDemoEnabled();
         m_PrevHudEnabled = RDF_RadarAutoRunner.IsHudEnabled();
-        m_PrevForceLocal = false;
+        m_PrevForceLocal = RDF_RadarAutoRunner.IsForceLocalScan();
 
-        if (!ChooseFlatSpawn())
+        if (!ChooseRadarOrigin())
         {
-            Print("[RDF Radar LockTest] failed to choose flat spawn near subject.", LogLevel.ERROR);
+            Print("[RDF Radar LockTest] failed to choose radar origin.", LogLevel.ERROR);
             RDF_RadarAutoTestGate.Release("Lock");
             return;
         }
 
-        if (!SpawnTarget())
+        // Clock before spawn so orbit phase 0 matches spawn position.
+        m_StartWallS = System.GetTickCount() * 0.001;
+
+        if (!SpawnAirTarget())
         {
-            Print("[RDF Radar LockTest] failed to spawn vehicle prefab.", LogLevel.ERROR);
+            Print("[RDF Radar LockTest] failed to spawn Mi-8 prefab.", LogLevel.ERROR);
             StopInternal(true);
             return;
         }
 
-        // Force local channel so Workbench RplComponent does not divert scans.
         RDF_RadarAutoRunner.SetForceLocalScan(true);
         ApplyTestRadarConfig();
         ConfigureLock();
@@ -156,14 +173,16 @@ class RDF_RadarLockAutoTest
         m_MaxDetectedPlots = 0;
         m_MaxAnyPlots = 0;
         m_MaxTracks = 0;
+        m_MaxSnrDb = -300.0;
+        m_TargetDiscovered = false;
         m_ReachedAcquiring = false;
         m_ReachedTracking = false;
         m_TargetAliveAtEnd = false;
         m_LastLoggedState = -1;
+        m_RespawnCount = 0;
         m_LastScanSerial = RDF_RadarAutoRunner.GetLastScanSerial();
-
-        m_StartWallS = System.GetTickCount() * 0.001;
         m_LastProgressWallS = m_StartWallS;
+        m_LastDebugPrintWallS = m_StartWallS;
         m_Running = true;
 
         if (!s_TickRegistered)
@@ -173,10 +192,11 @@ class RDF_RadarLockAutoTest
         }
 
         Print(string.Format(
-            "[RDF Radar LockTest] started radarOrigin=%1 target=%2 range=%3m",
+            "[RDF Radar LockTest] started PHYSICAL lock radarOrigin=%1 orbitCenter=%2 radius=%3 alt=%4",
             m_RadarOrigin.ToString(),
-            m_TargetSpawnPos.ToString(),
-            m_PlaceRangeM.ToString()));
+            m_OrbitCenter.ToString(),
+            m_OrbitRadiusM.ToString(),
+            m_OrbitAltitudeM.ToString()));
     }
 
     protected void StopInternal(bool restore)
@@ -186,7 +206,7 @@ class RDF_RadarLockAutoTest
 
         if (m_Target && !s_KeepTargetAfterTest)
         {
-            RDF_RadarEmitterRegistry.Unregister(m_Target);
+            RDF_RadarScattererRegistry.Unregister(m_Target);
             SCR_EntityHelper.DeleteEntityAndChildren(m_Target);
             m_Target = null;
         }
@@ -211,9 +231,7 @@ class RDF_RadarLockAutoTest
             return;
 
         float nowS = System.GetTickCount() * 0.001;
-        // Stationary target: only refresh scatterer registration, never teleport.
-        KeepTargetRegistered();
-        DrawDebugMarker();
+        UpdateAirTargetMotion(nowS);
         AccumulateLatestScan(nowS);
 
         if (nowS - m_StartWallS < m_DurationS)
@@ -224,9 +242,7 @@ class RDF_RadarLockAutoTest
         StopInternal(true);
     }
 
-    // Pick a flat, near-level patch around the subject so LOS is not blocked by
-    // a cliff between radar and the parked vehicle.
-    protected bool ChooseFlatSpawn()
+    protected bool ChooseRadarOrigin()
     {
         if (!m_Subject)
             return false;
@@ -238,89 +254,117 @@ class RDF_RadarLockAutoTest
         vector mat[4];
         m_Subject.GetWorldTransform(mat);
         vector center = mat[3];
-        m_RadarOrigin = center;
+        float surfaceY = world.GetSurfaceY(center[0], center[2]);
+        m_RadarOrigin = Vector(center[0], surfaceY + 8.0, center[2]);
 
-        vector best = "0 0 0";
-        float bestScore = 9999999.0;
-        bool found = false;
-        float sampleOffset = 12.0;
+        // Scanner boresight is the subject's mat[0]; park the racetrack on it.
+        vector fwd = mat[0];
+        float flatLen = Math.Sqrt(fwd[0] * fwd[0] + fwd[2] * fwd[2]);
+        vector flatFwd;
+        if (flatLen < 0.001)
+            flatFwd = Vector(0.0, 0.0, 1.0);
+        else
+            flatFwd = Vector(fwd[0] / flatLen, 0.0, fwd[2] / flatLen);
 
-        for (int i = 0; i < 16; i++)
-        {
-            float angle = i * Math.PI * 2.0 / 16.0;
-            float x = center[0] + Math.Cos(angle) * m_PlaceRangeM;
-            float z = center[2] + Math.Sin(angle) * m_PlaceRangeM;
-            float y = world.GetSurfaceY(x, z);
-
-            float hx1 = world.GetSurfaceY(x + sampleOffset, z);
-            float hx2 = world.GetSurfaceY(x - sampleOffset, z);
-            float hz1 = world.GetSurfaceY(x, z + sampleOffset);
-            float hz2 = world.GetSurfaceY(x, z - sampleOffset);
-            float localRough = Math.AbsFloat(hx1 - hx2) + Math.AbsFloat(hz1 - hz2);
-            float heightDelta = Math.AbsFloat(y - center[1]);
-            float score = localRough + heightDelta * 0.35;
-            if (score < bestScore)
-            {
-                bestScore = score;
-                best = Vector(x, y + 1.0, z);
-                found = true;
-            }
-        }
-
-        if (!found)
-            return false;
-
-        m_TargetSpawnPos = best;
+        m_OrbitCenter = Vector(
+            m_RadarOrigin[0] + flatFwd[0] * m_OrbitCenterRangeM,
+            m_RadarOrigin[1] + m_OrbitAltitudeM,
+            m_RadarOrigin[2] + flatFwd[2] * m_OrbitCenterRangeM);
         return true;
     }
 
-    protected bool SpawnTarget()
+    protected float GetElapsedS()
+    {
+        if (m_StartWallS <= 0.0)
+            return 0.0;
+        float elapsed = System.GetTickCount() * 0.001 - m_StartWallS;
+        if (elapsed < 0.0)
+            return 0.0;
+        return elapsed;
+    }
+
+    protected vector ComputeOrbitPos(float elapsedS)
+    {
+        float phase = elapsedS * m_OrbitRateRadS;
+        return Vector(
+            m_OrbitCenter[0] + Math.Cos(phase) * m_OrbitRadiusM,
+            m_OrbitCenter[1] + 12.0 * Math.Sin(elapsedS * 0.07),
+            m_OrbitCenter[2] + Math.Sin(phase) * m_OrbitRadiusM);
+    }
+
+    protected bool SpawnAirTarget()
     {
         BaseWorld world = GetGame().GetWorld();
         if (!world)
             return false;
 
-        Resource prefabRes = Resource.Load(GROUND_TARGET_PREFAB);
+        Resource prefabRes = Resource.Load(AIR_TARGET_PREFAB);
         if (!prefabRes)
             return false;
 
         EntitySpawnParams spawnParams = new EntitySpawnParams();
         Math3D.AnglesToMatrix(Vector(0, 0, 0), spawnParams.Transform);
-        spawnParams.Transform[3] = m_TargetSpawnPos;
+        vector spawnPos = ComputeOrbitPos(GetElapsedS());
+        spawnParams.Transform[3] = spawnPos;
 
         m_Target = GetGame().SpawnEntityPrefab(prefabRes, world, spawnParams);
         if (!m_Target)
             return false;
 
-        // Park it: zero velocity if physics exists. Do not SetOrigin later.
-        Physics physics = m_Target.GetPhysics();
-        if (physics)
-            physics.SetVelocity("0 0 0");
-
-        RDF_RadarEmitterRegistry.Register(m_Target, m_TargetSpawnPos, false, 1.0);
-        Print("[RDF Radar LockTest] parked vehicle at " + m_TargetSpawnPos.ToString());
+        // No registry pre-seeding and no emitter flag: the scatterer sweep has to
+        // find this airframe on its own, exactly as it would any spawned vehicle.
+        Print("[RDF Radar LockTest] spawned Mi-8 at " + spawnPos.ToString());
         return true;
     }
 
     protected void ApplyTestRadarConfig()
     {
-        // Lock-layer regression: prove SEARCH→ACQUIRE→TRACK on a real vehicle.
-        // Use geometry detection only — SNR/CFAR/NLOS are covered by other tests.
+        // Physical SEARCH lock regression on a moving airframe.
         RDF_RadarSettings cfg = RDF_RadarDemoConfig.CreateSearch(128);
-        cfg.m_Range = 2000.0;
+        cfg.m_Range = 3000.0;
         cfg.m_SectorHalfAngleDeg = 180.0;
         cfg.m_UpdateInterval = 0.2;
         cfg.m_IncludeVehicles = true;
         cfg.m_IncludeProjectiles = false;
         cfg.m_IncludeRadarEmitters = false;
-        cfg.m_EnablePhysicalDetection = false;
+        cfg.m_EnablePhysicalDetection = true;
+        cfg.m_DetectionSnrDb = 8.0;
+        // Keep undetected plots so a miss shows its SNR instead of vanishing.
         cfg.m_KeepUndetected = true;
+        // Ground clutter has its own regression (RDF_RadarAutoTest). The clutter
+        // model illuminates the ground patch with the target's pattern gain, so
+        // it has no elevation discrimination and buries an airborne target; that
+        // would test the clutter model, not the lock state machine.
         cfg.m_EnableDemClutter = false;
         cfg.m_EnableCfarGate = false;
         cfg.m_EnableNlosMultipath = true;
-        cfg.m_ScattererClassifyPerTick = 128;
+        cfg.m_UseScattererRegistry = true;
+        // Spawned target must be discovered by the sweep, so drain the classify
+        // queue fast and leave room for a populated world in the table.
+        cfg.m_ScattererClassifyPerTick = 256;
+        cfg.m_ScattererRefreshPerTick = 512;
+        cfg.m_ScattererMaxEntries = 2048;
         cfg.m_ScattererDiscoveryIntervalS = 0.5;
         cfg.m_KeepEntityTruth = true;
+        cfg.m_MaxLosTracesPerScan = 96;
+        cfg.m_OriginOffset = Vector(0.0, 12.0, 0.0);
+
+        // Fire-control pencil beam staring down the boresight. A wide beam would
+        // need a proportionally wide clutter cell and coarse range gate, which is
+        // what a tracking radar exists to avoid.
+        RDF_RadarHardware hw = RDF_RadarHardware.CreateShorad();
+        hw.m_AzimuthBeamwidthDeg = 20.0;
+        hw.m_BandwidthHz = 20000000.0;
+        hw.m_ScanRpm = 0.0;
+        // Moving heli has Doppler; MTI may stay on. Keep off so early orbit
+        // samples are not starved before velocity is established.
+        hw.m_EnableMti = false;
+        hw.ClearElevationBeams();
+        // Racetrack sits near 11 deg elevation and drifts a couple of degrees.
+        hw.AddElevationBeam("lock_low", 6.0, 14.0, 0.0);
+        hw.AddElevationBeam("lock_mid", 14.0, 16.0, 0.0);
+        hw.Validate();
+        cfg.m_Hardware = hw;
         cfg.Validate();
         RDF_RadarAutoRunner.SetDemoConfig(cfg);
     }
@@ -330,43 +374,76 @@ class RDF_RadarLockAutoTest
         RDF_RadarSensor sensor = RDF_RadarAutoRunner.GetSensor();
         if (!sensor)
             return;
+        // Tracks from the previous suite step would otherwise let this test
+        // report TRACKING and a locked point before it has seen anything.
+        RDF_RadarProjectileTracker tracker = sensor.GetTracker();
+        if (tracker)
+            tracker.ClearTracks();
+
         RDF_RadarLockManager lockMgr = sensor.GetLockManager();
         lockMgr.Unlock();
         lockMgr.SetAutoAcquire(true);
         lockMgr.SetTypeFilter(true, false, false);
-        lockMgr.SetMaxLockRange(2000.0);
+        lockMgr.SetMaxLockRange(3000.0);
         lockMgr.SetLockSector(0.0);
         lockMgr.SetAcquireHits(2);
-        lockMgr.SetCoastMaxSec(2.0);
+        lockMgr.SetCoastMaxSec(3.0);
     }
 
-    protected void KeepTargetRegistered()
+    protected void UpdateAirTargetMotion(float nowS)
     {
-        if (!IsTargetAlive())
+        if (!m_Target)
+        {
+            if (SpawnAirTarget())
+            {
+                m_RespawnCount = m_RespawnCount + 1;
+                Print("[RDF Radar LockTest] Mi-8 respawned count=" + m_RespawnCount.ToString());
+            }
             return;
-        vector pos = m_Target.GetOrigin();
-        RDF_RadarEmitterRegistry.Register(m_Target, pos, false, 1.0);
+        }
+
+        float elapsedS = GetElapsedS();
+        m_OrbitPhaseRad = elapsedS * m_OrbitRateRadS;
+        vector pos = ComputeOrbitPos(elapsedS);
+        m_Target.SetOrigin(pos);
+
+        float vx = -Math.Sin(m_OrbitPhaseRad) * m_OrbitRadiusM * m_OrbitRateRadS;
+        float vz = Math.Cos(m_OrbitPhaseRad) * m_OrbitRadiusM * m_OrbitRateRadS;
+        float vy = 12.0 * 0.07 * Math.Cos(elapsedS * 0.07);
+        Physics physics = m_Target.GetPhysics();
+        if (physics)
+            physics.SetVelocity(Vector(vx, vy, vz));
+
+        int flags = ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.TRANSP | ShapeFlags.ONCE;
+        Shape.CreateSphere(ARGBF(1, 0.2, 1, 0.2), flags, pos, 5.0);
+
+        if (nowS - m_LastDebugPrintWallS > 3.0)
+        {
+            m_LastDebugPrintWallS = nowS;
+            float dist = vector.Distance(pos, m_RadarOrigin);
+            Print("[RDF Radar LockTest] heli pos=" + pos.ToString()
+                + " range=" + dist.ToString()
+                + " inTable=" + IsTargetInScattererTable().ToString()
+                + " " + RDF_RadarScattererRegistry.GetStatsLine());
+        }
+    }
+
+    // Discovery evidence: the sweep found the airframe without help from the test.
+    protected bool IsTargetInScattererTable()
+    {
+        if (!m_Target)
+            return false;
+        return RDF_RadarScattererRegistry.Find(m_Target) != null;
     }
 
     protected bool IsTargetAlive()
     {
         if (!m_Target)
             return false;
-        // Destroyed / deleted entities become null after SCR_EntityHelper cleanup,
-        // but damage wrecks may still exist — treat null origin as dead.
         vector pos = m_Target.GetOrigin();
         if (pos[0] == 0.0 && pos[1] == 0.0 && pos[2] == 0.0)
             return false;
         return true;
-    }
-
-    protected void DrawDebugMarker()
-    {
-        if (!IsTargetAlive())
-            return;
-        vector pos = m_Target.GetOrigin();
-        int flags = ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.TRANSP | ShapeFlags.ONCE;
-        Shape.CreateSphere(ARGBF(1, 0.2, 1, 0.2), flags, pos + "0 2 0", 2.5);
     }
 
     protected void AccumulateLatestScan(float nowS)
@@ -384,6 +461,8 @@ class RDF_RadarLockAutoTest
         m_LastScanSerial = serial;
         m_LastProgressWallS = nowS;
         m_ScanCount = m_ScanCount + 1;
+        if (IsTargetInScattererTable())
+            m_TargetDiscovered = true;
 
         RDF_RadarSensor sensor = RDF_RadarAutoRunner.GetSensor();
         if (!sensor)
@@ -402,6 +481,19 @@ class RDF_RadarLockAutoTest
             m_DetectedPlotScans = m_DetectedPlotScans + 1;
         if (detected > m_MaxDetectedPlots)
             m_MaxDetectedPlots = detected;
+
+        if (plots)
+        {
+            // Undetected plots are kept, so record their SNR too: a miss then
+            // reports how far under threshold it landed instead of just -300.
+            foreach (RDF_RadarTarget t : plots)
+            {
+                if (!t)
+                    continue;
+                if (t.m_SnrDb > m_MaxSnrDb)
+                    m_MaxSnrDb = t.m_SnrDb;
+            }
+        }
 
         array<ref RDF_RadarTrack> tracks = sensor.GetTracks();
         int trackCount = 0;
@@ -440,10 +532,11 @@ class RDF_RadarLockAutoTest
                 if (p0)
                 {
                     plotDiag = string.Format(
-                        " snr=%1 losBlocked=%2 detectedFlag=%3",
+                        " snr=%1 losBlocked=%2 detectedFlag=%3 beam=%4",
                         p0.m_SnrDb.ToString(),
                         p0.m_LosBlocked.ToString(),
-                        p0.m_Detected.ToString());
+                        p0.m_Detected.ToString(),
+                        p0.m_BeamName);
                 }
             }
             Print("[RDF Radar LockTest] " + lockMgr.GetStatusShort()
@@ -465,27 +558,39 @@ class RDF_RadarLockAutoTest
         bool passAcquire = m_ReachedAcquiring;
         bool passTrack = m_ReachedTracking;
         bool passLockedPoint = m_LockedTargetScans > 0;
-        // If we jump straight to TRACKING in one scan (already confirmed),
-        // count that as acquire success too.
+        // Physical path evidence: SNR must have been computed (not left at the
+        // uninitialized -300 floor, and not the geometry placeholder ~0).
+        bool passPhysicalSnr = m_MaxSnrDb > -299.0;
+        if (passPhysicalSnr)
+        {
+            if (m_MaxSnrDb > -0.5 && m_MaxSnrDb < 0.5)
+                passPhysicalSnr = false;
+        }
+        // The airframe was never registered or flagged by the test, so table
+        // membership proves the normal discovery sweep found it.
+        bool passDiscovery = m_TargetDiscovered;
         if (passTrack && !passAcquire)
             passAcquire = true;
         bool allPass = passScans && passAlive && passPlots && passTracks
-            && passAcquire && passTrack && passLockedPoint;
+            && passAcquire && passTrack && passLockedPoint && passPhysicalSnr
+            && passDiscovery;
 
         array<string> lines = new array<string>();
-        lines.Insert("RDF Radar Lock Test");
-        lines.Insert("prefab " + GROUND_TARGET_PREFAB);
+        lines.Insert("RDF Radar Lock Test (physical Mi-8 orbit)");
+        lines.Insert("prefab " + AIR_TARGET_PREFAB);
         lines.Insert("result " + BoolLabel(allPass));
         lines.Insert("");
         lines.Insert("checks:");
         lines.Insert("  scans_present " + BoolLabel(passScans));
         lines.Insert("  target_alive " + BoolLabel(passAlive));
+        lines.Insert("  discovered_unaided " + BoolLabel(passDiscovery));
         lines.Insert("  plots_any " + BoolLabel(passAnyPlots));
         lines.Insert("  plots_detected " + BoolLabel(passPlots));
         lines.Insert("  tracks_present " + BoolLabel(passTracks));
         lines.Insert("  reached_acquiring " + BoolLabel(passAcquire));
         lines.Insert("  reached_tracking " + BoolLabel(passTrack));
         lines.Insert("  locked_point_usable " + BoolLabel(passLockedPoint));
+        lines.Insert("  physical_snr " + BoolLabel(passPhysicalSnr));
         lines.Insert("");
         lines.Insert("metrics:");
         lines.Insert("  scan_count " + m_ScanCount.ToString());
@@ -495,11 +600,12 @@ class RDF_RadarLockAutoTest
         lines.Insert("  max_any_plots " + m_MaxAnyPlots.ToString());
         lines.Insert("  max_detected_plots " + m_MaxDetectedPlots.ToString());
         lines.Insert("  max_tracks " + m_MaxTracks.ToString());
+        lines.Insert("  max_snr_db " + m_MaxSnrDb.ToString());
         lines.Insert("  acquire_scans " + m_AcquireScans.ToString());
         lines.Insert("  track_scans " + m_TrackScans.ToString());
         lines.Insert("  locked_target_scans " + m_LockedTargetScans.ToString());
+        lines.Insert("  respawn_count " + m_RespawnCount.ToString());
         lines.Insert("  radar_origin " + m_RadarOrigin.ToString());
-        lines.Insert("  target_spawn " + m_TargetSpawnPos.ToString());
 
         FileIO.MakeDirectory("$profile:RDF");
         FileIO.MakeDirectory("$profile:RDF/RadarTests");
@@ -509,14 +615,14 @@ class RDF_RadarLockAutoTest
 
         Print("[RDF Radar LockTest] " + BoolLabel(allPass) + "  report=" + reportPath);
         Print(string.Format(
-            "[RDF Radar LockTest] scans=%1 anyPlots=%2 detected=%3 tracks=%4 acquire=%5 track=%6 locked=%7 alive=%8",
+            "[RDF Radar LockTest] scans=%1 detected=%2 tracks=%3 acquire=%4 track=%5 locked=%6 maxSnr=%7 alive=%8",
             m_ScanCount.ToString(),
-            m_MaxAnyPlots.ToString(),
             m_MaxDetectedPlots.ToString(),
             m_MaxTracks.ToString(),
             m_AcquireScans.ToString(),
             m_TrackScans.ToString(),
             m_LockedTargetScans.ToString(),
+            m_MaxSnrDb.ToString(),
             m_TargetAliveAtEnd.ToString()));
     }
 

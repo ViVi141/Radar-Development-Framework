@@ -4,6 +4,9 @@
 // 3) force circular motion,
 // 4) verify radar can recognize and detect the airborne target.
 //
+// The Mi-8 gets no detection aid: no emitter flag, no RCS override, no registry
+// pre-seeding. Detection must come from its own skin return.
+//
 // Usage (Script Debugger): RDF_RadarAirborneScanTest.Start();
 class RDF_RadarAirborneScanTest
 {
@@ -17,7 +20,9 @@ class RDF_RadarAirborneScanTest
     protected bool m_Running;
     protected float m_StartWallS;
     protected float m_LastProgressWallS;
-    protected float m_DurationS = 18.0;
+    // Cold scatterer table needs time to classify the freshly spawned airframe
+    // now that the test no longer pre-seeds it.
+    protected float m_DurationS = 35.0;
     protected int m_LastScanSerial = -1;
 
     protected IEntity m_Subject;
@@ -37,6 +42,7 @@ class RDF_RadarAirborneScanTest
     protected int m_TargetSeenAsEmitter;
     protected int m_TargetSeenAsAnonymous;
     protected float m_MaxTargetSnrDb = -300.0;
+    protected bool m_TargetDiscovered;
     protected int m_RespawnCount;
 
     protected ref RDF_RadarSettings m_PrevConfig;
@@ -153,6 +159,7 @@ class RDF_RadarAirborneScanTest
         m_TargetSeenAsEmitter = 0;
         m_TargetSeenAsAnonymous = 0;
         m_MaxTargetSnrDb = -300.0;
+        m_TargetDiscovered = false;
         m_RespawnCount = 0;
         m_LastScanSerial = RDF_RadarAutoRunner.GetLastScanSerial();
 
@@ -179,8 +186,7 @@ class RDF_RadarAirborneScanTest
 
         if (m_AirTarget && !s_KeepSpawnedTargetAfterTest)
         {
-            RDF_RadarEmitterRegistry.SetEmitting(m_AirTarget, false);
-            RDF_RadarEmitterRegistry.Unregister(m_AirTarget);
+            RDF_RadarScattererRegistry.Unregister(m_AirTarget);
             SCR_EntityHelper.DeleteEntityAndChildren(m_AirTarget);
             m_AirTarget = null;
         }
@@ -296,7 +302,7 @@ class RDF_RadarAirborneScanTest
         if (!m_AirTarget)
             return false;
 
-        RDF_RadarEmitterRegistry.Register(m_AirTarget, spawnPos, true, 1.0);
+        // Skin RCS only: no emitter flag, no registry pre-seeding.
         Print("[RDF Radar AirTest] spawned Mi-8 at " + spawnPos.ToString());
         return true;
     }
@@ -309,11 +315,17 @@ class RDF_RadarAirborneScanTest
         cfg.m_UpdateInterval = 0.2;
         cfg.m_IncludeVehicles = true;
         cfg.m_IncludeProjectiles = true;
-        cfg.m_IncludeRadarEmitters = true;
+        // Passive skin return only; an ESM contribution would mask a real miss.
+        cfg.m_IncludeRadarEmitters = false;
         cfg.m_EnablePhysicalDetection = true;
         cfg.m_KeepUndetected = true;
         cfg.m_DetectionSnrDb = -40.0;
         cfg.m_EnableDemClutter = false;
+        // Spawned target must reach the table via the normal sweep.
+        cfg.m_ScattererClassifyPerTick = 256;
+        cfg.m_ScattererRefreshPerTick = 512;
+        cfg.m_ScattererMaxEntries = 2048;
+        cfg.m_ScattererDiscoveryIntervalS = 0.5;
         // Empty range cells carry no thermal-noise fill yet, so the CFAR window can
         // reject a lone genuine plot. This test measures detection, not false alarms.
         cfg.m_EnableCfarGate = false;
@@ -323,6 +335,9 @@ class RDF_RadarAirborneScanTest
 
         RDF_RadarHardware hw = RDF_RadarHardware.CreateShorad();
         hw.m_AzimuthBeamwidthDeg = 40.0;
+        // Non-Doppler search radar: the orbit crosses zero radial speed, and MTI
+        // blind speeds would hide a target the test is meant to measure.
+        hw.m_EnableMti = false;
         hw.ClearElevationBeams();
         hw.AddElevationBeam("air_low", 8.0, 30.0, 0.0);
         hw.AddElevationBeam("air_mid", 18.0, 36.0, 0.0);
@@ -358,8 +373,6 @@ class RDF_RadarAirborneScanTest
         if (physics)
             physics.SetVelocity(Vector(vx, vy, vz));
 
-        RDF_RadarEmitterRegistry.Register(m_AirTarget, pos, true, 1.0);
-
         // Always draw a bright debug marker so visibility tests do not depend on
         // whether the scenario prefab contains a rendered mesh.
         int markerFlags = ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.TRANSP | ShapeFlags.ONCE;
@@ -376,7 +389,10 @@ class RDF_RadarAirborneScanTest
             float dy = pos[1] - m_RadarOrigin[1];
             float dz = pos[2] - m_RadarOrigin[2];
             float dist = Math.Sqrt(dx * dx + dy * dy + dz * dz);
-            Print("[RDF Radar AirTest] marker pos=" + pos.ToString() + " range=" + dist.ToString());
+            Print("[RDF Radar AirTest] marker pos=" + pos.ToString()
+                + " range=" + dist.ToString()
+                + " inTable=" + m_TargetDiscovered.ToString()
+                + " " + RDF_RadarScattererRegistry.GetStatsLine());
         }
     }
 
@@ -396,6 +412,8 @@ class RDF_RadarAirborneScanTest
         m_LastScanSerial = serial;
         m_LastProgressWallS = nowS;
         m_ScanCount = m_ScanCount + 1;
+        if (m_AirTarget && RDF_RadarScattererRegistry.Find(m_AirTarget))
+            m_TargetDiscovered = true;
 
         array<ref RDF_RadarTarget> targets = RDF_RadarAutoRunner.GetLastTargets();
         if (!targets || !m_AirTarget)
@@ -467,8 +485,13 @@ class RDF_RadarAirborneScanTest
         bool passScans = m_ScanCount > 8;
         bool passSeen = m_TargetSeenCount > 0;
         bool passDetected = m_TargetDetectedCount > 0;
-        bool passClassified = m_TargetSeenAsVehicle > 0 || m_TargetSeenAsEmitter > 0;
-        bool allPass = passScans && passSeen && passDetected && passClassified;
+        // Must be a plain vehicle return. An emitter classification would mean
+        // something re-flagged the target and the skin-RCS path went untested.
+        bool passClassified = m_TargetSeenAsVehicle > 0;
+        bool passNoEmitterAid = m_TargetSeenAsEmitter == 0;
+        bool passDiscovery = m_TargetDiscovered;
+        bool allPass = passScans && passSeen && passDetected && passClassified
+            && passNoEmitterAid && passDiscovery;
 
         array<string> lines = new array<string>();
         lines.Insert("RDF Radar Airborne Scan Test");
@@ -479,7 +502,9 @@ class RDF_RadarAirborneScanTest
         lines.Insert("  scans_present " + BoolLabel(passScans));
         lines.Insert("  target_seen " + BoolLabel(passSeen));
         lines.Insert("  target_detected " + BoolLabel(passDetected));
-        lines.Insert("  target_classified " + BoolLabel(passClassified));
+        lines.Insert("  target_classified_vehicle " + BoolLabel(passClassified));
+        lines.Insert("  no_emitter_aid " + BoolLabel(passNoEmitterAid));
+        lines.Insert("  discovered_unaided " + BoolLabel(passDiscovery));
         lines.Insert("");
         lines.Insert("metrics:");
         lines.Insert("  scan_count " + m_ScanCount.ToString());

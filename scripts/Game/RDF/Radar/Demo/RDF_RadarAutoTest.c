@@ -1,4 +1,9 @@
 // Fully automated DEM clutter regression test for in-game radar.
+//
+// Targets are real spawned airframes with no detection aid: no emitter flag, no
+// RCS override, no registry pre-seeding. Clutter is measured against their own
+// skin return.
+//
 // Usage (Script Debugger): RDF_RadarAutoTest.Start();
 class RDF_RadarAutoTestCaseResult
 {
@@ -33,11 +38,18 @@ class RDF_RadarAutoTest
     protected static ref RDF_RadarAutoTest s_Instance;
     protected static bool s_TickRegistered;
 
+    protected static const ResourceName TARGET_PREFAB =
+        "{6BDF7D3E72D31F29}Prefabs/Scenarios/SP01/SP01_Mi8MT_unarmed_transport.et";
+    protected static const int TARGET_COUNT = 3;
+    protected static const float WARMUP_TIMEOUT_S = 30.0;
+
     protected bool m_Running;
     protected int m_PhaseIndex;
     protected float m_PhaseStartWallS;
     protected float m_LastScanProgressWallS;
-    protected float m_PhaseDurationS = 4.0;
+    // Long enough for a cold scatterer table to classify the spawned targets
+    // now that the test no longer pre-registers them.
+    protected float m_PhaseDurationS = 8.0;
     protected int m_LastScanSerial = -1;
 
     protected ref array<ref RDF_RadarAutoTestCaseResult> m_Results;
@@ -47,8 +59,11 @@ class RDF_RadarAutoTest
     protected bool m_PreviousDemoEnabled;
     protected bool m_PreviousHudEnabled;
     protected bool m_PreviousForceLocal;
-    protected ref array<IEntity> m_TestEmitterOwners;
-    protected ref array<float> m_TestEmitterBaseAngles;
+    protected ref array<IEntity> m_Targets;
+    protected ref array<vector> m_TargetAnchors;
+    protected bool m_WarmupDone;
+    protected bool m_TargetsDiscovered;
+    protected float m_WarmupStartWallS;
 
     static RDF_RadarAutoTest GetInstance()
     {
@@ -111,9 +126,11 @@ class RDF_RadarAutoTest
         m_PreviousForceLocal = RDF_RadarAutoRunner.IsForceLocalScan();
 
         m_Results = new array<ref RDF_RadarAutoTestCaseResult>();
-        m_TestEmitterOwners = new array<IEntity>();
-        m_TestEmitterBaseAngles = new array<float>();
+        m_Targets = new array<IEntity>();
+        m_TargetAnchors = new array<vector>();
         m_PhaseIndex = 0;
+        m_WarmupDone = false;
+        m_TargetsDiscovered = false;
         m_LastScanSerial = -1;
         m_LastScanProgressWallS = System.GetTickCount() * 0.001;
         m_Running = true;
@@ -124,9 +141,9 @@ class RDF_RadarAutoTest
         RDF_RadarAutoRunner.SetHudEnabled(false);
         RDF_RadarAutoRunner.SetDemoEnabled(true);
 
-        if (!PrepareSyntheticEmitters())
+        if (!PrepareTargets())
         {
-            Print("[RDF Radar AutoTest] failed: cannot prepare synthetic emitters.", LogLevel.ERROR);
+            Print("[RDF Radar AutoTest] failed: cannot spawn clutter targets.", LogLevel.ERROR);
             StopInternal(true);
             return;
         }
@@ -137,15 +154,42 @@ class RDF_RadarAutoTest
             GetGame().GetCallqueue().CallLater(StaticTick, 200, true);
         }
 
+        // Run the base config first so the sweep can classify the new targets.
+        // Starting dem_off before they are in the table makes that phase measure
+        // nothing and its clutter check pass vacuously.
+        m_WarmupDone = false;
+        m_WarmupStartWallS = System.GetTickCount() * 0.001;
+        RDF_RadarSettings warmup = BuildBaseConfig();
+        warmup.m_EnableDemClutter = false;
+        warmup.Validate();
+        RDF_RadarAutoRunner.SetDemoConfig(warmup);
+        RDF_RadarAutoRunner.StartAutoRun();
+
         Print("[RDF Radar AutoTest] start: DEM OFF/ON/SCALE/BUDGET regression");
-        SetupPhase(m_PhaseIndex);
+    }
+
+    // All spawned targets present in the scatterer table.
+    protected bool AreTargetsDiscovered()
+    {
+        if (!m_Targets || m_Targets.Count() <= 0)
+            return false;
+
+        for (int i = 0; i < m_Targets.Count(); i++)
+        {
+            IEntity target = m_Targets.Get(i);
+            if (!target)
+                continue;
+            if (!RDF_RadarScattererRegistry.Find(target))
+                return false;
+        }
+        return true;
     }
 
     protected void StopInternal(bool restorePrevious)
     {
         m_Running = false;
         m_Current = null;
-        CleanupSyntheticEmitters();
+        CleanupTargets();
         RDF_RadarAutoTestGate.Release("DEM");
 
         if (!restorePrevious)
@@ -164,7 +208,25 @@ class RDF_RadarAutoTest
             return;
 
         float wallNowS = System.GetTickCount() * 0.001;
-        UpdateSyntheticEmitters(wallNowS);
+        HoldTargets();
+
+        if (!m_WarmupDone)
+        {
+            bool discovered = AreTargetsDiscovered();
+            bool timedOut = wallNowS - m_WarmupStartWallS > WARMUP_TIMEOUT_S;
+            if (!discovered && !timedOut)
+                return;
+
+            m_WarmupDone = true;
+            m_TargetsDiscovered = discovered;
+            Print(string.Format(
+                "[RDF Radar AutoTest] warmup done after %1s discovered=%2",
+                (wallNowS - m_WarmupStartWallS).ToString(),
+                discovered.ToString()));
+            SetupPhase(m_PhaseIndex);
+            return;
+        }
+
         AccumulateLatestScan();
         if (wallNowS - m_PhaseStartWallS < m_PhaseDurationS)
             return;
@@ -233,15 +295,20 @@ class RDF_RadarAutoTest
         cfg.m_UpdateInterval = 0.2;
         cfg.m_IncludeVehicles = true;
         cfg.m_IncludeProjectiles = true;
-        cfg.m_IncludeRadarEmitters = true;
+        // Skin returns only; an ESM path would bypass the clutter measurement.
+        cfg.m_IncludeRadarEmitters = false;
         cfg.m_EnablePhysicalDetection = true;
         cfg.m_DetectionSnrDb = 8.0;
+        cfg.m_ScattererClassifyPerTick = 256;
+        cfg.m_ScattererRefreshPerTick = 512;
+        cfg.m_ScattererMaxEntries = 2048;
+        cfg.m_ScattererDiscoveryIntervalS = 0.5;
         cfg.m_DemCacheMaxTiles = RDF_DemBakeConstants.RUNTIME_DEM_CACHE_MAX_TILES;
         cfg.m_DemTileLoadsPerScan = RDF_DemBakeConstants.RUNTIME_DEM_LOADS_PER_SCAN;
         cfg.m_DemClutterScale = 1.0;
-        // Default Shorad pencil (2.5°) puts orbiting emitters outside the main
+        // Default Shorad pencil (2.5°) puts the staggered targets outside the main
         // lobe → patternGain≈0 → SNR=-300 and clutter=0. DEM regression needs
-        // a wide stare so clutter power is measurable on the synthetic targets.
+        // a wide stare so clutter power is measurable on every target.
         cfg.m_EnableMechanicalScan = false;
         cfg.m_EnableCfarGate = false;
         cfg.m_EnableMeasurementSynthesis = false;
@@ -250,6 +317,9 @@ class RDF_RadarAutoTest
         RDF_RadarHardware hw = RDF_RadarHardware.CreateShorad();
         hw.m_AzimuthBeamwidthDeg = 90.0;
         hw.m_ScanRpm = 0.0;
+        // Targets are held stationary, and MTI also folds the clutter return down
+        // to its floor — both would erase what this test measures.
+        hw.m_EnableMti = false;
         hw.ClearElevationBeams();
         hw.AddElevationBeam("dem_low", 2.0, 20.0, 0.0);
         hw.AddElevationBeam("dem_mid", 10.0, 24.0, 0.0);
@@ -347,6 +417,9 @@ class RDF_RadarAutoTest
         RDF_RadarAutoTestCaseResult on5 = m_Results.Get(2);
         RDF_RadarAutoTestCaseResult budget0 = m_Results.Get(3);
 
+        // Without this the off phase can report zero clutter simply because it
+        // never saw a target, which is a vacuous pass.
+        bool passDiscovery = m_TargetsDiscovered && off.m_TargetSamples > 0;
         bool passOffLowClutter = off.GetAvgClutterW() <= 0.000000000000001;
         bool passScansPresent = off.m_ScanSamples > 0
             && on1.m_ScanSamples > 0
@@ -372,6 +445,7 @@ class RDF_RadarAutoTest
         bool passBudgetZeroNoClutter = budget0.GetAvgClutterW() <= 0.000000000000001;
 
         bool allPass = passScansPresent
+            && passDiscovery
             && passTargetsPresent
             && passOffLowClutter
             && passOnHasDem
@@ -386,6 +460,7 @@ class RDF_RadarAutoTest
         lines.Insert("");
         lines.Insert("checks:");
         lines.Insert("  scans_present " + BoolLabel(passScansPresent));
+        lines.Insert("  discovered_unaided " + BoolLabel(passDiscovery));
         lines.Insert("  targets_present " + BoolLabel(passTargetsPresent));
         lines.Insert("  off_low_clutter " + BoolLabel(passOffLowClutter));
         lines.Insert("  on_has_dem_samples " + BoolLabel(passOnHasDem));
@@ -416,10 +491,13 @@ class RDF_RadarAutoTest
         Print("[RDF Radar AutoTest] " + BoolLabel(allPass) + "  report=" + reportPath);
     }
 
-    protected bool PrepareSyntheticEmitters()
+    // Spawn real airframes along boresight at stepped ranges. Clutter is measured
+    // against their own skin return; nothing is flagged as an emitter and no RCS
+    // is overridden.
+    protected bool PrepareTargets()
     {
-        m_TestEmitterOwners.Clear();
-        m_TestEmitterBaseAngles.Clear();
+        m_Targets.Clear();
+        m_TargetAnchors.Clear();
 
         IEntity subject = RDF_LidarSubjectResolver.ResolveLocalSubject(true);
         if (!subject)
@@ -429,50 +507,13 @@ class RDF_RadarAutoTest
         if (!world)
             return false;
 
-        array<IEntity> active = new array<IEntity>();
-        world.GetActiveEntities(active);
-        for (int i = 0; i < active.Count(); i++)
-        {
-            IEntity ent = active.Get(i);
-            if (!ent || ent == subject)
-                continue;
-
-            m_TestEmitterOwners.Insert(ent);
-            float phase = 0.0;
-            if (m_TestEmitterOwners.Count() == 1)
-                phase = 0.0;
-            else if (m_TestEmitterOwners.Count() == 2)
-                phase = 2.0943951;
-            else
-                phase = 4.1887902;
-            m_TestEmitterBaseAngles.Insert(phase);
-
-            if (m_TestEmitterOwners.Count() >= 3)
-                break;
-        }
-
-        if (m_TestEmitterOwners.Count() <= 0)
+        Resource prefabRes = Resource.Load(TARGET_PREFAB);
+        if (!prefabRes)
             return false;
-
-        UpdateSyntheticEmitters(world.GetWorldTime() * 0.001);
-        Print("[RDF Radar AutoTest] synthetic emitters prepared: " + m_TestEmitterOwners.Count().ToString());
-        return true;
-    }
-
-    protected void UpdateSyntheticEmitters(float nowS)
-    {
-        if (!m_TestEmitterOwners || m_TestEmitterOwners.Count() <= 0)
-            return;
-
-        IEntity subject = RDF_LidarSubjectResolver.ResolveLocalSubject(true);
-        if (!subject)
-            return;
 
         vector mat[4];
         subject.GetWorldTransform(mat);
         vector origin = mat[3];
-        // Place emitters along boresight (mat[0]) at stepped ranges so they stay
-        // inside the wide DEM-test beam instead of orbiting into sidelobes.
         vector fwd = mat[0];
         float flatLen = Math.Sqrt(fwd[0] * fwd[0] + fwd[2] * fwd[2]);
         vector flatFwd;
@@ -481,46 +522,69 @@ class RDF_RadarAutoTest
         else
             flatFwd = Vector(fwd[0] / flatLen, 0.0, fwd[2] / flatLen);
 
-        float radarY = origin[1] + 40.0;
-        // Wall clock keeps motion alive even if world time is paused in GM.
-        float wallS = System.GetTickCount() * 0.001;
-
-        for (int i = 0; i < m_TestEmitterOwners.Count(); i++)
+        for (int i = 0; i < TARGET_COUNT; i++)
         {
-            IEntity owner = m_TestEmitterOwners.Get(i);
-            if (!owner)
-                continue;
-
-            float baseAngle = m_TestEmitterBaseAngles.Get(i);
-            float angularRate = 0.05 + i * 0.02;
-            float angle = baseAngle * 0.15 + wallS * angularRate;
             float radius = 400.0 + i * 300.0;
-            // Small lateral wobble around forward; stay within ~±25°.
-            float lateral = Math.Sin(angle) * 0.35;
-
+            float groundY = world.GetSurfaceY(
+                origin[0] + flatFwd[0] * radius,
+                origin[2] + flatFwd[2] * radius);
+            // Low AGL keeps the grazing angle shallow so DEM clutter matters.
             vector pos = Vector(
-                origin[0] + flatFwd[0] * radius - flatFwd[2] * lateral * radius,
-                radarY + i * 18.0,
-                origin[2] + flatFwd[2] * radius + flatFwd[0] * lateral * radius);
-            RDF_RadarEmitterRegistry.Register(owner, pos, true, 1.0);
+                origin[0] + flatFwd[0] * radius,
+                groundY + 60.0 + i * 18.0,
+                origin[2] + flatFwd[2] * radius);
+
+            EntitySpawnParams spawnParams = new EntitySpawnParams();
+            Math3D.AnglesToMatrix(Vector(0, 0, 0), spawnParams.Transform);
+            spawnParams.Transform[3] = pos;
+
+            IEntity target = GetGame().SpawnEntityPrefab(prefabRes, world, spawnParams);
+            if (!target)
+                continue;
+            m_Targets.Insert(target);
+            m_TargetAnchors.Insert(pos);
+        }
+
+        if (m_Targets.Count() <= 0)
+            return false;
+
+        Print("[RDF Radar AutoTest] targets spawned: " + m_Targets.Count().ToString());
+        return true;
+    }
+
+    // Hold the airframes on their anchors; they would otherwise fall out of beam.
+    protected void HoldTargets()
+    {
+        if (!m_Targets)
+            return;
+
+        for (int i = 0; i < m_Targets.Count(); i++)
+        {
+            IEntity target = m_Targets.Get(i);
+            if (!target)
+                continue;
+            target.SetOrigin(m_TargetAnchors.Get(i));
+            Physics physics = target.GetPhysics();
+            if (physics)
+                physics.SetVelocity("0 0 0");
         }
     }
 
-    protected void CleanupSyntheticEmitters()
+    protected void CleanupTargets()
     {
-        if (!m_TestEmitterOwners)
+        if (!m_Targets)
             return;
 
-        for (int i = 0; i < m_TestEmitterOwners.Count(); i++)
+        for (int i = 0; i < m_Targets.Count(); i++)
         {
-            IEntity owner = m_TestEmitterOwners.Get(i);
-            if (!owner)
+            IEntity target = m_Targets.Get(i);
+            if (!target)
                 continue;
-            RDF_RadarEmitterRegistry.SetEmitting(owner, false);
-            RDF_RadarEmitterRegistry.Unregister(owner);
+            RDF_RadarScattererRegistry.Unregister(target);
+            SCR_EntityHelper.DeleteEntityAndChildren(target);
         }
-        m_TestEmitterOwners.Clear();
-        m_TestEmitterBaseAngles.Clear();
+        m_Targets.Clear();
+        m_TargetAnchors.Clear();
     }
 
     protected void AppendCaseLines(

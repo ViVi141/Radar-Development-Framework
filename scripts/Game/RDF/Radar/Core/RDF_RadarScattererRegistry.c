@@ -56,11 +56,18 @@ class RDF_RadarScattererRegistry
     protected static ref array<ref RDF_RadarScatterer> s_Entries;
     protected static ref array<IEntity> s_Pending;
     protected static ref array<IEntity> s_DiscoveryScratch;
+    // Entities a sweep already looked at, accepted or rejected. Without this the
+    // sweep re-queues the whole world every interval (11k+ on Eden), so a newly
+    // spawned target waits behind a backlog that never drains.
+    protected static ref map<IEntity, bool> s_Seen;
+    protected static ref array<IEntity> s_SeenPruneScratch;
 
     protected static float s_LastTickTime = -1000.0;
     protected static float s_LastTickWallS = -1000.0;
     protected static float s_LastDiscoveryTime = -1000.0;
     protected static float s_LastDiscoveryWallS = -1000.0;
+    protected static float s_LastSeenPruneWallS = -1000.0;
+    protected static const float SEEN_PRUNE_INTERVAL_S = 20.0;
     protected static vector s_FocusOrigin = "0 0 0";
     protected static float s_DiscoveryRadiusM = 4000.0;
     protected static int s_RefreshCursor = 0;
@@ -117,6 +124,7 @@ class RDF_RadarScattererRegistry
         EnsureContainers();
         string line = "scat=" + s_Entries.Count().ToString();
         line = line + " pend=" + s_Pending.Count().ToString();
+        line = line + " seen=" + s_Seen.Count().ToString();
         line = line + " sweeps=" + s_StatDiscoveries.ToString();
         line = line + " ok=" + s_StatClassified.ToString();
         line = line + " rej=" + s_StatRejected.ToString();
@@ -132,7 +140,11 @@ class RDF_RadarScattererRegistry
     }
 
     //------------------------------------------------------------------------------------------------
-    // Explicit registration. Safe to call every frame; updates in place.
+    // Explicit registration for entities that announce themselves, i.e. a radar
+    // flagging its own owner as an emitter. Safe to call every frame; updates in
+    // place. Do NOT use it to inject targets a radar should have to find on its
+    // own — that bypasses discovery and classification and invalidates any
+    // detection measurement taken afterwards.
     static RDF_RadarScatterer Register(
         IEntity entity,
         vector worldPos,
@@ -193,6 +205,7 @@ class RDF_RadarScattererRegistry
                 e.m_Emitting = false;
                 e.m_Entity = null;
                 s_Entries.Remove(i);
+                ForgetSeen(entity);
                 return;
             }
         }
@@ -242,9 +255,11 @@ class RDF_RadarScattererRegistry
         EnsureContainers();
         s_Entries.Clear();
         s_Pending.Clear();
+        s_Seen.Clear();
         s_RefreshCursor = 0;
         s_LastDiscoveryTime = -1000.0;
         s_LastDiscoveryWallS = -1000.0;
+        s_LastSeenPruneWallS = -1000.0;
         s_LastTickWallS = -1000.0;
     }
 
@@ -296,6 +311,7 @@ class RDF_RadarScattererRegistry
         {
             s_LastDiscoveryWallS = wallS;
             s_LastDiscoveryTime = worldTimeS;
+            MaybePruneSeen(wallS);
             RunDiscovery(world);
         }
 
@@ -324,11 +340,7 @@ class RDF_RadarScattererRegistry
         {
             world.GetActiveEntities(s_DiscoveryScratch);
             for (int i = 0; i < s_DiscoveryScratch.Count(); i++)
-            {
-                IEntity ent = s_DiscoveryScratch.Get(i);
-                if (ent)
-                    s_Pending.Insert(ent);
-            }
+                QueueIfUnseen(s_DiscoveryScratch.Get(i));
         }
 
         s_StatDiscoveries = s_StatDiscoveries + 1;
@@ -337,9 +349,19 @@ class RDF_RadarScattererRegistry
     //------------------------------------------------------------------------------------------------
     protected static bool OnDiscoveredEntity(IEntity entity)
     {
-        if (entity)
-            s_Pending.Insert(entity);
+        QueueIfUnseen(entity);
         return true;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    protected static void QueueIfUnseen(IEntity entity)
+    {
+        if (!entity)
+            return;
+        if (s_Seen.Contains(entity))
+            return;
+        s_Seen.Insert(entity, true);
+        s_Pending.Insert(entity);
     }
 
     //------------------------------------------------------------------------------------------------
@@ -359,7 +381,11 @@ class RDF_RadarScattererRegistry
             if (Find(ent))
                 continue;
             if (s_Entries.Count() >= s_MaxEntries)
+            {
+                // Table full: retry on a later sweep instead of memoizing a skip.
+                ForgetSeen(ent);
                 continue;
+            }
 
             if (!RDF_RadarEntityClassifier.IsRadarCandidate(ent))
             {
@@ -540,6 +566,8 @@ class RDF_RadarScattererRegistry
             if (delta.LengthSq() > pruneRadiusSq)
             {
                 entry.m_Alive = false;
+                // Out of range now, but a later sweep must be able to re-add it.
+                ForgetSeen(entry.m_Entity);
                 s_Entries.Remove(index);
                 s_StatPruned = s_StatPruned + 1;
                 continue;
@@ -723,5 +751,49 @@ class RDF_RadarScattererRegistry
             s_Pending = new array<IEntity>();
         if (!s_DiscoveryScratch)
             s_DiscoveryScratch = new array<IEntity>();
+        if (!s_Seen)
+            s_Seen = new map<IEntity, bool>();
+        if (!s_SeenPruneScratch)
+            s_SeenPruneScratch = new array<IEntity>();
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Deleted entities leave keys that were hashed on a now-null pointer, so they
+    // cannot be removed by key. Rebuild from the survivors instead. Rebuilding is
+    // O(memo), so it runs on a slow cadence rather than on every sweep.
+    protected static void MaybePruneSeen(float wallS)
+    {
+        if (!s_Seen)
+            return;
+        if (wallS - s_LastSeenPruneWallS < SEEN_PRUNE_INTERVAL_S)
+            return;
+        s_LastSeenPruneWallS = wallS;
+
+        s_SeenPruneScratch.Clear();
+        for (int i = 0; i < s_Seen.Count(); i++)
+        {
+            IEntity key = s_Seen.GetKey(i);
+            if (key)
+                s_SeenPruneScratch.Insert(key);
+        }
+        if (s_SeenPruneScratch.Count() == s_Seen.Count())
+        {
+            s_SeenPruneScratch.Clear();
+            return;
+        }
+
+        s_Seen.Clear();
+        for (int j = 0; j < s_SeenPruneScratch.Count(); j++)
+            s_Seen.Insert(s_SeenPruneScratch.Get(j), true);
+        s_SeenPruneScratch.Clear();
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Let a dropped entity be picked up again by a later sweep.
+    protected static void ForgetSeen(IEntity entity)
+    {
+        if (!entity || !s_Seen)
+            return;
+        s_Seen.Remove(entity);
     }
 }

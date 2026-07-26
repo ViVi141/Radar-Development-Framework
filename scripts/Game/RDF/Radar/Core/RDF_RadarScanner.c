@@ -332,6 +332,9 @@ class RDF_RadarScanner
     {
         array<IEntity> candidates = new array<IEntity>();
         CollectCandidateEntities(world, subject, origin, range, candidates);
+        // Trace budget is small; process nearest first so nearby vehicles are not
+        // starved by distant characters / clutter entities earlier in the dump.
+        SortEntitiesByDistance(candidates, origin);
 
         for (int i = 0; i < candidates.Count() && outTargets.Count() < maxTargets; i++)
         {
@@ -530,6 +533,35 @@ class RDF_RadarScanner
             m_QueryCandidates = new array<IEntity>();
         m_QueryCandidates.Insert(entity);
         return true;
+    }
+
+    protected void SortEntitiesByDistance(notnull array<IEntity> entities, vector origin)
+    {
+        int n = entities.Count();
+        if (n <= 1)
+            return;
+
+        // Insertion sort: candidate counts after classify are usually modest.
+        for (int i = 1; i < n; i++)
+        {
+            IEntity key = entities.Get(i);
+            if (!key)
+                continue;
+            float keyDistSq = vector.DistanceSq(key.GetOrigin(), origin);
+            int j = i - 1;
+            while (j >= 0)
+            {
+                IEntity cur = entities.Get(j);
+                float curDistSq = 0.0;
+                if (cur)
+                    curDistSq = vector.DistanceSq(cur.GetOrigin(), origin);
+                if (curDistSq <= keyDistSq)
+                    break;
+                entities.Set(j + 1, cur);
+                j = j - 1;
+            }
+            entities.Set(j + 1, key);
+        }
     }
 
     protected bool ContainsEntity(

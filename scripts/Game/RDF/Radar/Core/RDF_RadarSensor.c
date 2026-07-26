@@ -169,6 +169,10 @@ class RDF_RadarSensor
         s.m_IncludeProjectiles = true;
         s.m_IncludeRadarEmitters = true;
         s.m_Hardware = RDF_RadarHardware.CreateShorad();
+        // SEARCH is a general surveillance preset, not a pulse-Doppler MTI search.
+        // Keep MTI off so stationary vehicles remain detectable by default.
+        if (s.m_Hardware)
+            s.m_Hardware.m_EnableMti = false;
         s.m_EnablePhysicalDetection = true;
         s.m_DetectionSnrDb = 8.0;
         s.m_EnableMechanicalScan = false;

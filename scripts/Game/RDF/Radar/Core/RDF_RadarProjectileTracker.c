@@ -474,6 +474,13 @@ class RDF_RadarProjectileTracker
         return m_Tracks;
     }
 
+    // Drop every track. Used when a consumer restarts the sensor and must not
+    // inherit tracks built from a previous configuration.
+    void ClearTracks()
+    {
+        m_Tracks.Clear();
+    }
+
     vector GetLastRadarOrigin()
     {
         return m_LastRadarOrigin;

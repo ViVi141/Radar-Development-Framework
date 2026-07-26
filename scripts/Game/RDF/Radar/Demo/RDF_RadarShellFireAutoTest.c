@@ -2,6 +2,10 @@
 // Spawns Ammo_Shell_82mm_HE_O832DU, launches via ProjectileMoveComponent,
 // then checks projectile plots / confirmed tracks / WLR vs truth launch.
 //
+// Shells get no detection aid: no RCS override, no registry pre-seeding. The
+// ~0.01 m2 baked mortar signature has to carry the whole chain, which the
+// counter-battery power budget below is sized for.
+//
 // Usage (Script Debugger, Play mode): RDF_RadarShellFireAutoTest.Start();
 class RDF_RadarShellShotTruth
 {
@@ -30,8 +34,6 @@ class RDF_RadarShellFireAutoTest
     protected static const float FIRE_INTERVAL_S = 6.0;
     protected static const float TEST_DURATION_S = 42.0;
     protected static const float WLR_LAUNCH_PASS_M = 250.0;
-    // Baked mortar RCS is tiny; boost for CFAR/SNR so the live path is testable.
-    protected static const float TEST_SHELL_RCS_M2 = 0.5;
 
     protected bool m_Running;
     protected float m_StartWallS;
@@ -54,6 +56,7 @@ class RDF_RadarShellFireAutoTest
     protected float m_BestLaunchErrM = 999999.0;
     protected float m_BestImpactErrM = 999999.0;
     protected float m_MaxSnrDb = -300.0;
+    protected bool m_ShellDiscovered;
     protected float m_LastDebugWallS;
 
     protected ref array<ref RDF_RadarShellShotTruth> m_Shots;
@@ -160,6 +163,7 @@ class RDF_RadarShellFireAutoTest
         m_BestLaunchErrM = 999999.0;
         m_BestImpactErrM = 999999.0;
         m_MaxSnrDb = -300.0;
+        m_ShellDiscovered = false;
         m_LastScanSerial = RDF_RadarAutoRunner.GetLastScanSerial();
 
         ApplyTestRadarConfig();
@@ -167,6 +171,11 @@ class RDF_RadarShellFireAutoTest
         RDF_RadarAutoRunner.SetHudEnabled(true);
         RDF_RadarAutoRunner.SetDemoEnabled(true);
         RDF_RadarAutoRunner.StartAutoRun();
+
+        // Do not inherit tracks from the previous suite step.
+        RDF_RadarProjectileTracker tracker = RDF_RadarAutoRunner.GetTracker();
+        if (tracker)
+            tracker.ClearTracks();
 
         m_StartWallS = System.GetTickCount() * 0.001;
         m_LastFireWallS = m_StartWallS - FIRE_INTERVAL_S;
@@ -222,26 +231,13 @@ class RDF_RadarShellFireAutoTest
         m_LiveShells.Clear();
     }
 
-    protected void RegisterShellScatterer(IEntity shell, vector worldPos)
-    {
-        if (!shell)
-            return;
-        RDF_RadarScatterer entry = RDF_RadarScattererRegistry.Register(
-            shell, worldPos, false, 1.0);
-        if (!entry)
-            return;
-        entry.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_PROJECTILE;
-        entry.m_MeanRcsM2 = TEST_SHELL_RCS_M2;
-        entry.m_RcsM2 = TEST_SHELL_RCS_M2;
-        entry.m_SwerlingModel = 0;
-    }
-
     protected void RefreshLiveShellScatterers(float nowS)
     {
         if (!m_LiveShells)
             return;
 
         int alive = 0;
+        int inTable = 0;
         m_ShellsSeenMoving = 0;
         for (int i = m_LiveShells.Count() - 1; i >= 0; i--)
         {
@@ -253,7 +249,12 @@ class RDF_RadarShellFireAutoTest
             }
 
             vector pos = shell.GetOrigin();
-            RegisterShellScatterer(shell, pos);
+            // Shells are never registered by the test; the sweep must find them.
+            if (RDF_RadarScattererRegistry.Find(shell))
+            {
+                inTable = inTable + 1;
+                m_ShellDiscovered = true;
+            }
             alive = alive + 1;
 
             int flags = ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.TRANSP | ShapeFlags.ONCE;
@@ -301,8 +302,9 @@ class RDF_RadarShellFireAutoTest
         if (last)
             lastN = last.Count();
         Print(string.Format(
-            "[RDF ShellFire AutoTest] liveShells=%1 movingSeen=%2 plots=%3 det=%4 tracks=%5 lastTargets=%6 forceLocal=1 %7",
+            "[RDF ShellFire AutoTest] liveShells=%1 inTable=%2 movingSeen=%3 plots=%4 det=%5 tracks=%6 lastTargets=%7 forceLocal=1 %8",
             alive.ToString(),
+            inTable.ToString(),
             m_ShellsSeenMoving.ToString(),
             m_ProjectilePlotCount.ToString(),
             m_ProjectileDetectedCount.ToString(),
@@ -355,9 +357,11 @@ class RDF_RadarShellFireAutoTest
         cfg.m_KeepEntityTruth = true;
         cfg.m_OriginOffset = Vector(0.0, 12.0, 0.0);
         cfg.m_MaxLosTracesPerScan = 96;
-        cfg.m_ScattererDiscoveryIntervalS = 0.5;
-        cfg.m_ScattererClassifyPerTick = 128;
-        cfg.m_ScattererRefreshPerTick = 256;
+        // Shells live for seconds, so the sweep has to reach them quickly.
+        cfg.m_ScattererDiscoveryIntervalS = 0.25;
+        cfg.m_ScattererClassifyPerTick = 256;
+        cfg.m_ScattererRefreshPerTick = 512;
+        cfg.m_ScattererMaxEntries = 2048;
         cfg.m_TrackConfirmHits = 2;
         cfg.m_TrackMaxMisses = 8;
         cfg.m_EnableBallisticPrediction = true;
@@ -441,9 +445,6 @@ class RDF_RadarShellFireAutoTest
         move.EnableSimulation(shell);
         move.SetBulletCoef(SHELL_SPEED_COEF);
         move.Launch(dir, vector.Zero, 1.0, shell, null, null, null, null);
-
-        // Sphere discovery often misses short-lived shells; force-register.
-        RegisterShellScatterer(shell, launchPos);
 
         RDF_RadarShellShotTruth truth = new RDF_RadarShellShotTruth();
         truth.m_LaunchPos = launchPos;
@@ -657,7 +658,11 @@ class RDF_RadarShellFireAutoTest
         bool passPlots = m_ProjectileDetectedCount >= 2;
         bool passTrack = m_ConfirmedProjectileTracks >= 1;
         bool passWlr = m_WlrValidCount >= 1 && m_BestLaunchErrM <= WLR_LAUNCH_PASS_M;
-        bool allPass = passFired && passMoving && passScans && passPlots && passTrack && passWlr;
+        // Shells were never registered by the test, so table membership proves
+        // the normal discovery sweep picked them up in flight.
+        bool passDiscovery = m_ShellDiscovered;
+        bool allPass = passFired && passMoving && passScans && passPlots && passTrack
+            && passWlr && passDiscovery;
 
         array<string> lines = new array<string>();
         lines.Insert("RDF Radar Shell Fire AutoTest");
@@ -667,6 +672,7 @@ class RDF_RadarShellFireAutoTest
         lines.Insert("checks:");
         lines.Insert("  shells_fired " + BoolLabel(passFired));
         lines.Insert("  shells_in_flight " + BoolLabel(passMoving));
+        lines.Insert("  discovered_unaided " + BoolLabel(passDiscovery));
         lines.Insert("  scans_present " + BoolLabel(passScans));
         lines.Insert("  projectile_detected " + BoolLabel(passPlots));
         lines.Insert("  confirmed_projectile_track " + BoolLabel(passTrack));

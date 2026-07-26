@@ -74,13 +74,39 @@ RDF_RadarAutoRunner.SetHudEnabled(true);   // PPI HUD（品红=辐射源 / 绿=�
 // 推荐：顺序跑完全部
 RDF_RadarAutoTestSuite.StartAll();
 
+// 手动摆车看 PPI（物理检测，默认关 MTI）
+RDF_RadarManualDemo.Start();
+RDF_RadarManualDemo.Probe();   // 诊断 Det 0/0
+RDF_RadarManualDemo.Stop();
+
 // 或单独跑：
 RDF_RadarAutoTest.Start();                 // DEM 杂波回归
 RDF_RadarBallisticsAutoTest.Start();       // 弹道/WLR 数学
 RDF_RadarShellFireAutoTest.Start();        // 实弹放炮 + WLR
 RDF_RadarAirborneScanTest.StartKeepTarget(); // 空中目标 + PPI
-RDF_RadarLockAutoTest.Start();             // 载具锁定状态机
+RDF_RadarLockAutoTest.Start();             // 空中目标锁定状态机
 ```
+
+各测试的场景与雷达配置：
+
+| 测试 | 目标 | 雷达配置 | 验证点 |
+|---|---|---|---|
+| Ballistics | 纯数学，无实体 | — | 弹道积分、反推、WLR 解算 |
+| DEM AutoTest | 3 架 Mi-8 悬停在视轴 400/700/1000 m | 90° 宽波束（刻意放大杂波单元） | 杂波随 DEM 开关/scale/budget 正确变化 |
+| Lock | 1 架 Mi-8 沿视轴 800 m 处飞半径 120 m 跑道（方位摆动 ±8.5°） | 20° 火控窄波束、20 MHz 带宽、DEM 杂波关 | SEARCH→ACQUIRING→TRACKING→COAST 状态机 |
+| Airborne | 1 架 Mi-8 绕场约 345 m 盘旋 | 40° 波束、`KeepUndetected=true` | 物理检测 + 按载具分类（emitter 计数必须为 0） |
+| ShellFire | 实发 82 mm 迫击炮弹（RCS 0.01 m²） | WLR 预设 | 弹丸发现/检测/跟踪 + 反推炮位 |
+
+测试约定：**不得给被探测物体添加任何探测助攻** —— 不加辐射源标记、不改 RCS、不预先写进散射体表。
+目标必须由发现扫掠自行找到，并靠自身回波被检测。各测试的 `discovered_unaided` 检查即用于守住这条线。
+
+两条经验教训（详见 CHANGELOG 2026-07-27）：
+
+- **宽波束 + DEM 杂波会埋掉空中目标**：90° 波束在 300 m 处的杂波单元横向 471 m，杂波截面比 Mi-8 大一个量级
+  （实测同一硬件开/关杂波 SNR 相差约 70 dB）。想让目标一直在主瓣里，正确做法是收窄波束并让目标沿视轴运动
+  （Lock 测试的跑道航线），而不是把波束开到不真实的宽度。
+- **共用 AutoRunner 的测试必须清场**：上一步遗留的航迹会让下一个测试凭空报 TRACKING。
+  测试启动时调用 `tracker.ClearTracks()`；DEM 测试先预热等目标全部进散射体表再开第一阶段。
 
 公共 API：[docs/RADAR_API.md](docs/RADAR_API.md)  
 游戏内框架说明：[docs/RADAR_GAME_FRAMEWORK.md](docs/RADAR_GAME_FRAMEWORK.md)  
