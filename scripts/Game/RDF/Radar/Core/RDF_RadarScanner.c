@@ -33,6 +33,10 @@ class RDF_RadarScanner
     protected int m_CfarCachedAzBins;
     protected int m_CfarCachedRangeBins;
     protected bool m_SettingsValidated;
+    protected int m_StatReuseHits;
+    protected int m_StatFreshUpdates;
+    protected int m_StatBudgetSkips;
+    protected int m_StatLosCacheHits;
 
     void RDF_RadarScanner(RDF_RadarSettings settings = null)
     {
@@ -108,12 +112,24 @@ class RDF_RadarScanner
         return RDF_RadarScattererRegistry.GetStatsLine();
     }
 
+    string GetScanReuseStatsShort()
+    {
+        return "reuse=" + m_StatReuseHits.ToString()
+            + " fresh=" + m_StatFreshUpdates.ToString()
+            + " skip=" + m_StatBudgetSkips.ToString()
+            + " losHit=" + m_StatLosCacheHits.ToString();
+    }
+
     void Scan(IEntity subject, array<ref RDF_RadarTarget> outTargets)
     {
         if (!subject || !m_Settings || !m_Settings.m_Enabled || !outTargets)
             return;
 
         outTargets.Clear();
+        m_StatReuseHits = 0;
+        m_StatFreshUpdates = 0;
+        m_StatBudgetSkips = 0;
+        m_StatLosCacheHits = 0;
         if (!m_SettingsValidated)
         {
             m_Settings.Validate();
@@ -286,6 +302,7 @@ class RDF_RadarScanner
                 runFullUpdate = m_ScanReuseCache.ShouldRunFullUpdate(entry.m_Entity, priorityBand, wallTime);
             if (!runFullUpdate || (!highPriority && freshBudget <= 0))
             {
+                m_StatBudgetSkips = m_StatBudgetSkips + 1;
                 RDF_RadarTarget reusedTarget;
                 if (m_ScanReuseCache
                     && m_ScanReuseCache.TryGetReusedTarget(
@@ -294,6 +311,7 @@ class RDF_RadarScanner
                         TARGET_REUSE_MAX_AGE_S,
                         reusedTarget))
                 {
+                    m_StatReuseHits = m_StatReuseHits + 1;
                     reusedTarget.m_Entity = entry.m_Entity;
                     reusedTarget.m_ScattererId = entry.m_ScattererId;
                     reusedTarget.m_Position = losEnd;
@@ -330,6 +348,8 @@ class RDF_RadarScanner
                     hitFraction,
                     losClear);
             }
+            if (reusedLos)
+                m_StatLosCacheHits = m_StatLosCacheHits + 1;
             if (!reusedLos)
             {
                 if (losUsed >= losBudget)
@@ -425,6 +445,7 @@ class RDF_RadarScanner
                     true,
                     !reusedPhysical);
             }
+            m_StatFreshUpdates = m_StatFreshUpdates + 1;
             if (!highPriority && freshBudget > 0)
                 freshBudget = freshBudget - 1;
             if (t.m_Detected || m_Settings.m_KeepUndetected)
@@ -510,6 +531,7 @@ class RDF_RadarScanner
                 runFullUpdate = m_ScanReuseCache.ShouldRunFullUpdate(ent, priorityBand, wallTime);
             if (!runFullUpdate || (!highPriority && freshBudget <= 0))
             {
+                m_StatBudgetSkips = m_StatBudgetSkips + 1;
                 RDF_RadarTarget reusedTarget;
                 if (m_ScanReuseCache
                     && m_ScanReuseCache.TryGetReusedTarget(
@@ -518,6 +540,7 @@ class RDF_RadarScanner
                         TARGET_REUSE_MAX_AGE_S,
                         reusedTarget))
                 {
+                    m_StatReuseHits = m_StatReuseHits + 1;
                     reusedTarget.m_Entity = ent;
                     reusedTarget.m_Position = pos;
                     reusedTarget.m_Distance = dist;
@@ -546,6 +569,8 @@ class RDF_RadarScanner
                     hitFraction,
                     losClear);
             }
+            if (reusedLos)
+                m_StatLosCacheHits = m_StatLosCacheHits + 1;
             if (!reusedLos)
             {
                 if (losUsed >= losBudget)
@@ -614,6 +639,7 @@ class RDF_RadarScanner
                     true,
                     !reusedPhysical);
             }
+            m_StatFreshUpdates = m_StatFreshUpdates + 1;
             if (!highPriority && freshBudget > 0)
                 freshBudget = freshBudget - 1;
             if (t.m_Detected || m_Settings.m_KeepUndetected)
@@ -660,6 +686,7 @@ class RDF_RadarScanner
             }
             if (!emitterRunFull || (!emitterHighPriority && freshBudget <= 0))
             {
+                m_StatBudgetSkips = m_StatBudgetSkips + 1;
                 RDF_RadarTarget reusedEmitter;
                 if (m_ScanReuseCache
                     && m_ScanReuseCache.TryGetReusedTarget(
@@ -668,6 +695,7 @@ class RDF_RadarScanner
                         TARGET_REUSE_MAX_AGE_S,
                         reusedEmitter))
                 {
+                    m_StatReuseHits = m_StatReuseHits + 1;
                     reusedEmitter.m_Entity = et.m_Entity;
                     reusedEmitter.m_Position = et.m_Position;
                     reusedEmitter.m_Distance = distE;
@@ -699,6 +727,8 @@ class RDF_RadarScanner
                     hitFractionE,
                     losClearE);
             }
+            if (reusedLosE)
+                m_StatLosCacheHits = m_StatLosCacheHits + 1;
             if (!reusedLosE)
             {
                 if (losUsed >= losBudget)
@@ -761,6 +791,7 @@ class RDF_RadarScanner
                     true,
                     !reusedEmitterPhysical);
             }
+            m_StatFreshUpdates = m_StatFreshUpdates + 1;
             if (!emitterHighPriority && freshBudget > 0)
                 freshBudget = freshBudget - 1;
             if (et.m_Detected || m_Settings.m_KeepUndetected)
@@ -1391,6 +1422,18 @@ class RDF_RadarScanner
             distance,
             patternGain);
         target.m_ReceivedPowerW = target.m_ReceivedPowerW * target.m_MultipathFactor;
+        if (m_Settings.m_EnableAtmosphericLoss)
+        {
+            float atmDb = m_Settings.m_AtmLossDbPerKmOneWay;
+            if (atmDb < 0.0)
+                atmDb = RDF_RadarClutterModel.AtmosphericOneWayDbPerKm(hardware.m_FrequencyHz);
+            float latm = RDF_RadarClutterModel.AtmosphericLossLinear(
+                distance,
+                atmDb,
+                m_Settings.m_RainLossDbPerKmOneWay);
+            if (latm > 1.0)
+                target.m_ReceivedPowerW = target.m_ReceivedPowerW / latm;
+        }
 
         float wavelength = hardware.GetWavelengthM();
         target.m_DopplerHz = RDF_RadarClutterModel.DopplerHz(

@@ -365,6 +365,13 @@ class RDF_RadarAirborneScanTest
         hw.Validate();
         cfg.m_Hardware = hw;
 
+        if (RDF_RadarAutoTestSuite.IsRealisticChannel())
+            cfg.ApplyRealisticChannel();
+        else
+            cfg.ApplyIdealChannel();
+        // Classification check needs entity truth; CFAR still optional here.
+        cfg.m_KeepEntityTruth = true;
+        cfg.m_EnableCfarGate = false;
         cfg.Validate();
         ApplySensorConfig(cfg);
     }

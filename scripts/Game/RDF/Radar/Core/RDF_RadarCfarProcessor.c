@@ -62,6 +62,9 @@ class RDF_RadarCfarProcessor
         }
 
         float noiseFloor = EstimateNoiseFloorW(origin, scanForward, settings);
+        if (settings.m_EnableCfarThermalFill)
+            FillEmptyCellsWithThermalNoise(azBinCount, rangeBinCount, noiseFloor);
+
         int flatCount = azBinCount * rangeBinCount;
         while (m_RowHits.Count() < flatCount)
             m_RowHits.Insert(false);
@@ -175,6 +178,32 @@ class RDF_RadarCfarProcessor
             array<float> clearRow = m_PowerGrid.Get(azClear);
             for (int rbClear = 0; rbClear < rangeBins; rbClear++)
                 clearRow.Set(rbClear, 0.0);
+        }
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Empty cells stay at 0 without this, so training averages collapse and CFAR
+    // becomes either always-detect or never-detect. Inject ~noiseFloor samples.
+    protected void FillEmptyCellsWithThermalNoise(int azBins, int rangeBins, float noiseFloorW)
+    {
+        float floorW = noiseFloorW;
+        if (floorW < 0.000000000000000000000000000001)
+            floorW = 0.000000000000000000000000000001;
+        float sigma = floorW * 0.45;
+        float minSample = floorW * 0.05;
+
+        for (int az = 0; az < azBins; az++)
+        {
+            array<float> row = m_PowerGrid.Get(az);
+            for (int rb = 0; rb < rangeBins; rb++)
+            {
+                if (row.Get(rb) > 0.0)
+                    continue;
+                float sample = Math.RandomGaussFloat(sigma, floorW);
+                if (sample < minSample)
+                    sample = minSample;
+                row.Set(rb, sample);
+            }
         }
     }
 

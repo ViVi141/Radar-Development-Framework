@@ -34,6 +34,7 @@ class RDF_RadarShellFireAutoTest
     protected static const float FIRE_INTERVAL_S = 6.0;
     protected static const float TEST_DURATION_S = 42.0;
     protected static const float WLR_LAUNCH_PASS_M = 250.0;
+    protected static const float WLR_LAUNCH_PASS_REALISTIC_M = 800.0;
 
     protected bool m_Running;
     protected float m_StartWallS;
@@ -404,8 +405,23 @@ class RDF_RadarShellFireAutoTest
         hw.AddElevationBeam("mortar_high", 55.0, 28.0, -0.5);
         hw.Validate();
         cfg.m_Hardware = hw;
+        if (RDF_RadarAutoTestSuite.IsRealisticChannel())
+            cfg.ApplyRealisticChannel();
+        else
+            cfg.ApplyIdealChannel();
+        // Keep projectile identity for WLR track assertions.
+        cfg.m_EnableMeasurementSynthesis = true;
+        cfg.m_KeepEntityTruth = true;
+        cfg.m_EnableCfarGate = false;
         cfg.Validate();
         ApplySensorConfig(cfg);
+    }
+
+    protected float GetWlrLaunchPassM()
+    {
+        if (RDF_RadarAutoTestSuite.IsRealisticChannel())
+            return WLR_LAUNCH_PASS_REALISTIC_M;
+        return WLR_LAUNCH_PASS_M;
     }
 
     protected vector BuildLaunchDirection()
@@ -687,7 +703,7 @@ class RDF_RadarShellFireAutoTest
         bool passScans = m_ScanCount >= 20;
         bool passPlots = m_ProjectileDetectedCount >= 2;
         bool passTrack = m_ConfirmedProjectileTracks >= 1;
-        bool passWlr = m_WlrValidCount >= 1 && m_BestLaunchErrM <= WLR_LAUNCH_PASS_M;
+        bool passWlr = m_WlrValidCount >= 1 && m_BestLaunchErrM <= GetWlrLaunchPassM();
         // Shells were never registered by the test, so table membership proves
         // the normal discovery sweep picked them up in flight.
         bool passDiscovery = m_ShellDiscovered;

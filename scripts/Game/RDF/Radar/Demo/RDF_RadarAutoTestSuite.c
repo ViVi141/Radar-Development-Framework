@@ -1,7 +1,9 @@
 // Sequential AutoTest runner. Ballistics is sync; the rest share AutoRunner
 // and must never overlap.
 //
-// Usage: RDF_RadarAutoTestSuite.StartAll();
+// Usage:
+//   RDF_RadarAutoTestSuite.StartAll();            // ideal channel (logic loop)
+//   RDF_RadarAutoTestSuite.StartAllRealistic();   // realistic channel + wider bands
 class RDF_RadarAutoTestSuite
 {
     protected static bool s_TickRegistered;
@@ -9,8 +11,36 @@ class RDF_RadarAutoTestSuite
     protected static int s_Step = -1;
     protected static float s_StepStartWallS;
     protected static float s_StepTimeoutS = 120.0;
+    protected static bool s_RealisticChannel;
 
     static void StartAll()
+    {
+        BeginSuite(false);
+    }
+
+    static void StartAllRealistic()
+    {
+        BeginSuite(true);
+    }
+
+    static bool IsRealisticChannel()
+    {
+        return s_RealisticChannel;
+    }
+
+    static void Stop()
+    {
+        s_Running = false;
+        s_Step = -1;
+        Print("[RDF Radar AutoTestSuite] stopped.");
+    }
+
+    static bool IsRunning()
+    {
+        return s_Running;
+    }
+
+    protected static void BeginSuite(bool realistic)
     {
         if (s_Running)
         {
@@ -25,8 +55,12 @@ class RDF_RadarAutoTestSuite
             return;
         }
 
+        s_RealisticChannel = realistic;
         s_Running = true;
-        Print("[RDF Radar AutoTestSuite] begin (sequential)");
+        if (realistic)
+            Print("[RDF Radar AutoTestSuite] begin (sequential, REALISTIC channel)");
+        else
+            Print("[RDF Radar AutoTestSuite] begin (sequential, ideal channel)");
 
         if (!s_TickRegistered)
         {
@@ -35,18 +69,6 @@ class RDF_RadarAutoTestSuite
         }
 
         RunStep(0);
-    }
-
-    static void Stop()
-    {
-        s_Running = false;
-        s_Step = -1;
-        Print("[RDF Radar AutoTestSuite] stopped.");
-    }
-
-    static bool IsRunning()
-    {
-        return s_Running;
     }
 
     protected static void StaticTick()

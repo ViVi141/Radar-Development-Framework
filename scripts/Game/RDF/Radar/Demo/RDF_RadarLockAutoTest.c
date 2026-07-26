@@ -386,6 +386,14 @@ class RDF_RadarLockAutoTest
         hw.AddElevationBeam("lock_mid", 14.0, 16.0, 0.0);
         hw.Validate();
         cfg.m_Hardware = hw;
+        if (RDF_RadarAutoTestSuite.IsRealisticChannel())
+            cfg.ApplyRealisticChannel();
+        else
+            cfg.ApplyIdealChannel();
+        // Lock regression asserts entity classification / lock machine, not CFAR Pfa.
+        cfg.m_EnableCfarGate = false;
+        cfg.m_KeepEntityTruth = true;
+        cfg.m_EnableMeasurementSynthesis = false;
         cfg.Validate();
         ApplySensorConfig(cfg);
     }

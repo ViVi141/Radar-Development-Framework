@@ -491,6 +491,10 @@ class RDF_RadarSensor
 
         string dem = GetDemStatusShort();
 
+        string reuse = "";
+        if (m_Scanner)
+            reuse = " | " + m_Scanner.GetScanReuseStatsShort();
+
         string lock = "";
         if (m_LockManager)
             lock = " | " + m_LockManager.GetStatusShort();
@@ -499,6 +503,7 @@ class RDF_RadarSensor
             + " | plots=" + CountDetectedPlots().ToString()
             + " tracks=" + CountConfirmedTracks().ToString()
             + " wlr=" + CountWlrFixes().ToString()
+            + reuse
             + lock;
     }
 }

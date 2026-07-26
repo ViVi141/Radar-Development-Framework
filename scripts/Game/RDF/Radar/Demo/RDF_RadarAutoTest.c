@@ -346,6 +346,14 @@ class RDF_RadarAutoTest
         hw.AddElevationBeam("dem_mid", 10.0, 24.0, 0.0);
         hw.Validate();
         cfg.m_Hardware = hw;
+        if (RDF_RadarAutoTestSuite.IsRealisticChannel())
+            cfg.ApplyRealisticChannel();
+        else
+            cfg.ApplyIdealChannel();
+        // DEM measures clutter on entity-truth plots; synthesis would mask that.
+        cfg.m_EnableMeasurementSynthesis = false;
+        cfg.m_KeepEntityTruth = true;
+        cfg.m_EnableCfarGate = false;
         cfg.Validate();
         return cfg;
     }

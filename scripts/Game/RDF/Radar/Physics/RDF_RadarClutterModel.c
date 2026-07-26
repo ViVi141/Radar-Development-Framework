@@ -170,6 +170,41 @@ class RDF_RadarClutterModel
     }
 
     //------------------------------------------------------------------------------------------------
+    // Clear-air one-way loss near sea level (engineering fit, dB/km).
+    static float AtmosphericOneWayDbPerKm(float frequencyHz)
+    {
+        float fGhz = frequencyHz / 1000000000.0;
+        if (fGhz < 1.0)
+            return 0.003;
+        if (fGhz < 4.0)
+            return 0.007;
+        if (fGhz < 8.0)
+            return 0.012;
+        if (fGhz < 12.0)
+            return 0.02;
+        return 0.04;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Two-way atmospheric+rain loss as a linear factor (>=1) to divide received power by.
+    static float AtmosphericLossLinear(
+        float rangeM,
+        float atmDbPerKmOneWay,
+        float rainDbPerKmOneWay)
+    {
+        if (rangeM < 0.0)
+            rangeM = 0.0;
+        float alpha = atmDbPerKmOneWay + rainDbPerKmOneWay;
+        if (alpha <= 0.0)
+            return 1.0;
+        float lossDb = 2.0 * alpha * (rangeM / 1000.0);
+        float factor = DbToLin(lossDb);
+        if (factor < 1.0)
+            return 1.0;
+        return factor;
+    }
+
+    //------------------------------------------------------------------------------------------------
     // Two-pulse MTI power transfer, peak-normalized to 1 at fd = PRF/2.
     static float MtiTwoPulseGain(float dopplerHz, float prfHz)
     {

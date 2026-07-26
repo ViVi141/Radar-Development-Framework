@@ -58,6 +58,21 @@ class RDF_RadarSettings
     bool m_EnableMeasurementSynthesis = true;
     // Debug only: keep m_Entity / soft type tags (cheats identity into the PPI).
     bool m_KeepEntityTruth = false;
+    // Channel fidelity. Ideal = logic-loop validation; Realistic = "合常理" errors.
+    bool m_RealisticChannel = false;
+    // Measurement synthesis extras (applied when synthesis is on).
+    float m_MeasNoiseScale = 1.0;
+    float m_MeasRangeBiasM = 0.0;
+    float m_MeasAzimuthBiasDeg = 0.0;
+    float m_MeasElevationBiasDeg = 0.0;
+    float m_MeasDopplerBiasHz = 0.0;
+    // Fill empty CFAR cells with thermal-noise samples (real Pfa behaviour).
+    bool m_EnableCfarThermalFill = false;
+    // Two-way atmospheric / rain loss on received power.
+    bool m_EnableAtmosphericLoss = false;
+    // <0 → auto from carrier frequency (clear-air fit).
+    float m_AtmLossDbPerKmOneWay = -1.0;
+    float m_RainLossDbPerKmOneWay = 0.0;
     // Plot-to-track association gates (meters / degrees).
     float m_TrackGateRangeM = 400.0;
     float m_TrackGateAzimuthDeg = 4.0;
@@ -110,10 +125,52 @@ class RDF_RadarSettings
         m_TrackMaxMisses = Math.Clamp(m_TrackMaxMisses, 1, 32);
         m_ShellAirDrag = Math.Clamp(m_ShellAirDrag, 0.0, 1.0);
         m_WeaponLocateMinHits = Math.Clamp(m_WeaponLocateMinHits, 2, 32);
+        m_MeasNoiseScale = Math.Clamp(m_MeasNoiseScale, 0.0, 10.0);
+        m_MeasRangeBiasM = Math.Clamp(m_MeasRangeBiasM, -500.0, 500.0);
+        m_MeasAzimuthBiasDeg = Math.Clamp(m_MeasAzimuthBiasDeg, -5.0, 5.0);
+        m_MeasElevationBiasDeg = Math.Clamp(m_MeasElevationBiasDeg, -5.0, 5.0);
+        m_MeasDopplerBiasHz = Math.Clamp(m_MeasDopplerBiasHz, -500.0, 500.0);
+        m_AtmLossDbPerKmOneWay = Math.Clamp(m_AtmLossDbPerKmOneWay, -1.0, 5.0);
+        m_RainLossDbPerKmOneWay = Math.Clamp(m_RainLossDbPerKmOneWay, 0.0, 20.0);
         if (!m_Hardware)
             m_Hardware = RDF_RadarHardware.CreateShorad();
         if (!m_EwStack)
             m_EwStack = new RDF_RadarEwStack();
         m_Hardware.Validate();
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Deterministic / logic-loop profile: no random measurement noise, no thermal
+    // CFAR fill, no atmospheric loss. Suite default so regressions stay "过准".
+    void ApplyIdealChannel()
+    {
+        m_RealisticChannel = false;
+        m_MeasNoiseScale = 0.0;
+        m_MeasRangeBiasM = 0.0;
+        m_MeasAzimuthBiasDeg = 0.0;
+        m_MeasElevationBiasDeg = 0.0;
+        m_MeasDopplerBiasHz = 0.0;
+        m_EnableCfarThermalFill = false;
+        m_EnableAtmosphericLoss = false;
+        m_AtmLossDbPerKmOneWay = -1.0;
+        m_RainLossDbPerKmOneWay = 0.0;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Gameplay / fidelity profile: CRLB noise + small bias, thermal CFAR fill,
+    // clear-air atmosphere. Tests that enable this must use wider error bands.
+    void ApplyRealisticChannel()
+    {
+        m_RealisticChannel = true;
+        m_EnableMeasurementSynthesis = true;
+        m_MeasNoiseScale = 1.0;
+        m_MeasRangeBiasM = 2.0;
+        m_MeasAzimuthBiasDeg = 0.05;
+        m_MeasElevationBiasDeg = 0.05;
+        m_MeasDopplerBiasHz = 0.0;
+        m_EnableCfarThermalFill = true;
+        m_EnableAtmosphericLoss = true;
+        m_AtmLossDbPerKmOneWay = -1.0;
+        m_RainLossDbPerKmOneWay = 0.0;
     }
 }

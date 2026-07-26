@@ -1,5 +1,28 @@
 # CHANGELOG
 
+## 2026-07-27 — Sprint A/B：通道逼真 + 扫描可观测性
+
+按 TODO 收益序落地：
+
+- **扫描统计**：`reuse` / `fresh` / `skip` / `losHit` 写入 `Sensor.GetStatusShort` 与 PPI 模式行
+- **双档通道**：`RDF_RadarSettings.ApplyIdealChannel` / `ApplyRealisticChannel`；套件 `StartAll()`（理想）与 `StartAllRealistic()`（逼真，ShellFire WLR 误差带 800 m）
+- **测量噪声**：合成路径支持 `m_MeasNoiseScale` 与距离/方位/俯仰/多普勒偏差
+- **CFAR 热噪声填空**：`m_EnableCfarThermalFill` 给空距离单元注入 ~noiseFloor 样本
+- **大气衰减**：`m_EnableAtmosphericLoss` + 晴空 dB/km 拟合 + 可选雨衰；作用于接收功率
+
+理想档保持逻辑闭环回归；逼真档让误差“合常理”。
+
+---
+
+## 2026-07-27 — 扫描优化：LOS 缓存 / 分片预算 / 物理复用 / 优先级
+
+- `RDF_RadarLosCache`：短时复用 TraceMove 结果（原点/目标位移阈值）
+- 多帧 `freshBudget`：近距/弹丸/高速每帧更新，远距低威胁降频并复用上帧点迹
+- 低速目标短周期复用 `ProcessPhysicalDetection` 结果（SNR/杂波）
+- `RDF_RadarScanPassContext`：规避 Enforce 16 参数上限
+
+---
+
 ## 2026-07-27 — P1 工程核心 + 轻量项（A+B）
 
 - AutoRunner 的 DEM 状态读取改走 `RDF_RadarSensor.GetDemStatusShort()`，去掉 Demo 层 `GetScanner()` 穿透。

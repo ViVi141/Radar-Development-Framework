@@ -33,24 +33,34 @@ class RDF_RadarMeasurement
         if (denom < 0.001)
             denom = 0.001;
 
+        float noiseScale = settings.m_MeasNoiseScale;
+        if (noiseScale < 0.0)
+            noiseScale = 0.0;
+
         float rangeBinM = hardware.GetRangeBinM();
-        float rangeSigma = rangeBinM / denom;
+        float rangeSigma = (rangeBinM / denom) * noiseScale;
         int rangeBin = Math.Floor(trueRange / rangeBinM);
         if (rangeBin < 0)
             rangeBin = 0;
         float quantizedRange = (rangeBin + 0.5) * rangeBinM;
-        float measuredRange = quantizedRange + Math.RandomGaussFloat(rangeSigma, 0.0);
+        float measuredRange = quantizedRange + settings.m_MeasRangeBiasM;
+        if (rangeSigma > 0.0)
+            measuredRange = measuredRange + Math.RandomGaussFloat(rangeSigma, 0.0);
         if (measuredRange < settings.m_MinDistance)
             measuredRange = settings.m_MinDistance;
         if (measuredRange > settings.m_Range)
             measuredRange = settings.m_Range;
 
-        float azSigmaDeg = hardware.m_AzimuthBeamwidthDeg / denom;
-        float measuredAzDeg = target.m_AzimuthDeg + Math.RandomGaussFloat(azSigmaDeg, 0.0);
+        float azSigmaDeg = (hardware.m_AzimuthBeamwidthDeg / denom) * noiseScale;
+        float measuredAzDeg = target.m_AzimuthDeg + settings.m_MeasAzimuthBiasDeg;
+        if (azSigmaDeg > 0.0)
+            measuredAzDeg = measuredAzDeg + Math.RandomGaussFloat(azSigmaDeg, 0.0);
 
         float elBeamDeg = GetStrongestElevationBeamwidthDeg(hardware, target.m_ElevationDeg);
-        float elSigmaDeg = elBeamDeg / denom;
-        float measuredElDeg = target.m_ElevationDeg + Math.RandomGaussFloat(elSigmaDeg, 0.0);
+        float elSigmaDeg = (elBeamDeg / denom) * noiseScale;
+        float measuredElDeg = target.m_ElevationDeg + settings.m_MeasElevationBiasDeg;
+        if (elSigmaDeg > 0.0)
+            measuredElDeg = measuredElDeg + Math.RandomGaussFloat(elSigmaDeg, 0.0);
 
         float wavelength = hardware.GetWavelengthM();
         float trueDoppler = target.m_DopplerHz;
@@ -60,8 +70,10 @@ class RDF_RadarMeasurement
         float obsTimeS = EstimateObservationTimeS(hardware);
         float dopplerSigma = 0.0;
         if (obsTimeS > 0.000001 && wavelength > 0.0)
-            dopplerSigma = 1.0 / (obsTimeS * denom);
-        float measuredDoppler = trueDoppler + Math.RandomGaussFloat(dopplerSigma, 0.0);
+            dopplerSigma = (1.0 / (obsTimeS * denom)) * noiseScale;
+        float measuredDoppler = trueDoppler + settings.m_MeasDopplerBiasHz;
+        if (dopplerSigma > 0.0)
+            measuredDoppler = measuredDoppler + Math.RandomGaussFloat(dopplerSigma, 0.0);
         float measuredRadial = 0.0;
         if (wavelength > 0.0)
             measuredRadial = measuredDoppler * wavelength * 0.5;
