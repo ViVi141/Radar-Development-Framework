@@ -117,6 +117,10 @@ class RDF_RadarSensor
         m_Tracker.ConfigureFromSettings(m_Settings);
         // Force the next Tick to run immediately after a reconfigure.
         m_LastScanWallS = -1000.0;
+        // Drop stale plots from the previous settings object so consumers
+        // (ManualDemo.Probe, HUD) do not read a frozen previous dwell.
+        if (m_Plots)
+            m_Plots.Clear();
     }
 
     void SetMode(ERDF_RadarSensorMode mode)

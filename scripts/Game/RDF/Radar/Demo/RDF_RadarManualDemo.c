@@ -2,6 +2,8 @@
 // physical radar detection. Not geometry-only.
 //
 // Uses RDF_RadarSensor for configure / read; AutoRunner only hosts Tick + HUD.
+// Probe() always forces one ScanOnce so debugger dumps are never stale when the
+// editor pauses AutoRunner's CallLater tick.
 //
 // Usage (Script Debugger):
 //   RDF_RadarManualDemo.Start();
@@ -15,6 +17,7 @@ class RDF_RadarManualDemo
     protected static bool s_PrevHud;
     protected static bool s_PrevForceLocal;
     protected static bool s_Active;
+    protected static ref array<IEntity> s_ProbeScratch;
 
     static void Start()
     {
@@ -29,14 +32,18 @@ class RDF_RadarManualDemo
         RDF_RadarSettings cfg = BuildManualConfig();
         RDF_RadarAutoRunner.SetForceLocalScan(true);
         ApplySensorConfig(cfg);
+        if (sensor)
+            sensor.ResetSession();
+
         RDF_RadarAutoRunner.SetDemoEnabled(true);
         RDF_RadarAutoRunner.SetHudEnabled(true);
+        RDF_RadarAutoRunner.StartAutoRun();
         RDF_RadarHUD.Show();
         s_Active = true;
 
         Print("[RDF ManualDemo] started physical SEARCH (MTI off, wide beam, DEM clutter OFF, world search)");
         Print("[RDF ManualDemo] tip: keep Play running; close GM free-cam or possess a character; Probe() after placing targets");
-        Probe();
+        ForceScanAndProbe();
     }
 
     static void Stop()
@@ -76,9 +83,8 @@ class RDF_RadarManualDemo
         cfg.m_IncludeRadarEmitters = false;
         cfg.m_EnablePhysicalDetection = true;
         cfg.m_DetectionSnrDb = 8.0;
-        // 360° / wide beams make the DEM clutter cell huge and bury skin returns
-        // (same ~70 dB hit seen in LockTest). Clutter has its own AutoTest; this
-        // demo is for seeing vehicles and fired shells on the PPI.
+        // Wide beams make the DEM clutter cell huge and bury skin returns.
+        // Clutter has its own AutoTest; this demo is for PPI visibility.
         cfg.m_EnableDemClutter = false;
         cfg.m_EnableCfarGate = false;
         cfg.m_UseScattererRegistry = false;
@@ -86,13 +92,11 @@ class RDF_RadarManualDemo
         // Editor-placed vehicles are often missing from DYNAMIC sphere results.
         cfg.m_SphereQueryAlsoActive = true;
         cfg.m_MaxLosTracesPerScan = 128;
-        // Keep misses so Probe can show SNR instead of Det 0/0 with no plots.
         cfg.m_KeepUndetected = true;
         cfg.m_KeepEntityTruth = true;
         cfg.m_OriginOffset = Vector(0.0, 12.0, 0.0);
 
         RDF_RadarHardware hw = RDF_RadarHardware.CreateShorad();
-        // Wide stare for manual placement, not a true omni cell for clutter math.
         hw.m_AzimuthBeamwidthDeg = 90.0;
         hw.m_ScanRpm = 0.0;
         hw.m_EnableMti = false;
@@ -105,8 +109,14 @@ class RDF_RadarManualDemo
         return cfg;
     }
 
-    // Dump live scan / world state so Det 0/0 is diagnosable.
+    // Force one dwell then dump diagnostics. Safe to call from Script Debugger
+    // even when AutoRunner's periodic tick is stalled by the GM editor.
     static void Probe()
+    {
+        ForceScanAndProbe();
+    }
+
+    protected static void ForceScanAndProbe()
     {
         IEntity subject = RDF_LidarSubjectResolver.ResolveLocalSubject(true);
         if (!subject)
@@ -121,6 +131,17 @@ class RDF_RadarManualDemo
             Print("[RDF ManualDemo] Probe FAIL: no RDF_RadarSensor", LogLevel.WARNING);
             return;
         }
+
+        BaseWorld world = GetGame().GetWorld();
+        float worldTimeS = 0.0;
+        if (world)
+            worldTimeS = world.GetWorldTime() * 0.001;
+
+        // Debugger Probe must not depend on CallLater advancing while the editor
+        // is open; ScanOnce always produces a fresh dwell.
+        sensor.SetForceLocalScan(true);
+        sensor.SetEnabled(true);
+        sensor.ScanOnce(subject, null, worldTimeS);
 
         RDF_RadarSettings cfg = sensor.GetSettings();
         bool mti = false;
@@ -152,51 +173,25 @@ class RDF_RadarManualDemo
             }
         }
 
-        BaseWorld world = GetGame().GetWorld();
-        int activeN = 0;
         int vehicleN = 0;
         int nearVehicleN = 0;
         int projectileN = 0;
-        if (world)
-        {
-            array<IEntity> active = new array<IEntity>();
-            world.GetActiveEntities(active);
-            activeN = active.Count();
-            vector origin = subject.GetOrigin();
-            for (int i = 0; i < active.Count(); i++)
-            {
-                IEntity ent = active.Get(i);
-                if (!ent || ent == subject)
-                    continue;
-                if (RDF_RadarEntityClassifier.IsProjectile(ent))
-                {
-                    projectileN = projectileN + 1;
-                    continue;
-                }
-                if (!RDF_RadarEntityClassifier.IsVehicleOrCharacter(ent))
-                    continue;
-                if (ChimeraCharacter.Cast(ent))
-                    continue;
-                vehicleN = vehicleN + 1;
-                float d = vector.Distance(ent.GetOrigin(), origin);
-                if (d < 2000.0)
-                    nearVehicleN = nearVehicleN + 1;
-            }
-        }
+        int activeN = 0;
+        CountNearbyCandidates(subject, vehicleN, nearVehicleN, projectileN, activeN);
 
         Print(string.Format(
-            "[RDF ManualDemo] Probe subject=%1 plots=%2 det=%3 maxSnr=%4 forceLocal=%5 mti=%6 azBw=%7 demClutter=%8 status=%9",
+            "[RDF ManualDemo] Probe subject=%1 plots=%2 det=%3 maxSnr=%4 running=%5 mti=%6 azBw=%7 demClutter=%8 status=%9",
             subject.GetOrigin().ToString(),
             plotN.ToString(),
             detN.ToString(),
             maxSnr.ToString(),
-            sensor.IsForceLocalScan().ToString(),
+            RDF_RadarAutoRunner.IsRunning().ToString(),
             mti.ToString(),
             azBw.ToString(),
             demClutter.ToString(),
             sensor.GetStatusShort()));
         Print(string.Format(
-            "[RDF ManualDemo] Probe world active=%1 vehicles=%2 vehicles<2km=%3 projectiles=%4 serial=%5",
+            "[RDF ManualDemo] Probe world candidates=%1 vehicles=%2 vehicles<2km=%3 projectiles=%4 serial=%5",
             activeN.ToString(),
             vehicleN.ToString(),
             nearVehicleN.ToString(),
@@ -223,7 +218,75 @@ class RDF_RadarManualDemo
         }
         else if (nearVehicleN > 0)
         {
-            Print("[RDF ManualDemo] vehicles are in the world but no plots yet — wait 1s and Probe again (scan interval 0.2s)", LogLevel.WARNING);
+            Print("[RDF ManualDemo] vehicles nearby but no plots — check LOS / sector / IncludeVehicles", LogLevel.WARNING);
         }
+    }
+
+    protected static void CountNearbyCandidates(
+        IEntity subject,
+        out int vehicleN,
+        out int nearVehicleN,
+        out int projectileN,
+        out int activeN)
+    {
+        vehicleN = 0;
+        nearVehicleN = 0;
+        projectileN = 0;
+        activeN = 0;
+        if (!subject)
+            return;
+
+        BaseWorld world = subject.GetWorld();
+        if (!world)
+            world = GetGame().GetWorld();
+        if (!world)
+            return;
+
+        if (!s_ProbeScratch)
+            s_ProbeScratch = new array<IEntity>();
+        s_ProbeScratch.Clear();
+
+        // ALL catches editor-placed static vehicles that DYNAMIC misses.
+        world.QueryEntitiesBySphere(
+            subject.GetOrigin(),
+            2000.0,
+            OnProbeEntity,
+            null,
+            EQueryEntitiesFlags.ALL);
+        activeN = s_ProbeScratch.Count();
+
+        vector origin = subject.GetOrigin();
+        for (int i = 0; i < s_ProbeScratch.Count(); i++)
+        {
+            IEntity ent = s_ProbeScratch.Get(i);
+            if (!ent || ent == subject)
+                continue;
+            if (RDF_RadarEntityClassifier.IsProjectile(ent))
+            {
+                projectileN = projectileN + 1;
+                continue;
+            }
+            if (!RDF_RadarEntityClassifier.IsVehicleOrCharacter(ent))
+                continue;
+            if (ChimeraCharacter.Cast(ent))
+                continue;
+            vehicleN = vehicleN + 1;
+            float d = vector.Distance(ent.GetOrigin(), origin);
+            if (d < 2000.0)
+                nearVehicleN = nearVehicleN + 1;
+        }
+    }
+
+    protected static bool OnProbeEntity(IEntity entity)
+    {
+        if (!entity)
+            return true;
+        // Only keep radar-relevant entities so the count is not every bush in 2 km.
+        if (!RDF_RadarEntityClassifier.IsRadarCandidate(entity))
+            return true;
+        if (!s_ProbeScratch)
+            s_ProbeScratch = new array<IEntity>();
+        s_ProbeScratch.Insert(entity);
+        return true;
     }
 }
