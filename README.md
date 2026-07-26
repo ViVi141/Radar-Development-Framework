@@ -23,10 +23,10 @@ Arma Reforger 用的模块化传感器开发框架：**LiDAR**、**雷达**、**
 ```
 scripts/Game/RDF/
   Lidar/     Core / Visual / Util / Demo / Network / UI
-  Radar/     Core / Physics / EW / Visual / UI / Demo / Util
+  Radar/     Core / Physics / EW / Network / Visual / UI / Demo / Util
   DEM/       烘焙 + Runtime/（manifest/tile 解析与缓存）
 scripts/WorkbenchGame/RDF/
-  RDF_DemBakePlugin.c
+  RDF_DemBakePlugin.c / RDF_RadarSignatureBakePlugin.c
 tools/dem/   离线打包、雷达物理原型、框架 Demo
 docs/        文档
 ```

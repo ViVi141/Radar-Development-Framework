@@ -18,6 +18,10 @@ presets, not core dependencies.
 - `rdf_radar_ew.py`: pluggable noise/deception effects and frequency schedules.
 - `rdf_radar_track.py`: nearest-neighbor association and alpha-beta filtering.
 - `rdf_radar_framework_demo.py`: clean/EW validation output and CSV dumps.
+- `rdf_radar_mass_battle_sim.py`: DEM-backed multi-radar / multi-target battle,
+  trajectory prediction, and WLR evaluation.
+- `test_rdf_radar_ballistics.py`: deterministic ballistics, wind, drag, DEM
+  intersection, and WLR regression tests.
 
 ## Framework contracts
 
@@ -46,6 +50,8 @@ presets, not core dependencies.
 python tools\dem\rdf_radar_framework_demo.py --preset shorad
 python tools\dem\rdf_radar_framework_demo.py --preset shorad --ew
 python tools\dem\rdf_radar_framework_demo.py --preset p18
+python tools\dem\rdf_radar_mass_battle_sim.py
+python tools\dem\test_rdf_radar_ballistics.py
 ```
 
 Outputs under `tools/dem/out/`:
@@ -53,6 +59,8 @@ Outputs under `tools/dem/out/`:
 - `*_framework_*.png`
 - `*_detections.csv`
 - `*_tracks.csv`
+- `mass_battle_*.png`
+- `mass_battle_*.csv`
 
 ## Current fidelity boundaries
 

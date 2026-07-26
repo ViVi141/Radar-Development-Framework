@@ -4,7 +4,9 @@
 
 RDF 现已提供：
 
-- **雷达**：`RDF_RadarScanner`（实体优先 + Trace + 物理检测），输出 `RDF_RadarTarget`；Demo 入口 `RDF_RadarAutoRunner` / `RDF_RadarComponent`。见 [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md)。
+- **雷达**：公共门面 `RDF_RadarSensor`（SEARCH / STARE / WLR），输出
+  `RDF_RadarTarget` plot 与 `RDF_RadarTrack` 航迹；实体入口为
+  `RDF_RadarComponent`。见 [RADAR_API.md](RADAR_API.md)。
 - **LiDAR**：`RDF_LidarScanner` 射线点云，仍可用于近距感知或备用扫描。
 
 **锁定状态**与**武器制导对接**仍需模组侧自行实现；本文给出最小路径与分工。
@@ -15,9 +17,9 @@ RDF 现已提供：
 
 | 目标 | RDF 已有 | 需要你补充 |
 |------|----------|------------|
-| 载具能扫描载具 | ✅ `RDF_RadarScanner` / `RDF_RadarAutoRunner`；或 `RDF_LidarScanner.Scan()`；或第五节实体优先方案 | 将扫描挂到载具（组件或脚本），配置扇区/量程/硬件 |
+| 载具能扫描载具 | ✅ `RDF_RadarSensor` / `RDF_RadarComponent`；或 `RDF_LidarScanner.Scan()` | 将扫描挂到载具，配置模式/量程/硬件 |
 | 锁定载具 | ❌ 无“当前锁定目标”状态（跟踪器只维持航迹） | **锁定管理器**：维护当前锁定的 `IEntity`，从扫描结果选目标，断锁条件 |
-| 武器锁定并打击 | ❌ RDF 不包含武器/弹道 | **武器/导弹脚本**：每帧读取锁定目标，驱动制导 |
+| 武器锁定并打击 | ⚠️ RDF 有轨迹预测/WLR，但不含武器制导 | **武器/导弹脚本**：每帧读取锁定目标，驱动制导 |
 
 ---
 
@@ -25,15 +27,20 @@ RDF 现已提供：
 
 ### 2.1 扫描：只关心载具时
 
-- **方案 A（推荐，雷达）**：挂 `RDF_RadarComponent` 或调用 `RDF_RadarAutoRunner`，从 `RDF_RadarTarget` 列表过滤载具类型，按距离或 SNR 选锁。
+- **方案 A（推荐，雷达）**：挂 `RDF_RadarComponent`，通过
+  `GetSensor().GetPlots()` 或 `GetTracks()` 读取结果，过滤载具类型后按
+  距离、SNR 或航迹质量选锁。
 - **方案 B（LiDAR 射线优先）**：使用 `RDF_LidarScanner`，配置为只打实体，扇区用锥形/扫掠策略；按 `m_Distance` 自动锁。
-- **方案 C（自研实体优先）**：第五节 Query + Trace；输出接到同一套锁定层即可。
+- **方案 C（底层扩展）**：直接扩展 `RDF_RadarScanner` 或第五节 Query +
+  Trace；仅在公共 Sensor 无法满足需求时采用。
 
 ### 2.2 锁定层（需自行实现）
 
 在载具上挂一个**锁定管理组件**（或单例 + 当前载具引用），逻辑要点：
 
-1. **输入**：每次扫描得到 `array<ref RDF_LidarSample>`，先按目标类型过滤（仅保留载具）：`sample.m_Entity != null`，并按实体类型名或自定义规则排除步兵等。
+1. **输入**：每次扫描得到 `array<ref RDF_RadarTarget>`，按
+   `m_Type == ERDF_RadarTargetType.RDF_RADAR_TARGET_VEHICLE` 过滤载具；
+   需要平滑位置和短时丢批续航时改读 `RDF_RadarTrack`。
 2. **选目标**：
    - **自动锁**：在过滤后的列表中选“最近”（`m_Distance` 最小）；
    - **手动锁**：从 HUD/PPI 上点选一个 blip，对应到某条 sample 的 `m_Entity`。
@@ -44,16 +51,16 @@ RDF 现已提供：
 
 ```c
 // 每帧或每扫描周期调用
-void UpdateLock(array<ref RDF_LidarSample> samples)
+void UpdateLock(array<ref RDF_RadarTarget> plots)
 {
     if (m_LockedEntity == null) { /* 可选：自动选最近载具 */ return; }
     bool stillVisible = false;
-    foreach (RDF_LidarSample s : samples)
+    foreach (RDF_RadarTarget plot : plots)
     {
-        if (s.m_Entity == m_LockedEntity && s.m_Hit)
+        if (plot.m_Entity == m_LockedEntity)
         {
             stillVisible = true;
-            m_LockedPosition = s.m_HitPos;  // 用于武器
+            m_LockedPosition = plot.m_Position;  // 用于武器
             break;
         }
     }
@@ -64,7 +71,8 @@ void UpdateLock(array<ref RDF_LidarSample> samples)
 
 ### 2.3 武器打击：与 Reforger 武器系统对接
 
-RDF 不包含弹道或制导实现；武器“锁定并打击”需要在你的**武器/发射物脚本**中：
+RDF 的弹道模块用于轨迹预测和 WLR，不负责武器制导。武器“锁定并打击”
+仍需要在你的**武器/发射物脚本**中：
 
 1. **获取目标**：从上述锁定管理器取 `GetLockedTarget()` → `IEntity` 或世界坐标。
 2. **制导**：若为制导弹，每帧用当前弹位与目标位置/速度计算朝向或加速度，驱动弹体转向目标；若为非制导武器，可用锁定目标做瞄准辅助（准星偏移或火控解算）。
@@ -76,9 +84,12 @@ Reforger 的 BaseGame 中若有现成的制导导弹 API（如设置“目标实
 
 ## 三、需要用的 RDF 类（小结）
 
-- **扫描**：`RDF_LidarScanner`；配置 `RDF_LidarSettings`（`m_TraceTargetMode = ENTITIES_ONLY` 若只打实体）、`RDF_ConicalSampleStrategy` 或 `RDF_SweepSampleStrategy`。或采用第五节“实体优先”自实现扫描模块。
-- **过滤**：按 `sample.m_Entity != null` 及实体类型自行过滤载具/飞机。
-- **显示（可选）**：`RDF_LidarHUD` 显示 PPI；扫描结果通过 `RDF_LidarAutoRunner.SetScanCompleteHandler` 或 `RDF_LidarHUD.FeedSamples(samples)` 驱动。
+- **扫描**：`RDF_RadarSensor`；用 `ConfigureMode` 或自定义
+  `RDF_RadarSettings`，实体挂载则使用 `RDF_RadarComponent`。
+- **过滤/跟踪**：从 `GetPlots()` 按 `ERDF_RadarTargetType` 过滤，或从
+  `GetTracks()` 读取平滑航迹。
+- **显示（可选）**：`RDF_RadarAutoRunner` / `RDF_RadarHUD` 仅用于演示；
+  产品代码可只持有 Sensor。
 
 ---
 

@@ -673,4 +673,7 @@ Size: 215 × (header 25 px + PPI 210 px + 2 data rows × 21 px)
 
 ## Logic-only (no visualizer)
 
-仅逻辑扫描时直接用 `RDF_LidarScanner` / `RDF_RadarScanner`，不要创建 Visualizer，可跳过 debug Shape。示例见 README。
+仅逻辑扫描时，LiDAR 直接用 `RDF_LidarScanner`，Radar 首选
+`RDF_RadarSensor`；不要创建 Visualizer，即可跳过 debug Shape。
+底层扩展才直接调用 `RDF_RadarScanner`。示例见 README 与
+[RADAR_API.md](RADAR_API.md)。

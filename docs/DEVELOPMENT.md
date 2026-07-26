@@ -4,7 +4,7 @@ Repository: https://github.com/ViVi141/Radar-Development-Framework
 Contact: 747384120@qq.com  
 License: Apache-2.0
 
-入口文档：[README.md](../README.md) · 雷达：[RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md) · DEM：[DEM.md](DEM.md)
+入口文档：[README.md](../README.md) · 雷达公共 API：[RADAR_API.md](RADAR_API.md) · 雷达内部框架：[RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md) · DEM：[DEM.md](DEM.md)
 
 ---
 
@@ -27,7 +27,7 @@ scripts/Game/RDF/
 scripts/WorkbenchGame/RDF/
 ├── RDF_DemBakePlugin.c
 └── RDF_RadarSignatureBakePlugin.c   离线扫可放置 prefab → 特征 CSV
-tools/dem/     离线打包与雷达物理原型
+tools/dem/     离线打包、雷达物理原型、批量战场仿真与回归测试
 ```
 
 ---

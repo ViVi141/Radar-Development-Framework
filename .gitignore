@@ -3,6 +3,7 @@ resourceDatabase.rdb
 *.rdb
 *.wrpl
 *.ent
+/[0-9]*.jpg
 
 # Build / cache
 bin/
