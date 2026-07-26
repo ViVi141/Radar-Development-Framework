@@ -1,5 +1,45 @@
 # CHANGELOG
 
+## 2026-07-26 — 测量驱动雷达（拟真量测 + 航迹关联）
+
+### 架构转向
+
+- 游戏实体只作为**散射体/辐射源**：提供 RCS、通视、真值运动学给物理链。
+- 对外输出改为**量测 plot**：距离门量化、波束角抖动、多普勒反解径向速度，并叠加 SNR 相关噪声（`RDF_RadarMeasurement`）。
+- 默认切断 `m_Entity` 引用（`m_EnableMeasurementSynthesis=true`，调试可 `m_KeepEntityTruth`）。
+- 跟踪器改为**量测最近邻关联**（距离/方位波门 + α-β），提供 `PredictAt` / `PredictPolarAt`；对齐 `tools/dem/rdf_radar_track.py`。
+- CFAR 仅对已有 scatterer plot 做门限；去掉无功率空格“假匿名”路径。
+
+### 配置
+
+- `m_EnableMeasurementSynthesis` / `m_KeepEntityTruth`
+- `m_TrackGateRangeM` / `m_TrackGateAzimuthDeg` / `m_TrackConfirmHits` / `m_TrackMaxMisses`
+- `RDF_RadarHardware.GetRangeBinM()`
+
+### 文档 / 测试
+
+- `RDF_RadarAirborneScanTest` 改为按量测波门匹配空中目标（不再依赖实体指针）。
+- 更新能力边界与框架说明。
+
+---
+
+## 2026-07-26 — 雷达待办完善（1+2 / 深度 A）
+
+### 新增与增强（Radar）
+
+- **候选收集**：`RDF_RadarScanner` 新增 `QueryEntitiesBySphere` + `GetActiveEntities` 兜底合并与去重（`m_UseSphereQuery`、`m_SphereQueryAlsoActive`）。
+- **CFAR / 匿名点迹**：新增 `RDF_RadarCfarGate.c`；扫描末端支持粗栅格 CA-CFAR，未绑定实体的命中以匿名 plot 输出（`RDF_RADAR_TARGET_ANONYMOUS`）。
+- **EW 欺骗**：`RDF_RadarEwModel.c` 增加 `RDF_RadarFalsePlot` / `RDF_RadarDeceptionJammerEffect` 与 `CollectFalsePlots`；假目标可随时间拖距。
+- **联机权威同步**：新增 `Radar/Network/`（`RDF_RadarNetworkAPI.c`、`RDF_RadarNetworkComponent.c`）；`RDF_RadarAutoRunner` 与 `RDF_RadarComponent` 可优先走服务器扫描结果。
+- **显示与回归**：PPI 增加匿名/假目标配色与图例；`RDF_RadarAutoTest` 新增匿名/假目标计数字段。
+
+### 文档更新
+
+- 更新 [TODO.md](../TODO.md) 雷达相关待办状态。
+- 更新 [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md)、[RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md)、[DEVELOPMENT.md](DEVELOPMENT.md) 以反映新链路与文件结构。
+
+---
+
 ## 2026-07-26 — 雷达物理 / DEM 运行时 / 文档整理
 
 ### 新增与增强（Radar / DEM）

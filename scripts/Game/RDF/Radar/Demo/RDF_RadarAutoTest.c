@@ -7,6 +7,8 @@ class RDF_RadarAutoTestCaseResult
     int m_TargetSamples;
     int m_DetectedSamples;
     int m_DemValidSamples;
+    int m_AnonymousSamples;
+    int m_FalsePlotSamples;
     float m_ClutterSumW;
     float m_SnrSumDb;
 
@@ -258,6 +260,10 @@ class RDF_RadarAutoTest
                 m_Current.m_DetectedSamples = m_Current.m_DetectedSamples + 1;
             if (t.m_DemSampleValid)
                 m_Current.m_DemValidSamples = m_Current.m_DemValidSamples + 1;
+            if (t.m_IsAnonymous)
+                m_Current.m_AnonymousSamples = m_Current.m_AnonymousSamples + 1;
+            if (t.m_IsFalsePlot)
+                m_Current.m_FalsePlotSamples = m_Current.m_FalsePlotSamples + 1;
 
             m_Current.m_ClutterSumW = m_Current.m_ClutterSumW + t.m_ClutterPowerW;
             m_Current.m_SnrSumDb = m_Current.m_SnrSumDb + t.m_SnrDb;
@@ -270,14 +276,21 @@ class RDF_RadarAutoTest
             return;
 
         m_Results.Insert(m_Current);
+        string scansText = m_Current.m_ScanSamples.ToString();
+        string targetsText = m_Current.m_TargetSamples.ToString();
+        string demValidText = m_Current.m_DemValidSamples.ToString();
+        float avgClutter = m_Current.GetAvgClutterW();
+        float avgSnr = m_Current.GetAvgSnrDb();
+        string avgClutterText = avgClutter.ToString();
+        string avgSnrText = avgSnr.ToString();
         Print(string.Format(
             "[RDF Radar AutoTest] phase done: %1 scans=%2 targets=%3 demValid=%4 avgClutter=%5 avgSNR=%6",
             m_Current.m_Name,
-            m_Current.m_ScanSamples.ToString(),
-            m_Current.m_TargetSamples.ToString(),
-            m_Current.m_DemValidSamples.ToString(),
-            m_Current.GetAvgClutterW().ToString(),
-            m_Current.GetAvgSnrDb().ToString()));
+            scansText,
+            targetsText,
+            demValidText,
+            avgClutterText,
+            avgSnrText));
 
         m_Current = null;
         m_PhaseIndex = m_PhaseIndex + 1;
@@ -468,14 +481,27 @@ class RDF_RadarAutoTest
         if (!c)
             return;
 
-        lines.Insert(
-            "  " + c.m_Name
-            + " scans=" + c.m_ScanSamples.ToString()
-            + " targets=" + c.m_TargetSamples.ToString()
-            + " detected=" + c.m_DetectedSamples.ToString()
-            + " demValid=" + c.m_DemValidSamples.ToString()
-            + " avgClutterW=" + c.GetAvgClutterW().ToString()
-            + " avgSNRdB=" + c.GetAvgSnrDb().ToString());
+        string scans = c.m_ScanSamples.ToString();
+        string targets = c.m_TargetSamples.ToString();
+        string detected = c.m_DetectedSamples.ToString();
+        string demValid = c.m_DemValidSamples.ToString();
+        string anon = c.m_AnonymousSamples.ToString();
+        string falsePlots = c.m_FalsePlotSamples.ToString();
+        float avgClutter = c.GetAvgClutterW();
+        float avgSnr = c.GetAvgSnrDb();
+        string avgClutterText = avgClutter.ToString();
+        string avgSnrText = avgSnr.ToString();
+
+        string line = "  " + c.m_Name;
+        line = line + " scans=" + scans;
+        line = line + " targets=" + targets;
+        line = line + " detected=" + detected;
+        line = line + " demValid=" + demValid;
+        line = line + " anon=" + anon;
+        line = line + " false=" + falsePlots;
+        line = line + " avgClutterW=" + avgClutterText;
+        line = line + " avgSNRdB=" + avgSnrText;
+        lines.Insert(line);
     }
 
     protected string BoolLabel(bool value)

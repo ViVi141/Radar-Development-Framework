@@ -22,10 +22,14 @@
 - [x] DEM 运行时杂波接入
 - [x] 自动化 DEM 回归 / 空中目标测试
 - [x] Trace 遮挡时 NLOS 地面反射弱检（`m_EnableNlosMultipath`）
-- [ ] 匿名 plot / CFAR 栅格检测（当前仍为实体候选）
-- [ ] 联机权威同步检测结果（雷达目前本地）
-- [ ] 欺骗干扰 / 假目标（离线框架有，游戏内待接）
+- [x] 匿名 plot / CFAR 栅格检测（粗栅格 CA-CFAR + 匿名 blip）
+- [x] 联机权威同步检测结果（`RDF_RadarNetworkComponent`）
+- [x] 欺骗干扰 / 假目标（`RDF_RadarDeceptionJammerEffect`）
+- [x] 测量合成（距离门/波束量化 + SNR 噪声，切断实体真值）
+- [x] 量测驱动航迹关联与外推（`PredictAt`）
 - [ ] 刀刃绕射 / 更精细多径（当前为 image-method 简化）
+- [ ] 热噪声填充空距离单元 → 真实 CFAR 虚警率
+- [ ] Swerling 起伏 / 完整搜索-截获-跟踪状态机
 
 ## 三、DEM（已落地）
 

@@ -22,7 +22,7 @@ License: Apache-2.0
 ```
 scripts/Game/RDF/
 ├── Lidar/     点云扫描、可视化、网络、HUD
-├── Radar/     实体扫描、物理检测、EW、PPI、自动化测试
+├── Radar/     实体扫描、物理检测、EW、CFAR、网络同步、PPI、自动化测试
 └── DEM/       Workbench 烘焙 + Runtime 加载
 scripts/WorkbenchGame/RDF/
 └── RDF_DemBakePlugin.c
@@ -80,17 +80,22 @@ scripts/Game/RDF/
 scripts/Game/RDF/Radar/
 ├── Core/
 │   ├── RDF_RadarSettings.c / RDF_RadarTypes.c / RDF_RadarHardware.c
-│   ├── RDF_RadarScanner.c              实体优先 + Trace + 物理检测
+│   ├── RDF_RadarScanner.c              球查询 + Trace + 物理 + 测量合成
 │   ├── RDF_RadarEmitterRegistry.c      主动辐射注册
-│   └── RDF_RadarProjectileTracker.c    抛射物多帧轨迹 / α-β
+│   └── RDF_RadarProjectileTracker.c    量测关联 / α-β / PredictAt
 ├── Physics/
 │   ├── RDF_RadarRcsModel.c
-│   └── RDF_RadarClutterModel.c         DEM σ⁰ → 杂波功率
+│   ├── RDF_RadarClutterModel.c         DEM σ⁰ → 杂波功率
+│   ├── RDF_RadarMeasurement.c          距离门/波束量化 + SNR 噪声
+│   └── RDF_RadarCfarGate.c             粗栅格 CA-CFAR 判检
 ├── EW/
-│   └── RDF_RadarEwModel.c              附加噪声钩子
+│   └── RDF_RadarEwModel.c              噪声 + 欺骗假目标
+├── Network/
+│   ├── RDF_RadarNetworkAPI.c
+│   └── RDF_RadarNetworkComponent.c     服务器权威同步
 ├── Visual/ / UI/
 │   ├── RDF_RadarVisualizer.c
-│   └── RDF_RadarHUD.c                  PPI（品红=emitter）
+│   └── RDF_RadarHUD.c                  PPI（含匿名/假目标配色）
 ├── Util/
 │   └── RDF_RadarEntityClassifier.c
 └── Demo/

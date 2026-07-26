@@ -3,12 +3,15 @@ enum ERDF_RadarTargetType
 {
     RDF_RADAR_TARGET_VEHICLE,
     RDF_RADAR_TARGET_PROJECTILE,
-    RDF_RADAR_TARGET_RADAR_EMITTER
+    RDF_RADAR_TARGET_RADAR_EMITTER,
+    RDF_RADAR_TARGET_ANONYMOUS
 }
 
-// Single radar detection: geometry + physical/video processing fields.
+// Single radar detection / plot. With measurement synthesis enabled, kinematics
+// are model-derived (quantized + noisy); m_Entity is debug-only when kept.
 class RDF_RadarTarget
 {
+    // Optional debug link to the scatterer; null under measurement synthesis.
     IEntity m_Entity;
     vector m_Position;
     float m_Distance;
@@ -29,6 +32,9 @@ class RDF_RadarTarget
     float m_ClutterToNoiseDb;
     float m_SnrDb;
     bool m_Detected;
+    bool m_IsAnonymous;
+    bool m_IsFalsePlot;
+    float m_CfarPowerW;
     // True when TraceMove was blocked before the target (terrain/entity occluder).
     bool m_LosBlocked;
     // Trace hit fraction toward the target point (1 = reached end / clear).

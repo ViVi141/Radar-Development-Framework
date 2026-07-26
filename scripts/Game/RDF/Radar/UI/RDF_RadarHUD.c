@@ -61,6 +61,8 @@ class RDF_RadarHUD
     static const int COL_PROJ     = ARGB(255, 255, 170,  40);   // orange
     static const int COL_EMITTER  = ARGB(255, 255,  90, 230);   // magenta
     static const int COL_MULTIPATH = ARGB(255, 80, 220, 255);  // cyan NLOS bounce
+    static const int COL_ANON      = ARGB(255, 255, 230, 130); // pale yellow
+    static const int COL_FALSEPLOT = ARGB(255, 245, 245, 245); // near white
     static const int COL_UNDET    = ARGB(120, 110, 130, 110);   // dim grey-green
 
     static const float UPDATE_INTERVAL = 0.15;
@@ -235,7 +237,7 @@ class RDF_RadarHUD
         TextWidget.Cast(wRingLbl).SetExactFontSize(12);
 
         m_wStats  = TextWidget.Cast(MakeDataRow(ws, 0, "Det --   Trk --"));
-        m_wLegend = TextWidget.Cast(MakeDataRow(ws, 1, "veh/proj/emit + cyan NLOS"));
+        m_wLegend = TextWidget.Cast(MakeDataRow(ws, 1, "veh/proj/emit/anon + white false"));
         TextWidget.Cast(m_wLegend).SetExactFontSize(11);
 
         Print("[RDF_RadarHUD] HUD built  widgets=" + m_AllWidgets.Count().ToString());
@@ -371,6 +373,10 @@ class RDF_RadarHUD
     {
         if (!t.m_Detected)
             return COL_UNDET;
+        if (t.m_IsFalsePlot)
+            return COL_FALSEPLOT;
+        if (t.m_IsAnonymous)
+            return COL_ANON;
         if (t.m_LosBlocked)
             return COL_MULTIPATH;
         if (t.m_Type == ERDF_RadarTargetType.RDF_RADAR_TARGET_PROJECTILE)
@@ -461,6 +467,8 @@ class RDF_RadarHUD
             return "PROJ";
         if (type == ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER)
             return "EMIT";
+        if (type == ERDF_RadarTargetType.RDF_RADAR_TARGET_ANONYMOUS)
+            return "ANON";
         return "VEH";
     }
 

@@ -6,6 +6,7 @@ class RDF_RadarAutoRunner
     protected static bool s_AutoEnabled = true;
     protected static bool s_HudEnabled = true;
     protected static float s_MinTickInterval = 0.2;
+    protected static RDF_RadarNetworkAPI s_NetworkAPI;
 
     protected ref RDF_RadarSettings m_Config;
     protected ref RDF_RadarScanner m_Scanner;
@@ -22,6 +23,7 @@ class RDF_RadarAutoRunner
         m_Config = new RDF_RadarSettings();
         m_Scanner = new RDF_RadarScanner(m_Config);
         m_Tracker = new RDF_RadarProjectileTracker();
+        m_Tracker.ConfigureFromSettings(m_Config);
         m_LastTargets = new array<ref RDF_RadarTarget>();
         m_VisualSettings = new RDF_RadarVisualSettings();
         m_VisualSettings.m_DrawRays = true;
@@ -40,6 +42,31 @@ class RDF_RadarAutoRunner
     static float GetMinTickInterval()
     {
         return s_MinTickInterval;
+    }
+
+    static void SetNetworkAPI(RDF_RadarNetworkAPI networkAPI)
+    {
+        if (!networkAPI)
+        {
+            s_NetworkAPI = null;
+            return;
+        }
+        if (networkAPI.IsNetworkAvailable())
+            s_NetworkAPI = networkAPI;
+        else
+            s_NetworkAPI = null;
+    }
+
+    static bool IsNetworkAPIValid()
+    {
+        if (!s_NetworkAPI)
+            return false;
+        if (!s_NetworkAPI.IsNetworkAvailable())
+        {
+            s_NetworkAPI = null;
+            return false;
+        }
+        return true;
     }
 
     static void StaticTick()
@@ -113,6 +140,7 @@ class RDF_RadarAutoRunner
         inst.m_Scanner = new RDF_RadarScanner(inst.m_Config);
         if (!inst.m_Tracker)
             inst.m_Tracker = new RDF_RadarProjectileTracker();
+        inst.m_Tracker.ConfigureFromSettings(inst.m_Config);
         if (!inst.m_LastTargets)
             inst.m_LastTargets = new array<ref RDF_RadarTarget>();
         inst.m_Running = true;
@@ -126,6 +154,9 @@ class RDF_RadarAutoRunner
         RDF_RadarAutoRunner inst = GetInstance();
         inst.m_Config = config;
         inst.m_Scanner = new RDF_RadarScanner(config);
+        if (!inst.m_Tracker)
+            inst.m_Tracker = new RDF_RadarProjectileTracker();
+        inst.m_Tracker.ConfigureFromSettings(config);
     }
 
     static RDF_RadarSettings GetDemoConfig()
@@ -165,25 +196,68 @@ class RDF_RadarAutoRunner
         if (!subject)
             return;
 
+        RDF_RadarNetworkAPI net = RDF_RadarNetworkAPI.Cast(subject.FindComponent(RDF_RadarNetworkAPI));
+        if (net != s_NetworkAPI)
+            SetNetworkAPI(net);
+
         float now = world.GetWorldTime() * 0.001;
         if (now - m_LastScanTime >= m_Config.m_UpdateInterval)
         {
             m_LastScanTime = now;
             m_ScanSerial = m_ScanSerial + 1;
             m_LastTargets.Clear();
-            m_Scanner.Scan(subject, m_LastTargets);
-            m_Tracker.Update(m_LastTargets, now);
+            if (IsNetworkAPIValid())
+            {
+                s_NetworkAPI.RequestScan();
+                if (s_NetworkAPI.HasSyncedTargets())
+                {
+                    array<ref RDF_RadarTarget> syncedTargets = s_NetworkAPI.GetLastTargets();
+                    if (syncedTargets)
+                    {
+                        for (int i = 0; i < syncedTargets.Count(); i++)
+                        {
+                            RDF_RadarTarget t = syncedTargets.Get(i);
+                            if (t)
+                                m_LastTargets.Insert(t);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                m_Scanner.Scan(subject, m_LastTargets);
+            }
+            vector trackOrigin = m_Scanner.GetLastOrigin();
+            if (IsNetworkAPIValid())
+                trackOrigin = s_NetworkAPI.GetLastScanOrigin();
+            m_Tracker.UpdateWithOrigin(m_LastTargets, now, trackOrigin);
 
             if (s_HudEnabled)
             {
                 if (!RDF_RadarHUD.IsVisible())
                     RDF_RadarHUD.Show();
-                RDF_RadarHUD.SetMode("PPI | " + m_Scanner.GetDemStatusShort());
+                string modeText = "PPI";
+                if (IsNetworkAPIValid())
+                    modeText = "PPI | NET";
+                else
+                    modeText = "PPI | " + m_Scanner.GetDemStatusShort();
+                RDF_RadarHUD.SetMode(modeText);
+                vector hudOrigin = m_Scanner.GetLastOrigin();
+                vector hudForward = m_Scanner.GetLastForward();
+                float hudRange = m_Scanner.GetLastRange();
+                if (IsNetworkAPIValid())
+                {
+                    hudOrigin = s_NetworkAPI.GetLastScanOrigin();
+                    hudForward = s_NetworkAPI.GetLastScanForward();
+                    float netRange = s_NetworkAPI.GetLastScanRange();
+                    if (netRange > 0.0)
+                        hudRange = netRange;
+                }
                 RDF_RadarHUD.FeedScan(
                     m_LastTargets,
-                    m_Scanner.GetLastOrigin(),
-                    m_Scanner.GetLastForward(),
-                    m_Scanner.GetLastRange(),
+                    hudOrigin,
+                    hudForward,
+                    hudRange,
                     m_Tracker);
             }
         }

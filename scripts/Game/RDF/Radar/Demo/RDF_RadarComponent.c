@@ -11,6 +11,7 @@ class RDF_RadarComponent : ScriptComponent
     protected ref RDF_RadarScanner m_Scanner;
     protected ref RDF_RadarProjectileTracker m_Tracker;
     protected ref array<ref RDF_RadarTarget> m_LastTargets;
+    protected RDF_RadarNetworkAPI m_NetworkAPI;
     protected float m_LastScanTime = -1000.0;
     protected bool m_Enabled = true;
 
@@ -20,7 +21,9 @@ class RDF_RadarComponent : ScriptComponent
         m_Settings = new RDF_RadarSettings();
         m_Scanner = new RDF_RadarScanner(m_Settings);
         m_Tracker = new RDF_RadarProjectileTracker();
+        m_Tracker.ConfigureFromSettings(m_Settings);
         m_LastTargets = new array<ref RDF_RadarTarget>();
+        m_NetworkAPI = RDF_RadarNetworkAPI.Cast(owner.FindComponent(RDF_RadarNetworkAPI));
 
         vector pos = GetOwnerOrigin(owner);
         RDF_RadarEmitterRegistry.Register(owner, pos, m_Enabled, 1.0);
@@ -45,8 +48,32 @@ class RDF_RadarComponent : ScriptComponent
         RDF_RadarEmitterRegistry.Register(owner, pos, true, 1.0);
 
         m_LastTargets.Clear();
-        m_Scanner.Scan(owner, m_LastTargets);
-        m_Tracker.Update(m_LastTargets, now);
+        vector trackOrigin = pos;
+        if (m_NetworkAPI && m_NetworkAPI.IsNetworkAvailable())
+        {
+            m_NetworkAPI.RequestScan();
+            if (m_NetworkAPI.HasSyncedTargets())
+            {
+                array<ref RDF_RadarTarget> syncedTargets = m_NetworkAPI.GetLastTargets();
+                if (syncedTargets)
+                {
+                    for (int i = 0; i < syncedTargets.Count(); i++)
+                    {
+                        RDF_RadarTarget t = syncedTargets.Get(i);
+                        if (t)
+                            m_LastTargets.Insert(t);
+                    }
+                }
+            }
+            trackOrigin = m_NetworkAPI.GetLastScanOrigin();
+        }
+        else
+        {
+            m_Scanner.Scan(owner, m_LastTargets);
+            trackOrigin = m_Scanner.GetLastOrigin();
+        }
+        m_Tracker.ConfigureFromSettings(m_Settings);
+        m_Tracker.UpdateWithOrigin(m_LastTargets, now, trackOrigin);
 
         // Keep the emitter active between dwells; otherwise another radar can
         // almost never observe the sub-frame "emitting" window.

@@ -1,6 +1,6 @@
-// Radar scanner: entity-first scan with Trace LOS gate and optional NLOS ground-bounce.
-// Detects vehicles, projectiles, and emitting radars. Uses GetActiveEntities + sector
-// + TraceMove; blocked targets may still pass via weakened multipath + SNR.
+// Radar scanner: scatterers feed the physics chain; published plots are measurements.
+// Candidates from sphere query + active fallback; Trace LOS + optional NLOS;
+// SNR / CFAR gates; optional measurement synthesis (quantize + noise, no entity truth).
 class RDF_RadarScanner
 {
     protected static const float DEG_TO_RAD = 0.0174532925199;
@@ -14,6 +14,7 @@ class RDF_RadarScanner
     protected vector m_LastOrigin = "0 0 0";
     protected vector m_LastForward = "1 0 0";
     protected float m_LastRange = 2000.0;
+    protected ref array<IEntity> m_QueryCandidates;
 
     void RDF_RadarScanner(RDF_RadarSettings settings = null)
     {
@@ -23,6 +24,7 @@ class RDF_RadarScanner
             m_Settings = new RDF_RadarSettings();
 
         m_DemCache = new RDF_DemRuntimeCache();
+        m_QueryCandidates = new array<IEntity>();
     }
 
     RDF_RadarSettings GetSettings()
@@ -98,17 +100,17 @@ class RDF_RadarScanner
         float cosHalfAngle = Math.Cos(halfAngleRad);
         int maxTargets = m_Settings.m_MaxTargets;
 
-        array<IEntity> active = new array<IEntity>();
-        world.GetActiveEntities(active);
+        array<IEntity> candidates = new array<IEntity>();
+        CollectCandidateEntities(world, subject, origin, range, candidates);
 
         TraceParam param = new TraceParam();
         param.LayerMask = EPhysicsLayerPresets.Projectile;
         param.Exclude = subject;
         param.Flags = TraceFlags.WORLD | TraceFlags.ENTS;
 
-        for (int i = 0; i < active.Count() && outTargets.Count() < maxTargets; i++)
+        for (int i = 0; i < candidates.Count() && outTargets.Count() < maxTargets; i++)
         {
-            IEntity ent = active.Get(i);
+            IEntity ent = candidates.Get(i);
             if (!ent || ent == subject)
                 continue;
 
@@ -155,6 +157,8 @@ class RDF_RadarScanner
             t.m_LosBlocked = !losClear;
             t.m_LosHitFraction = hitFraction;
             t.m_MultipathFactor = 1.0;
+            t.m_IsAnonymous = false;
+            t.m_IsFalsePlot = false;
             ProcessPhysicalDetection(t, origin, forward, worldTime, world);
             if (t.m_Detected || m_Settings.m_KeepUndetected)
                 outTargets.Insert(t);
@@ -190,10 +194,458 @@ class RDF_RadarScanner
                 et.m_LosBlocked = !losClearE;
                 et.m_LosHitFraction = hitFractionE;
                 et.m_MultipathFactor = 1.0;
+                et.m_IsAnonymous = false;
+                et.m_IsFalsePlot = false;
                 ProcessPhysicalDetection(et, origin, forward, worldTime, world);
                 if (et.m_Detected || m_Settings.m_KeepUndetected)
-                    outTargets.Insert(et);
+                {
+                    if (!ContainsTargetEntity(outTargets, et.m_Entity))
+                        outTargets.Insert(et);
+                }
             }
+        }
+
+        AddDeceptionFalsePlots(outTargets, origin, forward, worldTime, maxTargets);
+        ApplyCfarGate(outTargets, origin, forward, halfAngleRad);
+        SynthesizeAllMeasurements(outTargets, origin);
+        RemoveUndetectedTargets(outTargets);
+    }
+
+    protected void SynthesizeAllMeasurements(
+        array<ref RDF_RadarTarget> targets,
+        vector origin)
+    {
+        if (!targets || !m_Settings || !m_Settings.m_EnableMeasurementSynthesis)
+            return;
+        if (!m_Settings.m_Hardware)
+            return;
+
+        for (int i = 0; i < targets.Count(); i++)
+        {
+            RDF_RadarTarget t = targets.Get(i);
+            if (!t || !t.m_Detected)
+                continue;
+            RDF_RadarMeasurement.Synthesize(t, origin, m_Settings.m_Hardware, m_Settings);
+        }
+    }
+
+    protected void CollectCandidateEntities(
+        BaseWorld world,
+        IEntity subject,
+        vector origin,
+        float range,
+        notnull array<IEntity> outCandidates)
+    {
+        outCandidates.Clear();
+        if (!world)
+            return;
+
+        if (m_Settings.m_UseSphereQuery)
+        {
+            if (!m_QueryCandidates)
+                m_QueryCandidates = new array<IEntity>();
+            m_QueryCandidates.Clear();
+            world.QueryEntitiesBySphere(
+                origin,
+                range,
+                OnSphereCandidateEntity,
+                null,
+                EQueryEntitiesFlags.DYNAMIC);
+            for (int i = 0; i < m_QueryCandidates.Count(); i++)
+            {
+                IEntity e = m_QueryCandidates.Get(i);
+                if (!e || e == subject)
+                    continue;
+                if (!ContainsEntity(outCandidates, e))
+                    outCandidates.Insert(e);
+            }
+        }
+
+        if (!m_Settings.m_SphereQueryAlsoActive && outCandidates.Count() > 0)
+            return;
+
+        array<IEntity> active = new array<IEntity>();
+        world.GetActiveEntities(active);
+        for (int j = 0; j < active.Count(); j++)
+        {
+            IEntity ent = active.Get(j);
+            if (!ent || ent == subject)
+                continue;
+            if (!ContainsEntity(outCandidates, ent))
+                outCandidates.Insert(ent);
+        }
+    }
+
+    protected bool OnSphereCandidateEntity(IEntity entity)
+    {
+        if (!entity)
+            return false;
+        if (!m_QueryCandidates)
+            m_QueryCandidates = new array<IEntity>();
+        if (!ContainsEntity(m_QueryCandidates, entity))
+            m_QueryCandidates.Insert(entity);
+        return true;
+    }
+
+    protected bool ContainsEntity(
+        notnull array<IEntity> entities,
+        IEntity entity)
+    {
+        for (int i = 0; i < entities.Count(); i++)
+        {
+            if (entities.Get(i) == entity)
+                return true;
+        }
+        return false;
+    }
+
+    protected bool ContainsTargetEntity(
+        notnull array<ref RDF_RadarTarget> targets,
+        IEntity entity)
+    {
+        if (!entity)
+            return false;
+        for (int i = 0; i < targets.Count(); i++)
+        {
+            RDF_RadarTarget t = targets.Get(i);
+            if (!t)
+                continue;
+            if (t.m_Entity == entity)
+                return true;
+        }
+        return false;
+    }
+
+    protected void AddDeceptionFalsePlots(
+        notnull array<ref RDF_RadarTarget> outTargets,
+        vector origin,
+        vector scanForward,
+        float worldTimeS,
+        int maxTargets)
+    {
+        if (!m_Settings || !m_Settings.m_EwStack)
+            return;
+        if (outTargets.Count() >= maxTargets)
+            return;
+
+        array<ref RDF_RadarFalsePlot> falsePlots = new array<ref RDF_RadarFalsePlot>();
+        m_Settings.m_EwStack.CollectFalsePlots(
+            origin,
+            scanForward,
+            m_Settings.m_Hardware,
+            worldTimeS,
+            falsePlots);
+        if (!falsePlots || falsePlots.Count() <= 0)
+            return;
+
+        float scanAzimuth = Math.Atan2(scanForward[2], scanForward[0]);
+        for (int i = 0; i < falsePlots.Count() && outTargets.Count() < maxTargets; i++)
+        {
+            RDF_RadarFalsePlot p = falsePlots.Get(i);
+            if (!p)
+                continue;
+            if (p.m_PowerW <= 0.0)
+                continue;
+            float rangeM = p.m_RangeM;
+            if (rangeM <= m_Settings.m_MinDistance)
+                continue;
+            if (rangeM > m_Settings.m_Range)
+                continue;
+
+            float azimuthDeg = p.m_AzimuthDeg;
+            float azimuthRad = scanAzimuth + azimuthDeg * DEG_TO_RAD;
+            float elevationRad = p.m_ElevationDeg * DEG_TO_RAD;
+            float cosElev = Math.Cos(elevationRad);
+            vector dir = Vector(
+                Math.Cos(azimuthRad) * cosElev,
+                Math.Sin(elevationRad),
+                Math.Sin(azimuthRad) * cosElev);
+            RDF_RadarTarget t = new RDF_RadarTarget();
+            t.m_Entity = null;
+            t.m_Position = origin + dir * rangeM;
+            t.m_Distance = rangeM;
+            t.m_Velocity = dir * p.m_RangeRateMs;
+            t.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_ANONYMOUS;
+            t.m_Time = worldTimeS;
+            t.m_AzimuthDeg = Math.Atan2(dir[2], dir[0]) * RAD_TO_DEG;
+            t.m_ElevationDeg = p.m_ElevationDeg;
+            t.m_RadialSpeedMs = p.m_RangeRateMs;
+            t.m_RcsM2 = 0.0;
+            t.m_ReceivedPowerW = p.m_PowerW;
+            t.m_ProcessedPowerW = p.m_PowerW;
+            t.m_DopplerHz = 0.0;
+            t.m_MtiGain = 1.0;
+            t.m_DemSurfaceClass = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
+            t.m_DemSampleValid = false;
+            t.m_ClutterPowerW = 0.0;
+            t.m_ClutterToNoiseDb = -300.0;
+            t.m_SnrDb = m_Settings.m_DetectionSnrDb + 3.0;
+            t.m_Detected = true;
+            t.m_IsAnonymous = true;
+            t.m_IsFalsePlot = true;
+            t.m_CfarPowerW = p.m_PowerW;
+            t.m_LosBlocked = false;
+            t.m_LosHitFraction = 1.0;
+            t.m_MultipathFactor = 1.0;
+            t.m_BeamName = "deception";
+            t.m_ScanNumber = 0;
+            outTargets.Insert(t);
+        }
+    }
+
+    protected void ApplyCfarGate(
+        notnull array<ref RDF_RadarTarget> outTargets,
+        vector origin,
+        vector scanForward,
+        float halfAngleRad)
+    {
+        if (!m_Settings || !m_Settings.m_EnableCfarGate)
+            return;
+        if (outTargets.Count() <= 0)
+            return;
+
+        int azBinCount = 24;
+        int rangeBinCount = m_Settings.m_RangeBinCount;
+        if (rangeBinCount < 8)
+            rangeBinCount = 8;
+
+        array<ref array<float>> powerGrid = new array<ref array<float>>();
+        for (int az = 0; az < azBinCount; az++)
+        {
+            array<float> row = new array<float>();
+            row.Reserve(rangeBinCount);
+            for (int rb = 0; rb < rangeBinCount; rb++)
+                row.Insert(0.0);
+            powerGrid.Insert(row);
+        }
+
+        float rangeM = Math.Max(1.0, m_Settings.m_Range);
+        float scanAzimuth = Math.Atan2(scanForward[2], scanForward[0]);
+        array<int> targetAzIndices = new array<int>();
+        array<int> targetRangeIndices = new array<int>();
+        targetAzIndices.Reserve(outTargets.Count());
+        targetRangeIndices.Reserve(outTargets.Count());
+
+        for (int i = 0; i < outTargets.Count(); i++)
+        {
+            RDF_RadarTarget t = outTargets.Get(i);
+            int azIndex = -1;
+            int rangeIndex = -1;
+            if (t)
+                GetCfarCellIndices(t, origin, scanAzimuth, halfAngleRad, rangeM, azBinCount, rangeBinCount, azIndex, rangeIndex);
+            targetAzIndices.Insert(azIndex);
+            targetRangeIndices.Insert(rangeIndex);
+            if (!t)
+                continue;
+            if (azIndex < 0 || rangeIndex < 0)
+                continue;
+            float power = GetTargetCfarPowerW(t);
+            if (power <= 0.0)
+                continue;
+            float prev = powerGrid.Get(azIndex).Get(rangeIndex);
+            powerGrid.Get(azIndex).Set(rangeIndex, prev + power);
+        }
+
+        float noiseFloor = EstimateCfarNoiseFloorW(origin, scanForward);
+        array<ref array<bool>> hits = new array<ref array<bool>>();
+        for (int azRow = 0; azRow < azBinCount; azRow++)
+        {
+            array<bool> rowHit = new array<bool>();
+            rowHit.Reserve(rangeBinCount);
+            for (int bin = 0; bin < rangeBinCount; bin++)
+            {
+                bool detected = RDF_RadarCfarGate.CellDetected(
+                    powerGrid.Get(azRow),
+                    bin,
+                    noiseFloor,
+                    m_Settings.m_CfarGuardCells,
+                    m_Settings.m_CfarTrainingCells,
+                    m_Settings.m_CfarPfa);
+                rowHit.Insert(detected);
+            }
+            hits.Insert(rowHit);
+        }
+
+        for (int k = 0; k < outTargets.Count(); k++)
+        {
+            RDF_RadarTarget target = outTargets.Get(k);
+            if (!target)
+                continue;
+            int azK = targetAzIndices.Get(k);
+            int rangeK = targetRangeIndices.Get(k);
+            if (azK < 0 || rangeK < 0)
+            {
+                target.m_Detected = false;
+                continue;
+            }
+            bool keep = hits.Get(azK).Get(rangeK);
+            target.m_Detected = keep;
+        }
+        // Empty-cell anonymous emission removed: without a filled power map of
+        // thermal/clutter noise, those cells cannot produce honest false alarms.
+        // Real plots come from scatterers via measurement synthesis.
+    }
+
+    protected void GetCfarCellIndices(
+        RDF_RadarTarget target,
+        vector origin,
+        float scanAzimuth,
+        float halfAngleRad,
+        float maxRange,
+        int azBins,
+        int rangeBins,
+        out int outAzIndex,
+        out int outRangeIndex)
+    {
+        outAzIndex = -1;
+        outRangeIndex = -1;
+        if (!target)
+            return;
+        vector toTarget = target.m_Position - origin;
+        float dist = toTarget.Length();
+        if (dist <= 0.001)
+            return;
+        if (dist > maxRange)
+            dist = maxRange;
+
+        float targetAzimuth = Math.Atan2(toTarget[2], toTarget[0]);
+        float rel = NormalizeAngleRad(targetAzimuth - scanAzimuth);
+        if (halfAngleRad > 0.0001)
+        {
+            if (rel < -halfAngleRad || rel > halfAngleRad)
+                return;
+        }
+
+        float azNorm = 0.5;
+        if (halfAngleRad > 0.0001)
+            azNorm = (rel + halfAngleRad) / (2.0 * halfAngleRad);
+        azNorm = Math.Clamp(azNorm, 0.0, 0.999999);
+        float rangeNorm = dist / Math.Max(1.0, maxRange);
+        rangeNorm = Math.Clamp(rangeNorm, 0.0, 0.999999);
+
+        outAzIndex = Math.Floor(azNorm * azBins);
+        outRangeIndex = Math.Floor(rangeNorm * rangeBins);
+        if (outAzIndex < 0)
+            outAzIndex = 0;
+        if (outAzIndex >= azBins)
+            outAzIndex = azBins - 1;
+        if (outRangeIndex < 0)
+            outRangeIndex = 0;
+        if (outRangeIndex >= rangeBins)
+            outRangeIndex = rangeBins - 1;
+    }
+
+    protected float GetTargetCfarPowerW(RDF_RadarTarget target)
+    {
+        if (!target)
+            return 0.0;
+        if (target.m_CfarPowerW > 0.0)
+            return target.m_CfarPowerW;
+        if (target.m_ProcessedPowerW > 0.0)
+            return target.m_ProcessedPowerW;
+        if (target.m_ReceivedPowerW > 0.0)
+            return target.m_ReceivedPowerW;
+        return 0.0;
+    }
+
+    protected float EstimateCfarNoiseFloorW(
+        vector origin,
+        vector scanForward)
+    {
+        if (!m_Settings || !m_Settings.m_Hardware)
+            return 0.000000000000000000000000000001;
+
+        RDF_RadarHardware hardware = m_Settings.m_Hardware;
+        float processingGain = hardware.GetProcessingGain();
+        float noise = hardware.GetNoisePowerW() * processingGain;
+        noise = noise + m_Settings.m_AdditionalNoisePowerW;
+        if (m_Settings.m_EwStack)
+        {
+            float ewNoiseRf = m_Settings.m_EwStack.GetAdditionalNoisePowerW(
+                origin,
+                scanForward,
+                hardware);
+            noise = noise + ewNoiseRf * processingGain;
+        }
+        if (noise < 0.000000000000000000000000000001)
+            noise = 0.000000000000000000000000000001;
+        return noise;
+    }
+
+    protected RDF_RadarTarget BuildAnonymousTarget(
+        vector origin,
+        float scanAzimuth,
+        float halfAngleRad,
+        float maxRange,
+        int azBins,
+        int rangeBins,
+        int azIndex,
+        int rangeIndex,
+        float cellPowerW,
+        float noiseFloorW)
+    {
+        float azCenterNorm = (azIndex + 0.5) / azBins;
+        float rangeCenterNorm = (rangeIndex + 0.5) / rangeBins;
+        float relAz = 0.0;
+        if (halfAngleRad > 0.0001)
+            relAz = (azCenterNorm * 2.0 - 1.0) * halfAngleRad;
+        float azimuth = scanAzimuth + relAz;
+        float distance = rangeCenterNorm * maxRange;
+        if (distance < m_Settings.m_MinDistance)
+            distance = m_Settings.m_MinDistance;
+        if (distance > maxRange)
+            distance = maxRange;
+
+        vector dir = Vector(Math.Cos(azimuth), 0.0, Math.Sin(azimuth));
+        RDF_RadarTarget t = new RDF_RadarTarget();
+        t.m_Entity = null;
+        t.m_Position = origin + dir * distance;
+        t.m_Distance = distance;
+        t.m_Velocity = "0 0 0";
+        t.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_ANONYMOUS;
+        t.m_Time = 0.0;
+        t.m_AzimuthDeg = azimuth * RAD_TO_DEG;
+        t.m_ElevationDeg = 0.0;
+        t.m_RadialSpeedMs = 0.0;
+        t.m_RcsM2 = 0.0;
+        t.m_ReceivedPowerW = cellPowerW;
+        t.m_ProcessedPowerW = cellPowerW;
+        t.m_DopplerHz = 0.0;
+        t.m_MtiGain = 1.0;
+        t.m_DemSurfaceClass = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
+        t.m_DemSampleValid = false;
+        t.m_ClutterPowerW = 0.0;
+        t.m_ClutterToNoiseDb = -300.0;
+        float snrLinear = cellPowerW / Math.Max(
+            0.000000000000000000000000000001,
+            noiseFloorW);
+        t.m_SnrDb = RDF_RadarClutterModel.LinToDb(snrLinear);
+        t.m_Detected = true;
+        t.m_IsAnonymous = true;
+        t.m_IsFalsePlot = false;
+        t.m_CfarPowerW = cellPowerW;
+        t.m_LosBlocked = false;
+        t.m_LosHitFraction = 1.0;
+        t.m_MultipathFactor = 1.0;
+        t.m_BeamName = "cfar";
+        t.m_ScanNumber = 0;
+        return t;
+    }
+
+    protected void RemoveUndetectedTargets(notnull array<ref RDF_RadarTarget> targets)
+    {
+        if (m_Settings && m_Settings.m_KeepUndetected)
+            return;
+        for (int i = targets.Count() - 1; i >= 0; i--)
+        {
+            RDF_RadarTarget t = targets.Get(i);
+            if (!t)
+            {
+                targets.Remove(i);
+                continue;
+            }
+            if (!t.m_Detected)
+                targets.Remove(i);
         }
     }
 
@@ -248,6 +700,7 @@ class RDF_RadarScanner
         target.m_DemSampleValid = false;
         target.m_ClutterPowerW = 0.0;
         target.m_ClutterToNoiseDb = -300.0;
+        target.m_CfarPowerW = 0.0;
         if (target.m_LosHitFraction <= 0.0 && !target.m_LosBlocked)
             target.m_LosHitFraction = 1.0;
         if (target.m_MultipathFactor <= 0.0)
@@ -343,6 +796,7 @@ class RDF_RadarScanner
         float processingGain = hardware.GetProcessingGain();
         target.m_ProcessedPowerW =
             target.m_ReceivedPowerW * processingGain * target.m_MtiGain;
+        target.m_CfarPowerW = target.m_ProcessedPowerW;
 
         float clutterPower = 0.0;
         if (m_Settings.m_EnableDemClutter && m_DemCache)

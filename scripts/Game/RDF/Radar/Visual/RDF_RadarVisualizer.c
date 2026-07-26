@@ -121,6 +121,8 @@ class RDF_RadarVisualizer
             return ARGBF(0.95, 1.0, 0.2, 0.2);
         if (type == ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER)
             return ARGBF(0.95, 1.0, 1.0, 0.0);
+        if (type == ERDF_RadarTargetType.RDF_RADAR_TARGET_ANONYMOUS)
+            return ARGBF(0.95, 1.0, 1.0, 1.0);
         return ARGBF(0.95, 0.2, 1.0, 0.2);
     }
 
@@ -131,6 +133,8 @@ class RDF_RadarVisualizer
             return ARGBF(a, 1.0, 0.2, 0.2);
         if (type == ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER)
             return ARGBF(a, 1.0, 1.0, 0.0);
+        if (type == ERDF_RadarTargetType.RDF_RADAR_TARGET_ANONYMOUS)
+            return ARGBF(a, 1.0, 1.0, 1.0);
         return ARGBF(a, 0.2, 1.0, 0.2);
     }
 }

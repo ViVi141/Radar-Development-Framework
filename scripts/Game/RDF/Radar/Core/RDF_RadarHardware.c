@@ -88,6 +88,23 @@ class RDF_RadarHardware
         return BOLTZMANN * 290.0 * bandwidth * noiseFactor;
     }
 
+    // Range resolution ≈ c/(2B); falls back to c*τ/2 when bandwidth is unset.
+    float GetRangeBinM()
+    {
+        float c = RDF_RadarClutterModel.C_LIGHT;
+        if (m_BandwidthHz > 1.0)
+        {
+            float binFromBw = c / (2.0 * m_BandwidthHz);
+            if (binFromBw < 1.0)
+                binFromBw = 1.0;
+            return binFromBw;
+        }
+        float binFromPulse = c * m_PulseWidthS * 0.5;
+        if (binFromPulse < 1.0)
+            binFromPulse = 1.0;
+        return binFromPulse;
+    }
+
     void Validate()
     {
         m_FrequencyHz = Math.Max(1000000.0, m_FrequencyHz);

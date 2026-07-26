@@ -9,6 +9,24 @@ class RDF_RadarEwEffect
     {
         return 0.0;
     }
+
+    void CollectFalsePlots(
+        vector radarOrigin,
+        vector scanForward,
+        RDF_RadarHardware hardware,
+        float worldTimeS,
+        notnull array<ref RDF_RadarFalsePlot> outPlots)
+    {
+    }
+}
+
+class RDF_RadarFalsePlot
+{
+    float m_RangeM;
+    float m_AzimuthDeg;
+    float m_ElevationDeg;
+    float m_PowerW;
+    float m_RangeRateMs;
 }
 
 class RDF_RadarNoiseJammerEffect : RDF_RadarEwEffect
@@ -97,5 +115,80 @@ class RDF_RadarEwStack
             }
         }
         return total;
+    }
+
+    void CollectFalsePlots(
+        vector radarOrigin,
+        vector scanForward,
+        RDF_RadarHardware hardware,
+        float worldTimeS,
+        notnull array<ref RDF_RadarFalsePlot> outPlots)
+    {
+        for (int i = 0; i < m_Effects.Count(); i++)
+        {
+            RDF_RadarEwEffect effect = m_Effects.Get(i);
+            if (!effect)
+                continue;
+            effect.CollectFalsePlots(
+                radarOrigin,
+                scanForward,
+                hardware,
+                worldTimeS,
+                outPlots);
+        }
+    }
+}
+
+class RDF_RadarDeceptionJammerEffect : RDF_RadarEwEffect
+{
+    bool m_Enabled = true;
+    ref array<ref RDF_RadarFalsePlot> m_FalsePlots;
+
+    void RDF_RadarDeceptionJammerEffect()
+    {
+        m_FalsePlots = new array<ref RDF_RadarFalsePlot>();
+    }
+
+    void AddFalsePlot(
+        float rangeM,
+        float azimuthDeg,
+        float powerW,
+        float rangeRateMs = 0.0,
+        float elevationDeg = 0.0)
+    {
+        RDF_RadarFalsePlot p = new RDF_RadarFalsePlot();
+        p.m_RangeM = rangeM;
+        p.m_AzimuthDeg = azimuthDeg;
+        p.m_ElevationDeg = elevationDeg;
+        p.m_PowerW = powerW;
+        p.m_RangeRateMs = rangeRateMs;
+        m_FalsePlots.Insert(p);
+    }
+
+    override void CollectFalsePlots(
+        vector radarOrigin,
+        vector scanForward,
+        RDF_RadarHardware hardware,
+        float worldTimeS,
+        notnull array<ref RDF_RadarFalsePlot> outPlots)
+    {
+        if (!m_Enabled || !m_FalsePlots)
+            return;
+
+        for (int i = 0; i < m_FalsePlots.Count(); i++)
+        {
+            RDF_RadarFalsePlot src = m_FalsePlots.Get(i);
+            if (!src)
+                continue;
+            RDF_RadarFalsePlot dst = new RDF_RadarFalsePlot();
+            dst.m_AzimuthDeg = src.m_AzimuthDeg;
+            dst.m_ElevationDeg = src.m_ElevationDeg;
+            dst.m_PowerW = src.m_PowerW;
+            dst.m_RangeRateMs = src.m_RangeRateMs;
+            dst.m_RangeM = src.m_RangeM + src.m_RangeRateMs * worldTimeS;
+            if (dst.m_RangeM < 1.0)
+                continue;
+            outPlots.Insert(dst);
+        }
     }
 }

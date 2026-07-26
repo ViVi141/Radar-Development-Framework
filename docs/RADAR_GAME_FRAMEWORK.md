@@ -1,7 +1,8 @@
 # RDF In-Game Radar Framework
 
 The Enforce implementation now follows the same contracts as the offline
-prototype while remaining entity-first for real-time performance.
+prototype. Game entities are scatterers/emitters for the physics chain;
+published plots are quantized, noisy measurements (not raw entity poses).
 
 Capabilities vs real EM radar (what works / what is missing / what is still
 feasible): [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md).
@@ -9,18 +10,24 @@ feasible): [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md).
 ## Runtime chain
 
 1. Resolve radar origin and current boresight.
-2. Enumerate active vehicle/projectile/emitter candidates.
+2. Enumerate vehicle/projectile candidates via `QueryEntitiesBySphere` with
+   active-entity fallback merge and dedup.
 3. Apply range and azimuth dwell.
 4. `TraceMove` line-of-sight check. Clear path → direct detection.
    Blocked path → optional NLOS ground-bounce (default on): image-method path
    length + `|Gamma|^2` + early-blocker depth scale; mark `m_LosBlocked`.
-5. Read projectile or rigid-body velocity.
+5. Read projectile or rigid-body velocity (**truth, physics only**).
 6. Estimate entity RCS; scale received power by `m_MultipathFactor`.
 7. Select the strongest configured elevation beam.
 8. Evaluate monostatic received power, Doppler, MTI, processing gain, noise,
    DEM clutter power, and SNR.
-9. Keep detections over the configured SNR threshold.
-10. Feed accepted detections to the alpha-beta entity tracker.
+9. Optional coarse-bin CA-CFAR over azimuth/range power bins (gates existing
+   plots only).
+10. **Measurement synthesis** (`RDF_RadarMeasurement`): quantize range to bin
+    center, add SNR-scaled angle/Doppler noise, rebuild plot kinematics;
+    clear `m_Entity` unless `m_KeepEntityTruth`.
+11. Feed accepted plots to the measurement-driven alpha-beta tracker
+    (nearest-neighbor gates + `PredictAt`).
 
 ## Main configuration
 
@@ -35,15 +42,20 @@ feasible): [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md).
 - `m_DemCacheMaxTiles`
 - `m_DemTileLoadsPerScan`
 - `m_DemClutterScale`
+- `m_UseSphereQuery`, `m_SphereQueryAlsoActive`
 - `m_EnableNlosMultipath` (default true)
 - `m_NlosReflectionAbs`, `m_NlosMinFactor`, `m_NlosMaxTargetAglM`
 - `m_AdditionalNoisePowerW`
 - `m_EwStack`
+- `m_EnableCfarGate`, `m_CfarGuardCells`, `m_CfarTrainingCells`, `m_CfarPfa`, `m_RangeBinCount`
+- `m_EnableMeasurementSynthesis` (default true), `m_KeepEntityTruth` (debug)
+- `m_TrackGateRangeM`, `m_TrackGateAzimuthDeg`, `m_TrackConfirmHits`, `m_TrackMaxMisses`
 
 `RDF_RadarHardware`:
 
 - frequency, peak power, antenna gain, system loss, noise figure
 - pulse width, bandwidth, PRF, pulse integration, MTI
+- `GetRangeBinM()` ≈ `c/(2B)` for measurement quantization
 - scan RPM and `RDF_RadarElevationBeam[]`
 
 ## Presets
@@ -65,6 +77,18 @@ jammer.m_ErpW = 10000.0;
 jammer.m_BandwidthHz = 5000000.0;
 settings.m_EwStack.Add(jammer);
 ```
+
+## Optional EW deception / false plots
+
+```c
+RDF_RadarDeceptionJammerEffect deceive = new RDF_RadarDeceptionJammerEffect();
+deceive.AddFalsePlot(1600.0, -18.0, 0.0000000000012, 25.0, 0.0);
+deceive.AddFalsePlot(2200.0, 12.0, 0.0000000000009, -10.0, 0.0);
+settings.m_EwStack.Add(deceive);
+```
+
+False plots are emitted as anonymous targets (`m_IsAnonymous=true`,
+`m_IsFalsePlot=true`) and pass through the same CFAR gate.
 
 ## Runtime DEM clutter source
 
@@ -92,18 +116,22 @@ Each `RDF_RadarTarget` now includes:
 - sampled DEM surface class and clutter power contribution
 - SNR, detection flag, and selected beam name
 - `m_LosBlocked`, `m_LosHitFraction`, `m_MultipathFactor` (NLOS bounce scale)
+- `m_IsAnonymous`, `m_IsFalsePlot`, and `m_CfarPowerW`
 
 ## PPI HUD
 
 `RDF_RadarHUD` draws a north-up plan-position display (green phosphor theme,
 bottom-right) with range rings, a boresight sweep line, and one blip per target.
 
-- Blip colour: green vehicle, orange projectile, magenta emitter; cyan for
-  detected NLOS multipath (`m_LosBlocked`); dim grey for undetected returns when
-  `m_KeepUndetected` is on.
+- Blip colour: pale-yellow anonymous measurement plots (default), white
+  deception false plot, cyan for detected NLOS multipath (`m_LosBlocked`);
+  soft type colours only when `m_KeepEntityTruth` is on; dim grey for
+  undetected returns when `m_KeepUndetected` is on.
 - Blip size scales with SNR.
 - Data row shows detected/total, confirmed track count, and the strongest target
   (type, range, SNR).
+- Tracks come from measurement association; use `RDF_RadarTrack.PredictAt(t)`
+  for extrapolated lock / lead points.
 
 Control:
 
@@ -117,7 +145,37 @@ The runner feeds the HUD automatically from `RDF_RadarScanner.GetLastOrigin()`,
 `GetLastForward()`, and `GetLastRange()`. To drive it from a custom system call
 `RDF_RadarHUD.FeedScan(targets, origin, forward, range, tracker)`.
 
-HUD mode label now includes DEM status (`DEM OK` or `DEM OFF`).
+HUD mode label includes DEM status in local mode and `NET` in synchronized mode.
+
+## Network authority path
+
+Use `RDF_RadarNetworkComponent` on the radar owner together with `RplComponent`.
+`RDF_RadarAutoRunner` and `RDF_RadarComponent` auto-detect
+`RDF_RadarNetworkAPI` on the subject:
+
+1. client calls `RequestScan()`,
+2. server runs `RDF_RadarScanner`,
+3. server broadcasts compact payload (scan meta + target rows),
+4. clients update local synced target cache and feed HUD/tracker from cache.
+
+### Minimal setup (entity-mounted radar)
+
+1. On the radar entity prefab, add:
+   - `RplComponent`
+   - `RDF_RadarComponent`
+   - `RDF_RadarNetworkComponent`
+2. Ensure the entity is replicated in your scenario/session settings.
+3. Start radar via existing entry points (`RDF_RadarComponent` tick or
+   `RDF_RadarAutoRunner`), no extra script wiring required.
+4. Optional: keep `RDF_RadarAutoRunner.SetHudEnabled(true)` to observe client HUD.
+
+### Quick verification (server-authoritative)
+
+1. Run a multiplayer session with at least host + one client.
+2. On host, enable radar demo/config as usual.
+3. On client, verify HUD mode text shows `PPI | NET`.
+4. Move targets/emitter sources and confirm both host/client see consistent
+   target count/type trends (allowing normal timing jitter).
 
 ## Automated DEM regression test
 
@@ -175,11 +233,9 @@ Output report:
 
 ## Current boundaries
 
-- Target candidates and LOS are still entity-first (`GetActiveEntities` +
-  `TraceMove`). DEM currently contributes clutter power to noise modeling, not
-  anonymous-plot generation.
+- Target candidates remain entity-first (sphere query + active fallback) and
+  LOS still relies on `TraceMove`.
 - DEM runtime source is development profile data. For multiplayer parity each
   scanning machine must have matching baked DEM files.
-- EW currently adds directional noise. Deception/false plots remain offline.
-- Tracking associates by entity identity; anonymous plot association remains
-  offline.
+- EW now supports directional noise plus deception false-plot injection.
+- Tracking still associates by entity identity; anonymous plots are display-only.

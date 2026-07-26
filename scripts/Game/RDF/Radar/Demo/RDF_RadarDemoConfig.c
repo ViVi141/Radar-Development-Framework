@@ -51,4 +51,15 @@ class RDF_RadarDemoConfig
         s.Validate();
         return s;
     }
+
+    static RDF_RadarSettings CreateWithDeceptionJammer(int maxTargets = 64)
+    {
+        RDF_RadarSettings s = CreateDefault(maxTargets);
+        RDF_RadarDeceptionJammerEffect jammer = new RDF_RadarDeceptionJammerEffect();
+        jammer.AddFalsePlot(1600.0, -18.0, 0.0000000000012, 25.0, 0.0);
+        jammer.AddFalsePlot(2200.0, 12.0, 0.0000000000009, -10.0, 0.0);
+        s.m_EwStack.Add(jammer);
+        s.Validate();
+        return s;
+    }
 }
