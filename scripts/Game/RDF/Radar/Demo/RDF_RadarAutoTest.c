@@ -120,7 +120,10 @@ class RDF_RadarAutoTest
             return;
         }
 
-        m_PreviousConfig = RDF_RadarAutoRunner.GetDemoConfig();
+        m_PreviousConfig = null;
+        RDF_RadarSensor prevSensor = RDF_RadarAutoRunner.GetSensor();
+        if (prevSensor)
+            m_PreviousConfig = prevSensor.GetSettings();
         m_PreviousDemoEnabled = RDF_RadarAutoRunner.IsDemoEnabled();
         m_PreviousHudEnabled = RDF_RadarAutoRunner.IsHudEnabled();
         m_PreviousForceLocal = RDF_RadarAutoRunner.IsForceLocalScan();
@@ -135,8 +138,7 @@ class RDF_RadarAutoTest
         m_LastScanProgressWallS = System.GetTickCount() * 0.001;
         m_Running = true;
 
-        // A Workbench character carrying RplComponent makes AutoRunner pick the
-        // networked scanner, which ignores the per-phase configs below.
+        // AutoRunner only hosts Sensor.Tick + optional HUD. Configure via Sensor.
         RDF_RadarAutoRunner.SetForceLocalScan(true);
         RDF_RadarAutoRunner.SetHudEnabled(false);
         RDF_RadarAutoRunner.SetDemoEnabled(true);
@@ -162,10 +164,25 @@ class RDF_RadarAutoTest
         RDF_RadarSettings warmup = BuildBaseConfig();
         warmup.m_EnableDemClutter = false;
         warmup.Validate();
-        RDF_RadarAutoRunner.SetDemoConfig(warmup);
+        ApplySensorConfig(warmup);
         RDF_RadarAutoRunner.StartAutoRun();
 
         Print("[RDF Radar AutoTest] start: DEM OFF/ON/SCALE/BUDGET regression");
+    }
+
+    // Presentation host keeps ticking; all radar knobs go through RDF_RadarSensor.
+    protected RDF_RadarSensor GetSensor()
+    {
+        return RDF_RadarAutoRunner.GetSensor();
+    }
+
+    protected void ApplySensorConfig(RDF_RadarSettings cfg)
+    {
+        RDF_RadarSensor sensor = GetSensor();
+        if (!sensor || !cfg)
+            return;
+        sensor.SetForceLocalScan(true);
+        sensor.Configure(cfg);
     }
 
     // All spawned targets present in the scatterer table.
@@ -196,7 +213,7 @@ class RDF_RadarAutoTest
             return;
 
         if (m_PreviousConfig)
-            RDF_RadarAutoRunner.SetDemoConfig(m_PreviousConfig);
+            ApplySensorConfig(m_PreviousConfig);
         RDF_RadarAutoRunner.SetDemoEnabled(m_PreviousDemoEnabled);
         RDF_RadarAutoRunner.SetHudEnabled(m_PreviousHudEnabled);
         RDF_RadarAutoRunner.SetForceLocalScan(m_PreviousForceLocal);
@@ -266,21 +283,24 @@ class RDF_RadarAutoTest
         }
 
         cfg.Validate();
-        RDF_RadarAutoRunner.SetDemoConfig(cfg);
+        ApplySensorConfig(cfg);
         RDF_RadarAutoRunner.StartAutoRun();
 
         // budget0 must not reuse warm DEM hits from earlier phases.
         if (phaseIdx == 3)
         {
-            RDF_RadarSensor sensor = RDF_RadarAutoRunner.GetSensor();
-            if (sensor && sensor.GetScanner())
-                sensor.GetScanner().ClearDemCache();
-            RDF_RadarScattererRegistry.InvalidateDemSamples();
+            RDF_RadarSensor sensor = GetSensor();
+            if (sensor)
+                sensor.ClearDemCache();
         }
 
         m_Current = new RDF_RadarAutoTestCaseResult();
         m_Current.m_Name = name;
-        m_LastScanSerial = RDF_RadarAutoRunner.GetLastScanSerial();
+        RDF_RadarSensor serialSensor = GetSensor();
+        if (serialSensor)
+            m_LastScanSerial = serialSensor.GetScanSerial();
+        else
+            m_LastScanSerial = -1;
         m_PhaseStartWallS = System.GetTickCount() * 0.001;
 
         Print("[RDF Radar AutoTest] phase start: " + name);
@@ -288,7 +308,8 @@ class RDF_RadarAutoTest
 
     protected RDF_RadarSettings BuildBaseConfig()
     {
-        RDF_RadarSettings cfg = RDF_RadarDemoConfig.CreateDefault(128);
+        // Sensor SEARCH preset, then widen for clutter measurability.
+        RDF_RadarSettings cfg = RDF_RadarSensor.CreateSearchSettings(128);
         cfg.m_KeepUndetected = true;
         cfg.m_Range = 8000.0;
         cfg.m_SectorHalfAngleDeg = 180.0;
@@ -334,7 +355,11 @@ class RDF_RadarAutoTest
         if (!m_Current)
             return;
 
-        int scanSerial = RDF_RadarAutoRunner.GetLastScanSerial();
+        RDF_RadarSensor sensor = GetSensor();
+        if (!sensor)
+            return;
+
+        int scanSerial = sensor.GetScanSerial();
         if (scanSerial < 0)
             return;
         if (scanSerial == m_LastScanSerial)
@@ -351,7 +376,7 @@ class RDF_RadarAutoTest
         m_LastScanProgressWallS = System.GetTickCount() * 0.001;
         m_Current.m_ScanSamples = m_Current.m_ScanSamples + 1;
 
-        array<ref RDF_RadarTarget> targets = RDF_RadarAutoRunner.GetLastTargets();
+        array<ref RDF_RadarTarget> targets = sensor.GetPlots();
         if (!targets || targets.Count() <= 0)
             return;
 

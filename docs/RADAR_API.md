@@ -173,6 +173,11 @@ verifies SEARCH → ACQUIRING → TRACKING with a usable aim point.
 
 Tests and gameplay should prefer Sensor / Component. AutoRunner remains the editor convenience entry (`StartWithConfig`, `SetHudEnabled`).
 
+Regression tests follow the same rule: configure via `sensor.Configure` /
+`Create*Settings`, read via `GetPlots` / `GetTracks` / `GetLockedTarget` /
+`Count*`, and clear suite state with `ResetSession` / `ClearDemCache`.
+AutoRunner only hosts `Tick` + optional PPI.
+
 ```c
 // Demo still works:
 RDF_RadarAutoRunner.SetMode(ERDF_RadarSensorMode.RDF_RADAR_MODE_STARE);
@@ -194,5 +199,9 @@ Only if you are extending RDF itself:
 
 - `GetScanner()` / `GetTracker()` / `GetSettings()`
 - `Configure(RDF_RadarSettings)` for full knob control
+
+Prefer the session helpers when a consumer only needs cleanup between scenarios:
+
+- `ClearTracks()` / `ClearDemCache()` / `ResetSession()` / `GetDemStatusShort()`
 
 Still prefer modes + a few settings overrides over rebuilding the pipeline.

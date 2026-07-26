@@ -237,11 +237,13 @@ class RDF_RadarSensor
         return m_Mode;
     }
 
+    // Escape hatch for framework extensions. Prefer ClearDemCache / GetDemStatusShort.
     RDF_RadarScanner GetScanner()
     {
         return m_Scanner;
     }
 
+    // Escape hatch for framework extensions. Prefer ClearTracks / GetTracks.
     RDF_RadarProjectileTracker GetTracker()
     {
         return m_Tracker;
@@ -252,6 +254,38 @@ class RDF_RadarSensor
         if (!m_LockManager)
             m_LockManager = new RDF_RadarLockManager();
         return m_LockManager;
+    }
+
+    // Drop every track. Call when reconfiguring between scenarios / suite steps
+    // so consumers do not inherit tracks from a previous settings object.
+    void ClearTracks()
+    {
+        if (m_Tracker)
+            m_Tracker.ClearTracks();
+    }
+
+    // Drop warm DEM tiles and invalidate cached DEM samples on scatterers.
+    // Used when a test phase changes DemTileLoadsPerScan / DemCacheMaxTiles.
+    void ClearDemCache()
+    {
+        if (m_Scanner)
+            m_Scanner.ClearDemCache();
+        RDF_RadarScattererRegistry.InvalidateDemSamples();
+    }
+
+    string GetDemStatusShort()
+    {
+        if (!m_Scanner)
+            return "DEM ?";
+        return m_Scanner.GetDemStatusShort();
+    }
+
+    // Clear tracks and unlock. Safe entry point for suite step boundaries.
+    void ResetSession()
+    {
+        ClearTracks();
+        if (m_LockManager)
+            m_LockManager.Unlock();
     }
 
     // Convenience: current locked target for weapon / fire-control code.
@@ -451,9 +485,7 @@ class RDF_RadarSensor
         else if (m_Mode == ERDF_RadarSensorMode.RDF_RADAR_MODE_WLR)
             modeName = "WLR";
 
-        string dem = "DEM ?";
-        if (m_Scanner)
-            dem = m_Scanner.GetDemStatusShort();
+        string dem = GetDemStatusShort();
 
         string lock = "";
         if (m_LockManager)

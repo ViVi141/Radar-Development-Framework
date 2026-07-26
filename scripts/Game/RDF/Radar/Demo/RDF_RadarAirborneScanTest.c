@@ -121,7 +121,10 @@ class RDF_RadarAirborneScanTest
             return;
         }
 
-        m_PrevConfig = RDF_RadarAutoRunner.GetDemoConfig();
+        m_PrevConfig = null;
+        RDF_RadarSensor prevSensor = RDF_RadarAutoRunner.GetSensor();
+        if (prevSensor)
+            m_PrevConfig = prevSensor.GetSettings();
         m_PrevDemoEnabled = RDF_RadarAutoRunner.IsDemoEnabled();
         m_PrevHudEnabled = RDF_RadarAutoRunner.IsHudEnabled();
         m_PrevForceLocal = RDF_RadarAutoRunner.IsForceLocalScan();
@@ -144,8 +147,7 @@ class RDF_RadarAirborneScanTest
             return;
         }
 
-        // A Workbench character carrying RplComponent makes AutoRunner pick the
-        // networked scanner, which ignores this test config.
+        // AutoRunner hosts Sensor.Tick + HUD; knobs go through RDF_RadarSensor.
         RDF_RadarAutoRunner.SetForceLocalScan(true);
         ApplyTestRadarConfig();
         RDF_RadarAutoRunner.SetHudEnabled(true);
@@ -161,7 +163,11 @@ class RDF_RadarAirborneScanTest
         m_MaxTargetSnrDb = -300.0;
         m_TargetDiscovered = false;
         m_RespawnCount = 0;
-        m_LastScanSerial = RDF_RadarAutoRunner.GetLastScanSerial();
+        RDF_RadarSensor sensor = GetSensor();
+        if (sensor)
+            m_LastScanSerial = sensor.GetScanSerial();
+        else
+            m_LastScanSerial = -1;
 
         m_LastProgressWallS = m_StartWallS;
         m_LastDebugPrintWallS = m_StartWallS;
@@ -195,10 +201,24 @@ class RDF_RadarAirborneScanTest
             return;
 
         if (m_PrevConfig)
-            RDF_RadarAutoRunner.SetDemoConfig(m_PrevConfig);
+            ApplySensorConfig(m_PrevConfig);
         RDF_RadarAutoRunner.SetDemoEnabled(m_PrevDemoEnabled);
         RDF_RadarAutoRunner.SetHudEnabled(m_PrevHudEnabled);
         RDF_RadarAutoRunner.SetForceLocalScan(m_PrevForceLocal);
+    }
+
+    protected RDF_RadarSensor GetSensor()
+    {
+        return RDF_RadarAutoRunner.GetSensor();
+    }
+
+    protected void ApplySensorConfig(RDF_RadarSettings cfg)
+    {
+        RDF_RadarSensor sensor = GetSensor();
+        if (!sensor || !cfg)
+            return;
+        sensor.SetForceLocalScan(true);
+        sensor.Configure(cfg);
     }
 
     protected void OnTick()
@@ -309,7 +329,7 @@ class RDF_RadarAirborneScanTest
 
     protected void ApplyTestRadarConfig()
     {
-        RDF_RadarSettings cfg = RDF_RadarDemoConfig.CreateDefault(128);
+        RDF_RadarSettings cfg = RDF_RadarSensor.CreateSearchSettings(128);
         cfg.m_Range = 6000.0;
         cfg.m_SectorHalfAngleDeg = 180.0;
         cfg.m_UpdateInterval = 0.2;
@@ -346,7 +366,7 @@ class RDF_RadarAirborneScanTest
         cfg.m_Hardware = hw;
 
         cfg.Validate();
-        RDF_RadarAutoRunner.SetDemoConfig(cfg);
+        ApplySensorConfig(cfg);
     }
 
     protected void UpdateAirTargetMotion(float nowS)
@@ -398,7 +418,11 @@ class RDF_RadarAirborneScanTest
 
     protected void AccumulateLatestScan(float nowS)
     {
-        int serial = RDF_RadarAutoRunner.GetLastScanSerial();
+        RDF_RadarSensor sensor = GetSensor();
+        if (!sensor)
+            return;
+
+        int serial = sensor.GetScanSerial();
         if (serial == m_LastScanSerial)
         {
             if (nowS - m_LastProgressWallS > 5.0)
@@ -415,7 +439,7 @@ class RDF_RadarAirborneScanTest
         if (m_AirTarget && RDF_RadarScattererRegistry.Find(m_AirTarget))
             m_TargetDiscovered = true;
 
-        array<ref RDF_RadarTarget> targets = RDF_RadarAutoRunner.GetLastTargets();
+        array<ref RDF_RadarTarget> targets = sensor.GetPlots();
         if (!targets || !m_AirTarget)
             return;
 

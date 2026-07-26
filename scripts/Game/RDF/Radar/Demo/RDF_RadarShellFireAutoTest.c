@@ -130,7 +130,10 @@ class RDF_RadarShellFireAutoTest
             return;
         }
 
-        m_PrevConfig = RDF_RadarAutoRunner.GetDemoConfig();
+        m_PrevConfig = null;
+        RDF_RadarSensor prevSensor = RDF_RadarAutoRunner.GetSensor();
+        if (prevSensor)
+            m_PrevConfig = prevSensor.GetSettings();
         m_PrevDemoEnabled = RDF_RadarAutoRunner.IsDemoEnabled();
         m_PrevHudEnabled = RDF_RadarAutoRunner.IsHudEnabled();
         m_PrevForceLocal = RDF_RadarAutoRunner.IsForceLocalScan();
@@ -164,7 +167,11 @@ class RDF_RadarShellFireAutoTest
         m_BestImpactErrM = 999999.0;
         m_MaxSnrDb = -300.0;
         m_ShellDiscovered = false;
-        m_LastScanSerial = RDF_RadarAutoRunner.GetLastScanSerial();
+        RDF_RadarSensor serialSensor = GetSensor();
+        if (serialSensor)
+            m_LastScanSerial = serialSensor.GetScanSerial();
+        else
+            m_LastScanSerial = -1;
 
         ApplyTestRadarConfig();
         RDF_RadarAutoRunner.SetForceLocalScan(true);
@@ -173,9 +180,9 @@ class RDF_RadarShellFireAutoTest
         RDF_RadarAutoRunner.StartAutoRun();
 
         // Do not inherit tracks from the previous suite step.
-        RDF_RadarProjectileTracker tracker = RDF_RadarAutoRunner.GetTracker();
-        if (tracker)
-            tracker.ClearTracks();
+        RDF_RadarSensor sensor = GetSensor();
+        if (sensor)
+            sensor.ResetSession();
 
         m_StartWallS = System.GetTickCount() * 0.001;
         m_LastFireWallS = m_StartWallS - FIRE_INTERVAL_S;
@@ -210,10 +217,24 @@ class RDF_RadarShellFireAutoTest
             return;
 
         if (m_PrevConfig)
-            RDF_RadarAutoRunner.SetDemoConfig(m_PrevConfig);
+            ApplySensorConfig(m_PrevConfig);
         RDF_RadarAutoRunner.SetForceLocalScan(m_PrevForceLocal);
         RDF_RadarAutoRunner.SetDemoEnabled(m_PrevDemoEnabled);
         RDF_RadarAutoRunner.SetHudEnabled(m_PrevHudEnabled);
+    }
+
+    protected RDF_RadarSensor GetSensor()
+    {
+        return RDF_RadarAutoRunner.GetSensor();
+    }
+
+    protected void ApplySensorConfig(RDF_RadarSettings cfg)
+    {
+        RDF_RadarSensor sensor = GetSensor();
+        if (!sensor || !cfg)
+            return;
+        sensor.SetForceLocalScan(true);
+        sensor.Configure(cfg);
     }
 
     protected void CleanupLiveShells()
@@ -298,9 +319,13 @@ class RDF_RadarShellFireAutoTest
 
         string scat = RDF_RadarScattererRegistry.GetStatsLine();
         int lastN = 0;
-        array<ref RDF_RadarTarget> last = RDF_RadarAutoRunner.GetLastTargets();
-        if (last)
-            lastN = last.Count();
+        RDF_RadarSensor sensor = GetSensor();
+        if (sensor)
+        {
+            array<ref RDF_RadarTarget> last = sensor.GetPlots();
+            if (last)
+                lastN = last.Count();
+        }
         Print(string.Format(
             "[RDF ShellFire AutoTest] liveShells=%1 inTable=%2 movingSeen=%3 plots=%4 det=%5 tracks=%6 lastTargets=%7 forceLocal=1 %8",
             alive.ToString(),
@@ -339,7 +364,8 @@ class RDF_RadarShellFireAutoTest
 
     protected void ApplyTestRadarConfig()
     {
-        RDF_RadarSettings cfg = RDF_RadarDemoConfig.CreateProjectileOnly(128);
+        // Sensor WLR preset, then widen sector / keep entity truth for assertions.
+        RDF_RadarSettings cfg = RDF_RadarSensor.CreateWlrSettings(128);
         cfg.m_Range = 8000.0;
         cfg.m_SectorHalfAngleDeg = 180.0;
         cfg.m_UpdateInterval = 0.15;
@@ -379,7 +405,7 @@ class RDF_RadarShellFireAutoTest
         hw.Validate();
         cfg.m_Hardware = hw;
         cfg.Validate();
-        RDF_RadarAutoRunner.SetDemoConfig(cfg);
+        ApplySensorConfig(cfg);
     }
 
     protected vector BuildLaunchDirection()
@@ -506,7 +532,11 @@ class RDF_RadarShellFireAutoTest
     protected void AccumulateLatestScan()
     {
         float nowS = System.GetTickCount() * 0.001;
-        int serial = RDF_RadarAutoRunner.GetLastScanSerial();
+        RDF_RadarSensor sensor = GetSensor();
+        if (!sensor)
+            return;
+
+        int serial = sensor.GetScanSerial();
         if (serial == m_LastScanSerial)
         {
             if (nowS - m_LastProgressWallS > 5.0)
@@ -521,7 +551,7 @@ class RDF_RadarShellFireAutoTest
         m_LastProgressWallS = nowS;
         m_ScanCount = m_ScanCount + 1;
 
-        array<ref RDF_RadarTarget> targets = RDF_RadarAutoRunner.GetLastTargets();
+        array<ref RDF_RadarTarget> targets = sensor.GetPlots();
         if (!targets)
             return;
 
@@ -566,11 +596,11 @@ class RDF_RadarShellFireAutoTest
 
     protected void EvaluateTracks()
     {
-        RDF_RadarProjectileTracker tracker = RDF_RadarAutoRunner.GetTracker();
-        if (!tracker)
+        RDF_RadarSensor sensor = GetSensor();
+        if (!sensor)
             return;
 
-        array<ref RDF_RadarTrack> tracks = tracker.GetAllTracks();
+        array<ref RDF_RadarTrack> tracks = sensor.GetTracks();
         if (!tracks)
             return;
 

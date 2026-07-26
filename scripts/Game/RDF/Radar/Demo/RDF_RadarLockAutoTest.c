@@ -134,7 +134,10 @@ class RDF_RadarLockAutoTest
             return;
         }
 
-        m_PrevConfig = RDF_RadarAutoRunner.GetDemoConfig();
+        m_PrevConfig = null;
+        RDF_RadarSensor prevSensor = RDF_RadarAutoRunner.GetSensor();
+        if (prevSensor)
+            m_PrevConfig = prevSensor.GetSettings();
         m_PrevDemoEnabled = RDF_RadarAutoRunner.IsDemoEnabled();
         m_PrevHudEnabled = RDF_RadarAutoRunner.IsHudEnabled();
         m_PrevForceLocal = RDF_RadarAutoRunner.IsForceLocalScan();
@@ -180,7 +183,11 @@ class RDF_RadarLockAutoTest
         m_TargetAliveAtEnd = false;
         m_LastLoggedState = -1;
         m_RespawnCount = 0;
-        m_LastScanSerial = RDF_RadarAutoRunner.GetLastScanSerial();
+        RDF_RadarSensor sensor = GetSensor();
+        if (sensor)
+            m_LastScanSerial = sensor.GetScanSerial();
+        else
+            m_LastScanSerial = -1;
         m_LastProgressWallS = m_StartWallS;
         m_LastDebugPrintWallS = m_StartWallS;
         m_Running = true;
@@ -214,15 +221,29 @@ class RDF_RadarLockAutoTest
         if (!restore)
             return;
 
-        RDF_RadarSensor sensor = RDF_RadarAutoRunner.GetSensor();
+        RDF_RadarSensor sensor = GetSensor();
         if (sensor)
-            sensor.GetLockManager().Unlock();
+            sensor.ResetSession();
 
         if (m_PrevConfig)
-            RDF_RadarAutoRunner.SetDemoConfig(m_PrevConfig);
+            ApplySensorConfig(m_PrevConfig);
         RDF_RadarAutoRunner.SetDemoEnabled(m_PrevDemoEnabled);
         RDF_RadarAutoRunner.SetHudEnabled(m_PrevHudEnabled);
         RDF_RadarAutoRunner.SetForceLocalScan(m_PrevForceLocal);
+    }
+
+    protected RDF_RadarSensor GetSensor()
+    {
+        return RDF_RadarAutoRunner.GetSensor();
+    }
+
+    protected void ApplySensorConfig(RDF_RadarSettings cfg)
+    {
+        RDF_RadarSensor sensor = GetSensor();
+        if (!sensor || !cfg)
+            return;
+        sensor.SetForceLocalScan(true);
+        sensor.Configure(cfg);
     }
 
     protected void OnTick()
@@ -319,8 +340,8 @@ class RDF_RadarLockAutoTest
 
     protected void ApplyTestRadarConfig()
     {
-        // Physical SEARCH lock regression on a moving airframe.
-        RDF_RadarSettings cfg = RDF_RadarDemoConfig.CreateSearch(128);
+        // Physical STARE lock regression on a moving airframe (Sensor preset).
+        RDF_RadarSettings cfg = RDF_RadarSensor.CreateStareSettings(128);
         cfg.m_Range = 3000.0;
         cfg.m_SectorHalfAngleDeg = 180.0;
         cfg.m_UpdateInterval = 0.2;
@@ -366,22 +387,20 @@ class RDF_RadarLockAutoTest
         hw.Validate();
         cfg.m_Hardware = hw;
         cfg.Validate();
-        RDF_RadarAutoRunner.SetDemoConfig(cfg);
+        ApplySensorConfig(cfg);
     }
 
     protected void ConfigureLock()
     {
-        RDF_RadarSensor sensor = RDF_RadarAutoRunner.GetSensor();
+        RDF_RadarSensor sensor = GetSensor();
         if (!sensor)
             return;
         // Tracks from the previous suite step would otherwise let this test
         // report TRACKING and a locked point before it has seen anything.
-        RDF_RadarProjectileTracker tracker = sensor.GetTracker();
-        if (tracker)
-            tracker.ClearTracks();
+        sensor.ResetSession();
 
+        // Lock layer is part of the public Sensor API (see docs/RADAR_API.md).
         RDF_RadarLockManager lockMgr = sensor.GetLockManager();
-        lockMgr.Unlock();
         lockMgr.SetAutoAcquire(true);
         lockMgr.SetTypeFilter(true, false, false);
         lockMgr.SetMaxLockRange(3000.0);
@@ -448,7 +467,11 @@ class RDF_RadarLockAutoTest
 
     protected void AccumulateLatestScan(float nowS)
     {
-        int serial = RDF_RadarAutoRunner.GetLastScanSerial();
+        RDF_RadarSensor sensor = GetSensor();
+        if (!sensor)
+            return;
+
+        int serial = sensor.GetScanSerial();
         if (serial == m_LastScanSerial)
         {
             if (nowS - m_LastProgressWallS > 5.0)
@@ -463,10 +486,6 @@ class RDF_RadarLockAutoTest
         m_ScanCount = m_ScanCount + 1;
         if (IsTargetInScattererTable())
             m_TargetDiscovered = true;
-
-        RDF_RadarSensor sensor = RDF_RadarAutoRunner.GetSensor();
-        if (!sensor)
-            return;
 
         int detected = sensor.CountDetectedPlots();
         int anyPlots = 0;
@@ -519,7 +538,7 @@ class RDF_RadarLockAutoTest
 
         IEntity lockedEntity;
         vector lockedPos;
-        if (lockMgr.GetLockedTarget(lockedEntity, lockedPos))
+        if (sensor.GetLockedTarget(lockedEntity, lockedPos))
             m_LockedTargetScans = m_LockedTargetScans + 1;
 
         if (state != m_LastLoggedState)

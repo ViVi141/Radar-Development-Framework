@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## 2026-07-27 — 测试用例改走 `RDF_RadarSensor` 公共 API
+
+按 [docs/RADAR_API.md](RADAR_API.md) 分层：测试 / 玩法代码应优先用 Sensor facade；
+AutoRunner 只保留 Tick 宿主与 PPI HUD。
+
+改动：
+
+- Sensor 新增门面：`ClearTracks` / `ClearDemCache` / `ResetSession` / `GetDemStatusShort`
+- DEM / Lock / Airborne / ShellFire / ManualDemo：
+  - 配置：`sensor.Configure(...)`，预设从 `CreateSearchSettings` / `CreateStareSettings` / `CreateWlrSettings` 起步
+  - 读数：`GetPlots` / `GetTracks` / `GetScanSerial` / `CountDetectedPlots` / `GetLockedTarget`
+  - 清场：`ResetSession()`（替代直接碰 Tracker / Scanner）
+- 不再经 `SetDemoConfig` / `GetLastTargets` / `GetTracker` 等演示壳层间接调用
+
+---
+
 ## 2026-07-27 — LockTest `plots=0`：90° 波束 + DEM 杂波把目标埋了
 
 根因由 DEM 测试自己的输出坐实：同一套 Shorad、同样 90° 方位波束

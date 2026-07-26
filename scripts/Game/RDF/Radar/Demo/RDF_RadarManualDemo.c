@@ -1,6 +1,8 @@
 // One-shot manual PPI demo for placing vehicles and verifying physical radar
 // detection (SNR / LOS / DEM clutter). Not geometry-only.
 //
+// Uses RDF_RadarSensor for configure / read; AutoRunner only hosts Tick + HUD.
+//
 // Usage (Script Debugger):
 //   RDF_RadarManualDemo.Start();
 //   RDF_RadarManualDemo.Probe();   // print why Det is 0/N
@@ -15,14 +17,17 @@ class RDF_RadarManualDemo
 
     static void Start()
     {
-        s_PrevConfig = RDF_RadarAutoRunner.GetDemoConfig();
+        RDF_RadarSensor sensor = RDF_RadarAutoRunner.GetSensor();
+        s_PrevConfig = null;
+        if (sensor)
+            s_PrevConfig = sensor.GetSettings();
         s_PrevDemo = RDF_RadarAutoRunner.IsDemoEnabled();
         s_PrevHud = RDF_RadarAutoRunner.IsHudEnabled();
         s_PrevForceLocal = RDF_RadarAutoRunner.IsForceLocalScan();
 
         RDF_RadarSettings cfg = BuildManualConfig();
         RDF_RadarAutoRunner.SetForceLocalScan(true);
-        RDF_RadarAutoRunner.SetDemoConfig(cfg);
+        ApplySensorConfig(cfg);
         RDF_RadarAutoRunner.SetDemoEnabled(true);
         RDF_RadarAutoRunner.SetHudEnabled(true);
         RDF_RadarHUD.Show();
@@ -36,7 +41,7 @@ class RDF_RadarManualDemo
     {
         s_Active = false;
         if (s_PrevConfig)
-            RDF_RadarAutoRunner.SetDemoConfig(s_PrevConfig);
+            ApplySensorConfig(s_PrevConfig);
         RDF_RadarAutoRunner.SetDemoEnabled(s_PrevDemo);
         RDF_RadarAutoRunner.SetHudEnabled(s_PrevHud);
         RDF_RadarAutoRunner.SetForceLocalScan(s_PrevForceLocal);
@@ -48,9 +53,18 @@ class RDF_RadarManualDemo
         return s_Active;
     }
 
+    protected static void ApplySensorConfig(RDF_RadarSettings cfg)
+    {
+        RDF_RadarSensor sensor = RDF_RadarAutoRunner.GetSensor();
+        if (!sensor || !cfg)
+            return;
+        sensor.SetForceLocalScan(true);
+        sensor.Configure(cfg);
+    }
+
     static RDF_RadarSettings BuildManualConfig()
     {
-        RDF_RadarSettings cfg = RDF_RadarDemoConfig.CreateSearch(128);
+        RDF_RadarSettings cfg = RDF_RadarSensor.CreateSearchSettings(128);
         cfg.m_Range = 5000.0;
         cfg.m_SectorHalfAngleDeg = 180.0;
         cfg.m_UpdateInterval = 0.2;
@@ -91,7 +105,14 @@ class RDF_RadarManualDemo
             return;
         }
 
-        RDF_RadarSettings cfg = RDF_RadarAutoRunner.GetDemoConfig();
+        RDF_RadarSensor sensor = RDF_RadarAutoRunner.GetSensor();
+        if (!sensor)
+        {
+            Print("[RDF ManualDemo] Probe FAIL: no RDF_RadarSensor", LogLevel.WARNING);
+            return;
+        }
+
+        RDF_RadarSettings cfg = sensor.GetSettings();
         bool mti = false;
         float azBw = -1.0;
         if (cfg && cfg.m_Hardware)
@@ -100,18 +121,11 @@ class RDF_RadarManualDemo
             azBw = cfg.m_Hardware.m_AzimuthBeamwidthDeg;
         }
 
-        array<ref RDF_RadarTarget> plots = RDF_RadarAutoRunner.GetLastTargets();
+        array<ref RDF_RadarTarget> plots = sensor.GetPlots();
         int plotN = 0;
-        int detN = 0;
+        int detN = sensor.CountDetectedPlots();
         if (plots)
-        {
             plotN = plots.Count();
-            foreach (RDF_RadarTarget t : plots)
-            {
-                if (t && t.m_Detected)
-                    detN = detN + 1;
-            }
-        }
 
         BaseWorld world = GetGame().GetWorld();
         int activeN = 0;
@@ -140,21 +154,22 @@ class RDF_RadarManualDemo
         }
 
         Print(string.Format(
-            "[RDF ManualDemo] Probe subject=%1 plots=%2 det=%3 forceLocal=%4 mti=%5 azBw=%6 registry=%7 physical=%8",
+            "[RDF ManualDemo] Probe subject=%1 plots=%2 det=%3 forceLocal=%4 mti=%5 azBw=%6 registry=%7 physical=%8 status=%9",
             subject.GetOrigin().ToString(),
             plotN.ToString(),
             detN.ToString(),
-            RDF_RadarAutoRunner.IsForceLocalScan().ToString(),
+            sensor.IsForceLocalScan().ToString(),
             mti.ToString(),
             azBw.ToString(),
             (cfg && cfg.m_UseScattererRegistry).ToString(),
-            (cfg && cfg.m_EnablePhysicalDetection).ToString()));
+            (cfg && cfg.m_EnablePhysicalDetection).ToString(),
+            sensor.GetStatusShort()));
         Print(string.Format(
             "[RDF ManualDemo] Probe world active=%1 vehicles=%2 vehicles<2km=%3 serial=%4",
             activeN.ToString(),
             vehicleN.ToString(),
             nearVehicleN.ToString(),
-            RDF_RadarAutoRunner.GetLastScanSerial().ToString()));
+            sensor.GetScanSerial().ToString()));
 
         if (plots)
         {
