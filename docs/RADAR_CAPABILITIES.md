@@ -36,7 +36,8 @@
 
 - PPI HUD：默认为匿名量测点；假目标白色；NLOS 青色
 - 量测驱动 α-β 跟踪 + `PredictAt` 外推
-- `RDF_RadarAutoTest`、`RDF_RadarBallisticsAutoTest`、`RDF_RadarAirborneScanTest` 自动化回归
+- `RDF_RadarAutoTest`、`RDF_RadarBallisticsAutoTest`、`RDF_RadarShellFireAutoTest`、`RDF_RadarAirborneScanTest` 自动化回归
+- **公共门面** `RDF_RadarSensor`（SEARCH / STARE / WLR → Plots / Tracks），见 [RADAR_API.md](RADAR_API.md)
 
 ### 观感上「像雷达」的部分
 

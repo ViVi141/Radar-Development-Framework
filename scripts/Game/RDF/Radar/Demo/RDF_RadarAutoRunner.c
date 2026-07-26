@@ -1,5 +1,5 @@
-// Optional auto-run manager for radar scans (demo). Same pattern as LiDAR:
-// singleton instance + CallLater recurring tick; no Bootstrap component required.
+// Optional auto-run manager for radar scans (demo). Owns an RDF_RadarSensor
+// facade; HUD / debug shapes stay here as presentation.
 class RDF_RadarAutoRunner
 {
     protected static ref RDF_RadarAutoRunner s_Instance;
@@ -7,29 +7,19 @@ class RDF_RadarAutoRunner
     protected static bool s_HudEnabled = true;
     protected static float s_MinTickInterval = 0.2;
     protected static RDF_RadarNetworkAPI s_NetworkAPI;
-    // When true, always run the local AutoRunner scanner (ignore network API).
-    // Used by scripted regression tests that install a custom RDF_RadarSettings.
+    // When true, always run the local sensor scanner (ignore network API).
     protected static bool s_ForceLocalScan;
 
-    protected ref RDF_RadarSettings m_Config;
-    protected ref RDF_RadarScanner m_Scanner;
-    protected ref RDF_RadarProjectileTracker m_Tracker;
+    protected ref RDF_RadarSensor m_Sensor;
     protected ref RDF_RadarVisualizer m_Visualizer;
     protected ref RDF_RadarVisualSettings m_VisualSettings;
-    protected ref array<ref RDF_RadarTarget> m_LastTargets;
-    protected float m_LastScanTime = -1000.0;
-    protected int m_ScanSerial = 0;
     protected bool m_Running = false;
 
     void RDF_RadarAutoRunner()
     {
-        m_Config = new RDF_RadarSettings();
-        m_Scanner = new RDF_RadarScanner(m_Config);
-        m_Tracker = new RDF_RadarProjectileTracker();
-        m_Tracker.ConfigureFromSettings(m_Config);
-        m_LastTargets = new array<ref RDF_RadarTarget>();
+        m_Sensor = new RDF_RadarSensor();
+        m_Sensor.ConfigureMode(ERDF_RadarSensorMode.RDF_RADAR_MODE_SEARCH, 64);
         m_VisualSettings = new RDF_RadarVisualSettings();
-        // Debug shapes are expensive; rays off by default. Enable via visual settings.
         m_VisualSettings.m_DrawRays = false;
         m_VisualSettings.m_DrawPoints = false;
         m_VisualSettings.m_DrawOriginAxis = false;
@@ -61,13 +51,14 @@ class RDF_RadarAutoRunner
             s_NetworkAPI = null;
     }
 
-    // Scripted tests that push a full local config should call this so Workbench
-    // characters with RplComponent do not divert scans into the network scanner.
     static void SetForceLocalScan(bool forceLocal)
     {
         s_ForceLocalScan = forceLocal;
         if (forceLocal)
             s_NetworkAPI = null;
+        RDF_RadarAutoRunner inst = GetInstance();
+        if (inst && inst.m_Sensor)
+            inst.m_Sensor.SetForceLocalScan(forceLocal);
     }
 
     static bool IsForceLocalScan()
@@ -97,6 +88,14 @@ class RDF_RadarAutoRunner
         if (!s_Instance)
             s_Instance = new RDF_RadarAutoRunner();
         return s_Instance;
+    }
+
+    static RDF_RadarSensor GetSensor()
+    {
+        RDF_RadarAutoRunner inst = GetInstance();
+        if (!inst.m_Sensor)
+            inst.m_Sensor = new RDF_RadarSensor();
+        return inst.m_Sensor;
     }
 
     static void StartAutoRun()
@@ -133,7 +132,6 @@ class RDF_RadarAutoRunner
         return GetInstance().m_Running;
     }
 
-    // Toggle the on-screen PPI HUD. When enabled the runner feeds every scan to it.
     static void SetHudEnabled(bool enabled)
     {
         s_HudEnabled = enabled;
@@ -150,18 +148,13 @@ class RDF_RadarAutoRunner
 
     static void StartWithConfig(RDF_RadarSettings config)
     {
-        RDF_RadarAutoRunner inst = GetInstance();
+        RDF_RadarSensor sensor = GetSensor();
         if (config)
-            inst.m_Config = config;
+            sensor.Configure(config);
         else
-            inst.m_Config = new RDF_RadarSettings();
-        inst.m_Scanner = new RDF_RadarScanner(inst.m_Config);
-        if (!inst.m_Tracker)
-            inst.m_Tracker = new RDF_RadarProjectileTracker();
-        inst.m_Tracker.ConfigureFromSettings(inst.m_Config);
-        if (!inst.m_LastTargets)
-            inst.m_LastTargets = new array<ref RDF_RadarTarget>();
-        inst.m_Running = true;
+            sensor.ConfigureMode(ERDF_RadarSensorMode.RDF_RADAR_MODE_SEARCH, 64);
+        sensor.SetForceLocalScan(s_ForceLocalScan);
+        GetInstance().m_Running = true;
         s_AutoEnabled = true;
     }
 
@@ -169,42 +162,42 @@ class RDF_RadarAutoRunner
     {
         if (!config)
             return;
-        RDF_RadarAutoRunner inst = GetInstance();
-        inst.m_Config = config;
-        inst.m_Scanner = new RDF_RadarScanner(config);
-        if (!inst.m_Tracker)
-            inst.m_Tracker = new RDF_RadarProjectileTracker();
-        inst.m_Tracker.ConfigureFromSettings(config);
+        RDF_RadarSensor sensor = GetSensor();
+        sensor.Configure(config);
+        sensor.SetForceLocalScan(s_ForceLocalScan);
+    }
+
+    static void SetMode(ERDF_RadarSensorMode mode)
+    {
+        GetSensor().SetMode(mode);
     }
 
     static RDF_RadarSettings GetDemoConfig()
     {
-        return GetInstance().m_Config;
+        return GetSensor().GetSettings();
     }
 
     static array<ref RDF_RadarTarget> GetLastTargets()
     {
-        RDF_RadarAutoRunner inst = GetInstance();
-        if (!inst.m_LastTargets)
-            inst.m_LastTargets = new array<ref RDF_RadarTarget>();
-        return inst.m_LastTargets;
+        return GetSensor().GetPlots();
     }
 
     static RDF_RadarProjectileTracker GetTracker()
     {
-        return GetInstance().m_Tracker;
+        return GetSensor().GetTracker();
     }
 
-    // Monotonic scan counter, increments once per executed scan.
     static int GetLastScanSerial()
     {
-        return GetInstance().m_ScanSerial;
+        return GetSensor().GetScanSerial();
     }
 
     void RadarTick()
     {
-        if (!m_Running || !m_Scanner || !m_Config)
+        if (!m_Running)
             return;
+        if (!m_Sensor)
+            m_Sensor = new RDF_RadarSensor();
 
         BaseWorld world = GetGame().GetWorld();
         if (!world)
@@ -214,7 +207,8 @@ class RDF_RadarAutoRunner
         if (!subject)
             return;
 
-        RDF_RadarNetworkAPI net = RDF_RadarNetworkAPI.Cast(subject.FindComponent(RDF_RadarNetworkAPI));
+        RDF_RadarNetworkAPI net = RDF_RadarNetworkAPI.Cast(
+            subject.FindComponent(RDF_RadarNetworkAPI));
         if (!s_ForceLocalScan)
         {
             if (net != s_NetworkAPI)
@@ -225,85 +219,63 @@ class RDF_RadarAutoRunner
             s_NetworkAPI = null;
         }
 
-        float now = world.GetWorldTime() * 0.001;
-        if (now - m_LastScanTime >= m_Config.m_UpdateInterval)
+        m_Sensor.SetForceLocalScan(s_ForceLocalScan);
+        if (!m_Sensor.Tick(subject, s_NetworkAPI))
         {
-            m_LastScanTime = now;
-            m_ScanSerial = m_ScanSerial + 1;
-            m_LastTargets.Clear();
-            if (!s_ForceLocalScan && IsNetworkAPIValid())
-            {
-                s_NetworkAPI.RequestScan();
-                if (s_NetworkAPI.HasSyncedTargets())
-                {
-                    array<ref RDF_RadarTarget> syncedTargets = s_NetworkAPI.GetLastTargets();
-                    if (syncedTargets)
-                    {
-                        for (int i = 0; i < syncedTargets.Count(); i++)
-                        {
-                            RDF_RadarTarget t = syncedTargets.Get(i);
-                            if (t)
-                                m_LastTargets.Insert(t);
-                        }
-                    }
-                }
-            }
-            else
-            {
-                m_Scanner.Scan(subject, m_LastTargets);
-            }
-            vector trackOrigin = m_Scanner.GetLastOrigin();
-            if (!s_ForceLocalScan && IsNetworkAPIValid())
-                trackOrigin = s_NetworkAPI.GetLastScanOrigin();
-            m_Tracker.UpdateWithOrigin(m_LastTargets, now, trackOrigin);
-            m_Tracker.RefreshWeaponLocates(trackOrigin[1]);
-
-            if (s_HudEnabled)
-            {
-                if (!RDF_RadarHUD.IsVisible())
-                    RDF_RadarHUD.Show();
-                string modeText = "PPI";
-                if (!s_ForceLocalScan && IsNetworkAPIValid())
-                    modeText = "PPI | NET";
-                else
-                    modeText = "PPI | " + m_Scanner.GetDemStatusShort();
-                RDF_RadarHUD.SetMode(modeText);
-                vector hudOrigin = m_Scanner.GetLastOrigin();
-                vector hudForward = m_Scanner.GetLastForward();
-                float hudRange = m_Scanner.GetLastRange();
-                if (!s_ForceLocalScan && IsNetworkAPIValid())
-                {
-                    hudOrigin = s_NetworkAPI.GetLastScanOrigin();
-                    hudForward = s_NetworkAPI.GetLastScanForward();
-                    float netRange = s_NetworkAPI.GetLastScanRange();
-                    if (netRange > 0.0)
-                        hudRange = netRange;
-                }
-                RDF_RadarHUD.FeedScan(
-                    m_LastTargets,
-                    hudOrigin,
-                    hudForward,
-                    hudRange,
-                    m_Tracker);
-            }
+            RenderPresentation(subject);
+            return;
         }
 
-        if (m_Visualizer && m_VisualSettings)
+        if (s_HudEnabled)
         {
-            bool drawScan = m_VisualSettings.m_DrawRays
-                || m_VisualSettings.m_DrawPoints
-                || m_VisualSettings.m_DrawOriginAxis;
-            bool drawWlr = m_VisualSettings.m_DrawWeaponLocate;
-            if (drawScan)
-                m_Visualizer.Render(subject, m_LastTargets);
-            else
+            if (!RDF_RadarHUD.IsVisible())
+                RDF_RadarHUD.Show();
+            RDF_RadarScanContext ctx = m_Sensor.GetScanContext();
+            string modeText = "PPI";
+            if (ctx && ctx.m_UsedNetwork)
+                modeText = "PPI | NET";
+            else if (m_Sensor.GetScanner())
+                modeText = "PPI | " + m_Sensor.GetScanner().GetDemStatusShort();
+            RDF_RadarHUD.SetMode(modeText);
+            float hudRange = m_Sensor.GetSettings().m_Range;
+            vector hudOrigin = "0 0 0";
+            vector hudForward = "1 0 0";
+            if (ctx)
             {
-                if (drawWlr)
-                    m_Visualizer.Reset();
+                hudOrigin = ctx.m_Origin;
+                hudForward = ctx.m_Forward;
+                if (ctx.m_RangeM > 0.0)
+                    hudRange = ctx.m_RangeM;
             }
-            if (drawWlr && m_Tracker)
-                m_Visualizer.RenderWeaponLocates(m_Tracker);
+            RDF_RadarHUD.FeedScan(
+                m_Sensor.GetPlots(),
+                hudOrigin,
+                hudForward,
+                hudRange,
+                m_Sensor.GetTracker());
         }
+
+        RenderPresentation(subject);
+    }
+
+    protected void RenderPresentation(IEntity subject)
+    {
+        if (!m_Visualizer || !m_VisualSettings || !m_Sensor)
+            return;
+
+        bool drawScan = m_VisualSettings.m_DrawRays
+            || m_VisualSettings.m_DrawPoints
+            || m_VisualSettings.m_DrawOriginAxis;
+        bool drawWlr = m_VisualSettings.m_DrawWeaponLocate;
+        if (drawScan)
+            m_Visualizer.Render(subject, m_Sensor.GetPlots());
+        else
+        {
+            if (drawWlr)
+                m_Visualizer.Reset();
+        }
+        if (drawWlr && m_Sensor.GetTracker())
+            m_Visualizer.RenderWeaponLocates(m_Sensor.GetTracker());
     }
 
     static RDF_RadarVisualizer GetVisualizer()

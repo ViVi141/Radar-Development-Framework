@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-07-26 — RDF_RadarSensor 公共门面 API
+
+- 新增 `RDF_RadarSensor`：`ConfigureMode(SEARCH/STARE/WLR)` → `Tick`/`ScanOnce` → `GetPlots`/`GetTracks`/`CountWlrFixes`
+- `RDF_RadarScanContext` + `RDF_RadarScanCompleteHandler` 回调
+- `RDF_RadarComponent` / `RDF_RadarAutoRunner` 改为持有 Sensor（HUD/可视化仍在 AutoRunner）
+- 文档：[RADAR_API.md](RADAR_API.md)
+
+---
+
 ## 2026-07-26 — WLR 结合 DEM 地形交点
 
 - Python：`ground_y_fn` / `dem_ground_y_fn`；交地点按 AGL 穿越局部地形，不再只用平地

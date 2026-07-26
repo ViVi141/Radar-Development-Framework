@@ -54,6 +54,21 @@ class RDF_RadarDemoConfig
         return s;
     }
 
+    static RDF_RadarSettings CreateSearch(int maxTargets = 64)
+    {
+        return RDF_RadarSensor.CreateSearchSettings(maxTargets);
+    }
+
+    static RDF_RadarSettings CreateStare(int maxTargets = 96)
+    {
+        return RDF_RadarSensor.CreateStareSettings(maxTargets);
+    }
+
+    static RDF_RadarSettings CreateWlr(int maxTargets = 128)
+    {
+        return RDF_RadarSensor.CreateWlrSettings(maxTargets);
+    }
+
     static RDF_RadarSettings CreateWithDeceptionJammer(int maxTargets = 64)
     {
         RDF_RadarSettings s = CreateDefault(maxTargets);

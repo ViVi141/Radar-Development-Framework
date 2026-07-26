@@ -84,7 +84,8 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarScanner.c              读散射体表 + Trace + 物理 + 测量合成
 │   ├── RDF_RadarScattererRegistry.c    全局散射体/辐射源表（增量维护）
 │   ├── RDF_RadarEmitterRegistry.c      辐射标记门面（转发到散射体表）
-│   └── RDF_RadarProjectileTracker.c    量测关联 / α-β / 弹道 PredictAt / WLR fix
+│   ├── RDF_RadarProjectileTracker.c    量测关联 / α-β / 弹道 PredictAt / WLR fix
+│   └── RDF_RadarSensor.c               公共门面 SEARCH/STARE/WLR → Plots/Tracks
 ├── Physics/
 │   ├── RDF_RadarRcsModel.c
 │   ├── RDF_RadarBallistics.c           重力+AirDrag+全局风；DEM/地表 WLR 交点

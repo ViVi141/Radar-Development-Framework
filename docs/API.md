@@ -645,23 +645,24 @@ Size: 215 × (header 25 px + PPI 210 px + 2 data rows × 21 px)
 
 ### 核心类型
 
+- **首选** `RDF_RadarSensor`：模式配置 + Tick + `GetPlots`/`GetTracks`。见 [RADAR_API.md](RADAR_API.md)。
 - `RDF_RadarTarget`：几何 + SNR / 检测标志；含 `m_LosBlocked`、`m_MultipathFactor`（NLOS）。
 - `ERDF_RadarTargetType`：载具 / 抛射物 / 辐射源（emitter）。
 - `RDF_RadarSettings`：另含 `m_EnableNlosMultipath`、`m_EnableDemClutter`、`m_Hardware`、`m_EwStack` 等。
-- `RDF_RadarScanner.Scan`：候选 → Trace（通视或 NLOS 弱检）→ RCS/功率×多径 → 多普勒/MTI/杂波 → SNR。
+- `RDF_RadarScanner.Scan`：候选 → Trace（通视或 NLOS 弱检）→ RCS/功率×多径 → 多普勒/MTI/杂波 → SNR（高级/内部）。
 
 ### 注册与跟踪
 
 - `RDF_RadarEmitterRegistry`：主动辐射注册 / 球内查询。
-- `RDF_RadarProjectileTracker`：轨迹与 α-β 滤波。
+- `RDF_RadarProjectileTracker`：轨迹与 α-β 滤波（通常经 Sensor 访问）。
 - `RDF_RadarEntityClassifier`：抛射物 / 载具粗分类。
 
 ### Demo / UI / 测试
 
-- `RDF_RadarAutoRunner`：`StartWithConfig`、`SetDemoEnabled`、`SetHudEnabled`、可视化与 HUD。
+- `RDF_RadarAutoRunner`：持有 Sensor；`StartWithConfig`、`SetMode`、`SetDemoEnabled`、`SetHudEnabled`。
 - `RDF_RadarHUD`：PPI（品红=emitter，绿=载具，橙=抛射物）。
-- `RDF_RadarComponent`：挂实体，扫描时标记发射。
-- `RDF_RadarDemoConfig.CreateDefault` / `CreateLongRange` / `CreateProjectileOnly`。
+- `RDF_RadarComponent`：挂实体，内部 `GetSensor()`。
+- `RDF_RadarDemoConfig.CreateDefault` / `CreateSearch` / `CreateStare` / `CreateWlr` / `CreateLongRange` / `CreateProjectileOnly`。
 - `RDF_RadarAutoTest.Start()`、`RDF_RadarBallisticsAutoTest.Start()`、`RDF_RadarShellFireAutoTest.Start()`、`RDF_RadarAirborneScanTest.StartKeepTarget()`。
 
 ### DEM 运行时（雷达杂波）

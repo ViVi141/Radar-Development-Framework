@@ -46,7 +46,17 @@ RDF_LidarAutoRunner.SetDemoEnabled(true);
 
 ## 快速上手 — 雷达
 
-进图后任选其一：
+模组作者首选门面（详见 [docs/RADAR_API.md](docs/RADAR_API.md)）：
+
+```c
+RDF_RadarSensor sensor = new RDF_RadarSensor();
+sensor.ConfigureMode(ERDF_RadarSensorMode.RDF_RADAR_MODE_SEARCH, 64);
+sensor.Tick(subject, null);
+array<ref RDF_RadarTarget> plots = sensor.GetPlots();
+array<ref RDF_RadarTrack> tracks = sensor.GetTracks();
+```
+
+进图演示任选其一：
 
 1. `SCR_BaseGameMode.SetRadarBootstrapEnabled(true);`
 2. 场景实体挂 `RDF_RadarBootstrap`
@@ -62,9 +72,12 @@ RDF_RadarAutoRunner.SetHudEnabled(true);   // PPI HUD（品红=辐射源 / 绿=�
 
 ```c
 RDF_RadarAutoTest.Start();                 // DEM 杂波回归
-RDF_RadarAirborneScanTest.StartKeepTarget(); // 空中目标 + PPI 全程开启
+RDF_RadarBallisticsAutoTest.Start();       // 弹道/WLR 数学
+RDF_RadarShellFireAutoTest.Start();        // 实弹放炮 + WLR
+RDF_RadarAirborneScanTest.StartKeepTarget(); // 空中目标 + PPI
 ```
 
+公共 API：[docs/RADAR_API.md](docs/RADAR_API.md)  
 游戏内框架说明：[docs/RADAR_GAME_FRAMEWORK.md](docs/RADAR_GAME_FRAMEWORK.md)  
 离线 Python 原型：[tools/dem/RADAR_FRAMEWORK.md](tools/dem/RADAR_FRAMEWORK.md)
 
@@ -89,7 +102,8 @@ python tools\dem\rdf_dem_pack.py --world GM_Eden
 
 | 文件 | 内容 |
 |------|------|
-| [docs/API.md](docs/API.md) | LiDAR API |
+| [docs/API.md](docs/API.md) | LiDAR / Radar API 摘要 |
+| [docs/RADAR_API.md](docs/RADAR_API.md) | 雷达公共 Sensor 门面 |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 架构与扩展 |
 | [docs/RADAR_GAME_FRAMEWORK.md](docs/RADAR_GAME_FRAMEWORK.md) | 游戏内雷达框架 |
 | [docs/RADAR_CAPABILITIES.md](docs/RADAR_CAPABILITIES.md) | 能力边界：已有 / 相对现实缺什么 / 还能做什么 |
