@@ -13,6 +13,8 @@ class RDF_RadarTarget
 {
     // Optional debug link to the scatterer; null under measurement synthesis.
     IEntity m_Entity;
+    // Stable scatterer-table id; survives measurement synthesis (debug / regression).
+    int m_ScattererId;
     vector m_Position;
     float m_Distance;
     vector m_Velocity;
@@ -22,6 +24,10 @@ class RDF_RadarTarget
     float m_ElevationDeg;
     float m_RadialSpeedMs;
     float m_RcsM2;
+    float m_MeanRcsM2;
+    int m_SwerlingModel;
+    float m_AglM = -1.0;
+    float m_DemTerrainY;
     float m_ReceivedPowerW;
     float m_ProcessedPowerW;
     float m_DopplerHz;

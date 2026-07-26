@@ -27,9 +27,13 @@
 - [x] 欺骗干扰 / 假目标（`RDF_RadarDeceptionJammerEffect`）
 - [x] 测量合成（距离门/波束量化 + SNR 噪声，切断实体真值）
 - [x] 量测驱动航迹关联与外推（`PredictAt`）
+- [x] 全局散射体表（`RDF_RadarScattererRegistry`，增量发现 + 缓存分类/RCS）
+- [x] 散射体拟真状态（姿态/AGL/DEM 缓存/射频摘要/Swerling）
+- [x] 按 prefab 的尺寸/RCS 特征表（`RDF_RadarSignatureLibrary`，烘焙 CSV + 首见测量复用）
+- [ ] 散射体表按空间网格索引（当前为线性遍历）
+- [ ] 完整搜索-截获-跟踪状态机
 - [ ] 刀刃绕射 / 更精细多径（当前为 image-method 简化）
 - [ ] 热噪声填充空距离单元 → 真实 CFAR 虚警率
-- [ ] Swerling 起伏 / 完整搜索-截获-跟踪状态机
 
 ## 三、DEM（已落地）
 

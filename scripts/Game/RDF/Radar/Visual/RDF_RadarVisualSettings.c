@@ -1,8 +1,8 @@
 // Visual settings for radar ray and point cloud drawing.
 class RDF_RadarVisualSettings
 {
-    bool m_DrawRays = true;
-    bool m_DrawPoints = true;
+    bool m_DrawRays = false;
+    bool m_DrawPoints = false;
     float m_PointSize = 0.15;
     float m_RayAlpha = 0.35;
     bool m_DrawOriginAxis = false;

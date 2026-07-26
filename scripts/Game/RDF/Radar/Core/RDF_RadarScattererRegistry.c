@@ -1,0 +1,690 @@
+// One tracked scatterer / emitter in the world. Identity / mean RCS / Swerling
+// class are set at insertion; pose, AGL, DEM cache, and kinematics refresh on tick.
+class RDF_RadarScatterer
+{
+    // Stable id for cross-scan / debug association after plots drop m_Entity.
+    int m_ScattererId;
+    IEntity m_Entity;
+    bool m_Alive = true;
+    vector m_Position;
+    vector m_Velocity;
+    vector m_PrevPosition;
+    float m_PrevSampleTime = -1.0;
+    // Horizontal yaw (deg) and body forward — aspect RCS input.
+    float m_YawDeg;
+    vector m_Forward = "1 0 0";
+    // Height above terrain (metres); negative means unknown.
+    float m_AglM = -1.0;
+    // Cached DEM sample at this scatterer (shared across radars).
+    bool m_DemSampleValid;
+    float m_DemTerrainY;
+    int m_DemSurfaceClass = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
+    float m_DemSampleTime = -1000.0;
+    float m_DemSampleX;
+    float m_DemSampleZ;
+    // Prefab key used to look up the shared signature (extents / RCS class).
+    string m_SignatureKey;
+    // Local AABB extents from the signature table (metres).
+    float m_SizeX;
+    float m_SizeY;
+    float m_SizeZ;
+    float m_CharacteristicLengthM;
+    ERDF_RadarTargetType m_Type;
+    // Mean optical-region RCS; instantaneous fluctuates via Swerling.
+    float m_MeanRcsM2;
+    float m_RcsM2;
+    int m_SwerlingModel = 1;
+    int m_RcsFluctSeed = 1;
+    bool m_Emitting;
+    float m_EmitStrength = 1.0;
+    // Emitter RF summary for ESM / passive detection hooks.
+    float m_EmitFrequencyHz;
+    float m_EmitPeakPowerW;
+    float m_EmitAntennaGainDbi;
+    float m_LastRefreshTime = -1.0;
+    ProjectileMoveComponent m_MoveComponent;
+}
+
+// Global table of radar-relevant entities. Entities are scatterers or emitters
+// only; all geometry / power / measurement work happens in the radar model,
+// which reads this table instead of searching the world every scan.
+//
+// Cost model: one discovery sweep every s_DiscoveryIntervalS, classification
+// amortized over frames, and a bounded kinematics refresh per frame.
+class RDF_RadarScattererRegistry
+{
+    protected static ref array<ref RDF_RadarScatterer> s_Entries;
+    protected static ref array<IEntity> s_Pending;
+    protected static ref array<IEntity> s_DiscoveryScratch;
+
+    protected static float s_LastTickTime = -1000.0;
+    protected static float s_LastDiscoveryTime = -1000.0;
+    protected static vector s_FocusOrigin = "0 0 0";
+    protected static float s_DiscoveryRadiusM = 4000.0;
+    protected static int s_RefreshCursor = 0;
+    protected static int s_NextScattererId = 1;
+    protected static RDF_DemRuntimeCache s_DemCache;
+    protected static float s_DemResampleIntervalS = 2.0;
+    protected static float s_DemResampleMoveM = 25.0;
+
+    // Tuning.
+    protected static float s_DiscoveryIntervalS = 3.0;
+    protected static int s_ClassifyPerTick = 24;
+    protected static int s_RefreshPerTick = 96;
+    protected static int s_MaxEntries = 512;
+    protected static bool s_UseSphereDiscovery = true;
+
+    // Stats.
+    protected static int s_StatDiscoveries;
+    protected static int s_StatClassified;
+    protected static int s_StatRejected;
+    protected static int s_StatPruned;
+
+    //------------------------------------------------------------------------------------------------
+    static void Configure(
+        float discoveryIntervalS,
+        int classifyPerTick,
+        int refreshPerTick,
+        int maxEntries,
+        bool useSphereDiscovery)
+    {
+        s_DiscoveryIntervalS = Math.Max(0.25, discoveryIntervalS);
+        s_ClassifyPerTick = Math.Clamp(classifyPerTick, 1, 256);
+        s_RefreshPerTick = Math.Clamp(refreshPerTick, 1, 1024);
+        s_MaxEntries = Math.Clamp(maxEntries, 8, 4096);
+        s_UseSphereDiscovery = useSphereDiscovery;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    static array<ref RDF_RadarScatterer> GetEntries()
+    {
+        EnsureContainers();
+        return s_Entries;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    static int GetEntryCount()
+    {
+        EnsureContainers();
+        return s_Entries.Count();
+    }
+
+    //------------------------------------------------------------------------------------------------
+    static string GetStatsLine()
+    {
+        EnsureContainers();
+        string line = "scat=" + s_Entries.Count().ToString();
+        line = line + " pend=" + s_Pending.Count().ToString();
+        line = line + " sweeps=" + s_StatDiscoveries.ToString();
+        line = line + " ok=" + s_StatClassified.ToString();
+        line = line + " rej=" + s_StatRejected.ToString();
+        line = line + " prune=" + s_StatPruned.ToString();
+        line = line + " " + RDF_RadarSignatureLibrary.GetStatsLine();
+        return line;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    static void SetDemCache(RDF_DemRuntimeCache demCache)
+    {
+        s_DemCache = demCache;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Explicit registration. Safe to call every frame; updates in place.
+    static RDF_RadarScatterer Register(
+        IEntity entity,
+        vector worldPos,
+        bool emitting,
+        float strength)
+    {
+        return RegisterWithRadio(entity, worldPos, emitting, strength, 0.0, 0.0, 0.0);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    static RDF_RadarScatterer RegisterWithRadio(
+        IEntity entity,
+        vector worldPos,
+        bool emitting,
+        float strength,
+        float frequencyHz,
+        float peakPowerW,
+        float antennaGainDbi)
+    {
+        if (!entity)
+            return null;
+
+        EnsureContainers();
+        RDF_RadarScatterer entry = Find(entity);
+        if (!entry)
+        {
+            entry = CreateEntry(entity);
+            if (!entry)
+                return null;
+            s_Entries.Insert(entry);
+        }
+
+        entry.m_Position = worldPos;
+        entry.m_Alive = true;
+        entry.m_Emitting = emitting;
+        entry.m_EmitStrength = strength;
+        if (frequencyHz > 0.0)
+            entry.m_EmitFrequencyHz = frequencyHz;
+        if (peakPowerW > 0.0)
+            entry.m_EmitPeakPowerW = peakPowerW;
+        if (antennaGainDbi != 0.0 || frequencyHz > 0.0)
+            entry.m_EmitAntennaGainDbi = antennaGainDbi;
+        return entry;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    static void Unregister(IEntity entity)
+    {
+        if (!entity)
+            return;
+        EnsureContainers();
+        for (int i = s_Entries.Count() - 1; i >= 0; i--)
+        {
+            RDF_RadarScatterer e = s_Entries.Get(i);
+            if (e && e.m_Entity == entity)
+            {
+                e.m_Alive = false;
+                e.m_Emitting = false;
+                e.m_Entity = null;
+                s_Entries.Remove(i);
+                return;
+            }
+        }
+    }
+
+    //------------------------------------------------------------------------------------------------
+    static void SetEmitting(IEntity entity, bool emitting)
+    {
+        RDF_RadarScatterer entry = Find(entity);
+        if (entry)
+            entry.m_Emitting = emitting;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    static RDF_RadarScatterer Find(IEntity entity)
+    {
+        if (!entity)
+            return null;
+        EnsureContainers();
+        for (int i = 0; i < s_Entries.Count(); i++)
+        {
+            RDF_RadarScatterer e = s_Entries.Get(i);
+            if (e && e.m_Alive && e.m_Entity == entity)
+                return e;
+        }
+        return null;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    static RDF_RadarScatterer FindById(int scattererId)
+    {
+        if (scattererId <= 0)
+            return null;
+        EnsureContainers();
+        for (int i = 0; i < s_Entries.Count(); i++)
+        {
+            RDF_RadarScatterer e = s_Entries.Get(i);
+            if (e && e.m_ScattererId == scattererId)
+                return e;
+        }
+        return null;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    static void Clear()
+    {
+        EnsureContainers();
+        s_Entries.Clear();
+        s_Pending.Clear();
+        s_RefreshCursor = 0;
+        s_LastDiscoveryTime = -1000.0;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Advance the table. Guarded so N radars in one frame cost the same as one.
+    static void Tick(
+        BaseWorld world,
+        float worldTimeS,
+        vector focusOrigin,
+        float radiusHintM)
+    {
+        if (!world)
+            return;
+
+        EnsureContainers();
+        if (worldTimeS == s_LastTickTime)
+            return;
+        s_LastTickTime = worldTimeS;
+
+        s_FocusOrigin = focusOrigin;
+        if (radiusHintM > 0.0)
+            s_DiscoveryRadiusM = Math.Clamp(radiusHintM, 100.0, 60000.0);
+
+        bool intervalElapsed = worldTimeS - s_LastDiscoveryTime >= s_DiscoveryIntervalS;
+        if (intervalElapsed && s_Pending.Count() == 0)
+        {
+            s_LastDiscoveryTime = worldTimeS;
+            RunDiscovery(world);
+        }
+
+        ProcessPending();
+        RefreshKinematics(world, worldTimeS);
+        RDF_RadarSignatureLibrary.MaybeAutoExport(worldTimeS);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Cheap sweep: collect raw candidates only. Classification is deferred.
+    protected static void RunDiscovery(BaseWorld world)
+    {
+        s_Pending.Clear();
+        s_DiscoveryScratch.Clear();
+
+        if (s_UseSphereDiscovery)
+        {
+            world.QueryEntitiesBySphere(
+                s_FocusOrigin,
+                s_DiscoveryRadiusM,
+                OnDiscoveredEntity,
+                null,
+                EQueryEntitiesFlags.DYNAMIC);
+        }
+        else
+        {
+            world.GetActiveEntities(s_DiscoveryScratch);
+            for (int i = 0; i < s_DiscoveryScratch.Count(); i++)
+            {
+                IEntity ent = s_DiscoveryScratch.Get(i);
+                if (ent)
+                    s_Pending.Insert(ent);
+            }
+        }
+
+        s_StatDiscoveries = s_StatDiscoveries + 1;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    protected static bool OnDiscoveredEntity(IEntity entity)
+    {
+        if (entity)
+            s_Pending.Insert(entity);
+        return true;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Classify a bounded slice per tick; prefab lookups are the expensive part.
+    protected static void ProcessPending()
+    {
+        int processed = 0;
+        while (s_Pending.Count() > 0 && processed < s_ClassifyPerTick)
+        {
+            int last = s_Pending.Count() - 1;
+            IEntity ent = s_Pending.Get(last);
+            s_Pending.Remove(last);
+            processed = processed + 1;
+
+            if (!ent)
+                continue;
+            if (Find(ent))
+                continue;
+            if (s_Entries.Count() >= s_MaxEntries)
+                continue;
+
+            if (!RDF_RadarEntityClassifier.IsRadarCandidate(ent))
+            {
+                s_StatRejected = s_StatRejected + 1;
+                continue;
+            }
+
+            RDF_RadarScatterer entry = CreateEntry(ent);
+            if (!entry)
+                continue;
+            s_Entries.Insert(entry);
+            s_StatClassified = s_StatClassified + 1;
+        }
+    }
+
+    //------------------------------------------------------------------------------------------------
+    protected static RDF_RadarScatterer CreateEntry(IEntity entity)
+    {
+        if (!entity)
+            return null;
+
+        RDF_RadarScatterer entry = new RDF_RadarScatterer();
+        entry.m_ScattererId = s_NextScattererId;
+        s_NextScattererId = s_NextScattererId + 1;
+        entry.m_Entity = entity;
+        entry.m_Alive = true;
+
+        GenericEntity generic = GenericEntity.Cast(entity);
+        if (generic)
+        {
+            entry.m_MoveComponent = ProjectileMoveComponent.Cast(
+                generic.FindComponent(ProjectileMoveComponent));
+        }
+
+        if (entry.m_MoveComponent || RDF_RadarEntityClassifier.IsProjectile(entity))
+            entry.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_PROJECTILE;
+        else
+            entry.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_VEHICLE;
+
+        ApplySignature(entity, entry);
+        entry.m_RcsFluctSeed = entry.m_ScattererId * 1103515245 + 12345;
+        if (entry.m_RcsFluctSeed < 0)
+            entry.m_RcsFluctSeed = -entry.m_RcsFluctSeed;
+        if (entry.m_RcsFluctSeed == 0)
+            entry.m_RcsFluctSeed = 1;
+
+        entry.m_Position = ReadPosition(entity);
+        entry.m_PrevPosition = entry.m_Position;
+        entry.m_PrevSampleTime = -1.0;
+        entry.m_Velocity = ReadVelocity(entity, entry.m_MoveComponent);
+        ReadPose(entity, entry);
+        entry.m_Emitting = false;
+        entry.m_EmitStrength = 1.0;
+        entry.m_EmitFrequencyHz = 0.0;
+        entry.m_EmitPeakPowerW = 0.0;
+        entry.m_EmitAntennaGainDbi = 0.0;
+        entry.m_AglM = -1.0;
+        entry.m_DemSampleValid = false;
+        entry.m_DemTerrainY = 0.0;
+        entry.m_DemSurfaceClass = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
+        entry.m_DemSampleTime = -1000.0;
+        return entry;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Extents / mean RCS / Swerling class come from the per-model signature table.
+    // Baked models are pure table reads; an unknown model is measured once and reused.
+    protected static void ApplySignature(IEntity entity, RDF_RadarScatterer entry)
+    {
+        if (!entity || !entry)
+            return;
+
+        RDF_RadarSignature sig = RDF_RadarSignatureLibrary.Resolve(entity, entry.m_Type);
+        if (!sig)
+        {
+            FillExtents(entity, entry);
+            entry.m_MeanRcsM2 = RDF_RadarRcsModel.GetEntityRcsM2(entity, entry.m_Type);
+            entry.m_RcsM2 = entry.m_MeanRcsM2;
+            entry.m_SwerlingModel = RDF_RadarRcsModel.GetDefaultSwerlingModel(entry.m_Type);
+            return;
+        }
+
+        entry.m_SignatureKey = sig.m_Key;
+        entry.m_SizeX = sig.m_SizeX;
+        entry.m_SizeY = sig.m_SizeY;
+        entry.m_SizeZ = sig.m_SizeZ;
+        entry.m_CharacteristicLengthM = sig.m_CharacteristicLengthM;
+        entry.m_MeanRcsM2 = sig.m_MeanRcsM2;
+        entry.m_RcsM2 = sig.m_MeanRcsM2;
+        entry.m_SwerlingModel = sig.m_SwerlingModel;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Direct bounds read; only used when no signature key can be derived.
+    protected static void FillExtents(IEntity entity, RDF_RadarScatterer entry)
+    {
+        if (!entity || !entry)
+            return;
+
+        vector mins;
+        vector maxs;
+        entity.GetBounds(mins, maxs);
+        vector size = maxs - mins;
+        entry.m_SizeX = Math.AbsFloat(size[0]);
+        entry.m_SizeY = Math.AbsFloat(size[1]);
+        entry.m_SizeZ = Math.AbsFloat(size[2]);
+
+        float longest = entry.m_SizeX;
+        if (entry.m_SizeY > longest)
+            longest = entry.m_SizeY;
+        if (entry.m_SizeZ > longest)
+            longest = entry.m_SizeZ;
+        if (longest < 0.1)
+            longest = 0.1;
+        entry.m_CharacteristicLengthM = longest;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    protected static void ReadPose(IEntity entity, RDF_RadarScatterer entry)
+    {
+        if (!entity || !entry)
+            return;
+
+        vector mat[4];
+        entity.GetWorldTransform(mat);
+        // Same convention as RDF_RadarVisualizer: mat[0] is forward.
+        vector forward = mat[0];
+        float flen = forward.Length();
+        if (flen < 0.001)
+            forward = "1 0 0";
+        else
+            forward = forward / flen;
+        entry.m_Forward = forward;
+        entry.m_YawDeg = Math.Atan2(forward[2], forward[0]) * 57.2957795;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Round-robin kinematics + pose + DEM/AGL refresh; prune dead / far entries.
+    protected static void RefreshKinematics(BaseWorld world, float worldTimeS)
+    {
+        int count = s_Entries.Count();
+        if (count <= 0)
+        {
+            s_RefreshCursor = 0;
+            return;
+        }
+
+        float pruneRadius = s_DiscoveryRadiusM * 2.0;
+        float pruneRadiusSq = pruneRadius * pruneRadius;
+
+        int budget = s_RefreshPerTick;
+        if (budget > count)
+            budget = count;
+
+        for (int step = 0; step < budget; step++)
+        {
+            if (s_RefreshCursor >= s_Entries.Count())
+                s_RefreshCursor = 0;
+
+            int index = s_RefreshCursor;
+            RDF_RadarScatterer entry = s_Entries.Get(index);
+            if (!entry || !entry.m_Alive || !entry.m_Entity)
+            {
+                if (entry)
+                    entry.m_Alive = false;
+                s_Entries.Remove(index);
+                s_StatPruned = s_StatPruned + 1;
+                continue;
+            }
+
+            vector newPos = ReadPosition(entry.m_Entity);
+            vector physicsVel = ReadVelocity(entry.m_Entity, entry.m_MoveComponent);
+            ApplyKinematicsSample(entry, newPos, physicsVel, worldTimeS);
+            ReadPose(entry.m_Entity, entry);
+            RefreshDemAndAgl(entry, world, worldTimeS);
+
+            vector delta = entry.m_Position - s_FocusOrigin;
+            if (delta.LengthSq() > pruneRadiusSq)
+            {
+                entry.m_Alive = false;
+                s_Entries.Remove(index);
+                s_StatPruned = s_StatPruned + 1;
+                continue;
+            }
+
+            s_RefreshCursor = s_RefreshCursor + 1;
+        }
+    }
+
+    //------------------------------------------------------------------------------------------------
+    protected static void RefreshDemAndAgl(
+        RDF_RadarScatterer entry,
+        BaseWorld world,
+        float worldTimeS)
+    {
+        if (!entry)
+            return;
+
+        bool needSample = false;
+        if (!entry.m_DemSampleValid)
+            needSample = true;
+        if (worldTimeS - entry.m_DemSampleTime >= s_DemResampleIntervalS)
+            needSample = true;
+
+        if (entry.m_DemSampleValid)
+        {
+            float dx = entry.m_Position[0] - entry.m_DemSampleX;
+            float dz = entry.m_Position[2] - entry.m_DemSampleZ;
+            if ((dx * dx + dz * dz) > (s_DemResampleMoveM * s_DemResampleMoveM))
+                needSample = true;
+        }
+
+        float terrainY = 0.0;
+        bool haveTerrain = false;
+
+        if (needSample && s_DemCache)
+        {
+            RDF_DemRuntimeCellSample demSample;
+            if (s_DemCache.TrySampleAt(entry.m_Position[0], entry.m_Position[2], demSample))
+            {
+                if (demSample && demSample.m_Valid)
+                {
+                    entry.m_DemSampleValid = true;
+                    entry.m_DemTerrainY = demSample.m_TerrainY;
+                    entry.m_DemSurfaceClass = demSample.m_SurfaceClass;
+                    entry.m_DemSampleTime = worldTimeS;
+                    entry.m_DemSampleX = entry.m_Position[0];
+                    entry.m_DemSampleZ = entry.m_Position[2];
+                    terrainY = demSample.m_TerrainY;
+                    haveTerrain = true;
+                }
+            }
+        }
+        else if (entry.m_DemSampleValid)
+        {
+            terrainY = entry.m_DemTerrainY;
+            haveTerrain = true;
+        }
+
+        if (!haveTerrain && world)
+        {
+            terrainY = world.GetSurfaceY(entry.m_Position[0], entry.m_Position[2]);
+            haveTerrain = true;
+            if (!entry.m_DemSampleValid)
+            {
+                entry.m_DemTerrainY = terrainY;
+                entry.m_DemSampleTime = worldTimeS;
+            }
+        }
+
+        if (haveTerrain)
+        {
+            entry.m_AglM = entry.m_Position[1] - terrainY;
+            if (entry.m_AglM < 0.0)
+                entry.m_AglM = 0.0;
+        }
+    }
+
+    // Instantaneous RCS for a look direction / scan (aspect × Swerling).
+    static float EvaluateInstantRcsM2(
+        RDF_RadarScatterer entry,
+        float losAzimuthDeg,
+        int scanNumber)
+    {
+        if (!entry)
+            return 0.0;
+
+        float aspectRcs = RDF_RadarRcsModel.AspectRcsFromExtents(
+            entry.m_MeanRcsM2,
+            entry.m_SizeX,
+            entry.m_SizeY,
+            entry.m_SizeZ,
+            entry.m_YawDeg,
+            losAzimuthDeg);
+        float fluct = RDF_RadarRcsModel.SampleSwerling(
+            aspectRcs,
+            entry.m_SwerlingModel,
+            entry.m_RcsFluctSeed,
+            scanNumber,
+            entry.m_ScattererId);
+        entry.m_RcsM2 = fluct;
+        return fluct;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Prefer physics velocity; if near-zero, fall back to position differencing.
+    protected static void ApplyKinematicsSample(
+        RDF_RadarScatterer entry,
+        vector newPos,
+        vector physicsVel,
+        float worldTimeS)
+    {
+        if (!entry)
+            return;
+
+        float dt = -1.0;
+        if (entry.m_LastRefreshTime >= 0.0)
+            dt = worldTimeS - entry.m_LastRefreshTime;
+
+        vector diffVel = "0 0 0";
+        if (dt > 0.001)
+        {
+            vector deltaPos = newPos - entry.m_Position;
+            diffVel = deltaPos * (1.0 / dt);
+        }
+
+        float physSpeedSq = physicsVel.LengthSq();
+        if (physSpeedSq > 0.01)
+            entry.m_Velocity = physicsVel;
+        else if (dt > 0.001)
+            entry.m_Velocity = diffVel;
+        else
+            entry.m_Velocity = physicsVel;
+
+        entry.m_PrevPosition = entry.m_Position;
+        entry.m_PrevSampleTime = entry.m_LastRefreshTime;
+        entry.m_Position = newPos;
+        entry.m_LastRefreshTime = worldTimeS;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    protected static vector ReadPosition(IEntity entity)
+    {
+        if (!entity)
+            return "0 0 0";
+        vector mat[4];
+        entity.GetWorldTransform(mat);
+        return mat[3];
+    }
+
+    //------------------------------------------------------------------------------------------------
+    protected static vector ReadVelocity(
+        IEntity entity,
+        ProjectileMoveComponent moveComponent)
+    {
+        if (!entity)
+            return "0 0 0";
+        if (moveComponent)
+            return moveComponent.GetVelocity();
+        Physics physics = entity.GetPhysics();
+        if (physics)
+            return physics.GetVelocity();
+        return "0 0 0";
+    }
+
+    //------------------------------------------------------------------------------------------------
+    protected static void EnsureContainers()
+    {
+        if (!s_Entries)
+            s_Entries = new array<ref RDF_RadarScatterer>();
+        if (!s_Pending)
+            s_Pending = new array<IEntity>();
+        if (!s_DiscoveryScratch)
+            s_DiscoveryScratch = new array<IEntity>();
+    }
+}

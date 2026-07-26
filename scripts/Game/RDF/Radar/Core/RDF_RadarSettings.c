@@ -11,9 +11,23 @@ class RDF_RadarSettings
     bool m_IncludeVehicles = true;
     bool m_IncludeProjectiles = true;
     bool m_IncludeRadarEmitters = true;
+    // Read candidates from the global scatterer table (incremental discovery)
+    // instead of searching the world on every scan.
+    bool m_UseScattererRegistry = true;
+    // Discovery sweep radius = m_Range * this factor.
+    float m_ScattererDiscoveryRangeScale = 1.25;
+    float m_ScattererDiscoveryIntervalS = 3.0;
+    int m_ScattererClassifyPerTick = 24;
+    int m_ScattererRefreshPerTick = 96;
+    int m_ScattererMaxEntries = 512;
+    // Legacy per-scan search path; only used when the registry is disabled.
     bool m_UseSphereQuery = true;
-    bool m_SphereQueryAlsoActive = true;
+    // Only call GetActiveEntities when sphere query is off, or when sphere
+    // returned nothing (fallback). Do NOT merge both every scan — that hitch.
+    bool m_SphereQueryAlsoActive = false;
     int m_MaxTargets = 64;
+    // Cap TraceMove calls per scan to bound hitch size in dense scenes.
+    int m_MaxLosTracesPerScan = 48;
     float m_MinDistance = 0.5;
     ref RDF_RadarHardware m_Hardware;
     bool m_EnablePhysicalDetection = true;
@@ -62,6 +76,12 @@ class RDF_RadarSettings
         m_UpdateInterval = Math.Max(0.05, m_UpdateInterval);
         m_SectorHalfAngleDeg = Math.Clamp(m_SectorHalfAngleDeg, 0.0, 180.0);
         m_MaxTargets = Math.Max(1, m_MaxTargets);
+        m_MaxLosTracesPerScan = Math.Clamp(m_MaxLosTracesPerScan, 4, 512);
+        m_ScattererDiscoveryRangeScale = Math.Clamp(m_ScattererDiscoveryRangeScale, 1.0, 4.0);
+        m_ScattererDiscoveryIntervalS = Math.Clamp(m_ScattererDiscoveryIntervalS, 0.25, 60.0);
+        m_ScattererClassifyPerTick = Math.Clamp(m_ScattererClassifyPerTick, 1, 256);
+        m_ScattererRefreshPerTick = Math.Clamp(m_ScattererRefreshPerTick, 1, 1024);
+        m_ScattererMaxEntries = Math.Clamp(m_ScattererMaxEntries, 8, 4096);
         m_MinDistance = Math.Max(0.0, m_MinDistance);
         m_DetectionSnrDb = Math.Clamp(m_DetectionSnrDb, -100.0, 200.0);
         m_DemCacheMaxTiles = Math.Clamp(m_DemCacheMaxTiles, 1, 256);

@@ -26,9 +26,10 @@ class RDF_RadarAutoRunner
         m_Tracker.ConfigureFromSettings(m_Config);
         m_LastTargets = new array<ref RDF_RadarTarget>();
         m_VisualSettings = new RDF_RadarVisualSettings();
-        m_VisualSettings.m_DrawRays = true;
-        m_VisualSettings.m_DrawPoints = true;
-        m_VisualSettings.m_DrawOriginAxis = true;
+        // Debug shapes are expensive; rays off by default. Enable via visual settings.
+        m_VisualSettings.m_DrawRays = false;
+        m_VisualSettings.m_DrawPoints = false;
+        m_VisualSettings.m_DrawOriginAxis = false;
         m_VisualSettings.m_OriginAxisLength = 2.0;
         m_Visualizer = new RDF_RadarVisualizer(m_VisualSettings);
         GetGame().GetCallqueue().CallLater(StaticTick, 200, true);

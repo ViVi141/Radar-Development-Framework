@@ -15,6 +15,12 @@ class RDF_RadarScanner
     protected vector m_LastForward = "1 0 0";
     protected float m_LastRange = 2000.0;
     protected ref array<IEntity> m_QueryCandidates;
+    protected ref array<IEntity> m_CandidateScratch;
+    protected ref array<ref array<float>> m_CfarPowerGrid;
+    protected ref array<bool> m_CfarRowHits;
+    protected int m_CfarCachedAzBins;
+    protected int m_CfarCachedRangeBins;
+    protected bool m_SettingsValidated;
 
     void RDF_RadarScanner(RDF_RadarSettings settings = null)
     {
@@ -25,6 +31,12 @@ class RDF_RadarScanner
 
         m_DemCache = new RDF_DemRuntimeCache();
         m_QueryCandidates = new array<IEntity>();
+        m_CandidateScratch = new array<IEntity>();
+        m_CfarPowerGrid = new array<ref array<float>>();
+        m_CfarRowHits = new array<bool>();
+        m_CfarCachedAzBins = 0;
+        m_CfarCachedRangeBins = 0;
+        m_SettingsValidated = false;
     }
 
     RDF_RadarSettings GetSettings()
@@ -63,13 +75,22 @@ class RDF_RadarScanner
         return m_DemCache.GetStatsLine();
     }
 
+    string GetScattererStatsLine()
+    {
+        return RDF_RadarScattererRegistry.GetStatsLine();
+    }
+
     void Scan(IEntity subject, array<ref RDF_RadarTarget> outTargets)
     {
         if (!subject || !m_Settings || !m_Settings.m_Enabled || !outTargets)
             return;
 
         outTargets.Clear();
-        m_Settings.Validate();
+        if (!m_SettingsValidated)
+        {
+            m_Settings.Validate();
+            m_SettingsValidated = true;
+        }
 
         BaseWorld world = subject.GetWorld();
         if (!world)
@@ -93,20 +114,209 @@ class RDF_RadarScanner
             if (m_Settings.m_EnableDemClutter)
                 m_DemCache.InitializeForCurrentWorld();
         }
+        if (m_Settings.m_UseScattererRegistry)
+        {
+            RDF_RadarScattererRegistry.Configure(
+                m_Settings.m_ScattererDiscoveryIntervalS,
+                m_Settings.m_ScattererClassifyPerTick,
+                m_Settings.m_ScattererRefreshPerTick,
+                m_Settings.m_ScattererMaxEntries,
+                true);
+            if (m_DemCache)
+                RDF_RadarScattererRegistry.SetDemCache(m_DemCache);
+            RDF_RadarScattererRegistry.Tick(
+                world,
+                worldTime,
+                origin,
+                range * m_Settings.m_ScattererDiscoveryRangeScale);
+        }
+
         float minDist = m_Settings.m_MinDistance;
+        float minDistSq = minDist * minDist;
         float halfAngleRad = m_Settings.m_SectorHalfAngleDeg * 0.01745329;
         if (m_Settings.m_EnableMechanicalScan && m_Settings.m_Hardware)
             halfAngleRad = m_Settings.m_Hardware.m_AzimuthBeamwidthDeg * 0.5 * 0.01745329;
         float cosHalfAngle = Math.Cos(halfAngleRad);
         int maxTargets = m_Settings.m_MaxTargets;
 
-        array<IEntity> candidates = new array<IEntity>();
-        CollectCandidateEntities(world, subject, origin, range, candidates);
-
         TraceParam param = new TraceParam();
         param.LayerMask = EPhysicsLayerPresets.Projectile;
         param.Exclude = subject;
         param.Flags = TraceFlags.WORLD | TraceFlags.ENTS;
+        int losBudget = m_Settings.m_MaxLosTracesPerScan;
+        int losUsed = 0;
+        float rangeSq = range * range;
+
+        if (m_Settings.m_UseScattererRegistry)
+        {
+            ScanFromRegistry(
+                subject,
+                world,
+                outTargets,
+                origin,
+                forward,
+                worldTime,
+                minDistSq,
+                rangeSq,
+                cosHalfAngle,
+                maxTargets,
+                param,
+                losBudget,
+                losUsed);
+        }
+        else
+        {
+            ScanFromWorldSearch(
+                subject,
+                world,
+                outTargets,
+                origin,
+                forward,
+                range,
+                worldTime,
+                minDist,
+                minDistSq,
+                rangeSq,
+                cosHalfAngle,
+                maxTargets,
+                param,
+                losBudget,
+                losUsed);
+        }
+
+        AddDeceptionFalsePlots(outTargets, origin, forward, worldTime, maxTargets);
+        ApplyCfarGate(outTargets, origin, forward, halfAngleRad);
+        SynthesizeAllMeasurements(outTargets, origin);
+        RemoveUndetectedTargets(outTargets);
+    }
+
+    // Table-driven pass: entities are pre-classified scatterers / emitters.
+    protected void ScanFromRegistry(
+        IEntity subject,
+        BaseWorld world,
+        notnull array<ref RDF_RadarTarget> outTargets,
+        vector origin,
+        vector forward,
+        float worldTime,
+        float minDistSq,
+        float rangeSq,
+        float cosHalfAngle,
+        int maxTargets,
+        TraceParam param,
+        int losBudget,
+        int losUsed)
+    {
+        array<ref RDF_RadarScatterer> entries = RDF_RadarScattererRegistry.GetEntries();
+        if (!entries)
+            return;
+
+        for (int i = 0; i < entries.Count() && outTargets.Count() < maxTargets; i++)
+        {
+            RDF_RadarScatterer entry = entries.Get(i);
+            if (!entry || !entry.m_Alive || !entry.m_Entity || entry.m_Entity == subject)
+                continue;
+
+            bool isEmitter = entry.m_Emitting && m_Settings.m_IncludeRadarEmitters;
+            bool isProjectile = entry.m_Type == ERDF_RadarTargetType.RDF_RADAR_TARGET_PROJECTILE;
+            if (!isEmitter)
+            {
+                if (isProjectile && !m_Settings.m_IncludeProjectiles)
+                    continue;
+                if (!isProjectile && !m_Settings.m_IncludeVehicles)
+                    continue;
+            }
+
+            vector pos = entry.m_Position;
+            vector toTarget = pos - origin;
+            float distSq = toTarget.LengthSq();
+            if (distSq < minDistSq || distSq > rangeSq)
+                continue;
+
+            float dist = Math.Sqrt(distSq);
+            vector toTargetNorm = toTarget;
+            if (dist > 0.001)
+                toTargetNorm = toTarget / dist;
+            float dot = forward[0] * toTargetNorm[0] + forward[1] * toTargetNorm[1] + forward[2] * toTargetNorm[2];
+            if (dot < cosHalfAngle)
+                continue;
+
+            if (losUsed >= losBudget)
+                break;
+
+            param.Start = origin;
+            param.End = pos;
+            param.TraceEnt = null;
+            float hitFraction = world.TraceMove(param, null);
+            losUsed = losUsed + 1;
+            bool losClear = IsLineOfSightClear(hitFraction, param.TraceEnt, entry.m_Entity);
+            if (!losClear && !m_Settings.m_EnableNlosMultipath)
+                continue;
+
+            float losAzimuthDeg = Math.Atan2(toTargetNorm[2], toTargetNorm[0]) * RAD_TO_DEG;
+            int scanNumber = 0;
+            if (m_Settings.m_Hardware)
+            {
+                float scanPeriod = m_Settings.m_Hardware.GetScanPeriodS();
+                if (scanPeriod < 1000000.0)
+                    scanNumber = Math.Floor(worldTime / scanPeriod);
+            }
+            float instantRcs = RDF_RadarScattererRegistry.EvaluateInstantRcsM2(
+                entry,
+                losAzimuthDeg,
+                scanNumber);
+
+            RDF_RadarTarget t = new RDF_RadarTarget();
+            t.m_Entity = entry.m_Entity;
+            t.m_ScattererId = entry.m_ScattererId;
+            t.m_Position = pos;
+            t.m_Distance = dist;
+            t.m_Velocity = entry.m_Velocity;
+            if (isEmitter)
+                t.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER;
+            else
+                t.m_Type = entry.m_Type;
+            t.m_RcsM2 = instantRcs;
+            t.m_MeanRcsM2 = entry.m_MeanRcsM2;
+            t.m_SwerlingModel = entry.m_SwerlingModel;
+            t.m_AglM = entry.m_AglM;
+            if (entry.m_DemSampleValid)
+            {
+                t.m_DemSampleValid = true;
+                t.m_DemSurfaceClass = entry.m_DemSurfaceClass;
+                t.m_DemTerrainY = entry.m_DemTerrainY;
+            }
+            t.m_Time = worldTime;
+            t.m_LosBlocked = !losClear;
+            t.m_LosHitFraction = hitFraction;
+            t.m_MultipathFactor = 1.0;
+            t.m_IsAnonymous = false;
+            t.m_IsFalsePlot = false;
+            ProcessPhysicalDetection(t, origin, forward, worldTime, world);
+            if (t.m_Detected || m_Settings.m_KeepUndetected)
+                outTargets.Insert(t);
+        }
+    }
+
+    // Legacy pass: search the world every scan (kept for comparison / fallback).
+    protected void ScanFromWorldSearch(
+        IEntity subject,
+        BaseWorld world,
+        notnull array<ref RDF_RadarTarget> outTargets,
+        vector origin,
+        vector forward,
+        float range,
+        float worldTime,
+        float minDist,
+        float minDistSq,
+        float rangeSq,
+        float cosHalfAngle,
+        int maxTargets,
+        TraceParam param,
+        int losBudget,
+        int losUsed)
+    {
+        array<IEntity> candidates = new array<IEntity>();
+        CollectCandidateEntities(world, subject, origin, range, candidates);
 
         for (int i = 0; i < candidates.Count() && outTargets.Count() < maxTargets; i++)
         {
@@ -116,10 +326,11 @@ class RDF_RadarScanner
 
             vector pos = GetEntityPosition(ent);
             vector toTarget = pos - origin;
-            float dist = toTarget.Length();
-            if (dist < minDist || dist > range)
+            float distSq = toTarget.LengthSq();
+            if (distSq < minDistSq || distSq > rangeSq)
                 continue;
 
+            float dist = Math.Sqrt(distSq);
             vector toTargetNorm = toTarget;
             if (dist > 0.001)
                 toTargetNorm = toTarget / dist;
@@ -136,10 +347,14 @@ class RDF_RadarScanner
             if (!isProjectile && !isVehicle)
                 continue;
 
+            if (losUsed >= losBudget)
+                break;
+
             param.Start = origin;
             param.End = pos;
             param.TraceEnt = null;
             float hitFraction = world.TraceMove(param, null);
+            losUsed = losUsed + 1;
             bool losClear = IsLineOfSightClear(hitFraction, param.TraceEnt, ent);
             if (!losClear && !m_Settings.m_EnableNlosMultipath)
                 continue;
@@ -164,51 +379,50 @@ class RDF_RadarScanner
                 outTargets.Insert(t);
         }
 
-        if (m_Settings.m_IncludeRadarEmitters && outTargets.Count() < maxTargets)
+        if (!m_Settings.m_IncludeRadarEmitters || outTargets.Count() >= maxTargets)
+            return;
+
+        array<ref RDF_RadarTarget> emitterTargets = new array<ref RDF_RadarTarget>();
+        RDF_RadarEmitterRegistry.GetEmittingInSphere(origin, range, emitterTargets, worldTime);
+        for (int j = 0; j < emitterTargets.Count() && outTargets.Count() < maxTargets; j++)
         {
-            array<ref RDF_RadarTarget> emitterTargets = new array<ref RDF_RadarTarget>();
-            RDF_RadarEmitterRegistry.GetEmittingInSphere(origin, range, emitterTargets, worldTime);
-            for (int j = 0; j < emitterTargets.Count() && outTargets.Count() < maxTargets; j++)
+            RDF_RadarTarget et = emitterTargets.Get(j);
+            if (et.m_Entity == subject)
+                continue;
+            vector toE = et.m_Position - origin;
+            float distE = toE.Length();
+            if (distE < minDist)
+                continue;
+            vector toENorm = toE / distE;
+            float dotE = forward[0] * toENorm[0] + forward[1] * toENorm[1] + forward[2] * toENorm[2];
+            if (dotE < cosHalfAngle)
+                continue;
+
+            if (losUsed >= losBudget)
+                break;
+
+            param.Start = origin;
+            param.End = et.m_Position;
+            param.TraceEnt = null;
+            float hitFractionE = world.TraceMove(param, null);
+            losUsed = losUsed + 1;
+            bool losClearE = IsLineOfSightClear(hitFractionE, param.TraceEnt, et.m_Entity);
+            if (!losClearE && !m_Settings.m_EnableNlosMultipath)
+                continue;
+
+            et.m_Velocity = GetEntityVelocity(et.m_Entity);
+            et.m_LosBlocked = !losClearE;
+            et.m_LosHitFraction = hitFractionE;
+            et.m_MultipathFactor = 1.0;
+            et.m_IsAnonymous = false;
+            et.m_IsFalsePlot = false;
+            ProcessPhysicalDetection(et, origin, forward, worldTime, world);
+            if (et.m_Detected || m_Settings.m_KeepUndetected)
             {
-                RDF_RadarTarget et = emitterTargets.Get(j);
-                if (et.m_Entity == subject)
-                    continue;
-                vector toE = et.m_Position - origin;
-                float distE = toE.Length();
-                if (distE < minDist)
-                    continue;
-                vector toENorm = toE / distE;
-                float dotE = forward[0] * toENorm[0] + forward[1] * toENorm[1] + forward[2] * toENorm[2];
-                if (dotE < cosHalfAngle)
-                    continue;
-
-                param.Start = origin;
-                param.End = et.m_Position;
-                param.TraceEnt = null;
-                float hitFractionE = world.TraceMove(param, null);
-                bool losClearE = IsLineOfSightClear(hitFractionE, param.TraceEnt, et.m_Entity);
-                if (!losClearE && !m_Settings.m_EnableNlosMultipath)
-                    continue;
-
-                et.m_Velocity = GetEntityVelocity(et.m_Entity);
-                et.m_LosBlocked = !losClearE;
-                et.m_LosHitFraction = hitFractionE;
-                et.m_MultipathFactor = 1.0;
-                et.m_IsAnonymous = false;
-                et.m_IsFalsePlot = false;
-                ProcessPhysicalDetection(et, origin, forward, worldTime, world);
-                if (et.m_Detected || m_Settings.m_KeepUndetected)
-                {
-                    if (!ContainsTargetEntity(outTargets, et.m_Entity))
-                        outTargets.Insert(et);
-                }
+                if (!ContainsTargetEntity(outTargets, et.m_Entity))
+                    outTargets.Insert(et);
             }
         }
-
-        AddDeceptionFalsePlots(outTargets, origin, forward, worldTime, maxTargets);
-        ApplyCfarGate(outTargets, origin, forward, halfAngleRad);
-        SynthesizeAllMeasurements(outTargets, origin);
-        RemoveUndetectedTargets(outTargets);
     }
 
     protected void SynthesizeAllMeasurements(
@@ -240,6 +454,7 @@ class RDF_RadarScanner
         if (!world)
             return;
 
+        bool haveSphere = false;
         if (m_Settings.m_UseSphereQuery)
         {
             if (!m_QueryCandidates)
@@ -256,20 +471,32 @@ class RDF_RadarScanner
                 IEntity e = m_QueryCandidates.Get(i);
                 if (!e || e == subject)
                     continue;
-                if (!ContainsEntity(outCandidates, e))
-                    outCandidates.Insert(e);
+                outCandidates.Insert(e);
             }
+            haveSphere = outCandidates.Count() > 0;
         }
 
-        if (!m_Settings.m_SphereQueryAlsoActive && outCandidates.Count() > 0)
+        // Active-entity dump is expensive; only use as fallback when sphere is
+        // disabled, or when sphere returned nothing and AlsoActive is set.
+        bool needActive = false;
+        if (!m_Settings.m_UseSphereQuery)
+            needActive = true;
+        else if (m_Settings.m_SphereQueryAlsoActive && !haveSphere)
+            needActive = true;
+
+        if (!needActive)
             return;
 
-        array<IEntity> active = new array<IEntity>();
-        world.GetActiveEntities(active);
-        for (int j = 0; j < active.Count(); j++)
+        if (!m_CandidateScratch)
+            m_CandidateScratch = new array<IEntity>();
+        m_CandidateScratch.Clear();
+        world.GetActiveEntities(m_CandidateScratch);
+        for (int j = 0; j < m_CandidateScratch.Count(); j++)
         {
-            IEntity ent = active.Get(j);
+            IEntity ent = m_CandidateScratch.Get(j);
             if (!ent || ent == subject)
+                continue;
+            if (!RDF_RadarEntityClassifier.IsRadarCandidate(ent))
                 continue;
             if (!ContainsEntity(outCandidates, ent))
                 outCandidates.Insert(ent);
@@ -280,10 +507,11 @@ class RDF_RadarScanner
     {
         if (!entity)
             return false;
+        if (!RDF_RadarEntityClassifier.IsRadarCandidate(entity))
+            return true;
         if (!m_QueryCandidates)
             m_QueryCandidates = new array<IEntity>();
-        if (!ContainsEntity(m_QueryCandidates, entity))
-            m_QueryCandidates.Insert(entity);
+        m_QueryCandidates.Insert(entity);
         return true;
     }
 
@@ -409,15 +637,7 @@ class RDF_RadarScanner
         if (rangeBinCount < 8)
             rangeBinCount = 8;
 
-        array<ref array<float>> powerGrid = new array<ref array<float>>();
-        for (int az = 0; az < azBinCount; az++)
-        {
-            array<float> row = new array<float>();
-            row.Reserve(rangeBinCount);
-            for (int rb = 0; rb < rangeBinCount; rb++)
-                row.Insert(0.0);
-            powerGrid.Insert(row);
-        }
+        EnsureCfarGrid(azBinCount, rangeBinCount);
 
         float rangeM = Math.Max(1.0, m_Settings.m_Range);
         float scanAzimuth = Math.Atan2(scanForward[2], scanForward[0]);
@@ -442,28 +662,31 @@ class RDF_RadarScanner
             float power = GetTargetCfarPowerW(t);
             if (power <= 0.0)
                 continue;
-            float prev = powerGrid.Get(azIndex).Get(rangeIndex);
-            powerGrid.Get(azIndex).Set(rangeIndex, prev + power);
+            float prev = m_CfarPowerGrid.Get(azIndex).Get(rangeIndex);
+            m_CfarPowerGrid.Get(azIndex).Set(rangeIndex, prev + power);
         }
 
         float noiseFloor = EstimateCfarNoiseFloorW(origin, scanForward);
-        array<ref array<bool>> hits = new array<ref array<bool>>();
-        for (int azRow = 0; azRow < azBinCount; azRow++)
+        int flatCount = azBinCount * rangeBinCount;
+        if (!m_CfarRowHits)
+            m_CfarRowHits = new array<bool>();
+        while (m_CfarRowHits.Count() < flatCount)
+            m_CfarRowHits.Insert(false);
+
+        for (int azHit = 0; azHit < azBinCount; azHit++)
         {
-            array<bool> rowHit = new array<bool>();
-            rowHit.Reserve(rangeBinCount);
-            for (int bin = 0; bin < rangeBinCount; bin++)
+            array<float> powerRow = m_CfarPowerGrid.Get(azHit);
+            for (int rb = 0; rb < rangeBinCount; rb++)
             {
-                bool detected = RDF_RadarCfarGate.CellDetected(
-                    powerGrid.Get(azRow),
-                    bin,
+                bool hit = RDF_RadarCfarGate.CellDetected(
+                    powerRow,
+                    rb,
                     noiseFloor,
                     m_Settings.m_CfarGuardCells,
                     m_Settings.m_CfarTrainingCells,
                     m_Settings.m_CfarPfa);
-                rowHit.Insert(detected);
+                m_CfarRowHits.Set(azHit * rangeBinCount + rb, hit);
             }
-            hits.Insert(rowHit);
         }
 
         for (int k = 0; k < outTargets.Count(); k++)
@@ -478,12 +701,37 @@ class RDF_RadarScanner
                 target.m_Detected = false;
                 continue;
             }
-            bool keep = hits.Get(azK).Get(rangeK);
-            target.m_Detected = keep;
+            target.m_Detected = m_CfarRowHits.Get(azK * rangeBinCount + rangeK);
         }
-        // Empty-cell anonymous emission removed: without a filled power map of
-        // thermal/clutter noise, those cells cannot produce honest false alarms.
-        // Real plots come from scatterers via measurement synthesis.
+    }
+
+    protected void EnsureCfarGrid(int azBins, int rangeBins)
+    {
+        if (!m_CfarPowerGrid)
+            m_CfarPowerGrid = new array<ref array<float>>();
+
+        if (m_CfarCachedAzBins != azBins || m_CfarCachedRangeBins != rangeBins)
+        {
+            m_CfarPowerGrid.Clear();
+            for (int az = 0; az < azBins; az++)
+            {
+                array<float> row = new array<float>();
+                row.Reserve(rangeBins);
+                for (int rb = 0; rb < rangeBins; rb++)
+                    row.Insert(0.0);
+                m_CfarPowerGrid.Insert(row);
+            }
+            m_CfarCachedAzBins = azBins;
+            m_CfarCachedRangeBins = rangeBins;
+            return;
+        }
+
+        for (int azClear = 0; azClear < azBins; azClear++)
+        {
+            array<float> clearRow = m_CfarPowerGrid.Get(azClear);
+            for (int rbClear = 0; rbClear < rangeBins; rbClear++)
+                clearRow.Set(rbClear, 0.0);
+        }
     }
 
     protected void GetCfarCellIndices(
@@ -696,8 +944,11 @@ class RDF_RadarScanner
 
         target.m_Detected = true;
         target.m_BeamName = "geometry";
-        target.m_DemSurfaceClass = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
-        target.m_DemSampleValid = false;
+        if (!target.m_DemSampleValid)
+        {
+            target.m_DemSurfaceClass = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
+            target.m_DemSampleValid = false;
+        }
         target.m_ClutterPowerW = 0.0;
         target.m_ClutterToNoiseDb = -300.0;
         target.m_CfarPowerW = 0.0;
@@ -740,7 +991,10 @@ class RDF_RadarScanner
                 target.m_Position,
                 distance,
                 target.m_LosHitFraction,
-                world);
+                world,
+                target.m_AglM,
+                target.m_DemSampleValid,
+                target.m_DemTerrainY);
             if (target.m_MultipathFactor <= 0.0)
             {
                 target.m_Detected = false;
@@ -766,9 +1020,13 @@ class RDF_RadarScanner
         if (target.m_LosBlocked)
             target.m_BeamName = beamName + "/nlos";
 
-        target.m_RcsM2 = RDF_RadarRcsModel.GetEntityRcsM2(
-            target.m_Entity,
-            target.m_Type);
+        // Registry entries carry a cached RCS; only estimate when absent.
+        if (target.m_RcsM2 <= 0.0)
+        {
+            target.m_RcsM2 = RDF_RadarRcsModel.GetEntityRcsM2(
+                target.m_Entity,
+                target.m_Type);
+        }
         target.m_ReceivedPowerW = RDF_RadarClutterModel.ReceivedPowerW(
             hardware.m_PeakPowerW,
             hardware.m_AntennaGainDbi,
@@ -860,22 +1118,34 @@ class RDF_RadarScanner
         if (m_Settings.m_DemClutterScale <= 0.0)
             return 0.0;
 
-        RDF_DemRuntimeCellSample demSample;
-        if (!m_DemCache.TrySampleAt(target.m_Position[0], target.m_Position[2], demSample))
-            return 0.0;
-        if (!demSample || !demSample.m_Valid)
-            return 0.0;
+        float terrainY = 0.0;
+        int surfaceClass = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
+        if (target.m_DemSampleValid)
+        {
+            terrainY = target.m_DemTerrainY;
+            surfaceClass = target.m_DemSurfaceClass;
+        }
+        else
+        {
+            RDF_DemRuntimeCellSample demSample;
+            if (!m_DemCache.TrySampleAt(target.m_Position[0], target.m_Position[2], demSample))
+                return 0.0;
+            if (!demSample || !demSample.m_Valid)
+                return 0.0;
+            terrainY = demSample.m_TerrainY;
+            surfaceClass = demSample.m_SurfaceClass;
+            target.m_DemSampleValid = true;
+            target.m_DemSurfaceClass = surfaceClass;
+            target.m_DemTerrainY = terrainY;
+        }
 
-        target.m_DemSampleValid = true;
-        target.m_DemSurfaceClass = demSample.m_SurfaceClass;
-
-        float radarAboveGround = origin[1] - demSample.m_TerrainY;
+        float radarAboveGround = origin[1] - terrainY;
         if (radarAboveGround < 0.0)
             radarAboveGround = -radarAboveGround;
         float grazingRad = Math.Atan2(radarAboveGround, Math.Max(1.0, distance));
 
         float sigma0 = RDF_RadarClutterModel.GetSigma0(
-            demSample.m_SurfaceClass,
+            surfaceClass,
             grazingRad);
         sigma0 = sigma0 * m_Settings.m_DemClutterScale;
         if (sigma0 <= 0.0)
@@ -922,7 +1192,10 @@ class RDF_RadarScanner
         vector targetPos,
         float distance,
         float hitFraction,
-        BaseWorld world)
+        BaseWorld world,
+        float targetAglM,
+        bool haveTargetTerrain,
+        float targetTerrainYCached)
     {
         if (!m_Settings || !m_Settings.m_EnableNlosMultipath)
             return 0.0;
@@ -930,10 +1203,14 @@ class RDF_RadarScanner
             return 0.0;
 
         float originTerrainY = SampleTerrainY(origin[0], origin[2], world);
-        float targetTerrainY = SampleTerrainY(targetPos[0], targetPos[2], world);
+        float targetTerrainY = targetTerrainYCached;
+        if (!haveTargetTerrain)
+            targetTerrainY = SampleTerrainY(targetPos[0], targetPos[2], world);
 
         float hr = origin[1] - originTerrainY;
         float ht = targetPos[1] - targetTerrainY;
+        if (targetAglM >= 0.0)
+            ht = targetAglM;
         if (hr < 0.5)
             hr = 0.5;
         if (ht < 0.5)

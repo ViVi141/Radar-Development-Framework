@@ -5,9 +5,10 @@ class RDF_RadarDemoConfig
     {
         RDF_RadarSettings s = new RDF_RadarSettings();
         s.m_Range = 2000.0;
-        s.m_UpdateInterval = 0.2;
+        s.m_UpdateInterval = 0.25;
         s.m_SectorHalfAngleDeg = 45.0;
         s.m_MaxTargets = maxTargets;
+        s.m_MaxLosTracesPerScan = 48;
         s.m_IncludeVehicles = true;
         s.m_IncludeProjectiles = true;
         s.m_IncludeRadarEmitters = true;
@@ -22,8 +23,9 @@ class RDF_RadarDemoConfig
     {
         RDF_RadarSettings s = CreateDefault(maxTargets);
         s.m_Range = 13000.0;
-        s.m_UpdateInterval = 0.1;
+        s.m_UpdateInterval = 1.0;
         s.m_SectorHalfAngleDeg = 180.0;
+        s.m_MaxLosTracesPerScan = 32;
         s.m_Hardware = RDF_RadarHardware.CreateP18Like();
         s.m_EnableMechanicalScan = true;
         s.m_DetectionSnrDb = 6.0;

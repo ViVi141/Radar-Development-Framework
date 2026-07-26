@@ -1,95 +1,79 @@
-// One registered radar emitter entry.
-class RDF_RadarEmitterEntry
-{
-    IEntity m_Owner;
-    vector m_Position;
-    bool m_Emitting;
-    float m_Strength;
-}
-
-// Global registry of radar emitters. When a radar is "active" it registers with emitting=true;
-// other radars can query emitting emitters in range and treat them as targets.
+// Emitter registry facade. The single source of truth is
+// RDF_RadarScattererRegistry; these calls flag table entries as emitting so
+// other radars can treat them as targets. Kept for API compatibility.
 class RDF_RadarEmitterRegistry
 {
-    protected static ref array<ref RDF_RadarEmitterEntry> s_Entries = new array<ref RDF_RadarEmitterEntry>();
-
     static void Register(IEntity owner, vector worldPos, bool emitting, float strength)
     {
-        if (!owner)
-            return;
+        RDF_RadarScattererRegistry.Register(owner, worldPos, emitting, strength);
+    }
 
-        RDF_RadarEmitterEntry existing = FindEntry(owner);
-        if (existing)
-        {
-            existing.m_Position = worldPos;
-            existing.m_Emitting = emitting;
-            existing.m_Strength = strength;
-            return;
-        }
-
-        RDF_RadarEmitterEntry entry = new RDF_RadarEmitterEntry();
-        entry.m_Owner = owner;
-        entry.m_Position = worldPos;
-        entry.m_Emitting = emitting;
-        entry.m_Strength = strength;
-        s_Entries.Insert(entry);
+    static void RegisterWithRadio(
+        IEntity owner,
+        vector worldPos,
+        bool emitting,
+        float strength,
+        float frequencyHz,
+        float peakPowerW,
+        float antennaGainDbi)
+    {
+        RDF_RadarScattererRegistry.RegisterWithRadio(
+            owner,
+            worldPos,
+            emitting,
+            strength,
+            frequencyHz,
+            peakPowerW,
+            antennaGainDbi);
     }
 
     static void Unregister(IEntity owner)
     {
-        for (int i = s_Entries.Count() - 1; i >= 0; i--)
-        {
-            if (s_Entries.Get(i).m_Owner == owner)
-            {
-                s_Entries.Remove(i);
-                return;
-            }
-        }
+        RDF_RadarScattererRegistry.SetEmitting(owner, false);
     }
 
     static void SetEmitting(IEntity owner, bool emitting)
     {
-        RDF_RadarEmitterEntry entry = FindEntry(owner);
-        if (entry)
-            entry.m_Emitting = emitting;
+        RDF_RadarScattererRegistry.SetEmitting(owner, emitting);
     }
 
-    static void GetEmittingInSphere(vector center, float radius, array<ref RDF_RadarTarget> outTargets, float worldTime)
+    static void GetEmittingInSphere(
+        vector center,
+        float radius,
+        array<ref RDF_RadarTarget> outTargets,
+        float worldTime)
     {
         if (!outTargets)
             return;
 
+        array<ref RDF_RadarScatterer> entries = RDF_RadarScattererRegistry.GetEntries();
+        if (!entries)
+            return;
+
         float r2 = radius * radius;
-        for (int i = 0; i < s_Entries.Count(); i++)
+        for (int i = 0; i < entries.Count(); i++)
         {
-            RDF_RadarEmitterEntry e = s_Entries.Get(i);
-            if (!e.m_Emitting || !e.m_Owner)
+            RDF_RadarScatterer e = entries.Get(i);
+            if (!e || !e.m_Emitting || !e.m_Entity)
                 continue;
 
             vector d = e.m_Position - center;
-            float distSq = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
-            if (distSq > r2)
+            if (d.LengthSq() > r2)
                 continue;
 
-            float dist = Math.Sqrt(distSq);
             RDF_RadarTarget t = new RDF_RadarTarget();
-            t.m_Entity = e.m_Owner;
+            t.m_Entity = e.m_Entity;
+            t.m_ScattererId = e.m_ScattererId;
             t.m_Position = e.m_Position;
-            t.m_Distance = dist;
-            t.m_Velocity = "0 0 0";
+            t.m_Distance = d.Length();
+            t.m_Velocity = e.m_Velocity;
             t.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER;
+            t.m_RcsM2 = e.m_RcsM2;
+            t.m_MeanRcsM2 = e.m_MeanRcsM2;
+            t.m_SwerlingModel = e.m_SwerlingModel;
+            t.m_AglM = e.m_AglM;
             t.m_Time = worldTime;
             outTargets.Insert(t);
         }
-    }
-
-    protected static RDF_RadarEmitterEntry FindEntry(IEntity owner)
-    {
-        for (int i = 0; i < s_Entries.Count(); i++)
-        {
-            if (s_Entries.Get(i).m_Owner == owner)
-                return s_Entries.Get(i);
-        }
-        return null;
     }
 }

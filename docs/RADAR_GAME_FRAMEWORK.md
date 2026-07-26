@@ -10,9 +10,10 @@ feasible): [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md).
 ## Runtime chain
 
 1. Resolve radar origin and current boresight.
-2. Enumerate vehicle/projectile candidates via `QueryEntitiesBySphere` with
-   active-entity fallback merge and dedup.
-3. Apply range and azimuth dwell.
+2. Advance the global scatterer table (`RDF_RadarScattererRegistry`): periodic
+   discovery sweep, amortized classification, round-robin kinematics refresh.
+   Type and RCS are cached per entry, so scans never re-classify entities.
+3. Read candidates from the table, then apply range and azimuth dwell.
 4. `TraceMove` line-of-sight check. Clear path → direct detection.
    Blocked path → optional NLOS ground-bounce (default on): image-method path
    length + `|Gamma|^2` + early-blocker depth scale; mark `m_LosBlocked`.
@@ -42,7 +43,11 @@ feasible): [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md).
 - `m_DemCacheMaxTiles`
 - `m_DemTileLoadsPerScan`
 - `m_DemClutterScale`
-- `m_UseSphereQuery`, `m_SphereQueryAlsoActive`
+- `m_UseScattererRegistry` (default true), `m_ScattererDiscoveryRangeScale`,
+  `m_ScattererDiscoveryIntervalS`, `m_ScattererClassifyPerTick`,
+  `m_ScattererRefreshPerTick`, `m_ScattererMaxEntries`
+- `m_UseSphereQuery`, `m_SphereQueryAlsoActive` (legacy search path only)
+- `m_MaxLosTracesPerScan` (default 48; bounds TraceMove hitch)
 - `m_EnableNlosMultipath` (default true)
 - `m_NlosReflectionAbs`, `m_NlosMinFactor`, `m_NlosMaxTargetAglM`
 - `m_AdditionalNoisePowerW`

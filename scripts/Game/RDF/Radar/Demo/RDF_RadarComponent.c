@@ -26,7 +26,16 @@ class RDF_RadarComponent : ScriptComponent
         m_NetworkAPI = RDF_RadarNetworkAPI.Cast(owner.FindComponent(RDF_RadarNetworkAPI));
 
         vector pos = GetOwnerOrigin(owner);
-        RDF_RadarEmitterRegistry.Register(owner, pos, m_Enabled, 1.0);
+        float freq = 0.0;
+        float peak = 0.0;
+        float gain = 0.0;
+        if (m_Settings && m_Settings.m_Hardware)
+        {
+            freq = m_Settings.m_Hardware.m_FrequencyHz;
+            peak = m_Settings.m_Hardware.m_PeakPowerW;
+            gain = m_Settings.m_Hardware.m_AntennaGainDbi;
+        }
+        RDF_RadarEmitterRegistry.RegisterWithRadio(owner, pos, m_Enabled, 1.0, freq, peak, gain);
     }
 
     override void EOnFrame(IEntity owner, float timeSlice)
@@ -45,7 +54,16 @@ class RDF_RadarComponent : ScriptComponent
 
         m_LastScanTime = now;
         vector pos = GetOwnerOrigin(owner);
-        RDF_RadarEmitterRegistry.Register(owner, pos, true, 1.0);
+        float freq = 0.0;
+        float peak = 0.0;
+        float gain = 0.0;
+        if (m_Settings.m_Hardware)
+        {
+            freq = m_Settings.m_Hardware.m_FrequencyHz;
+            peak = m_Settings.m_Hardware.m_PeakPowerW;
+            gain = m_Settings.m_Hardware.m_AntennaGainDbi;
+        }
+        RDF_RadarEmitterRegistry.RegisterWithRadio(owner, pos, true, 1.0, freq, peak, gain);
 
         m_LastTargets.Clear();
         vector trackOrigin = pos;
@@ -77,7 +95,7 @@ class RDF_RadarComponent : ScriptComponent
 
         // Keep the emitter active between dwells; otherwise another radar can
         // almost never observe the sub-frame "emitting" window.
-        RDF_RadarEmitterRegistry.Register(owner, pos, true, 1.0);
+        RDF_RadarEmitterRegistry.RegisterWithRadio(owner, pos, true, 1.0, freq, peak, gain);
     }
 
     void SetEnabled(bool enabled)

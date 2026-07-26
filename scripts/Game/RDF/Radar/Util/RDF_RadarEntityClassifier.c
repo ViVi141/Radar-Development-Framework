@@ -1,5 +1,5 @@
 // Classify entities for radar: projectile vs vehicle vs other.
-// Uses ProjectileMoveComponent for projectiles; BaseContainer.GetClassName() for fallback (prefab from EntityPrefabData.GetPrefab()).
+// Cheap type checks first; prefab string fallback only when needed.
 class RDF_RadarEntityClassifier
 {
     static bool IsProjectile(IEntity entity)
@@ -10,20 +10,13 @@ class RDF_RadarEntityClassifier
         GenericEntity generic = GenericEntity.Cast(entity);
         if (generic)
         {
-            ProjectileMoveComponent pm = ProjectileMoveComponent.Cast(generic.FindComponent(ProjectileMoveComponent));
+            ProjectileMoveComponent pm = ProjectileMoveComponent.Cast(
+                generic.FindComponent(ProjectileMoveComponent));
             if (pm)
                 return true;
         }
 
-        string className = GetPrefabClassName(entity);
-        if (className == "")
-            return false;
-        if (className.IndexOf("Projectile") >= 0)
-            return true;
-        if (className.IndexOf("Missile") >= 0)
-            return true;
-
-        return false;
+        return PrefabNameContainsProjectileToken(entity);
     }
 
     static bool IsVehicleOrCharacter(IEntity entity)
@@ -34,6 +27,49 @@ class RDF_RadarEntityClassifier
         if (ChimeraCharacter.Cast(entity))
             return true;
 
+        if (Vehicle.Cast(entity))
+            return true;
+
+        return PrefabNameContainsVehicleToken(entity);
+    }
+
+    // Fast reject used by sphere-query callback before inserting candidates.
+    static bool IsRadarCandidate(IEntity entity)
+    {
+        if (!entity)
+            return false;
+        if (ChimeraCharacter.Cast(entity))
+            return true;
+        if (Vehicle.Cast(entity))
+            return true;
+
+        GenericEntity generic = GenericEntity.Cast(entity);
+        if (generic)
+        {
+            ProjectileMoveComponent pm = ProjectileMoveComponent.Cast(
+                generic.FindComponent(ProjectileMoveComponent));
+            if (pm)
+                return true;
+        }
+
+        return PrefabNameContainsVehicleToken(entity)
+            || PrefabNameContainsProjectileToken(entity);
+    }
+
+    protected static bool PrefabNameContainsProjectileToken(IEntity entity)
+    {
+        string className = GetPrefabClassName(entity);
+        if (className == "")
+            return false;
+        if (className.IndexOf("Projectile") >= 0)
+            return true;
+        if (className.IndexOf("Missile") >= 0)
+            return true;
+        return false;
+    }
+
+    protected static bool PrefabNameContainsVehicleToken(IEntity entity)
+    {
         string className = GetPrefabClassName(entity);
         if (className == "")
             return false;
@@ -53,7 +89,6 @@ class RDF_RadarEntityClassifier
             return true;
         if (className.IndexOf("Character") >= 0)
             return true;
-
         return false;
     }
 

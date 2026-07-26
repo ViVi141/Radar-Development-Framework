@@ -64,11 +64,16 @@ class RDF_DemRuntimeCache
                 Print("[RDF DEM Runtime] init failed: world key empty", LogLevel.WARNING);
             m_LastInitFailed = true;
             m_Ready = false;
+            m_WorldKey = string.Empty;
             return false;
         }
 
         if (m_Ready && m_WorldKey == worldKey && m_Manifest)
             return true;
+
+        // Avoid reopening missing/unbaked DEM files every scan (disk hitch).
+        if (m_LastInitFailed && m_WorldKey == worldKey)
+            return false;
 
         if (m_WorldKey != worldKey)
         {
@@ -76,6 +81,9 @@ class RDF_DemRuntimeCache
             m_TileTouchOrder.Clear();
             m_TouchCounter = 0;
             m_WorldKey = worldKey;
+            m_LastInitFailed = false;
+            m_Ready = false;
+            m_Manifest = null;
         }
 
         RDF_DemRuntimeManifest manifest;

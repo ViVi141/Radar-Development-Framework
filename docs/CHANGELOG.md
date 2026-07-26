@@ -1,5 +1,68 @@
 # CHANGELOG
 
+## 2026-07-26 — 按 prefab 的特征表（尺寸 / RCS 查表化）
+
+- 新增 `RDF_RadarSignatureLibrary`：`map<prefab ResourceName, RDF_RadarSignature>`，存 `m_SizeX/Y/Z`、`m_CharacteristicLengthM`、`m_MeanRcsM2`、`m_SwerlingModel`、`m_TypeHint`
+- 入表流程：先查烘焙表 `$profile:RDF/Signatures/rdf_radar_signatures.csv`（`RDF_RADAR_SIG_V1`，`;` 分隔）；未命中（如第三方模组模型）才 `GetBounds` 测一次并缓存，同模型后续实例纯查表
+- 自动回写：新测到的模型每 30s 合并写回同一 CSV，跑一遍即得烘焙表；也可显式 `RDF_RadarSignatureLibrary.ExportTable()`
+- `RDF_RadarScatterer.m_SignatureKey` 记录命中键；无 prefab 键时退回直接 `GetBounds`
+- 诊断：散射体统计行追加 `sig=/baked=/measured=/hit=/nokey=`
+
+---
+
+## 2026-07-26 — 散射体拟真状态（姿态 / AGL / DEM / 射频 / Swerling）
+
+- 姿态：`m_YawDeg`、`m_Forward`；RCS 按方位角做鼻锥/侧向投影
+- AGL：`m_AglM`（DEM 或 `GetSurfaceY`）
+- DEM 缓存：表面类 + 地形高 + 采样点（2s / 25m 再采样），扫描与 NLOS/杂波复用
+- 辐射射频：`m_EmitFrequencyHz` / `m_EmitPeakPowerW` / `m_EmitAntennaGainDbi`（`RegisterWithRadio`）
+- Swerling 0–4：`m_MeanRcsM2` + 扫描相关起伏（对齐 Python `SwerlingModel`）
+- plot 透传：`m_MeanRcsM2`、`m_SwerlingModel`、`m_AglM`、`m_DemTerrainY`
+
+---
+
+## 2026-07-26 — 散射体表状态增强
+
+- 稳定 `m_ScattererId`（量测切断实体后仍可对账）
+- `m_Alive` 失效标记；注销时先标死再移除
+- AABB 尺寸 `m_SizeX/Y/Z` + `m_CharacteristicLengthM`
+- 上一帧位置差分速度兜底（物理速度≈0 时）
+- plot 携带 `RDF_RadarTarget.m_ScattererId`；`FindById`
+
+---
+
+## 2026-07-26 — 全局散射体表（实体入表 → 模型计算 → 输出数据）
+
+### 架构
+
+- 新增 `RDF_RadarScattererRegistry`：全局维护活跃散射体/辐射源表。实体只提供位置、速度、RCS、是否辐射。
+- **一次分类，长期复用**：类型与 RCS 在入表时算好；扫描不再每帧做 prefab 字符串判定。
+- **增量维护**：发现扫掠默认 3s 一次（上批未分类完不开新扫掠）；分类每 tick 限量；运动学轮转刷新；实体失效或超距自动剔除。
+- 扫描器改为**读表**（`m_UseScattererRegistry=true`），原每帧世界搜索保留为回退路径。
+- `RDF_RadarEmitterRegistry` 改为同表门面，辐射源与散射体统一在一张表里。
+
+### 配置
+
+- `m_UseScattererRegistry`、`m_ScattererDiscoveryRangeScale`、`m_ScattererDiscoveryIntervalS`
+- `m_ScattererClassifyPerTick`、`m_ScattererRefreshPerTick`、`m_ScattererMaxEntries`
+- 诊断：`RDF_RadarScanner.GetScattererStatsLine()`
+
+---
+
+## 2026-07-26 — 扫描性能：消除周期性卡顿
+
+### 根因与修复
+
+- **双路候选**：默认关闭每帧 `GetActiveEntities` 合并（`m_SphereQueryAlsoActive=false`）；仅在球查询为空时兜底。
+- **球查询预过滤**：回调内用 `IsRadarCandidate` 丢掉无关动态实体。
+- **Trace 预算**：`m_MaxLosTracesPerScan`（默认 48）限制单次扫描 `TraceMove` 次数。
+- **DEM 失败重试**：manifest 缺失后同世界不再每扫描读盘。
+- **CFAR 缓冲复用**：不再每扫描 new 整张栅格。
+- **调试可视化默认关**：AutoRunner / VisualSettings 默认不画射线与球；PPI HUD 不受影响。
+- Demo：`CreateDefault` 间隔 0.25s；`CreateP18Like` 间隔 1.0s（原 0.1s + 13km 半球过重）。
+
+---
+
 ## 2026-07-26 — 测量驱动雷达（拟真量测 + 航迹关联）
 
 ### 架构转向
