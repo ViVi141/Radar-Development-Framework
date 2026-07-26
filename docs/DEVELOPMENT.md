@@ -84,9 +84,10 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarScanner.c              读散射体表 + Trace + 物理 + 测量合成
 │   ├── RDF_RadarScattererRegistry.c    全局散射体/辐射源表（增量维护）
 │   ├── RDF_RadarEmitterRegistry.c      辐射标记门面（转发到散射体表）
-│   └── RDF_RadarProjectileTracker.c    量测关联 / α-β / PredictAt
+│   └── RDF_RadarProjectileTracker.c    量测关联 / α-β / 弹道 PredictAt / WLR fix
 ├── Physics/
 │   ├── RDF_RadarRcsModel.c
+│   ├── RDF_RadarBallistics.c           重力+AirDrag+全局风；发射/落点反推
 │   ├── RDF_RadarSignatureLibrary.c     按 prefab 的尺寸/RCS 特征表（离线烘焙 + 运行时查表）
 │   ├── RDF_RadarClutterModel.c         DEM σ⁰ → 杂波功率
 │   ├── RDF_RadarMeasurement.c          距离门/波束量化 + SNR 噪声

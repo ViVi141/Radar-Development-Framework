@@ -232,6 +232,7 @@ class RDF_RadarAutoRunner
             if (IsNetworkAPIValid())
                 trackOrigin = s_NetworkAPI.GetLastScanOrigin();
             m_Tracker.UpdateWithOrigin(m_LastTargets, now, trackOrigin);
+            m_Tracker.RefreshWeaponLocates(trackOrigin[1]);
 
             if (s_HudEnabled)
             {
@@ -263,8 +264,22 @@ class RDF_RadarAutoRunner
             }
         }
 
-        if (m_Visualizer && m_VisualSettings && (m_VisualSettings.m_DrawRays || m_VisualSettings.m_DrawPoints || m_VisualSettings.m_DrawOriginAxis))
-            m_Visualizer.Render(subject, m_LastTargets);
+        if (m_Visualizer && m_VisualSettings)
+        {
+            bool drawScan = m_VisualSettings.m_DrawRays
+                || m_VisualSettings.m_DrawPoints
+                || m_VisualSettings.m_DrawOriginAxis;
+            bool drawWlr = m_VisualSettings.m_DrawWeaponLocate;
+            if (drawScan)
+                m_Visualizer.Render(subject, m_LastTargets);
+            else
+            {
+                if (drawWlr)
+                    m_Visualizer.Reset();
+            }
+            if (drawWlr && m_Tracker)
+                m_Visualizer.RenderWeaponLocates(m_Tracker);
+        }
     }
 
     static RDF_RadarVisualizer GetVisualizer()

@@ -106,6 +106,51 @@ class RDF_RadarVisualizer
         }
     }
 
+    // Draw cached weapon-locating launch / impact points for projectile tracks.
+    void RenderWeaponLocates(RDF_RadarProjectileTracker tracker)
+    {
+        if (!tracker || !m_Settings)
+            return;
+        if (!m_Settings.m_DrawWeaponLocate)
+            return;
+        if (!m_DebugShapes)
+            m_DebugShapes = new array<ref Shape>();
+
+        array<ref RDF_RadarTrack> tracks = tracker.GetAllTracks();
+        if (!tracks)
+            return;
+
+        float markerSize = m_Settings.m_WeaponLocateMarkerSize;
+        if (markerSize < 0.2)
+            markerSize = 0.2;
+        int launchColor = ARGBF(0.95, 1.0, 0.55, 0.1);
+        int impactColor = ARGBF(0.95, 0.15, 0.9, 1.0);
+        int linkColor = ARGBF(0.55, 0.85, 0.85, 0.85);
+        int shapeFlags = ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.TRANSP | ShapeFlags.ONCE;
+
+        for (int i = 0; i < tracks.Count(); i++)
+        {
+            RDF_RadarTrack track = tracks.Get(i);
+            if (!track || !track.m_Confirmed)
+                continue;
+            RDF_RadarWlrFix fix = track.m_LastWlrFix;
+            if (!fix)
+                continue;
+
+            if (fix.m_LaunchValid && fix.m_ImpactValid)
+            {
+                vector link[2];
+                link[0] = fix.m_LaunchPos;
+                link[1] = fix.m_ImpactPos;
+                m_DebugShapes.Insert(Shape.CreateLines(linkColor, shapeFlags, link, 2));
+            }
+            if (fix.m_LaunchValid)
+                m_DebugShapes.Insert(Shape.CreateSphere(launchColor, shapeFlags, fix.m_LaunchPos, markerSize));
+            if (fix.m_ImpactValid)
+                m_DebugShapes.Insert(Shape.CreateSphere(impactColor, shapeFlags, fix.m_ImpactPos, markerSize));
+        }
+    }
+
     protected vector GetSubjectOrigin(IEntity subject)
     {
         if (!subject)

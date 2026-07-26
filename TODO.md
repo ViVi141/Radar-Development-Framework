@@ -27,6 +27,7 @@
 - [x] 欺骗干扰 / 假目标（`RDF_RadarDeceptionJammerEffect`）
 - [x] 测量合成（距离门/波束量化 + SNR 噪声，切断实体真值）
 - [x] 量测驱动航迹关联与外推（`PredictAt`）
+- [x] 炮弹弹道外推（重力 + AirDrag + 全局风）与 WLR 发射/落点反推（`RDF_RadarBallistics`）
 - [x] 全局散射体表（`RDF_RadarScattererRegistry`，增量发现 + 缓存分类/RCS）
 - [x] 散射体拟真状态（姿态/AGL/DEM 缓存/射频摘要/Swerling）
 - [x] 按 prefab 的尺寸/RCS 特征表（`RDF_RadarSignatureLibrary`，Workbench 扫可放置 prefab 离线烘焙 + 运行时查表）

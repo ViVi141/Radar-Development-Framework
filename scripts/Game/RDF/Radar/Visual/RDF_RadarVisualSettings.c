@@ -7,4 +7,7 @@ class RDF_RadarVisualSettings
     float m_RayAlpha = 0.35;
     bool m_DrawOriginAxis = false;
     float m_OriginAxisLength = 1.0;
+    // Draw ballistic launch (orange) / impact (cyan) markers for WLR fixes.
+    bool m_DrawWeaponLocate = true;
+    float m_WeaponLocateMarkerSize = 1.5;
 }

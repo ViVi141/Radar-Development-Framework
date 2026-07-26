@@ -1,5 +1,7 @@
 // Holds trajectory and alpha-beta state for one measured radar track.
 // Association is plot-driven (range / azimuth gates), not entity identity.
+// Projectile tracks extrapolate with Reforger-style AirDrag + global wind and
+// can solve weapon-locating launch / impact points.
 class RDF_RadarTrack
 {
     int m_TrackId;
@@ -20,6 +22,13 @@ class RDF_RadarTrack
     int m_LastScanNumber = -1;
     bool m_Confirmed;
     float m_LastUpdateTime = -1.0;
+    ERDF_RadarTargetType m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_ANONYMOUS;
+    // Ballistic prior (ShellMoveComponent.AirDrag). <=0 disables drag path.
+    float m_AirDrag = RDF_RadarBallistics.AIR_DRAG_SHELL_82MM_HE;
+    bool m_UseBallisticPrediction = true;
+    float m_GroundYM = 0.0;
+    bool m_GroundYValid;
+    ref RDF_RadarWlrFix m_LastWlrFix;
 
     void Push(vector pos, vector vel, float time)
     {
@@ -41,7 +50,15 @@ class RDF_RadarTrack
         return m_Times.Get(m_Times.Count() - 1);
     }
 
+    bool IsProjectileTrack()
+    {
+        if (m_Type == ERDF_RadarTargetType.RDF_RADAR_TARGET_PROJECTILE)
+            return true;
+        return false;
+    }
+
     // Extrapolate Cartesian position at an absolute world time (seconds).
+    // Projectiles: gravity + AirDrag + global wind. Others: constant velocity.
     vector PredictAt(float worldTimeSec)
     {
         float lastTime = GetLastTime();
@@ -50,7 +67,18 @@ class RDF_RadarTrack
         float dt = worldTimeSec - lastTime;
         if (dt < 0.0)
             dt = 0.0;
-        return m_FilteredPosition + m_FilteredVelocity * dt;
+
+        if (!m_UseBallisticPrediction || !IsProjectileTrack() || m_AirDrag <= 0.0)
+            return m_FilteredPosition + m_FilteredVelocity * dt;
+
+        RDF_RadarGlobalWind wind = RDF_RadarBallistics.SampleGlobalWind();
+        return RDF_RadarBallistics.IntegrateForDuration(
+            m_FilteredPosition,
+            m_FilteredVelocity,
+            dt,
+            m_AirDrag,
+            wind,
+            RDF_RadarBallistics.GRAVITY_M_S2);
     }
 
     // Extrapolate polar range / azimuth relative to a radar origin.
@@ -79,6 +107,38 @@ class RDF_RadarTrack
         outRangeRateMs = m_FilteredRangeRateMs;
     }
 
+    // Back/forward-project to flat ground for weapon locating.
+    // groundYM: absolute world Y of the local flat plane (radar site altitude
+    // is a usable default until DEM terrain Y is wired in).
+    RDF_RadarWlrFix SolveWeaponLocate(float groundYM)
+    {
+        RDF_RadarWlrFix empty = new RDF_RadarWlrFix();
+        if (!IsProjectileTrack())
+            return empty;
+        if (m_HitCount < 3)
+            return empty;
+        if (m_AirDrag <= 0.0)
+            return empty;
+
+        float anchorTime = GetLastTime();
+        if (anchorTime < 0.0)
+            return empty;
+
+        RDF_RadarGlobalWind wind = RDF_RadarBallistics.SampleGlobalWind();
+        RDF_RadarWlrFix fix = RDF_RadarBallistics.SolveLaunchAndImpact(
+            m_FilteredPosition,
+            m_FilteredVelocity,
+            groundYM,
+            anchorTime,
+            m_AirDrag,
+            wind,
+            RDF_RadarBallistics.GRAVITY_M_S2);
+        m_LastWlrFix = fix;
+        m_GroundYM = groundYM;
+        m_GroundYValid = true;
+        return fix;
+    }
+
     void FilterUpdate(
         RDF_RadarTarget target,
         float alpha,
@@ -88,6 +148,7 @@ class RDF_RadarTrack
         if (!target)
             return;
 
+        m_Type = target.m_Type;
         float lastTime = GetLastTime();
         if (lastTime < 0.0)
         {
@@ -155,6 +216,10 @@ class RDF_RadarProjectileTracker
     protected int m_MaxMisses = 3;
     protected int m_NextTrackId = 1;
     protected vector m_LastRadarOrigin = "0 0 0";
+    protected bool m_EnableBallisticPrediction = true;
+    protected float m_ShellAirDrag = RDF_RadarBallistics.AIR_DRAG_SHELL_82MM_HE;
+    protected bool m_EnableWeaponLocate = true;
+    protected int m_WeaponLocateMinHits = 3;
 
     void ConfigureFromSettings(RDF_RadarSettings settings)
     {
@@ -164,12 +229,46 @@ class RDF_RadarProjectileTracker
         m_GateAzimuthDeg = settings.m_TrackGateAzimuthDeg;
         m_ConfirmHits = settings.m_TrackConfirmHits;
         m_MaxMisses = settings.m_TrackMaxMisses;
+        m_EnableBallisticPrediction = settings.m_EnableBallisticPrediction;
+        m_ShellAirDrag = settings.m_ShellAirDrag;
+        m_EnableWeaponLocate = settings.m_EnableWeaponLocate;
+        m_WeaponLocateMinHits = settings.m_WeaponLocateMinHits;
     }
 
     void SetFilterGains(float alpha, float beta)
     {
         m_Alpha = alpha;
         m_Beta = beta;
+    }
+
+    void ApplyBallisticConfig(RDF_RadarTrack track)
+    {
+        if (!track)
+            return;
+        track.m_UseBallisticPrediction = m_EnableBallisticPrediction;
+        track.m_AirDrag = m_ShellAirDrag;
+    }
+
+    // Recompute launch/impact for confirmed projectile tracks using radar-site
+    // altitude as the flat ground plane (good enough until DEM terrain Y).
+    void RefreshWeaponLocates(float groundYM)
+    {
+        if (!m_EnableWeaponLocate)
+            return;
+        for (int i = 0; i < m_Tracks.Count(); i++)
+        {
+            RDF_RadarTrack track = m_Tracks.Get(i);
+            if (!track)
+                continue;
+            if (!track.m_Confirmed)
+                continue;
+            if (!track.IsProjectileTrack())
+                continue;
+            if (track.m_HitCount < m_WeaponLocateMinHits)
+                continue;
+            ApplyBallisticConfig(track);
+            track.SolveWeaponLocate(groundYM);
+        }
     }
 
     void Update(array<ref RDF_RadarTarget> targets, float worldTimeSec)
@@ -281,7 +380,10 @@ class RDF_RadarProjectileTracker
             RDF_RadarTrack assigned = m_Tracks.Get(tiA);
             RDF_RadarTarget hit = plots.Get(piA);
             if (assigned && hit)
+            {
+                ApplyBallisticConfig(assigned);
                 assigned.FilterUpdate(hit, m_Alpha, m_Beta, m_ConfirmHits);
+            }
         }
 
         for (int tm = 0; tm < m_Tracks.Count(); tm++)
@@ -305,6 +407,7 @@ class RDF_RadarProjectileTracker
             m_NextTrackId = m_NextTrackId + 1;
             if (seed.m_Entity)
                 born.m_Entity = seed.m_Entity;
+            ApplyBallisticConfig(born);
             born.FilterUpdate(seed, m_Alpha, m_Beta, m_ConfirmHits);
             m_Tracks.Insert(born);
         }

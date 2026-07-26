@@ -435,6 +435,7 @@ class RDF_RadarHUD
         }
 
         int confirmedTracks = 0;
+        int wlrFixes = 0;
         if (tracker)
         {
             array<ref RDF_RadarTrack> tracks = tracker.GetAllTracks();
@@ -442,8 +443,11 @@ class RDF_RadarHUD
             {
                 foreach (RDF_RadarTrack tr : tracks)
                 {
-                    if (tr && tr.m_Confirmed)
-                        confirmedTracks = confirmedTracks + 1;
+                    if (!tr || !tr.m_Confirmed)
+                        continue;
+                    confirmedTracks = confirmedTracks + 1;
+                    if (tr.m_LastWlrFix && tr.m_LastWlrFix.m_LaunchValid)
+                        wlrFixes = wlrFixes + 1;
                 }
             }
         }
@@ -451,7 +455,8 @@ class RDF_RadarHUD
         if (m_wStats)
         {
             string s = "Det " + detected.ToString() + "/" + total.ToString()
-                + "   Trk " + confirmedTracks.ToString();
+                + "   Trk " + confirmedTracks.ToString()
+                + "   WLR " + wlrFixes.ToString();
             if (best)
             {
                 s = s + "   " + TypeTag(best.m_Type) + " "

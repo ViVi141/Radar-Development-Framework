@@ -63,6 +63,13 @@ class RDF_RadarSettings
     float m_TrackGateAzimuthDeg = 4.0;
     int m_TrackConfirmHits = 2;
     int m_TrackMaxMisses = 3;
+    // Projectile tracks: AirDrag + global wind extrapolation / WLR fixes.
+    bool m_EnableBallisticPrediction = true;
+    // Prefab prior (82mm HE O832DU). Override per ammo family later if needed.
+    float m_ShellAirDrag = 0.000615;
+    // Recompute launch/impact for confirmed projectile tracks each scan.
+    bool m_EnableWeaponLocate = true;
+    int m_WeaponLocateMinHits = 3;
 
     void RDF_RadarSettings()
     {
@@ -99,6 +106,8 @@ class RDF_RadarSettings
         m_TrackGateAzimuthDeg = Math.Clamp(m_TrackGateAzimuthDeg, 0.1, 90.0);
         m_TrackConfirmHits = Math.Clamp(m_TrackConfirmHits, 1, 16);
         m_TrackMaxMisses = Math.Clamp(m_TrackMaxMisses, 1, 32);
+        m_ShellAirDrag = Math.Clamp(m_ShellAirDrag, 0.0, 1.0);
+        m_WeaponLocateMinHits = Math.Clamp(m_WeaponLocateMinHits, 2, 32);
         if (!m_Hardware)
             m_Hardware = RDF_RadarHardware.CreateShorad();
         if (!m_EwStack)

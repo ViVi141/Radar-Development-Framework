@@ -1,5 +1,70 @@
 # CHANGELOG
 
+## 2026-07-26 — 游戏内弹道预测 / 全局风 / WLR 发射·落点
+
+- 新增 `RDF_RadarBallistics.c`：`a = g - AirDrag·|v−w|·(v−w)`，读 `TimeAndWeatherManager` 全局风
+- `RDF_RadarTrack.PredictAt`：炮弹航迹改弹道积分；载具仍为常速度
+- `SolveWeaponLocate` / `RefreshWeaponLocates`：确认炮弹航迹反推发射点、前推落点
+- 设置：`m_EnableBallisticPrediction`、`m_ShellAirDrag`、`m_EnableWeaponLocate`
+- 可视化：橙=发射点、青=落点、连线；HUD 增加 `WLR` 计数
+- 地面暂用雷达站海拔平地（后续可接 DEM）
+
+---
+
+## 2026-07-26 — WLR 弹道反推发射点 / 落点
+
+- `find_ground_intersection` / `solve_launch_and_impact`：沿弹道正/反向积分到平地交点
+- 航迹在顶点附近做短窗真空拟合 → AirDrag+全局风前推/回推
+- 输出 `mass_battle_wlr_fixes.csv/png`；summary 增加 `wlr_fix`
+- 本次结果量级：确认炮弹航迹约 23 条，发射点中位误差 ~400 m，落点 ~370 m（12–22 km 射程尺度）
+
+---
+
+## 2026-07-26 — 全局风（对齐游戏的世界级风速）
+
+- `GlobalWind`（速度 + 方位）与 `random_global_wind`；游戏内风是全局的，故不做风场网格
+- 阻力改为作用在**空速**上：`a_drag = -AirDrag * |v - w| * (v - w)`
+- 仿真每次按 seed 抽 2–14 m/s 随机风，可用 `--wind-speed-m-s` / `--wind-dir-deg` 覆盖
+- 预测新增 `ballistic_drag_wind`（雷达站已知全局风），summary JSON 增加 `wind` 段
+- 14 m/s 强风校验：+10 s 方位误差中位 0.263° → 0.155°，位置误差 169 m → 150 m
+
+---
+
+## 2026-07-26 — 炮弹真值/预测加入 Reforger AirDrag
+
+- 模型：`a_drag = -AirDrag * |v| * v`（与 `ShellMoveComponent.AirDrag` 同形）
+- 先验：`AIR_DRAG_SHELL_82MM_HE = 0.000615`（O832DU prefab）
+- `TargetTrajectory`：有阻力时 RK2 数值积分 + 缓存；无阻力仍用解析常加速度
+- 预测对比三路：CV / 真空弹道 / 真空拟合状态 + AirDrag 前推
+- 输出图例更新为 `mass_battle_prediction.png`
+
+---
+
+## 2026-07-26 — 炮弹真空弹道拟合预测（优于常速度外推）
+
+- `rdf_radar_track.py`：航迹历史加入俯仰；新增 `fit_ballistic_vacuum` / `predict_ballistic`（水平匀速 + 竖直固定 g，残差门限）
+- 仿真对比：炮弹 +10 s 中位位置误差 CV≈979 m → ballistic≈318 m；p90≈1898 m → ≈598 m
+- 对齐游戏内 `ShellMoveComponent` 主导项（重力）；`AirDrag` 尚未进预测器（下一步）
+
+---
+
+## 2026-07-26 — 轨迹预测评估（α-β 外推 vs 真值）
+
+- `rdf_radar_mass_battle_sim.py` 新增 `evaluate_prediction`：沿滤波历史多锚点外推 2/5/10 s，对比真值给出距离/方位/位置误差
+- 修复凝视雷达（WLR）scan 编号按 2 s 分桶导致同一炮弹每桶产生 ~8 个点迹、航迹碎成 45 条的问题；改为每 dwell 一个 scan
+- `rdf_radar_track.py` 新增 `TrackerConfig.keep_confirmed_dead`：离线分析保留已确认但停更（落地/出界）的航迹
+- 新增输出 `mass_battle_prediction.csv` / `mass_battle_prediction.png`，summary JSON 增加 `prediction` 段
+
+---
+
+## 2026-07-26 — Python 大规模防空+炮兵雷达仿真
+
+- 新增 `tools/dem/rdf_radar_mass_battle_sim.py`：读签名表先验 RCS，生成 22 空中 + 40 炮弹场景
+- 双雷达：SHORAD AD（机械扫描）+ WLR（扇区凝视）；测量合成 + α-β 航迹
+- 输出 `tools/dem/out/mass_battle_*`（png / csv / json）
+
+---
+
 ## 2026-07-26 — 雷达特征表 CSV V2
 
 - 格式：`RDF_RADAR_SIG_V2` + 表头 + 逗号分隔 + key 加引号
