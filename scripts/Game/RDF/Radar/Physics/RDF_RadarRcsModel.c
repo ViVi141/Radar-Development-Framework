@@ -33,9 +33,25 @@ class RDF_RadarRcsModel
         vector maxs;
         entity.GetBounds(mins, maxs);
         vector size = maxs - mins;
-        float width = Math.AbsFloat(size[0]);
-        float height = Math.AbsFloat(size[1]);
-        float length = Math.AbsFloat(size[2]);
+        return EstimateRcsFromExtents(
+            Math.AbsFloat(size[0]),
+            Math.AbsFloat(size[1]),
+            Math.AbsFloat(size[2]),
+            targetType);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Optical-region estimate from AABB extents (no entity query).
+    static float EstimateRcsFromExtents(
+        float sizeX,
+        float sizeY,
+        float sizeZ,
+        ERDF_RadarTargetType targetType)
+    {
+        float fallback = GetDefaultRcsM2(targetType);
+        float width = Math.AbsFloat(sizeX);
+        float height = Math.AbsFloat(sizeY);
+        float length = Math.AbsFloat(sizeZ);
 
         float projectedA = width * height;
         float projectedB = length * height;
@@ -151,7 +167,8 @@ class RDF_RadarRcsModel
         x = x * 668265263 + channel * 1013904223;
         if (x < 0)
             x = -x;
-        float u = (x % 1000000) / 1000000.0;
+        int rem = x - (x / 1000000) * 1000000;
+        float u = rem / 1000000.0;
         if (u < 0.000001)
             u = 0.000001;
         if (u > 1.0)

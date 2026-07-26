@@ -25,7 +25,8 @@ scripts/Game/RDF/
 ├── Radar/     实体扫描、物理检测、EW、CFAR、网络同步、PPI、自动化测试
 └── DEM/       Workbench 烘焙 + Runtime 加载
 scripts/WorkbenchGame/RDF/
-└── RDF_DemBakePlugin.c
+├── RDF_DemBakePlugin.c
+└── RDF_RadarSignatureBakePlugin.c   离线扫可放置 prefab → 特征 CSV
 tools/dem/     离线打包与雷达物理原型
 ```
 
@@ -86,7 +87,7 @@ scripts/Game/RDF/Radar/
 │   └── RDF_RadarProjectileTracker.c    量测关联 / α-β / PredictAt
 ├── Physics/
 │   ├── RDF_RadarRcsModel.c
-│   ├── RDF_RadarSignatureLibrary.c     按 prefab 的尺寸/RCS 特征表（烘焙 + 首见测量）
+│   ├── RDF_RadarSignatureLibrary.c     按 prefab 的尺寸/RCS 特征表（离线烘焙 + 运行时查表）
 │   ├── RDF_RadarClutterModel.c         DEM σ⁰ → 杂波功率
 │   ├── RDF_RadarMeasurement.c          距离门/波束量化 + SNR 噪声
 │   └── RDF_RadarCfarGate.c             粗栅格 CA-CFAR 判检

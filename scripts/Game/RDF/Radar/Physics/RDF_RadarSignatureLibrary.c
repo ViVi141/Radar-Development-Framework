@@ -14,20 +14,21 @@ class RDF_RadarSignature
     bool m_Baked;
 }
 
-// Signature table. Load order:
-//   1. baked CSV (offline, shipped) — no runtime bounds queries needed
-//   2. first sighting of an unknown model (e.g. third-party mod) is measured
-//      once via GetBounds, cached, and reused by every later instance
-//   3. ExportTable() writes the merged table back out; that file is the bake
+// Signature table. Load / bake order:
+//   1. Offline Workbench bake (RDF Bake Radar Signatures) enumerates PLACEABLE
+//      Vehicle/Character prefabs (+ projectiles) from ResourceDatabase — not the
+//      live world — measures each once, writes SIG_FILE
+//   2. Runtime: Resolve() is a table lookup; unknown models (e.g. third-party mods)
+//      are measured on first sighting and optionally merged back via MaybeAutoExport
 class RDF_RadarSignatureLibrary
 {
     static const string SIG_DIR = "$profile:RDF/Signatures";
     static const string SIG_FILE = "$profile:RDF/Signatures/rdf_radar_signatures.csv";
-    static const string SIG_MAGIC = "RDF_RADAR_SIG_V1";
-    static const string FIELD_SEP = ";";
+    static const string SIG_MAGIC = "RDF_RADAR_SIG_V2";
+    static const string SIG_HEADER = "key,size_x_m,size_y_m,size_z_m,char_length_m,mean_rcs_m2,swerling,type_hint";
+    static const string FIELD_SEP = ",";
 
-    // Newly measured models are flushed back to the table at most this often,
-    // so one session in the editor is enough to produce/extend the bake.
+    // Newly measured unknown models (runtime) flushed at most this often.
     static const float AUTO_EXPORT_INTERVAL_S = 30.0;
 
     protected static ref map<string, ref RDF_RadarSignature> s_ByKey;
@@ -41,7 +42,13 @@ class RDF_RadarSignatureLibrary
     protected static int s_StatNoKey;
 
     //------------------------------------------------------------------------------------------------
-    // Resolve the signature for an entity, measuring only on first sighting.
+    static void EnsureLoadedPublic()
+    {
+        EnsureLoaded();
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Resolve the signature for an entity, measuring only on first sighting of an unknown model.
     static RDF_RadarSignature Resolve(
         IEntity entity,
         ERDF_RadarTargetType targetType)
@@ -69,16 +76,44 @@ class RDF_RadarSignatureLibrary
         {
             s_ByKey.Set(key, measured);
             s_Dirty = true;
+            Print("[RDF Radar Sig] first-sight measure: " + key, LogLevel.NORMAL);
         }
         return measured;
     }
 
     //------------------------------------------------------------------------------------------------
-    // Persist models measured this session. Called from the registry tick.
+    // Offline bake path: measure a temporarily spawned prefab and upsert as baked.
+    static RDF_RadarSignature BakeFromSpawned(
+        IEntity entity,
+        string key,
+        ERDF_RadarTargetType targetType)
+    {
+        EnsureLoaded();
+        if (!entity || key == "")
+            return null;
+
+        RDF_RadarSignature sig = MeasureSignature(entity, targetType, key);
+        if (!sig)
+            return null;
+
+        sig.m_Baked = true;
+        s_ByKey.Set(key, sig);
+        s_Dirty = true;
+        return sig;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Persist runtime-discovered unknown models. Skip empty tables so a bad bake
+    // cannot wipe a previously good CSV.
     static void MaybeAutoExport(float now)
     {
         if (!s_Dirty)
             return;
+        if (s_ByKey.Count() == 0)
+        {
+            s_Dirty = false;
+            return;
+        }
         // First dirty tick only arms the timer, so the initial flush is not a near-empty file.
         if (s_LastExportTime < -1.0)
         {
@@ -146,7 +181,7 @@ class RDF_RadarSignatureLibrary
     }
 
     //------------------------------------------------------------------------------------------------
-    // One-time bounds measurement for an unknown model.
+    // One-time bounds measurement for an unknown model (or offline bake spawn).
     protected static RDF_RadarSignature MeasureSignature(
         IEntity entity,
         ERDF_RadarTargetType targetType,
@@ -176,7 +211,11 @@ class RDF_RadarSignatureLibrary
             longest = 0.1;
         sig.m_CharacteristicLengthM = longest;
 
-        sig.m_MeanRcsM2 = RDF_RadarRcsModel.GetEntityRcsM2(entity, targetType);
+        sig.m_MeanRcsM2 = RDF_RadarRcsModel.EstimateRcsFromExtents(
+            sig.m_SizeX,
+            sig.m_SizeY,
+            sig.m_SizeZ,
+            targetType);
         sig.m_SwerlingModel = RDF_RadarRcsModel.GetDefaultSwerlingModel(targetType);
         sig.m_TypeHint = TargetTypeToInt(targetType);
 
@@ -204,28 +243,34 @@ class RDF_RadarSignatureLibrary
             return false;
 
         array<string> lines = SCR_FileIOHelper.ReadFileContent(SIG_FILE, false);
-        if (!lines || lines.Count() < 2)
+        if (!lines || lines.Count() < 3)
             return false;
         if (lines.Get(0) != SIG_MAGIC)
         {
             Print("[RDF Radar Sig] magic mismatch: " + SIG_FILE, LogLevel.WARNING);
             return false;
         }
+        if (lines.Get(1) != SIG_HEADER)
+        {
+            Print("[RDF Radar Sig] header mismatch: " + SIG_FILE, LogLevel.WARNING);
+            return false;
+        }
 
         int loaded = 0;
-        for (int i = 1; i < lines.Count(); i++)
+        for (int i = 2; i < lines.Count(); i++)
         {
             string row = lines.Get(i);
             if (row == "")
                 continue;
 
             array<string> f = new array<string>();
-            row.Split(FIELD_SEP, f, true);
+            if (!ParseCsvRow(row, f))
+                continue;
             if (f.Count() < 8)
                 continue;
 
             RDF_RadarSignature sig = new RDF_RadarSignature();
-            sig.m_Key = f.Get(0);
+            sig.m_Key = UnquoteField(f.Get(0));
             sig.m_SizeX = f.Get(1).ToFloat();
             sig.m_SizeY = f.Get(2).ToFloat();
             sig.m_SizeZ = f.Get(3).ToFloat();
@@ -249,18 +294,38 @@ class RDF_RadarSignatureLibrary
     }
 
     //------------------------------------------------------------------------------------------------
-    // Write the merged table (baked + newly measured). Run once, ship the file.
+    // Write CSV: magic, header, then quoted-key rows. Refuses empty overwrite.
     static bool ExportTable()
     {
         EnsureLoaded();
+
+        int writable = 0;
+        int count = s_ByKey.Count();
+        for (int i = 0; i < count; i++)
+        {
+            RDF_RadarSignature probe = s_ByKey.GetElement(i);
+            if (probe && probe.m_Key != "")
+                writable = writable + 1;
+        }
+
+        if (writable == 0)
+        {
+            if (FileIO.FileExists(SIG_FILE))
+            {
+                Print("[RDF Radar Sig] refuse empty export; keeping " + SIG_FILE, LogLevel.WARNING);
+                return false;
+            }
+            Print("[RDF Radar Sig] nothing to export.", LogLevel.WARNING);
+            return false;
+        }
 
         FileIO.MakeDirectory("$profile:RDF");
         FileIO.MakeDirectory(SIG_DIR);
 
         array<string> lines = new array<string>();
         lines.Insert(SIG_MAGIC);
+        lines.Insert(SIG_HEADER);
 
-        int count = s_ByKey.Count();
         for (int i = 0; i < count; i++)
         {
             RDF_RadarSignature sig = s_ByKey.GetElement(i);
@@ -269,7 +334,7 @@ class RDF_RadarSignatureLibrary
             if (sig.m_Key == "")
                 continue;
 
-            string row = sig.m_Key;
+            string row = QuoteField(sig.m_Key);
             row = row + FIELD_SEP + sig.m_SizeX.ToString();
             row = row + FIELD_SEP + sig.m_SizeY.ToString();
             row = row + FIELD_SEP + sig.m_SizeZ.ToString();
@@ -282,8 +347,88 @@ class RDF_RadarSignatureLibrary
 
         bool ok = SCR_FileIOHelper.WriteFileContent(SIG_FILE, lines);
         if (ok)
-            Print("[RDF Radar Sig] exported " + (lines.Count() - 1).ToString() + " -> " + SIG_FILE, LogLevel.NORMAL);
+            Print("[RDF Radar Sig] exported " + (lines.Count() - 2).ToString() + " -> " + SIG_FILE, LogLevel.NORMAL);
         return ok;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Minimal RFC4180-ish row parser: supports "quoted,fields" and "".
+    protected static bool ParseCsvRow(string row, notnull array<string> fields)
+    {
+        fields.Clear();
+        if (row == "")
+            return false;
+
+        string current = "";
+        bool inQuotes = false;
+        int len = row.Length();
+        for (int i = 0; i < len; i++)
+        {
+            string ch = row.Get(i);
+            if (inQuotes)
+            {
+                if (ch == "\"")
+                {
+                    if (i + 1 < len && row.Get(i + 1) == "\"")
+                    {
+                        current = current + "\"";
+                        i = i + 1;
+                    }
+                    else
+                    {
+                        inQuotes = false;
+                    }
+                }
+                else
+                {
+                    current = current + ch;
+                }
+            }
+            else
+            {
+                if (ch == "\"")
+                {
+                    inQuotes = true;
+                }
+                else if (ch == FIELD_SEP)
+                {
+                    fields.Insert(current);
+                    current = "";
+                }
+                else
+                {
+                    current = current + ch;
+                }
+            }
+        }
+
+        fields.Insert(current);
+        return fields.Count() > 0;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    protected static string QuoteField(string value)
+    {
+        string escaped = value;
+        escaped.Replace("\"", "\"\"");
+        return "\"" + escaped + "\"";
+    }
+
+    //------------------------------------------------------------------------------------------------
+    protected static string UnquoteField(string value)
+    {
+        if (value == "")
+            return "";
+        if (value.Length() < 2)
+            return value;
+        if (value.Get(0) != "\"")
+            return value;
+        if (value.Get(value.Length() - 1) != "\"")
+            return value;
+
+        string inner = value.Substring(1, value.Length() - 2);
+        inner.Replace("\"\"", "\"");
+        return inner;
     }
 
     //------------------------------------------------------------------------------------------------
@@ -291,7 +436,10 @@ class RDF_RadarSignatureLibrary
     {
         if (s_ByKey)
             s_ByKey.Clear();
-        s_BakedLoadAttempted = false;
+        else
+            s_ByKey = new map<string, ref RDF_RadarSignature>();
+        // Keep loaded state so the next Upsert/Export does not re-read the old file.
+        s_BakedLoadAttempted = true;
         s_Dirty = false;
         s_LastExportTime = -1000.0;
         s_StatBakedLoaded = 0;

@@ -1,10 +1,28 @@
 # CHANGELOG
 
+## 2026-07-26 — 雷达特征表 CSV V2
+
+- 格式：`RDF_RADAR_SIG_V2` + 表头 + 逗号分隔 + key 加引号
+- 表头：`key,size_x_m,size_y_m,size_z_m,char_length_m,mean_rcs_m2,swerling,type_hint`
+- 请重新跑一次烘焙插件覆盖旧文件
+
+---
+
+## 2026-07-26 — 雷达特征表离线烘焙（扫可放置 prefab，非世界实体）
+
+- Workbench 插件 `RDF Bake Radar Signatures`：`ResourceDatabase.SearchResources` 枚举 `.et`
+- 筛选：`PLACEABLE` 的 Vehicle/Character；可选含 `ProjectileMoveComponent` 的弹药/导弹
+- 每个候选离图临时 `SpawnEntityPrefab` → `GetBounds`/RCS → `delete`，写入 `$profile:RDF/Signatures/rdf_radar_signatures.csv`
+- **不**扫描当前世界里已存在的实体；运行时 `Resolve` 只查表，未知模组模型才首见测量
+- `RDF_RadarRcsModel.EstimateRcsFromExtents`：由尺寸估 RCS，避免重复 GetBounds
+
+---
+
 ## 2026-07-26 — 按 prefab 的特征表（尺寸 / RCS 查表化）
 
 - 新增 `RDF_RadarSignatureLibrary`：`map<prefab ResourceName, RDF_RadarSignature>`，存 `m_SizeX/Y/Z`、`m_CharacteristicLengthM`、`m_MeanRcsM2`、`m_SwerlingModel`、`m_TypeHint`
 - 入表流程：先查烘焙表 `$profile:RDF/Signatures/rdf_radar_signatures.csv`（`RDF_RADAR_SIG_V1`，`;` 分隔）；未命中（如第三方模组模型）才 `GetBounds` 测一次并缓存，同模型后续实例纯查表
-- 自动回写：新测到的模型每 30s 合并写回同一 CSV，跑一遍即得烘焙表；也可显式 `RDF_RadarSignatureLibrary.ExportTable()`
+- 运行时未知模型可自动合并回写（每 30s）；正式全量表由 Workbench 离线烘焙插件生成
 - `RDF_RadarScatterer.m_SignatureKey` 记录命中键；无 prefab 键时退回直接 `GetBounds`
 - 诊断：散射体统计行追加 `sig=/baked=/measured=/hit=/nokey=`
 
