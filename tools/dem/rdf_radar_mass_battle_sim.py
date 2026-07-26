@@ -31,6 +31,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
+from rdf_dem_io import choose_radar_site, default_tile_dir, load_dem
 from rdf_radar_channel import MultipathModel, SwerlingModel
 from rdf_radar_physics import (
     RadarHardware,
@@ -52,9 +53,12 @@ from rdf_radar_targets import (
     RCS_HELICOPTER_M2,
     RCS_TRANSPORT_M2,
     GlobalWind,
+    GroundYFn,
     RadarTarget,
     TargetTrajectory,
+    dem_ground_y_fn,
     find_ground_intersection,
+    flat_ground_y_fn,
     math_hypot3,
     radial_speed_toward_radar,
     random_global_wind,
@@ -242,9 +246,12 @@ def build_mass_scenario(
     radar_y: float,
     seed: int,
     wind: GlobalWind = NO_WIND,
+    ground_y_fn: GroundYFn | None = None,
 ) -> list[TargetTrajectory]:
     rng = np.random.default_rng(seed)
     trajectories: list[TargetTrajectory] = []
+    if ground_y_fn is None:
+        ground_y_fn = flat_ground_y_fn(radar_y)
 
     # --- Air defense raid: fighters inbound from multiple sectors ---
     for i in range(12):
@@ -357,13 +364,16 @@ def build_mass_scenario(
         vx = v0 * math.cos(elev) * dx / max(horiz, 1.0)
         vz = v0 * math.cos(elev) * dz / max(horiz, 1.0)
         vy = v0 * math.sin(elev)
+        launch_x_m = (launch_ix - radar_ix) * cell_m
+        launch_z_m = (launch_iz - radar_iz) * cell_m
+        launch_ground = ground_y_fn(launch_x_m, launch_z_m)
         trajectories.append(
             TargetTrajectory(
                 initial=RadarTarget(
                     name=f"shell_{i:02d}",
                     ix=launch_ix,
                     iz=launch_iz,
-                    y_m=radar_y + 2.0,
+                    y_m=launch_ground + 2.0,
                     rcs_m2=priors.shell_rcs * float(rng.uniform(0.7, 1.4)),
                     kind="shell",
                     vx_m_s=vx,
@@ -920,13 +930,16 @@ def _true_shell_endpoints(
     radar_ix: float,
     radar_iz: float,
     ground_y_m: float,
+    ground_y_fn: GroundYFn | None = None,
 ) -> tuple[tuple[float, float, float], tuple[float, float, float], float] | None:
     """Return (launch_xyz_rel, impact_xyz_rel, flight_time_s) in radar frame."""
     init = traj.initial
     launch_x = (init.ix - radar_ix) * cell_m
-    launch_y = init.y_m - ground_y_m
     launch_z = (init.iz - radar_iz) * cell_m
-    # Integrate from true launch state to impact (flat ground at radar altitude).
+    if ground_y_fn is None:
+        ground_y_fn = flat_ground_y_fn(ground_y_m)
+    launch_ground = ground_y_fn(launch_x, launch_z)
+    launch_y = init.y_m - launch_ground
     hit = find_ground_intersection(
         launch_x,
         init.y_m,
@@ -940,12 +953,14 @@ def _true_shell_endpoints(
         wind=traj.wind,
         backward=False,
         max_time_s=120.0,
+        ground_y_fn=ground_y_fn,
     )
     if hit is None:
         return None
+    impact_ground = ground_y_fn(hit.x_m, hit.z_m)
     return (
         (launch_x, launch_y, launch_z),
-        (hit.x_m, hit.y_m - ground_y_m, hit.z_m),
+        (hit.x_m, hit.y_m - impact_ground, hit.z_m),
         hit.time_offset_s,
     )
 
@@ -959,8 +974,11 @@ def evaluate_wlr_fixes(
     radar_y: float,
     wind: GlobalWind = NO_WIND,
     min_hits: int = 5,
+    ground_y_fn: GroundYFn | None = None,
 ) -> list[WlrFixSample]:
     """Fit shell tracks and back/forward-project to launch & impact."""
+    if ground_y_fn is None:
+        ground_y_fn = flat_ground_y_fn(radar_y)
     truth_by_name = {t.initial.name: t for t in trajectories}
     samples: list[WlrFixSample] = []
     for track in run.tracker_tracks:
@@ -972,7 +990,7 @@ def evaluate_wlr_fixes(
         if traj is None or traj.initial.kind != "shell":
             continue
         endpoints = _true_shell_endpoints(
-            traj, cell_m, radar_ix, radar_iz, radar_y
+            traj, cell_m, radar_ix, radar_iz, radar_y, ground_y_fn=ground_y_fn
         )
         if endpoints is None:
             continue
@@ -1016,6 +1034,7 @@ def evaluate_wlr_fixes(
                 air_drag=drag,
                 gravity_m_s2=GRAVITY_M_S2,
                 wind=wind,
+                ground_y_fn=ground_y_fn,
             )
             if launch is None or impact is None:
                 continue
@@ -1275,6 +1294,78 @@ def _render(
     print(f"wrote: {path}")
 
 
+def make_synthetic_dem(
+    size: int = 512,
+    cell_m: float = 20.0,
+    base_y_m: float = 100.0,
+    seed: int = 0,
+) -> np.ndarray:
+    """Hilly DEM for offline WLR tests when baked tiles are unavailable."""
+    rng = np.random.default_rng(seed)
+    yy, xx = np.mgrid[0:size, 0:size]
+    terrain = np.full((size, size), base_y_m, dtype=np.float32)
+    terrain = terrain + 45.0 * np.sin(xx * 0.035 + 0.4) * np.cos(yy * 0.028)
+    terrain = terrain + 28.0 * np.sin(xx * 0.012 - yy * 0.018)
+    terrain = terrain + rng.normal(0.0, 2.5, size=(size, size)).astype(np.float32)
+    _ = cell_m
+    return terrain
+
+
+def _resolve_battle_dem(
+    dem_dir: str,
+    no_dem: bool,
+    seed: int,
+) -> tuple[np.ndarray, float, float, float, float, GroundYFn, str]:
+    """Return terrain, cell_m, radar_ix/iz/y, ground_y_fn, source label."""
+    if no_dem:
+        cell_m = 20.0
+        radar_ix = 256.0
+        radar_iz = 256.0
+        radar_y = 100.0
+        terrain = np.full((512, 512), radar_y, dtype=np.float32)
+        ground_fn = flat_ground_y_fn(radar_y)
+        return terrain, cell_m, radar_ix, radar_iz, radar_y, ground_fn, "flat"
+
+    tile_dir = dem_dir
+    if not tile_dir:
+        tile_dir = default_tile_dir("GM_Eden")
+    if tile_dir and os.path.isdir(tile_dir):
+        try:
+            dem = load_dem(tile_dir, load_spans=False)
+            terrain = np.asarray(dem["terrain"], dtype=np.float32)
+            cell_m = float(dem["cell_m"])
+            radar_iz_i, radar_ix_i = choose_radar_site(terrain)
+            radar_ix = float(radar_ix_i)
+            radar_iz = float(radar_iz_i)
+            radar_y = float(terrain[radar_iz_i, radar_ix_i])
+            if not np.isfinite(radar_y):
+                radar_y = 100.0
+            ground_fn = dem_ground_y_fn(
+                terrain, cell_m, radar_ix, radar_iz, radar_y
+            )
+            return (
+                terrain,
+                cell_m,
+                radar_ix,
+                radar_iz,
+                radar_y,
+                ground_fn,
+                f"tiles:{tile_dir}",
+            )
+        except SystemExit:
+            pass
+        except OSError:
+            pass
+
+    cell_m = 20.0
+    terrain = make_synthetic_dem(512, cell_m, 100.0, seed=seed + 19)
+    radar_ix = 256.0
+    radar_iz = 256.0
+    radar_y = float(terrain[256, 256])
+    ground_fn = dem_ground_y_fn(terrain, cell_m, radar_ix, radar_iz, radar_y)
+    return terrain, cell_m, radar_ix, radar_iz, radar_y, ground_fn, "synthetic"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--duration-s", type=float, default=60.0)
@@ -1293,6 +1384,17 @@ def main() -> None:
         type=float,
         default=-1.0,
         help="Global wind bearing (deg, +X=0); <0 draws random.",
+    )
+    parser.add_argument(
+        "--dem-dir",
+        default="",
+        help="DEM tile dir (dataset_*.npz). Empty tries default GM_Eden tiles, "
+        "then falls back to a synthetic hilly DEM.",
+    )
+    parser.add_argument(
+        "--no-dem",
+        action="store_true",
+        help="Force flat ground (legacy WLR plane at radar altitude).",
     )
     args = parser.parse_args()
 
@@ -1323,12 +1425,24 @@ def main() -> None:
         f"global wind {wind.speed_m_s:.1f} m/s bearing {wind.direction_deg:.0f} deg"
     )
 
-    cell_m = 20.0
-    radar_ix = 0.0
-    radar_iz = 0.0
-    radar_y = 100.0
+    terrain, cell_m, radar_ix, radar_iz, radar_y, ground_y_fn, dem_source = (
+        _resolve_battle_dem(args.dem_dir, args.no_dem, args.seed)
+    )
+    print(
+        f"DEM source={dem_source} cell={cell_m:.1f} m "
+        f"radar=({radar_ix:.0f},{radar_iz:.0f}) y={radar_y:.1f} m "
+        f"shape={terrain.shape}"
+    )
+
     trajectories = build_mass_scenario(
-        priors, cell_m, radar_ix, radar_iz, radar_y, args.seed, wind=wind
+        priors,
+        cell_m,
+        radar_ix,
+        radar_iz,
+        radar_y,
+        args.seed,
+        wind=wind,
+        ground_y_fn=ground_y_fn,
     )
     n_air = sum(1 for t in trajectories if t.initial.kind in ("aircraft", "heli"))
     n_shell = sum(1 for t in trajectories if t.initial.kind == "shell")
@@ -1486,7 +1600,14 @@ def main() -> None:
     _render_prediction(pred_png, pred_samples)
 
     wlr_fixes = evaluate_wlr_fixes(
-        wlr, trajectories, cell_m, radar_ix, radar_iz, radar_y, wind=wind
+        wlr,
+        trajectories,
+        cell_m,
+        radar_ix,
+        radar_iz,
+        radar_y,
+        wind=wind,
+        ground_y_fn=ground_y_fn,
     )
     wlr_fix_summary = summarize_wlr_fixes(wlr_fixes)
     wlr_fix_csv = os.path.join(out_dir, "mass_battle_wlr_fixes.csv")
@@ -1551,6 +1672,14 @@ def main() -> None:
             "shell_rcs_m2": priors.shell_rcs,
         },
         "scenario": {"air": n_air, "shells": n_shell, "total": len(trajectories)},
+        "dem": {
+            "source": dem_source,
+            "cell_m": cell_m,
+            "radar_ix": radar_ix,
+            "radar_iz": radar_iz,
+            "radar_y_m": radar_y,
+            "shape": [int(terrain.shape[0]), int(terrain.shape[1])],
+        },
         "wind": {
             "speed_m_s": wind.speed_m_s,
             "direction_deg": wind.direction_deg,

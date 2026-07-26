@@ -69,6 +69,8 @@ class RDF_RadarSettings
     float m_ShellAirDrag = 0.000615;
     // Recompute launch/impact for confirmed projectile tracks each scan.
     bool m_EnableWeaponLocate = true;
+    // Prefer DEM / live surface for WLR ground intersection (fallback = flat Y).
+    bool m_EnableDemGroundForWlr = true;
     int m_WeaponLocateMinHits = 3;
 
     void RDF_RadarSettings()

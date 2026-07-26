@@ -6,10 +6,13 @@ from __future__ import annotations
 import math
 import unittest
 
+import numpy as np
+
 from rdf_radar_targets import (
     AIR_DRAG_SHELL_82MM_HE,
     GRAVITY_M_S2,
     GlobalWind,
+    dem_ground_y_fn,
     find_ground_intersection,
     integrate_ballistic,
     solve_launch_and_impact,
@@ -151,6 +154,32 @@ class TestBallistics(unittest.TestCase):
 
     def test_gravity_constant_sign(self) -> None:
         self.assertLess(GRAVITY_M_S2, 0.0)
+
+    def test_dem_ground_intersection_hits_hill(self) -> None:
+        terrain = np.zeros((64, 64), dtype=np.float32)
+        terrain[40:50, 40:50] = 80.0
+        ground_fn = dem_ground_y_fn(terrain, 10.0, 32.0, 32.0, 0.0)
+        # Fly toward the hill plateau; flat ground at 0 would land farther.
+        hit_flat = find_ground_intersection(
+            0.0, 50.0, 0.0, 40.0, 10.0, 40.0, 0.0, air_drag=0.0, wind=NO_WIND
+        )
+        hit_dem = find_ground_intersection(
+            0.0,
+            50.0,
+            0.0,
+            40.0,
+            10.0,
+            40.0,
+            0.0,
+            air_drag=0.0,
+            wind=NO_WIND,
+            ground_y_fn=ground_fn,
+        )
+        self.assertIsNotNone(hit_flat)
+        self.assertIsNotNone(hit_dem)
+        assert hit_flat is not None and hit_dem is not None
+        self.assertGreater(hit_dem.y_m, 20.0)
+        self.assertLess(hit_dem.time_offset_s, hit_flat.time_offset_s)
 
 
 if __name__ == "__main__":

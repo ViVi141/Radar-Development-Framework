@@ -9,6 +9,8 @@ class RDF_RadarBallisticsAutoTest
     {
         s_Pass = 0;
         s_Fail = 0;
+        // Synthetic XYZ tests assume a flat plane; live DEM/GetSurfaceY would skew them.
+        RDF_RadarBallistics.SetUseDemGround(false);
         Print("[RDF Ballistics AutoTest] begin");
 
         TestFreefallImpactTime();
@@ -17,6 +19,8 @@ class RDF_RadarBallisticsAutoTest
         TestBackwardRecoversLaunch();
         TestSolveLaunchAndImpactPair();
         TestTrackApexWeaponLocate();
+
+        RDF_RadarBallistics.SetUseDemGround(true);
 
         Print(string.Format(
             "[RDF Ballistics AutoTest] done: pass=%1 fail=%2",

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 2026-07-26 — WLR 结合 DEM 地形交点
+
+- Python：`ground_y_fn` / `dem_ground_y_fn`；交地点按 AGL 穿越局部地形，不再只用平地
+- `mass_battle`：默认加载 GM_Eden DEM tiles（无 tile 则合成丘陵）；`--no-dem` 可退回平地
+- Enforce：`RDF_RadarBallistics.SampleGroundYM` 优先 DEM cache，其次 `GetSurfaceY`
+- Scanner 每次扫描把 DEM cache 交给 Ballistics；设置项 `m_EnableDemGroundForWlr`
+- 数学单测在合成坐标下临时 `SetUseDemGround(false)`；Python DEM 丘包测试已通过
+
+---
+
 ## 2026-07-26 — 实弹自动放炮回归（修复检测链路）
 
 - `EnableSimulation` + 强制写入散射体表 + 测试 RCS 抬升
@@ -35,7 +45,7 @@
 - `SolveWeaponLocate` / `RefreshWeaponLocates`：确认炮弹航迹反推发射点、前推落点
 - 设置：`m_EnableBallisticPrediction`、`m_ShellAirDrag`、`m_EnableWeaponLocate`
 - 可视化：橙=发射点、青=落点、连线；HUD 增加 `WLR` 计数
-- 地面暂用雷达站海拔平地（后续可接 DEM）
+- 地面：DEM / `GetSurfaceY`（见同日 DEM 交点条目）
 
 ---
 

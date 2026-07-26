@@ -111,8 +111,11 @@ class RDF_RadarScanner
         {
             m_DemCache.SetMaxTiles(m_Settings.m_DemCacheMaxTiles);
             m_DemCache.BeginScan(m_Settings.m_DemTileLoadsPerScan);
-            if (m_Settings.m_EnableDemClutter)
-                m_DemCache.InitializeForCurrentWorld();
+            // WLR ground sampling needs DEM even when clutter is off.
+            m_DemCache.InitializeForCurrentWorld();
+            RDF_RadarBallistics.SetDemCache(m_DemCache);
+            if (m_Settings.m_UseScattererRegistry)
+                RDF_RadarScattererRegistry.SetDemCache(m_DemCache);
         }
         if (m_Settings.m_UseScattererRegistry)
         {
@@ -122,8 +125,6 @@ class RDF_RadarScanner
                 m_Settings.m_ScattererRefreshPerTick,
                 m_Settings.m_ScattererMaxEntries,
                 true);
-            if (m_DemCache)
-                RDF_RadarScattererRegistry.SetDemCache(m_DemCache);
             RDF_RadarScattererRegistry.Tick(
                 world,
                 worldTime,

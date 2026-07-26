@@ -7,6 +7,8 @@ absolute monostatic radar equation (see rdf_radar_physics.received_power_w).
 
 from __future__ import annotations
 
+import math
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -316,7 +318,7 @@ def integrate_ballistic(
 
 @dataclass
 class GroundHit:
-    """Point where a ballistic trajectory meets a flat ground plane."""
+    """Point where a ballistic trajectory meets the ground surface."""
 
     time_offset_s: float
     x_m: float
@@ -325,6 +327,86 @@ class GroundHit:
     vx_m_s: float
     vy_m_s: float
     vz_m_s: float
+
+
+GroundYFn = Callable[[float, float], float]
+
+
+def flat_ground_y_fn(ground_y_m: float) -> GroundYFn:
+    """Constant-altitude ground plane (legacy WLR / unit tests)."""
+
+    def _fn(_x_m: float, _z_m: float) -> float:
+        return float(ground_y_m)
+
+    return _fn
+
+
+def sample_terrain_bilinear(
+    terrain: np.ndarray,
+    ix: float,
+    iz: float,
+    fallback_y_m: float,
+) -> float:
+    """Bilinear sample of terrain[iz, ix] with clamp-to-edge."""
+    height, width = terrain.shape
+    if height < 1 or width < 1:
+        return float(fallback_y_m)
+    if ix < 0.0:
+        ix = 0.0
+    if iz < 0.0:
+        iz = 0.0
+    if ix > width - 1.0000001:
+        ix = width - 1.0000001
+    if iz > height - 1.0000001:
+        iz = height - 1.0000001
+    ix0 = int(math.floor(ix))
+    iz0 = int(math.floor(iz))
+    ix1 = ix0 + 1
+    iz1 = iz0 + 1
+    if ix1 >= width:
+        ix1 = width - 1
+    if iz1 >= height:
+        iz1 = height - 1
+    tx = ix - ix0
+    tz = iz - iz0
+    v00 = float(terrain[iz0, ix0])
+    v10 = float(terrain[iz0, ix1])
+    v01 = float(terrain[iz1, ix0])
+    v11 = float(terrain[iz1, ix1])
+    if not np.isfinite(v00):
+        v00 = fallback_y_m
+    if not np.isfinite(v10):
+        v10 = fallback_y_m
+    if not np.isfinite(v01):
+        v01 = fallback_y_m
+    if not np.isfinite(v11):
+        v11 = fallback_y_m
+    v0 = v00 * (1.0 - tx) + v10 * tx
+    v1 = v01 * (1.0 - tx) + v11 * tx
+    return v0 * (1.0 - tz) + v1 * tz
+
+
+def dem_ground_y_fn(
+    terrain: np.ndarray,
+    cell_m: float,
+    origin_ix: float,
+    origin_iz: float,
+    fallback_y_m: float,
+) -> GroundYFn:
+    """Map radar-relative (x_m, z_m) onto a DEM grid and return absolute terrain Y.
+
+    Radar sits at grid (origin_ix, origin_iz). Ballistic X/Z are metres relative
+    to that site (same frame as WLR fit / mass-battle tracks).
+    """
+    if cell_m <= 1e-6:
+        cell_m = 1.0
+
+    def _fn(x_m: float, z_m: float) -> float:
+        ix = origin_ix + x_m / cell_m
+        iz = origin_iz + z_m / cell_m
+        return sample_terrain_bilinear(terrain, ix, iz, fallback_y_m)
+
+    return _fn
 
 
 def find_ground_intersection(
@@ -342,13 +424,17 @@ def find_ground_intersection(
     backward: bool = False,
     max_time_s: float = 90.0,
     dt_s: float = 0.05,
+    ground_y_fn: GroundYFn | None = None,
 ) -> GroundHit | None:
-    """Integrate until altitude crosses ground_y_m.
+    """Integrate until altitude crosses the local ground surface.
 
     forward  → impact point (weapon impact)
     backward → launch point (weapon origin)
+    ground_y_fn(x, z) returns absolute terrain Y; when None, uses flat ground_y_m.
     Returns None if no crossing within max_time_s.
     """
+    if ground_y_fn is None:
+        ground_y_fn = flat_ground_y_fn(ground_y_m)
     if dt_s < 1e-4:
         dt_s = 1e-4
     step_mag = dt_s
@@ -356,12 +442,14 @@ def find_ground_intersection(
     wx = wind.vx_m_s
     wz = wind.vz_m_s
     t = 0.0
-    # Already at/below ground: only valid as impact if descending.
-    if y <= ground_y_m + 0.05:
+
+    ground0 = ground_y_fn(x, z)
+    height0 = y - ground0
+    if height0 <= 0.05:
         if not backward and vy <= 0.0:
-            return GroundHit(0.0, x, ground_y_m, z, vx, vy, vz)
+            return GroundHit(0.0, x, ground0, z, vx, vy, vz)
         if backward and vy >= 0.0:
-            return GroundHit(0.0, x, ground_y_m, z, vx, vy, vz)
+            return GroundHit(0.0, x, ground0, z, vx, vy, vz)
 
     while abs(t) + 1e-12 < max_time_s:
         step = direction * step_mag
@@ -372,6 +460,8 @@ def find_ground_intersection(
         vy_prev = vy
         vz_prev = vz
         t_prev = t
+        ground_prev = ground_y_fn(x_prev, z_prev)
+        height_prev = y_prev - ground_prev
 
         ax, ay, az = _accel_with_drag(
             vx, vy, vz, air_drag, wx, wz, 0.0, gravity_m_s2, 0.0
@@ -390,27 +480,31 @@ def find_ground_intersection(
         vz = vz + az_m * step
         t = t + step
 
-        crossed = (y_prev > ground_y_m and y <= ground_y_m) or (
-            y_prev < ground_y_m and y >= ground_y_m
+        ground = ground_y_fn(x, z)
+        height = y - ground
+        crossed = (height_prev > 0.0 and height <= 0.0) or (
+            height_prev < 0.0 and height >= 0.0
         )
         if not crossed:
             continue
 
-        # Linear interpolate the crossing within the step.
-        denom = y_prev - y
+        denom = height_prev - height
         if abs(denom) < 1e-9:
             alpha = 1.0
         else:
-            alpha = (y_prev - ground_y_m) / denom
+            alpha = height_prev / denom
         if alpha < 0.0:
             alpha = 0.0
         if alpha > 1.0:
             alpha = 1.0
+        x_hit = x_prev + (x - x_prev) * alpha
+        z_hit = z_prev + (z - z_prev) * alpha
+        y_hit = ground_y_fn(x_hit, z_hit)
         return GroundHit(
             time_offset_s=t_prev + alpha * step,
-            x_m=x_prev + (x - x_prev) * alpha,
-            y_m=ground_y_m,
-            z_m=z_prev + (z - z_prev) * alpha,
+            x_m=x_hit,
+            y_m=y_hit,
+            z_m=z_hit,
             vx_m_s=vx_prev + (vx - vx_prev) * alpha,
             vy_m_s=vy_prev + (vy - vy_prev) * alpha,
             vz_m_s=vz_prev + (vz - vz_prev) * alpha,
@@ -430,6 +524,7 @@ def solve_launch_and_impact(
     gravity_m_s2: float = GRAVITY_M_S2,
     wind: GlobalWind = NO_WIND,
     max_time_s: float = 90.0,
+    ground_y_fn: GroundYFn | None = None,
 ) -> tuple[GroundHit | None, GroundHit | None]:
     """From a mid-flight ballistic state, recover launch and impact points."""
     launch = find_ground_intersection(
@@ -445,6 +540,7 @@ def solve_launch_and_impact(
         wind=wind,
         backward=True,
         max_time_s=max_time_s,
+        ground_y_fn=ground_y_fn,
     )
     impact = find_ground_intersection(
         x,
@@ -459,6 +555,7 @@ def solve_launch_and_impact(
         wind=wind,
         backward=False,
         max_time_s=max_time_s,
+        ground_y_fn=ground_y_fn,
     )
     return launch, impact
 

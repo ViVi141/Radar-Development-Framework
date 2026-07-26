@@ -87,7 +87,7 @@ scripts/Game/RDF/Radar/
 │   └── RDF_RadarProjectileTracker.c    量测关联 / α-β / 弹道 PredictAt / WLR fix
 ├── Physics/
 │   ├── RDF_RadarRcsModel.c
-│   ├── RDF_RadarBallistics.c           重力+AirDrag+全局风；发射/落点反推
+│   ├── RDF_RadarBallistics.c           重力+AirDrag+全局风；DEM/地表 WLR 交点
 │   ├── RDF_RadarSignatureLibrary.c     按 prefab 的尺寸/RCS 特征表（离线烘焙 + 运行时查表）
 │   ├── RDF_RadarClutterModel.c         DEM σ⁰ → 杂波功率
 │   ├── RDF_RadarMeasurement.c          距离门/波束量化 + SNR 噪声

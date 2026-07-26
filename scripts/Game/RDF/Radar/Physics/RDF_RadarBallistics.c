@@ -75,6 +75,54 @@ class RDF_RadarBallistics
     static const float DEFAULT_DT_S = 0.05;
     static const float MAX_INTEGRATE_S = 90.0;
 
+    protected static ref RDF_DemRuntimeCache s_DemCache;
+    protected static bool s_UseDemGround = true;
+
+    static void SetDemCache(RDF_DemRuntimeCache demCache)
+    {
+        s_DemCache = demCache;
+    }
+
+    static void SetUseDemGround(bool enable)
+    {
+        s_UseDemGround = enable;
+    }
+
+    static bool GetUseDemGround()
+    {
+        return s_UseDemGround;
+    }
+
+    static RDF_DemRuntimeCache GetOrCreateDemCache()
+    {
+        if (!s_DemCache)
+            s_DemCache = new RDF_DemRuntimeCache();
+        return s_DemCache;
+    }
+
+    // Prefer baked RDF DEM; fall back to live world surface, then flat Y.
+    static float SampleGroundYM(float worldX, float worldZ, float fallbackYM)
+    {
+        if (!s_UseDemGround)
+            return fallbackYM;
+
+        RDF_DemRuntimeCache cache = GetOrCreateDemCache();
+        if (cache)
+        {
+            RDF_DemRuntimeCellSample demSample;
+            if (cache.TrySampleAt(worldX, worldZ, demSample))
+            {
+                if (demSample && demSample.m_Valid)
+                    return demSample.m_TerrainY;
+            }
+        }
+
+        BaseWorld world = GetGame().GetWorld();
+        if (world)
+            return world.GetSurfaceY(worldX, worldZ);
+        return fallbackYM;
+    }
+
     // Sample the world's single global wind. Map UI adds +180 for display,
     // so the API angle is treated as velocity heading (blows towards).
     static RDF_RadarGlobalWind SampleGlobalWind()
@@ -183,16 +231,17 @@ class RDF_RadarBallistics
         if (backward)
             direction = -1.0;
 
-        float y = pos[1];
+        float ground0 = SampleGroundYM(pos[0], pos[2], groundYM);
+        float height0 = pos[1] - ground0;
         float vy = vel[1];
-        if (y <= groundYM + 0.05)
+        if (height0 <= 0.05)
         {
             if (!backward && vy <= 0.0)
             {
                 hit.m_Valid = true;
                 hit.m_TimeOffsetS = 0.0;
                 hit.m_Position = pos;
-                hit.m_Position[1] = groundYM;
+                hit.m_Position[1] = ground0;
                 hit.m_Velocity = vel;
                 return hit;
             }
@@ -201,7 +250,7 @@ class RDF_RadarBallistics
                 hit.m_Valid = true;
                 hit.m_TimeOffsetS = 0.0;
                 hit.m_Position = pos;
-                hit.m_Position[1] = groundYM;
+                hit.m_Position[1] = ground0;
                 hit.m_Velocity = vel;
                 return hit;
             }
@@ -213,10 +262,11 @@ class RDF_RadarBallistics
         while (Math.AbsFloat(t) + 0.000000000001 < maxTimeS)
         {
             float step = direction * dtS;
-            float yPrev = p[1];
             vector pPrev = p;
             vector vPrev = v;
             float tPrev = t;
+            float groundPrev = SampleGroundYM(pPrev[0], pPrev[2], groundYM);
+            float heightPrev = pPrev[1] - groundPrev;
 
             vector nextP;
             vector nextV;
@@ -225,29 +275,36 @@ class RDF_RadarBallistics
             v = nextV;
             t = t + step;
 
+            float ground = SampleGroundYM(p[0], p[2], groundYM);
+            float height = p[1] - ground;
+
             bool crossedDown = false;
-            if (yPrev > groundYM && p[1] <= groundYM)
+            if (heightPrev > 0.0 && height <= 0.0)
                 crossedDown = true;
             bool crossedUp = false;
-            if (yPrev < groundYM && p[1] >= groundYM)
+            if (heightPrev < 0.0 && height >= 0.0)
                 crossedUp = true;
             if (!crossedDown && !crossedUp)
                 continue;
 
-            float denom = yPrev - p[1];
+            float denom = heightPrev - height;
             float alpha = 1.0;
             if (Math.AbsFloat(denom) >= 0.000000001)
-                alpha = (yPrev - groundYM) / denom;
+                alpha = heightPrev / denom;
             if (alpha < 0.0)
                 alpha = 0.0;
             if (alpha > 1.0)
                 alpha = 1.0;
 
+            float hitX = pPrev[0] + (p[0] - pPrev[0]) * alpha;
+            float hitZ = pPrev[2] + (p[2] - pPrev[2]) * alpha;
+            float hitY = SampleGroundYM(hitX, hitZ, groundYM);
+
             hit.m_Valid = true;
             hit.m_TimeOffsetS = tPrev + alpha * step;
-            hit.m_Position[0] = pPrev[0] + (p[0] - pPrev[0]) * alpha;
-            hit.m_Position[1] = groundYM;
-            hit.m_Position[2] = pPrev[2] + (p[2] - pPrev[2]) * alpha;
+            hit.m_Position[0] = hitX;
+            hit.m_Position[1] = hitY;
+            hit.m_Position[2] = hitZ;
             hit.m_Velocity[0] = vPrev[0] + (v[0] - vPrev[0]) * alpha;
             hit.m_Velocity[1] = vPrev[1] + (v[1] - vPrev[1]) * alpha;
             hit.m_Velocity[2] = vPrev[2] + (v[2] - vPrev[2]) * alpha;

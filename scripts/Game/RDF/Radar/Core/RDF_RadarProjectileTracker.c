@@ -107,8 +107,9 @@ class RDF_RadarTrack
         outRangeRateMs = m_FilteredRangeRateMs;
     }
 
-    // Back/forward-project to flat ground for weapon locating.
+    // Back/forward-project onto DEM / live surface for weapon locating.
     // Prefer the apex sample (max Y) when history is available.
+    // groundYM is the flat-plane fallback when DEM/surface sampling is disabled.
     RDF_RadarWlrFix SolveWeaponLocate(float groundYM)
     {
         RDF_RadarWlrFix empty = new RDF_RadarWlrFix();
@@ -254,6 +255,7 @@ class RDF_RadarProjectileTracker
         m_ShellAirDrag = settings.m_ShellAirDrag;
         m_EnableWeaponLocate = settings.m_EnableWeaponLocate;
         m_WeaponLocateMinHits = settings.m_WeaponLocateMinHits;
+        RDF_RadarBallistics.SetUseDemGround(settings.m_EnableDemGroundForWlr);
     }
 
     void SetFilterGains(float alpha, float beta)
@@ -270,8 +272,8 @@ class RDF_RadarProjectileTracker
         track.m_AirDrag = m_ShellAirDrag;
     }
 
-    // Recompute launch/impact for confirmed projectile tracks using radar-site
-    // altitude as the flat ground plane (good enough until DEM terrain Y).
+    // Recompute launch/impact for confirmed projectile tracks.
+    // groundYM is only the fallback plane; SampleGroundYM prefers DEM/surface.
     void RefreshWeaponLocates(float groundYM)
     {
         if (!m_EnableWeaponLocate)
