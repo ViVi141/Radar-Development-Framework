@@ -23,10 +23,7 @@ class RDF_RadarAutoRunner
         m_Sensor = new RDF_RadarSensor();
         m_Sensor.ConfigureMode(ERDF_RadarSensorMode.RDF_RADAR_MODE_SEARCH, 64);
         m_VisualSettings = new RDF_RadarVisualSettings();
-        m_VisualSettings.m_DrawRays = false;
-        m_VisualSettings.m_DrawPoints = false;
-        m_VisualSettings.m_DrawOriginAxis = false;
-        m_VisualSettings.m_OriginAxisLength = 2.0;
+        m_VisualSettings.ApplyShowcaseDefaults();
         m_Visualizer = new RDF_RadarVisualizer(m_VisualSettings);
         GetGame().GetCallqueue().CallLater(StaticTick, 200, true);
     }
@@ -275,19 +272,68 @@ class RDF_RadarAutoRunner
         if (!m_Visualizer || !m_VisualSettings || !m_Sensor)
             return;
 
-        bool drawScan = m_VisualSettings.m_DrawRays
+        bool drawWorld = m_VisualSettings.m_DrawRays
             || m_VisualSettings.m_DrawPoints
-            || m_VisualSettings.m_DrawOriginAxis;
+            || m_VisualSettings.m_DrawOriginAxis
+            || m_VisualSettings.m_DrawSectorSweep
+            || m_VisualSettings.m_DrawLockBeam
+            || m_VisualSettings.m_DrawAfterglow
+            || m_VisualSettings.m_DrawRangeRings
+            || m_VisualSettings.m_DrawTrackRibbon;
         bool drawWlr = m_VisualSettings.m_DrawWeaponLocate;
-        if (drawScan)
-            m_Visualizer.Render(subject, m_Sensor.GetPlots());
+
+        if (drawWorld)
+        {
+            RDF_RadarScanContext ctx = m_Sensor.GetScanContext();
+            vector origin = "0 0 0";
+            vector forward = "0 0 1";
+            float rangeM = 2000.0;
+            float halfAngle = 45.0;
+            if (ctx)
+            {
+                origin = ctx.m_Origin;
+                forward = ctx.m_Forward;
+                if (ctx.m_RangeM > 0.0)
+                    rangeM = ctx.m_RangeM;
+            }
+            RDF_RadarSettings cfg = m_Sensor.GetSettings();
+            if (cfg)
+            {
+                if (cfg.m_Range > 0.0)
+                    rangeM = cfg.m_Range;
+                halfAngle = cfg.m_SectorHalfAngleDeg;
+            }
+            m_Visualizer.Render(
+                subject,
+                m_Sensor.GetPlots(),
+                origin,
+                forward,
+                rangeM,
+                halfAngle,
+                m_Sensor.GetLockManager(),
+                m_Sensor.GetTracker(),
+                m_Sensor.GetScanSerial());
+        }
         else
         {
             if (drawWlr)
                 m_Visualizer.Reset();
         }
+
         if (drawWlr && m_Sensor.GetTracker())
             m_Visualizer.RenderWeaponLocates(m_Sensor.GetTracker());
+    }
+
+    //------------------------------------------------------------------------------------------------
+    static void SetShowcaseVisuals(bool enabled)
+    {
+        RDF_RadarVisualSettings vs = GetVisualSettings();
+        if (!vs)
+            return;
+        if (enabled)
+            vs.ApplyShowcaseDefaults();
+        else
+            vs.ApplyMinimalDefaults();
     }
 
     static RDF_RadarVisualizer GetVisualizer()

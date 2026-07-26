@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## 2026-07-27 — Showcase 可视化去闪烁
+
+- 世界 Shape 去掉 `ONCE`：在两次 AutoRunner 重绘之间保持可见（CallLater≈5 Hz 时不再闪）
+- 余晖仅在新 `scanSerial` 时采样，避免同批点迹重复灌入
+
+---
+
+## 2026-07-27 — Radar Showcase 可视化 + PPI 右下压缩
+
+- 世界空间 Showcase：扇区扫掠扇面、距离环、点迹余晖、锁定锥、弹道缎带、加大 WLR 标记
+- `RDF_RadarVisualSettings.ApplyShowcaseDefaults` / `ApplyMinimalDefaults`；AutoRunner 默认 Showcase
+- `RDF_RadarAutoRunner.SetShowcaseVisuals(bool)` 一键切换
+- PPI HUD：缩小至 128×128，半透明，贴右下角（少挡视野）
+
+---
+
 ## 2026-07-27 — 天气驱动雨衰 / 雾衰
 
 - `RDF_RadarBallistics.SampleWorldWeather()`：一次采样风速、风向、`GetRainIntensity`、`GetFogAmount`

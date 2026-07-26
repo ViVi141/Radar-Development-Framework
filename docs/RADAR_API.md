@@ -244,3 +244,20 @@ Prefer the session helpers when a consumer only needs cleanup between scenarios:
 - `ClearTracks()` / `ClearDemCache()` / `ResetSession()` / `GetDemStatusShort()`
 
 Still prefer modes + a few settings overrides over rebuilding the pipeline.
+
+### Showcase visuals (demo)
+
+AutoRunner defaults to world-space showcase (not LiDAR-style point clouds):
+
+- search **sector fan** + sweep edge
+- **range rings**
+- plot markers + phosphor **afterglow**
+- **lock beam** cone while ACQUIRING / TRACKING / COAST
+- projectile **track ribbon** + larger WLR launch/impact markers
+
+```c
+RDF_RadarAutoRunner.SetShowcaseVisuals(true);  // default
+RDF_RadarAutoRunner.SetShowcaseVisuals(false); // minimal / gameplay
+```
+
+PPI HUD sits in the **bottom-right** corner at 128×128 (compact, translucent).

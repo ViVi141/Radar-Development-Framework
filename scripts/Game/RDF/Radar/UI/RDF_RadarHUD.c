@@ -2,41 +2,43 @@
 // + data rows. All widgets created dynamically via WorkspaceWidget.CreateWidgetInWorkspace().
 // No .layout file required. Green "phosphor" theme to distinguish from the blue LiDAR HUD.
 //
-// Screen layout (bottom-right, 1920x1080 reference px):
+// Screen layout (bottom-right corner, compact so it does not eat the view):
 //
-//  +==========================================+
-//  | (o) RADAR             <preset>          |  header
-//  +------------------------------------------+
-//  |                   N (north)              |
-//  |    CanvasWidget PPI  210 x 210           |
-//  |  W      (+) radar           E            |
-//  |                   S (south)              |
-//  +------------------------------------------+
-//  | Det 3/7   Trk 2   Best VEH 1.2km 14dB   |
-//  | Green veh / orange proj / magenta emit / cyan NLOS|
-//  +==========================================+
+//  +================================+
+//  | (o) RADAR        <preset>     |  header
+//  +--------------------------------+
+//  |         N                      |
+//  |  CanvasWidget PPI  128 x 128   |
+//  | W    (+) radar           E     |
+//  |         S                      |
+//  +--------------------------------+
+//  | Det / Trk / Best ...           |
+//  | legend                         |
+//  +================================+
 
 class RDF_RadarHUD
 {
     // ---- panel geometry (reference px; origin computed at Build from workspace) ----
-    static const int PX_W       = 215;
-    static const int PX_HDR_H   = 25;
+    static const int PX_W       = 136;
+    static const int PX_HDR_H   = 22;
 
-    static const int PX_RADAR_H = 210;
-    static const int PX_RADAR_W = 210;
+    static const int PX_RADAR_H = 128;
+    static const int PX_RADAR_W = 128;
 
-    static const int PX_ROW_H   = 21;
-    static const int PX_PAD_X   = 7;
-    static const int PX_PAD_Y   = 4;
+    static const int PX_ROW_H   = 18;
+    static const int PX_PAD_X   = 5;
+    static const int PX_PAD_Y   = 3;
 
-    static const int PX_H       = PX_HDR_H + PX_RADAR_H + 2 * PX_ROW_H + 6;
-    static const int PX_MARGIN  = 24;
+    static const int PX_H       = PX_HDR_H + PX_RADAR_H + 2 * PX_ROW_H + 4;
+    // Tuck into the corner; keep clear of screen edges / common UI chrome.
+    static const int PX_MARGIN_RIGHT = 14;
+    static const int PX_MARGIN_BOTTOM = 14;
 
     // ---- PPI canvas internals (unit coords == pixel coords 1:1) ----
-    static const float PPI_CX   = 105.0;
-    static const float PPI_CY   = 105.0;
-    static const float PPI_R    = 100.0;
-    static const float PPI_RING = 50.0;
+    static const float PPI_CX   = 64.0;
+    static const float PPI_CY   = 64.0;
+    static const float PPI_R    = 60.0;
+    static const float PPI_RING = 30.0;
 
     // Real-world range corresponding to PPI_R pixels.
     float m_DisplayRange = 2000.0;
@@ -47,8 +49,8 @@ class RDF_RadarHUD
     protected int m_PxDataY = 937;
 
     // ---- ARGB colours (green phosphor theme) ----
-    static const int COL_PANEL    = ARGB(210,  6,  16,  8);
-    static const int COL_HDR      = ARGB(255, 12,  30,  16);
+    static const int COL_PANEL    = ARGB(165,  6,  16,  8);
+    static const int COL_HDR      = ARGB(210, 12,  30,  16);
     static const int COL_TITLE    = ARGB(255, 120, 255, 140);
     static const int COL_MODE     = ARGB(255, 90,  220, 120);
     static const int COL_DATA     = ARGB(255, 120, 235, 150);
@@ -207,15 +209,15 @@ class RDF_RadarHUD
         MakeFrame(ws, m_PxLeft, m_PxTop, PX_W, PX_HDR_H, 91, COL_HDR);
 
         Widget wTitle = MakeText(ws, m_PxLeft + PX_PAD_X, m_PxTop + PX_PAD_Y,
-                                 110, PX_HDR_H - PX_PAD_Y, 95, COL_TITLE);
+                                 72, PX_HDR_H - PX_PAD_Y, 95, COL_TITLE);
         TextWidget.Cast(wTitle).SetText("(o) RADAR");
-        TextWidget.Cast(wTitle).SetExactFontSize(17);
+        TextWidget.Cast(wTitle).SetExactFontSize(14);
 
-        Widget wMode = MakeText(ws, m_PxLeft + 110, m_PxTop + PX_PAD_Y,
-                                PX_W - 116, PX_HDR_H - PX_PAD_Y, 95, COL_MODE);
+        Widget wMode = MakeText(ws, m_PxLeft + 74, m_PxTop + PX_PAD_Y,
+                                PX_W - 78, PX_HDR_H - PX_PAD_Y, 95, COL_MODE);
         m_wMode = TextWidget.Cast(wMode);
         m_wMode.SetText("PPI");
-        m_wMode.SetExactFontSize(15);
+        m_wMode.SetExactFontSize(12);
 
         int canvasTop = m_PxTop + PX_HDR_H;
         Widget wCanvas = ws.CreateWidgetInWorkspace(
@@ -236,18 +238,18 @@ class RDF_RadarHUD
         }
 
         // Compass labels (north-up plan display).
-        MakeCompassLabel(ws, m_PxLeft + 98, canvasTop + 8,   "N");
-        MakeCompassLabel(ws, m_PxLeft + 98, canvasTop + 188, "S");
-        MakeCompassLabel(ws, m_PxLeft + 8,   canvasTop + 98, "W");
-        MakeCompassLabel(ws, m_PxLeft + 192, canvasTop + 98, "E");
+        MakeCompassLabel(ws, m_PxLeft + 58, canvasTop + 4,   "N");
+        MakeCompassLabel(ws, m_PxLeft + 58, canvasTop + 112, "S");
+        MakeCompassLabel(ws, m_PxLeft + 4,   canvasTop + 56, "W");
+        MakeCompassLabel(ws, m_PxLeft + 114, canvasTop + 56, "E");
 
         string ringLabel = RangeLabel(m_DisplayRange * 0.5);
         Widget wRingLbl = MakeText(ws,
-            m_PxLeft + (int)PPI_CX + 3,
+            m_PxLeft + (int)PPI_CX + 2,
             canvasTop + (int)(PPI_CY - PPI_RING) - 1,
-            48, 14, 96, ARGB(130, 70, 200, 110));
+            40, 12, 96, ARGB(130, 70, 200, 110));
         TextWidget.Cast(wRingLbl).SetText(ringLabel);
-        TextWidget.Cast(wRingLbl).SetExactFontSize(12);
+        TextWidget.Cast(wRingLbl).SetExactFontSize(10);
 
         m_wStats  = TextWidget.Cast(MakeDataRow(ws, 0, "Det --   Trk --"));
         m_wLegend = TextWidget.Cast(MakeDataRow(ws, 1, "veh/proj/emit/anon + white false"));
@@ -276,13 +278,13 @@ class RDF_RadarHUD
                 screenH = h;
         }
 
-        m_PxLeft = screenW - PX_W - PX_MARGIN;
-        if (m_PxLeft < PX_MARGIN)
-            m_PxLeft = PX_MARGIN;
+        m_PxLeft = screenW - PX_W - PX_MARGIN_RIGHT;
+        if (m_PxLeft < PX_MARGIN_RIGHT)
+            m_PxLeft = PX_MARGIN_RIGHT;
 
-        m_PxTop = screenH - PX_H - PX_MARGIN;
-        if (m_PxTop < PX_MARGIN)
-            m_PxTop = PX_MARGIN;
+        m_PxTop = screenH - PX_H - PX_MARGIN_BOTTOM;
+        if (m_PxTop < PX_MARGIN_BOTTOM)
+            m_PxTop = PX_MARGIN_BOTTOM;
 
         m_PxDataY = m_PxTop + PX_HDR_H + PX_RADAR_H + 2;
     }
@@ -567,7 +569,7 @@ class RDF_RadarHUD
         {
             TextWidget tw = TextWidget.Cast(w);
             tw.SetText(defaultText);
-            tw.SetExactFontSize(15);
+            tw.SetExactFontSize(11);
         }
         return w;
     }
