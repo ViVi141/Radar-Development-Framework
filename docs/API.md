@@ -662,7 +662,7 @@ Size: 215 × (header 25 px + PPI 210 px + 2 data rows × 21 px)
 - `RDF_RadarHUD`：PPI（品红=emitter，绿=载具，橙=抛射物）。
 - `RDF_RadarComponent`：挂实体，扫描时标记发射。
 - `RDF_RadarDemoConfig.CreateDefault` / `CreateLongRange` / `CreateProjectileOnly`。
-- `RDF_RadarAutoTest.Start()`、`RDF_RadarAirborneScanTest.StartKeepTarget()`。
+- `RDF_RadarAutoTest.Start()`、`RDF_RadarBallisticsAutoTest.Start()`、`RDF_RadarShellFireAutoTest.Start()`、`RDF_RadarAirborneScanTest.StartKeepTarget()`。
 
 ### DEM 运行时（雷达杂波）
 

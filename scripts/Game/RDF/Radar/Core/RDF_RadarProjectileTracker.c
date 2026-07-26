@@ -108,8 +108,7 @@ class RDF_RadarTrack
     }
 
     // Back/forward-project to flat ground for weapon locating.
-    // groundYM: absolute world Y of the local flat plane (radar site altitude
-    // is a usable default until DEM terrain Y is wired in).
+    // Prefer the apex sample (max Y) when history is available.
     RDF_RadarWlrFix SolveWeaponLocate(float groundYM)
     {
         RDF_RadarWlrFix empty = new RDF_RadarWlrFix();
@@ -120,14 +119,36 @@ class RDF_RadarTrack
         if (m_AirDrag <= 0.0)
             return empty;
 
+        vector anchorPos = m_FilteredPosition;
+        vector anchorVel = m_FilteredVelocity;
         float anchorTime = GetLastTime();
         if (anchorTime < 0.0)
             return empty;
 
+        if (m_Positions && m_Positions.Count() > 0)
+        {
+            int apex = 0;
+            float bestY = m_Positions.Get(0)[1];
+            for (int i = 1; i < m_Positions.Count(); i++)
+            {
+                float y = m_Positions.Get(i)[1];
+                if (y > bestY)
+                {
+                    bestY = y;
+                    apex = i;
+                }
+            }
+            anchorPos = m_Positions.Get(apex);
+            if (m_Velocities && m_Velocities.Count() > apex)
+                anchorVel = m_Velocities.Get(apex);
+            if (m_Times && m_Times.Count() > apex)
+                anchorTime = m_Times.Get(apex);
+        }
+
         RDF_RadarGlobalWind wind = RDF_RadarBallistics.SampleGlobalWind();
         RDF_RadarWlrFix fix = RDF_RadarBallistics.SolveLaunchAndImpact(
-            m_FilteredPosition,
-            m_FilteredVelocity,
+            anchorPos,
+            anchorVel,
             groundYM,
             anchorTime,
             m_AirDrag,

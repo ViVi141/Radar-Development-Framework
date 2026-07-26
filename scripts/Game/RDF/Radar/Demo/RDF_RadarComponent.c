@@ -92,6 +92,7 @@ class RDF_RadarComponent : ScriptComponent
         }
         m_Tracker.ConfigureFromSettings(m_Settings);
         m_Tracker.UpdateWithOrigin(m_LastTargets, now, trackOrigin);
+        m_Tracker.RefreshWeaponLocates(trackOrigin[1]);
 
         // Keep the emitter active between dwells; otherwise another radar can
         // almost never observe the sub-frame "emitting" window.

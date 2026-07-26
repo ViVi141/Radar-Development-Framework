@@ -1,5 +1,33 @@
 # CHANGELOG
 
+## 2026-07-26 — 实弹自动放炮回归（修复检测链路）
+
+- `EnableSimulation` + 强制写入散射体表 + 测试 RCS 抬升
+- 关闭 CFAR；`m_KeepEntityTruth=true`（避免测量合成把炮弹改成 ANONYMOUS）
+- **根因**：Workbench 角色带 `RplComponent` 时 AutoRunner 误走网络默认扫描器，测试配置被绕过 → `SetForceLocalScan(true)`
+- 开火方位对齐雷达 `mat[0]` 前向；扇区 180°；天线抬高 12 m
+- 周期刷新炮弹位姿并打印 `liveShells/moving/plots/det/lastTargets`
+
+---
+
+## 2026-07-26 — 实弹自动放炮回归
+
+- 新增 `RDF_RadarShellFireAutoTest`：自动 `Spawn` + `Launch` 真实 `Ammo_Shell_82mm_HE_O832DU`
+- 约 42 s 内每 6 s 放一发（仰角 55°、装药系数 ~1.736），雷达盯炮弹扇区
+- 校验：炮弹点迹检测、确认航迹、WLR 发射点相对真值 ≤250 m
+- Debugger：`RDF_RadarShellFireAutoTest.Start();`
+
+---
+
+## 2026-07-26 — 弹道/WLR 完整接线 + 自动测试
+
+- `RDF_RadarComponent` 航迹更新后同步调用 `RefreshWeaponLocates`（与 AutoRunner 一致）
+- `SolveWeaponLocate` 优先取历史最高点（apex）状态再反推/前推
+- Enforce：`RDF_RadarBallisticsAutoTest.Start()`（自由落体时间、阻力缩短射程、侧风偏流、回推发射点、航迹 WLR）
+- Python：`tools/dem/test_rdf_radar_ballistics.py`（`python -m unittest` 已通过）
+
+---
+
 ## 2026-07-26 — 游戏内弹道预测 / 全局风 / WLR 发射·落点
 
 - 新增 `RDF_RadarBallistics.c`：`a = g - AirDrag·|v−w|·(v−w)`，读 `TimeAndWeatherManager` 全局风

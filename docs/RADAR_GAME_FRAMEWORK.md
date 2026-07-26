@@ -182,6 +182,38 @@ Use `RDF_RadarNetworkComponent` on the radar owner together with `RplComponent`.
 4. Move targets/emitter sources and confirm both host/client see consistent
    target count/type trends (allowing normal timing jitter).
 
+## Automated live shell fire + WLR test
+
+Script Debugger (Play mode). Spawns and launches real 82 mm HE shells:
+
+```c
+RDF_RadarShellFireAutoTest.Start();
+```
+
+About 42 s: fires O832DU every 6 s ahead of the local player, stares a wide
+projectile sector, then checks detected plots, confirmed tracks, and WLR launch
+error vs truth (pass ≤ 250 m). Report:
+`$profile:RDF/RadarTests/radar_shellfire_autotest_<tick>.txt`.
+
+## Automated ballistics / WLR math test
+
+Script Debugger (synchronous, no tick loop):
+
+```c
+RDF_RadarBallisticsAutoTest.Start();
+```
+
+Checks freefall impact time, AirDrag range shortening, crosswind shift,
+launch back-projection, and track apex WLR solve. Writes
+`$profile:RDF/RadarTests/radar_ballistics_autotest_<tick>.txt`.
+
+Offline Python mirror:
+
+```
+cd tools/dem
+python -m unittest test_rdf_radar_ballistics.py -v
+```
+
 ## Automated DEM regression test
 
 You can run a fully automated in-game test from Script Debugger:

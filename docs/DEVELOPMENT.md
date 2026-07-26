@@ -105,6 +105,8 @@ scripts/Game/RDF/Radar/
 └── Demo/
     ├── RDF_RadarAutoRunner.c / Bootstrap / Component / DemoConfig
     ├── RDF_RadarAutoTest.c             DEM 杂波回归
+    ├── RDF_RadarBallisticsAutoTest.c   弹道/WLR 数学回归
+    ├── RDF_RadarShellFireAutoTest.c    实弹 Spawn+Launch + WLR
     └── RDF_RadarAirborneScanTest.c     空中目标扫描
 ```
 

@@ -7,6 +7,9 @@ class RDF_RadarAutoRunner
     protected static bool s_HudEnabled = true;
     protected static float s_MinTickInterval = 0.2;
     protected static RDF_RadarNetworkAPI s_NetworkAPI;
+    // When true, always run the local AutoRunner scanner (ignore network API).
+    // Used by scripted regression tests that install a custom RDF_RadarSettings.
+    protected static bool s_ForceLocalScan;
 
     protected ref RDF_RadarSettings m_Config;
     protected ref RDF_RadarScanner m_Scanner;
@@ -56,6 +59,20 @@ class RDF_RadarAutoRunner
             s_NetworkAPI = networkAPI;
         else
             s_NetworkAPI = null;
+    }
+
+    // Scripted tests that push a full local config should call this so Workbench
+    // characters with RplComponent do not divert scans into the network scanner.
+    static void SetForceLocalScan(bool forceLocal)
+    {
+        s_ForceLocalScan = forceLocal;
+        if (forceLocal)
+            s_NetworkAPI = null;
+    }
+
+    static bool IsForceLocalScan()
+    {
+        return s_ForceLocalScan;
     }
 
     static bool IsNetworkAPIValid()
@@ -198,8 +215,15 @@ class RDF_RadarAutoRunner
             return;
 
         RDF_RadarNetworkAPI net = RDF_RadarNetworkAPI.Cast(subject.FindComponent(RDF_RadarNetworkAPI));
-        if (net != s_NetworkAPI)
-            SetNetworkAPI(net);
+        if (!s_ForceLocalScan)
+        {
+            if (net != s_NetworkAPI)
+                SetNetworkAPI(net);
+        }
+        else
+        {
+            s_NetworkAPI = null;
+        }
 
         float now = world.GetWorldTime() * 0.001;
         if (now - m_LastScanTime >= m_Config.m_UpdateInterval)
@@ -207,7 +231,7 @@ class RDF_RadarAutoRunner
             m_LastScanTime = now;
             m_ScanSerial = m_ScanSerial + 1;
             m_LastTargets.Clear();
-            if (IsNetworkAPIValid())
+            if (!s_ForceLocalScan && IsNetworkAPIValid())
             {
                 s_NetworkAPI.RequestScan();
                 if (s_NetworkAPI.HasSyncedTargets())
@@ -229,7 +253,7 @@ class RDF_RadarAutoRunner
                 m_Scanner.Scan(subject, m_LastTargets);
             }
             vector trackOrigin = m_Scanner.GetLastOrigin();
-            if (IsNetworkAPIValid())
+            if (!s_ForceLocalScan && IsNetworkAPIValid())
                 trackOrigin = s_NetworkAPI.GetLastScanOrigin();
             m_Tracker.UpdateWithOrigin(m_LastTargets, now, trackOrigin);
             m_Tracker.RefreshWeaponLocates(trackOrigin[1]);
@@ -239,7 +263,7 @@ class RDF_RadarAutoRunner
                 if (!RDF_RadarHUD.IsVisible())
                     RDF_RadarHUD.Show();
                 string modeText = "PPI";
-                if (IsNetworkAPIValid())
+                if (!s_ForceLocalScan && IsNetworkAPIValid())
                     modeText = "PPI | NET";
                 else
                     modeText = "PPI | " + m_Scanner.GetDemStatusShort();
@@ -247,7 +271,7 @@ class RDF_RadarAutoRunner
                 vector hudOrigin = m_Scanner.GetLastOrigin();
                 vector hudForward = m_Scanner.GetLastForward();
                 float hudRange = m_Scanner.GetLastRange();
-                if (IsNetworkAPIValid())
+                if (!s_ForceLocalScan && IsNetworkAPIValid())
                 {
                     hudOrigin = s_NetworkAPI.GetLastScanOrigin();
                     hudForward = s_NetworkAPI.GetLastScanForward();

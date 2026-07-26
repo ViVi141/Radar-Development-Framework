@@ -81,6 +81,9 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         m_UpdateInterval = Math.Max(0.05, config.m_UpdateInterval);
         m_DemoEnabled = config.m_Enabled;
         m_Verbose = config.m_KeepUndetected;
+        // Keep a full settings object on the authority scanner (not just the
+        // handful of replicated scalars), so projectile / WLR test configs apply.
+        m_Scanner = new RDF_RadarScanner(config);
         Replication.BumpMe();
     }
 
