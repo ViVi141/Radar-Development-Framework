@@ -1,124 +1,146 @@
 # TODO — RDF
 
-已完成项与后续路线。优先级：**P0** 玩法闭环 / **P1** 工程与性能 / **P2** 物理逼真 / **P3** 可选增强。
-
-相关文档：[RADAR_API.md](docs/RADAR_API.md) · [RADAR_CAPABILITIES.md](docs/RADAR_CAPABILITIES.md) · [VEHICLE_RADAR_LOCK_GUIDE.md](docs/VEHICLE_RADAR_LOCK_GUIDE.md)
-
----
-
-## 一、LiDAR（维护中）
-
-- [x] 点云扫描核心（多种采样策略）
-- [x] 可视化 / HUD / CSV 导出
-- [x] 多人网络同步（服务器权威）
-- [x] Bootstrap / 策略轮换
-- [ ] （P3）PPI 扫描动画、命中点历史淡出
-- [ ] （P3）DiagMenu 参数面板
-- [ ] （P3）可选 Sensor 门面，与雷达 API 形态对齐
+按 **收益 ÷ 成本** 排期；标签只作分类，不决定顺序。  
+相关：[RADAR_API.md](docs/RADAR_API.md) · [RADAR_CAPABILITIES.md](docs/RADAR_CAPABILITIES.md) · [VEHICLE_RADAR_LOCK_GUIDE.md](docs/VEHICLE_RADAR_LOCK_GUIDE.md) · [CHANGELOG.md](docs/CHANGELOG.md)
 
 ---
 
-## 二、雷达 — 已落地
+## 定位
 
-- [x] 实体优先扫描 + Trace 可见性
-- [x] 炮弹 / 载具 / 辐射源分类与 α-β 跟踪
-- [x] 硬件参数、雷达方程、多普勒、MTI、SNR
-- [x] PPI HUD、机械扫描、EW 噪声钩子
-- [x] DEM 运行时杂波接入
-- [x] NLOS 地面反射弱检（`m_EnableNlosMultipath`）
-- [x] 粗栅格 CA-CFAR + 匿名 blip
-- [x] 联机权威同步（`RDF_RadarNetworkComponent`）
-- [x] 欺骗干扰 / 假目标
-- [x] 测量合成（距离门 / 波束量化 + SNR 噪声）
-- [x] `PredictAt` 航迹外推
-- [x] 弹道（重力 + AirDrag + 全局风）与 WLR；DEM 地面交点
-- [x] 散射体表 + Signature 库 + Swerling / 方位 RCS
-- [x] 公共门面 `RDF_RadarSensor`（SEARCH / STARE / WLR）
-- [x] 自动化：`AutoTest` / `BallisticsAutoTest` / `ShellFireAutoTest` / `AirborneScanTest`
-- [x] 离线 Python 原型 + `mass_battle` + ballistics 单测
+框架已复现功能链：**搜索 → 点迹 → 跟踪 → 锁定/火控 → WLR**。  
+物理噪声 / 大气 / 信号处理高度理想化——回归“过准”是在无噪声数学世界验证闭环，不是战场精度。
 
----
-
-## 三、雷达 — 待做（按优先级）
-
-### P0 — 玩法闭环
-
-- [x] 锁定层 `RDF_RadarLockManager`：选目标、断锁、coast、当前锁 API
-- [x] 搜索 → 截获 → 跟踪状态机（`ERDF_RadarLockState`，含 coast 丢批）
-- [x] 载具挂载示例：`RDF_RadarComponent` 锁定 API + `RDF_RadarLockAutoTest`  
-  见 [VEHICLE_RADAR_LOCK_GUIDE.md](docs/VEHICLE_RADAR_LOCK_GUIDE.md)
-- [x] 武器接口：`GetLockedTarget(out entity, out worldPos)`（游戏原生暂无制导弹，接口即交付；制导留给未来模组）
-
-### P1 — 工程、性能、架构
-
-- [x] 散射体表空间网格索引（当前线性遍历）
-- [x] 拆分过重的 `RDF_RadarScanner`（CFAR / 候选 / 物理链）
-- [x] Network 对齐 Sensor（权威端统一门面，避免旁路双 Scanner）
-- [x] 收窄门面穿透：`GetDemStatusShort` 等到 Sensor，减少 `GetScanner()` 依赖
-- [x] DEM 模组内只读发布包（当前偏 `$profile` 开发路径）
-- [ ] 拆分 `tools/dem/rdf_radar_mass_battle_sim.py`（scenario / engine / eval / render）
-- [ ] 加厚 Python 单测（CFAR / track）；可选与 Enforce 同输入 golden
-
-### P1 — 远程计算后端（可选增强）
-
-> **原则**：游戏服务器仍做实体查询 + `TraceMove`（世界状态在本地）。  
-> 远程只外包 **RF 通道 / 跟踪 / WLR / 批量评估**；失败必须回退 Local。  
-> 不把整次实时扫描无条件搬到外网。
-
-- [ ] 设计文档：协议、超时、降级、安全边界
-- [ ] `RDF_RadarComputeBackend` 接口（Local 默认 / Remote 可选）
-- [ ] 请求摘要：origin / forward / settings + 已 Trace 候选（位置、速度、类型、LOS、DEM 采样）
-- [ ] 响应：plots / tracks / WLR fixes（JSON 或 CSV）；权威校验后再同步客户端
-- [ ] 游戏侧：`RestApi` / `RestContext` 异步请求；超时丢弃、不卡帧
-- [ ] 计算服务：复用 `tools/dem` 物理链（HTTP/WebSocket），与 Enforce 常量对齐
-- [ ] 首期范围建议：异步 WLR / 批量航迹 / 离线孪生；实时 SEARCH/STARE 仍默认 Local
-- [ ] 配置项：启用开关、endpoint、超时 ms、最大并发、密钥（勿入库）
-
-### P2 — 物理与检测逼真
-
-- [ ] 热噪声填充空距离单元 → 真实 CFAR 虚警率
-- [ ] 可配置 GO-CFAR / SO-CFAR 等多门限
-- [ ] 刀刃绕射 / 更精细多径（当前 image-method 简化）
-- [ ] 欺骗库扩展：拖距、角闪烁、间歇假点
-- [ ] DEM 柱状 span 遮挡 / 多径（可选）
-
-### P3 — 远期产品
-
-- [ ] 多雷达组网与 plots 融合 / 交叉定位
-- [ ] 反炮兵专用 HUD（WLR 发射 / 落点告警圈）
-- [ ] IFF / 数据链抽象
-- [ ] 游戏内 AutoTest 批跑入口或最小 CI（Python ballistics + 文档链接）
-
----
-
-## 四、DEM
-
-- [x] Workbench 烘焙 V3 CSV（tile + manifest）
-- [x] 深水捷径、列 span、材质分类
-- [x] 运行时 manifest / tile 解析与 LRU 缓存
-- [x] 雷达杂波功率 + WLR 地面采样接入
-- [x] （P1）模组内只读发布数据包
-- [ ] （P2）柱状 span 遮挡 / 多径
-
----
-
-## 五、仓库卫生（可选）
-
-- [x] Sensor API 文档与 Demo 接线
-- [x] `.gitignore`：`out/`、`TrainData/`、`*.rdb`、根目录数字 JPG
-- [x] 删除空目录 `Radar/Detection`、`Radar/Tracking`（若仍存在）
-- [x] CHANGELOG 顶部补 P1 A+B 摘要（不压缩历史段）
-- [ ] `LICENSE` / `LICENSE.txt` 二选一（仅检查，暂不合并）
-
----
-
-## 六、明确不做（游戏内实时主路径）
-
-- 全场电磁波 / FDTD
-- 训练级 RD 图每帧满跑
-- 完整 DRFM 硬件仿真
-- 远程服务器替代本地 Trace / 实体查询（状态无法干净搬迁）
-
-目标产品形态：**可信的军武传感器玩法**（发现 / 丢失 / 压制 / 欺骗 / 锁定），可选远程算力增强重计算，而不是电磁仿真器。
+| 当前强项 | 当前弱项 |
+|----------|----------|
+| 功能链、Sensor 门面、5/5 回归 | 热噪声、真实虚警、测量误差 |
+| 网格、LOS/物理复用、分片预算 | 大气衰减、精细多径 |
+| DEM 杂波 + 模组内发布回退 | 组网融合、远程算力 |
 
 入口：[README.md](README.md)
+
+---
+
+## 实施顺序（按收益）
+
+收益：玩法体感 / 可信度 / 可维护性。成本：改动面、回归风险、联调量。  
+原则：**先让误差合常理，再加深模型；先可观测，再可调参；远程与组网最后。**
+
+### 1 — 立刻做（高收益 · 低成本）
+
+| 项 | 收益 | 成本 | 为何现在做 |
+|----|------|------|------------|
+| CHANGELOG 补扫描优化条目 | 文档与现状对齐 | 极低 | 欠账，几分钟 |
+| `GetStatusShort` / stats：`reuseHits` `freshUpdates` `budgetSkips` | 能看见优化是否生效 | 低 | 无观测就无法调预算 |
+| 回归双档：理想档仍可“准”；逼真档用误差带验收 | 防止 P2 把套件卡死 | 低 | 物理项的前置护栏 |
+
+- [ ] CHANGELOG：LOS 缓存 / 分片预算 / 物理复用 / 优先级扫描
+- [ ] 复用与预算命中统计写入状态行
+- [ ] AutoTest：`ideal` vs `realistic`（或 settings 开关）；逼真档断言改为误差带
+
+### 2 — 下一波（高收益 · 中成本）← 主战场
+
+目标：玩法上出现“发现不稳定 / 虚警 / 测距晃动”，而不是永远 0.3 m。
+
+| 项 | 收益 | 成本 | 依赖 |
+|----|------|------|------|
+| 测量噪声与偏差（距离 / 方位 / 多普勒） | 跟踪与 WLR 立刻“合常理” | 中 | 双档回归 |
+| 热噪声填空距离单元 | CFAR 有真实虚警率 | 中 | 无 |
+| 大气 / 降雨简化衰减 | 远距探测变难，体感强 | 中 | 测量噪声后更自然 |
+
+- [ ] 测量噪声与系统性偏差（合成测量路径）
+- [ ] 热噪声填充空距离单元 → CA-CFAR 虚警可测
+- [ ] 大气衰减 / 降雨损耗（简化模型，可关）
+
+### 3 — 再加深（中收益 · 中高成本）
+
+| 项 | 收益 | 成本 | 说明 |
+|----|------|------|------|
+| GO-CFAR / SO-CFAR | 杂波边缘更稳 | 中 | 热噪声落地后再做才有意义 |
+| 扫描阈值进 `RDF_RadarSettings` | 不同雷达可调 | 低中 | 有 stats 后再调参 |
+| 欺骗扩展：拖距 / 角闪烁 / 间歇假点 | EW 玩法厚度 | 中 | 不挡物理主线 |
+| 反炮兵 HUD（发射/落点圈） | WLR 产品化 | 中 | 功能已有，缺呈现 |
+
+- [ ] 可配置 GO-CFAR / SO-CFAR
+- [ ] 扫描优化阈值下沉 `RDF_RadarSettings`
+- [ ] 欺骗库扩展（拖距、角闪烁、间歇假点）
+- [ ] 反炮兵专用 HUD（WLR 告警圈）
+
+### 4 — 延后（收益情景化 · 成本高）
+
+| 项 | 收益 | 成本 | 何时启动 |
+|----|------|------|----------|
+| 刀刃绕射 / 精细多径 | 山地遮挡更真 | 高 | 基础噪声稳定后 |
+| DEM 柱状 span 遮挡 / 多径 | 城区/林冠 | 高 | 有明确场景需求时 |
+| 多雷达组网 / 交叉定位 | 战役级 | 很高 | 单雷达玩法打磨完 |
+| 远程计算后端 | 卸服务器算力 | 很高 | 本地算力真成瓶颈 |
+| `mass_battle_sim` 拆分 | 离线可维护 | 中 | 离线仿真要大改时 |
+| Python CFAR/track golden | 防漂移 | 中 | 逼真模型定稿后 |
+| IFF / 数据链 | 产品层 | 高 | 玩法需要识别友军时 |
+| AutoTest 批跑 / 最小 CI | 工程卫生 | 中 | 多人协作或发版频繁时 |
+| LiDAR PPI 动画 / DiagMenu / Sensor 对齐 | LiDAR 体验 | 中 | 雷达主线空窗 |
+
+- [ ] 刀刃绕射 / 更精细多径
+- [ ] DEM span 遮挡 / 多径
+- [ ] 多雷达 plots 融合 / 交叉定位
+- [ ] 远程计算：设计文档 → Backend 接口 → Rest 异步 → 服务端对齐（失败回退 Local）
+- [ ] 拆分 `rdf_radar_mass_battle_sim.py`
+- [ ] Python CFAR / track 单测 + 可选 Enforce golden
+- [ ] IFF / 数据链抽象
+- [ ] 游戏内 AutoTest 批跑或最小 CI
+- [ ] LiDAR：PPI 动画、DiagMenu、Sensor 门面对齐
+
+### 5 — 停车场（低收益或高风险，默认不做）
+
+- [ ] `LICENSE` / `LICENSE.txt` 合并（工具链兼容未确认前不动）
+- 全场 FDTD / 训练级 RD 图每帧 / 完整 DRFM
+- 远程替代本地 Trace / 实体查询
+
+---
+
+## 建议冲刺切片
+
+**Sprint A（1–2 天）**：§1 三条全做完 → 有观测、有双档回归、文档齐。  
+**Sprint B（3–5 天）**：测量噪声 → 热噪声 → 大气衰减；每步跑 `AutoTestSuite`，逼真档用误差带。  
+**Sprint C（按需）**：GO/SO-CFAR、Settings 阈值、欺骗扩展、WLR HUD。  
+**以后**：绕射 / DEM span / 组网 / 远程算力。
+
+---
+
+## 已落地（摘要）
+
+### 功能链
+
+- [x] 扫描 + Trace LOS / NLOS · 分类跟踪 · 雷达方程 / 多普勒 / MTI / SNR
+- [x] PPI · DEM 杂波 · CA-CFAR · EW / 欺骗 · 测量合成
+- [x] 弹道 + WLR · 散射体表 / Signature / Swerling
+- [x] `RDF_RadarSensor` · `RDF_RadarLockManager` · `GetLockedTarget`
+- [x] Network 权威端挂 Sensor
+
+### 工程 / 性能
+
+- [x] 散射体 XZ 网格 · Scanner 拆分 · DEM `$profile`→`DemData/`
+- [x] LOS 缓存 · 多帧预算 · 优先级扫描 · 低速物理复用
+
+### 测试
+
+- [x] `AutoTestSuite` 5/5（Ballistics / DEM / Lock / Airborne / ShellFire）
+- [x] 测试不加辐射源 / 抬 RCS / 强制写表
+
+### DEM / 仓库
+
+- [x] V3 烘焙 · 运行时 LRU · 杂波 + WLR 地面
+- [x] `.gitignore` · 空目录清理 · P1 CHANGELOG 摘要
+
+### LiDAR（维护）
+
+- [x] 点云 / HUD / CSV / 网络 / Bootstrap  
+- 体验项见上方 §4
+
+---
+
+## 明确不做（实时主路径）
+
+- 全场电磁波 / FDTD · 训练级 RD 图每帧 · 完整 DRFM
+- 远程替代本地 Trace / 实体查询
+
+产品目标：**可信的军武传感器玩法**（发现 / 丢失 / 压制 / 欺骗 / 锁定），不是电磁仿真器，也不用理想世界冒充战场精度。
