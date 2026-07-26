@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-07-27 — 天气驱动雨衰 / 雾衰
+
+- `RDF_RadarBallistics.SampleWorldWeather()`：一次采样风速、风向、`GetRainIntensity`、`GetFogAmount`
+- `m_EnableWeatherDrivenRainLoss`：每扫描用雨强/雾量叠加到大气雨衰（晴空拟合仍独立）
+- 逼真档默认开启（满雨 0.5 dB/km、满雾 0.05 dB/km）；理想档关闭以保证回归稳定
+- 风速仍驱动弹道 / WLR（既有 `SampleGlobalWind`）
+
+---
+
 ## 2026-07-27 — 测量误差模型扩展接口
 
 - 新增 `RDF_RadarMeasurementModel` / `RDF_RadarDefaultMeasurementModel`

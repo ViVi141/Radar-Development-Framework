@@ -37,6 +37,8 @@ class RDF_RadarScanner
     protected int m_StatFreshUpdates;
     protected int m_StatBudgetSkips;
     protected int m_StatLosCacheHits;
+    // Resolved once per Scan() when atmospheric loss is enabled.
+    protected float m_ScanRainLossDbPerKm;
 
     void RDF_RadarScanner(RDF_RadarSettings settings = null)
     {
@@ -58,6 +60,7 @@ class RDF_RadarScanner
         m_CfarCachedAzBins = 0;
         m_CfarCachedRangeBins = 0;
         m_SettingsValidated = false;
+        m_ScanRainLossDbPerKm = 0.0;
     }
 
     RDF_RadarSettings GetSettings()
@@ -130,10 +133,19 @@ class RDF_RadarScanner
         m_StatFreshUpdates = 0;
         m_StatBudgetSkips = 0;
         m_StatLosCacheHits = 0;
+        m_ScanRainLossDbPerKm = 0.0;
         if (!m_SettingsValidated)
         {
             m_Settings.Validate();
             m_SettingsValidated = true;
+        }
+
+        if (m_Settings.m_EnableAtmosphericLoss)
+        {
+            RDF_RadarWeatherSnapshot weather = null;
+            if (m_Settings.m_EnableWeatherDrivenRainLoss)
+                weather = RDF_RadarBallistics.SampleWorldWeather();
+            m_ScanRainLossDbPerKm = m_Settings.ResolveRainLossDbPerKm(weather);
         }
 
         BaseWorld world = subject.GetWorld();
@@ -1438,7 +1450,7 @@ class RDF_RadarScanner
             float latm = RDF_RadarClutterModel.AtmosphericLossLinear(
                 distance,
                 atmDb,
-                m_Settings.m_RainLossDbPerKmOneWay);
+                m_ScanRainLossDbPerKm);
             if (latm > 1.0)
                 target.m_ReceivedPowerW = target.m_ReceivedPowerW / latm;
         }

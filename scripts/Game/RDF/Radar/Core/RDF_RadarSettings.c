@@ -75,7 +75,14 @@ class RDF_RadarSettings
     bool m_EnableAtmosphericLoss = false;
     // <0 → auto from carrier frequency (clear-air fit).
     float m_AtmLossDbPerKmOneWay = -1.0;
+    // Manual rain floor (always applied when atmospheric loss is on).
     float m_RainLossDbPerKmOneWay = 0.0;
+    // When true, add rain/fog from TimeAndWeatherManager each scan.
+    bool m_EnableWeatherDrivenRainLoss = false;
+    // Extra one-way dB/km when GetRainIntensity() == 1.
+    float m_RainLossDbPerKmAtFullIntensity = 0.5;
+    // Extra one-way dB/km when GetFogAmount() == 1 (weak; fog is not rain).
+    float m_FogLossDbPerKmAtFullFog = 0.05;
     // Plot-to-track association gates (meters / degrees).
     float m_TrackGateRangeM = 400.0;
     float m_TrackGateAzimuthDeg = 4.0;
@@ -136,6 +143,9 @@ class RDF_RadarSettings
         m_MeasDopplerBiasHz = Math.Clamp(m_MeasDopplerBiasHz, -500.0, 500.0);
         m_AtmLossDbPerKmOneWay = Math.Clamp(m_AtmLossDbPerKmOneWay, -1.0, 5.0);
         m_RainLossDbPerKmOneWay = Math.Clamp(m_RainLossDbPerKmOneWay, 0.0, 20.0);
+        m_RainLossDbPerKmAtFullIntensity = Math.Clamp(
+            m_RainLossDbPerKmAtFullIntensity, 0.0, 20.0);
+        m_FogLossDbPerKmAtFullFog = Math.Clamp(m_FogLossDbPerKmAtFullFog, 0.0, 5.0);
         if (!m_Hardware)
             m_Hardware = RDF_RadarHardware.CreateShorad();
         if (!m_EwStack)
@@ -159,13 +169,15 @@ class RDF_RadarSettings
         m_MeasDopplerBiasHz = 0.0;
         m_EnableCfarThermalFill = false;
         m_EnableAtmosphericLoss = false;
+        m_EnableWeatherDrivenRainLoss = false;
         m_AtmLossDbPerKmOneWay = -1.0;
         m_RainLossDbPerKmOneWay = 0.0;
     }
 
     //------------------------------------------------------------------------------------------------
     // Gameplay / fidelity profile: louder measurement noise, thermal CFAR fill,
-    // clear-air atmosphere. Tests that enable this must use wider error bands.
+    // clear-air atmosphere + weather-driven rain/fog loss.
+    // Tests that enable this must use wider error bands.
     void ApplyRealisticChannel()
     {
         m_RealisticChannel = true;
@@ -178,7 +190,31 @@ class RDF_RadarSettings
         m_MeasDopplerBiasHz = 0.0;
         m_EnableCfarThermalFill = true;
         m_EnableAtmosphericLoss = true;
+        m_EnableWeatherDrivenRainLoss = true;
         m_AtmLossDbPerKmOneWay = -1.0;
-        m_RainLossDbPerKmOneWay = 0.05;
+        m_RainLossDbPerKmOneWay = 0.0;
+        m_RainLossDbPerKmAtFullIntensity = 0.5;
+        m_FogLossDbPerKmAtFullFog = 0.05;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Resolve effective one-way rain(+fog) loss for this scan.
+    // Manual floor always applies; weather terms optional.
+    float ResolveRainLossDbPerKm(RDF_RadarWeatherSnapshot weather)
+    {
+        float rainDb = m_RainLossDbPerKmOneWay;
+        if (!m_EnableWeatherDrivenRainLoss)
+            return rainDb;
+        if (!weather || !weather.m_Valid)
+            return rainDb;
+
+        rainDb = rainDb
+            + weather.m_RainIntensity * m_RainLossDbPerKmAtFullIntensity
+            + weather.m_FogAmount * m_FogLossDbPerKmAtFullFog;
+        if (rainDb < 0.0)
+            rainDb = 0.0;
+        if (rainDb > 20.0)
+            rainDb = 20.0;
+        return rainDb;
     }
 }

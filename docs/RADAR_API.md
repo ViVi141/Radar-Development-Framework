@@ -130,6 +130,14 @@ Also assignable on settings: `cfg.m_MeasurementModel = new MyGameplayNoise();`
 
 `m_EnableMeasurementSynthesis = false` disables the whole stage (ideal God-mode plots).
 
+### Weather coupling
+
+- **Wind** (already): ballistics / WLR via `RDF_RadarBallistics.SampleGlobalWind()`.
+- **Rain / fog loss** (optional): `m_EnableWeatherDrivenRainLoss` samples
+  `GetRainIntensity` / `GetFogAmount` once per scan and adds
+  `intensity * m_RainLossDbPerKmAtFullIntensity` (+ fog term) on top of the
+  manual `m_RainLossDbPerKmOneWay` floor. Enabled by `ApplyRealisticChannel()`.
+
 ---
 
 ## Read model (contracts)

@@ -29,6 +29,33 @@ class RDF_RadarGlobalWind
     }
 }
 
+// One-shot TimeAndWeatherManager sample (global, not a spatial field).
+class RDF_RadarWeatherSnapshot
+{
+    bool m_Valid;
+    float m_WindSpeedMs;
+    float m_WindDirectionDeg;
+    // Engine rain / fog amounts in [0, 1].
+    float m_RainIntensity;
+    float m_FogAmount;
+
+    void RDF_RadarWeatherSnapshot()
+    {
+        m_Valid = false;
+        m_WindSpeedMs = 0.0;
+        m_WindDirectionDeg = 0.0;
+        m_RainIntensity = 0.0;
+        m_FogAmount = 0.0;
+    }
+
+    RDF_RadarGlobalWind ToWind()
+    {
+        RDF_RadarGlobalWind wind = new RDF_RadarGlobalWind();
+        wind.Set(m_WindSpeedMs, m_WindDirectionDeg);
+        return wind;
+    }
+}
+
 class RDF_RadarGroundHit
 {
     float m_TimeOffsetS;
@@ -127,17 +154,28 @@ class RDF_RadarBallistics
     // so the API angle is treated as velocity heading (blows towards).
     static RDF_RadarGlobalWind SampleGlobalWind()
     {
-        RDF_RadarGlobalWind wind = new RDF_RadarGlobalWind();
+        RDF_RadarWeatherSnapshot snap = SampleWorldWeather();
+        return snap.ToWind();
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Wind + rain + fog from TimeAndWeatherManager (one call per scan preferred).
+    static RDF_RadarWeatherSnapshot SampleWorldWeather()
+    {
+        RDF_RadarWeatherSnapshot snap = new RDF_RadarWeatherSnapshot();
         ChimeraWorld world = ChimeraWorld.CastFrom(GetGame().GetWorld());
         if (!world)
-            return wind;
+            return snap;
         TimeAndWeatherManagerEntity weather = world.GetTimeAndWeatherManager();
         if (!weather)
-            return wind;
-        float speed = weather.GetWindSpeed();
-        float dirDeg = weather.GetWindDirection();
-        wind.Set(speed, dirDeg);
-        return wind;
+            return snap;
+
+        snap.m_Valid = true;
+        snap.m_WindSpeedMs = weather.GetWindSpeed();
+        snap.m_WindDirectionDeg = weather.GetWindDirection();
+        snap.m_RainIntensity = Math.Clamp(weather.GetRainIntensity(), 0.0, 1.0);
+        snap.m_FogAmount = Math.Clamp(weather.GetFogAmount(), 0.0, 1.0);
+        return snap;
     }
 
     static void AccelWithDrag(
