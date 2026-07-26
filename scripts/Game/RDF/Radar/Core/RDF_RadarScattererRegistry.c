@@ -249,6 +249,24 @@ class RDF_RadarScattererRegistry
     }
 
     //------------------------------------------------------------------------------------------------
+    // Drop cached DEM cell hits on every entry. Used when the runtime cache is
+    // flushed so stale terrainY / surfaceClass cannot keep demValid=true.
+    static void InvalidateDemSamples()
+    {
+        EnsureContainers();
+        for (int i = 0; i < s_Entries.Count(); i++)
+        {
+            RDF_RadarScatterer e = s_Entries.Get(i);
+            if (!e)
+                continue;
+            e.m_DemSampleValid = false;
+            e.m_DemTerrainY = 0.0;
+            e.m_DemSurfaceClass = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
+            e.m_DemSampleTime = -1000.0;
+        }
+    }
+
+    //------------------------------------------------------------------------------------------------
     // Advance the table. Guarded so N radars in one frame cost the same as one.
     // Frame / discovery cadence uses wall clock so GM editor (frozen world time)
     // still classifies and refreshes entries for AutoTests.
@@ -573,6 +591,15 @@ class RDF_RadarScattererRegistry
                     terrainY = demSample.m_TerrainY;
                     haveTerrain = true;
                 }
+                else
+                {
+                    entry.m_DemSampleValid = false;
+                }
+            }
+            else
+            {
+                // Cache miss / empty budget: do not keep a stale demValid hit.
+                entry.m_DemSampleValid = false;
             }
         }
         else if (entry.m_DemSampleValid)

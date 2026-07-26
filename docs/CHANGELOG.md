@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## 2026-07-27 — DEM AutoTest budget0 清缓存
+
+- 杂波已正确：`scale1→scale5` 约 5×（7.9e-18 → 3.9e-17）
+- `budget0` 假 FAIL：前几阶段散射体表仍保留 `demValid`，即使 `DemTileLoadsPerScan=0` 也继续算杂波
+- `InvalidateDemSamples` + phase 切入时 `ClearDemCache`；刷新 DEM 时 cache miss 不再保留陈旧 `demValid`
+
+---
+
+## 2026-07-27 — DEM AutoTest 宽波束修复
+
+- 根因：默认 Shorad 方位波束 2.5°，合成辐射源落在主瓣外 → `patternGain≈0` → `avgSNR=-300`、`avgClutter=0`（假 FAIL）
+- `BuildBaseConfig`：方位 90°、加宽仰角波束；关 CFAR / 测量合成；天线抬高 12 m
+- 合成辐射源改沿 boresight 阶梯距离放置（±小侧摆），运动用墙钟
+
+---
+
 ## 2026-07-27 — AutoTest 互斥 + 顺序套件
 
 - 根因：DEM / Lock / Air / ShellFire 共用 `RDF_RadarAutoRunner`；并行启动会互相覆盖配置 → 假 FAIL（clutter=0、acquire=0、tracks=0、分类为 0）

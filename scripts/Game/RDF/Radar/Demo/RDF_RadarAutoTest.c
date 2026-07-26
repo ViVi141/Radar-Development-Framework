@@ -207,6 +207,15 @@ class RDF_RadarAutoTest
         RDF_RadarAutoRunner.SetDemoConfig(cfg);
         RDF_RadarAutoRunner.StartAutoRun();
 
+        // budget0 must not reuse warm DEM hits from earlier phases.
+        if (phaseIdx == 3)
+        {
+            RDF_RadarSensor sensor = RDF_RadarAutoRunner.GetSensor();
+            if (sensor && sensor.GetScanner())
+                sensor.GetScanner().ClearDemCache();
+            RDF_RadarScattererRegistry.InvalidateDemSamples();
+        }
+
         m_Current = new RDF_RadarAutoTestCaseResult();
         m_Current.m_Name = name;
         m_LastScanSerial = RDF_RadarAutoRunner.GetLastScanSerial();
@@ -230,6 +239,22 @@ class RDF_RadarAutoTest
         cfg.m_DemCacheMaxTiles = RDF_DemBakeConstants.RUNTIME_DEM_CACHE_MAX_TILES;
         cfg.m_DemTileLoadsPerScan = RDF_DemBakeConstants.RUNTIME_DEM_LOADS_PER_SCAN;
         cfg.m_DemClutterScale = 1.0;
+        // Default Shorad pencil (2.5°) puts orbiting emitters outside the main
+        // lobe → patternGain≈0 → SNR=-300 and clutter=0. DEM regression needs
+        // a wide stare so clutter power is measurable on the synthetic targets.
+        cfg.m_EnableMechanicalScan = false;
+        cfg.m_EnableCfarGate = false;
+        cfg.m_EnableMeasurementSynthesis = false;
+        cfg.m_KeepEntityTruth = true;
+        cfg.m_OriginOffset = Vector(0.0, 12.0, 0.0);
+        RDF_RadarHardware hw = RDF_RadarHardware.CreateShorad();
+        hw.m_AzimuthBeamwidthDeg = 90.0;
+        hw.m_ScanRpm = 0.0;
+        hw.ClearElevationBeams();
+        hw.AddElevationBeam("dem_low", 2.0, 20.0, 0.0);
+        hw.AddElevationBeam("dem_mid", 10.0, 24.0, 0.0);
+        hw.Validate();
+        cfg.m_Hardware = hw;
         cfg.Validate();
         return cfg;
     }
@@ -446,7 +471,19 @@ class RDF_RadarAutoTest
         vector mat[4];
         subject.GetWorldTransform(mat);
         vector origin = mat[3];
+        // Place emitters along boresight (mat[0]) at stepped ranges so they stay
+        // inside the wide DEM-test beam instead of orbiting into sidelobes.
+        vector fwd = mat[0];
+        float flatLen = Math.Sqrt(fwd[0] * fwd[0] + fwd[2] * fwd[2]);
+        vector flatFwd;
+        if (flatLen < 0.001)
+            flatFwd = Vector(0.0, 0.0, 1.0);
+        else
+            flatFwd = Vector(fwd[0] / flatLen, 0.0, fwd[2] / flatLen);
+
         float radarY = origin[1] + 40.0;
+        // Wall clock keeps motion alive even if world time is paused in GM.
+        float wallS = System.GetTickCount() * 0.001;
 
         for (int i = 0; i < m_TestEmitterOwners.Count(); i++)
         {
@@ -455,14 +492,16 @@ class RDF_RadarAutoTest
                 continue;
 
             float baseAngle = m_TestEmitterBaseAngles.Get(i);
-            float angularRate = 0.20 + i * 0.08;
-            float angle = baseAngle + nowS * angularRate;
-            float radius = 450.0 + i * 350.0;
+            float angularRate = 0.05 + i * 0.02;
+            float angle = baseAngle * 0.15 + wallS * angularRate;
+            float radius = 400.0 + i * 300.0;
+            // Small lateral wobble around forward; stay within ~±25°.
+            float lateral = Math.Sin(angle) * 0.35;
 
             vector pos = Vector(
-                origin[0] + Math.Cos(angle) * radius,
+                origin[0] + flatFwd[0] * radius - flatFwd[2] * lateral * radius,
                 radarY + i * 18.0,
-                origin[2] + Math.Sin(angle) * radius);
+                origin[2] + flatFwd[2] * radius + flatFwd[0] * lateral * radius);
             RDF_RadarEmitterRegistry.Register(owner, pos, true, 1.0);
         }
     }

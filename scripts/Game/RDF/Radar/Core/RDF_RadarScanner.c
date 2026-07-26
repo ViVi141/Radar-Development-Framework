@@ -75,6 +75,17 @@ class RDF_RadarScanner
         return m_DemCache.GetStatsLine();
     }
 
+    RDF_DemRuntimeCache GetDemCache()
+    {
+        return m_DemCache;
+    }
+
+    void ClearDemCache()
+    {
+        if (m_DemCache)
+            m_DemCache.Clear();
+    }
+
     string GetScattererStatsLine()
     {
         return RDF_RadarScattererRegistry.GetStatsLine();
