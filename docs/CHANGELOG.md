@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-07-27 — 测量误差模型扩展接口
+
+- 新增 `RDF_RadarMeasurementModel` / `RDF_RadarDefaultMeasurementModel`
+- 扫描管线：CFAR → **MeasurementModel** → Tracker/WLR（自定义噪声会影响跟踪与定位）
+- `RDF_RadarSettings.m_MeasurementModel`；`Sensor.SetMeasurementModel` / `GetMeasurementModel`
+- 默认仍走内置 `RDF_RadarMeasurement.Synthesize`（CRLB + 量化）
+
+---
+
 ## 2026-07-27 — 逼真档真正加压
 
 - `ApplyRealisticChannel`：默认开 CFAR；`m_MeasNoiseScale=3.5`；距离偏置 5 m；方位/俯仰偏置加大；轻雨衰 0.05 dB/km

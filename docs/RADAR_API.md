@@ -100,6 +100,36 @@ class MyHandler : RDF_RadarScanCompleteHandler
 sensor.SetScanCompleteHandler(new MyHandler());
 ```
 
+### Custom measurement / error model
+
+Runs **after CFAR, before Tracker / WLR**, so noise affects tracks and weapon locate.
+Default is CRLB + quantization (`RDF_RadarMeasurement`). Downstream mods override for gameplay feel.
+
+```c
+class MyGameplayNoise : RDF_RadarMeasurementModel
+{
+    override void SynthesizePlot(
+        RDF_RadarTarget target,
+        vector radarOrigin,
+        RDF_RadarHardware hardware,
+        RDF_RadarSettings settings)
+    {
+        // Optional: keep stock quantization / CRLB first.
+        super.SynthesizePlot(target, radarOrigin, hardware, settings);
+
+        // Then add a σ floor, bias table, weather, etc. Rewrite
+        // target.m_Distance / m_AzimuthDeg / m_ElevationDeg / m_Position.
+    }
+}
+
+sensor.SetMeasurementModel(new MyGameplayNoise());
+// sensor.SetMeasurementModel(null); // restore default
+```
+
+Also assignable on settings: `cfg.m_MeasurementModel = new MyGameplayNoise();`
+
+`m_EnableMeasurementSynthesis = false` disables the whole stage (ideal God-mode plots).
+
 ---
 
 ## Read model (contracts)

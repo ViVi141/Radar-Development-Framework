@@ -104,6 +104,26 @@ class RDF_RadarSensor
         m_Handler = handler;
     }
 
+    //------------------------------------------------------------------------------------------------
+    // Replace the post-CFAR measurement / error model. Affects Tracker and WLR.
+    // Pass null to restore the built-in default CRLB synthesizer.
+    void SetMeasurementModel(RDF_RadarMeasurementModel model)
+    {
+        if (!m_Settings)
+            return;
+        if (model)
+            m_Settings.m_MeasurementModel = model;
+        else
+            m_Settings.m_MeasurementModel = new RDF_RadarDefaultMeasurementModel();
+    }
+
+    RDF_RadarMeasurementModel GetMeasurementModel()
+    {
+        if (!m_Settings)
+            return null;
+        return m_Settings.m_MeasurementModel;
+    }
+
     // Replace full settings (advanced). Prefer ConfigureMode for gameplay presets.
     void Configure(RDF_RadarSettings settings)
     {

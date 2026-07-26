@@ -51,6 +51,7 @@
 - [x] 热噪声填充空距离单元 → CA-CFAR 虚警可测
 - [x] 大气衰减 / 降雨损耗（简化模型，可关）
 - [x] 逼真档套件真正加压：CFAR+热填空保持开启；`MeasNoiseScale≈3.5`；WLR 误差带 800 m
+- [x] 测量误差扩展接口：`RDF_RadarMeasurementModel`（CFAR 后 / Tracker 前，下游可 override）
 
 ### 3 — 再加深（中收益 · 中高成本）← 下一步
 

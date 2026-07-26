@@ -66,6 +66,9 @@ class RDF_RadarSettings
     float m_MeasAzimuthBiasDeg = 0.0;
     float m_MeasElevationBiasDeg = 0.0;
     float m_MeasDopplerBiasHz = 0.0;
+    // Pluggable channel-error model (runs after CFAR, before Tracker/WLR).
+    // Null → built-in RDF_RadarMeasurement.Synthesize fallback.
+    ref RDF_RadarMeasurementModel m_MeasurementModel;
     // Fill empty CFAR cells with thermal-noise samples (real Pfa behaviour).
     bool m_EnableCfarThermalFill = false;
     // Two-way atmospheric / rain loss on received power.
@@ -92,6 +95,7 @@ class RDF_RadarSettings
     {
         m_Hardware = RDF_RadarHardware.CreateShorad();
         m_EwStack = new RDF_RadarEwStack();
+        m_MeasurementModel = new RDF_RadarDefaultMeasurementModel();
     }
 
     void Validate()
@@ -136,6 +140,8 @@ class RDF_RadarSettings
             m_Hardware = RDF_RadarHardware.CreateShorad();
         if (!m_EwStack)
             m_EwStack = new RDF_RadarEwStack();
+        if (!m_MeasurementModel)
+            m_MeasurementModel = new RDF_RadarDefaultMeasurementModel();
         m_Hardware.Validate();
     }
 

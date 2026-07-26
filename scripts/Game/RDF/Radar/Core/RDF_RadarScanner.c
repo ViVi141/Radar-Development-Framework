@@ -813,6 +813,14 @@ class RDF_RadarScanner
         if (!m_Settings.m_Hardware)
             return;
 
+        RDF_RadarMeasurementModel model = m_Settings.m_MeasurementModel;
+        if (model)
+        {
+            model.SynthesizeAll(targets, origin, m_Settings.m_Hardware, m_Settings);
+            return;
+        }
+
+        // Fallback when settings cleared the model reference.
         for (int i = 0; i < targets.Count(); i++)
         {
             RDF_RadarTarget t = targets.Get(i);
