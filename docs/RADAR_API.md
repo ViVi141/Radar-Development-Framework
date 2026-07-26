@@ -189,7 +189,8 @@ RDF_RadarAutoRunner.GetSensor().GetStatusShort();
 ## Network
 
 Pass `RDF_RadarNetworkAPI` into `Tick` / `ScanOnce` when present.  
-`SetForceLocalScan(true)` forces the local channel (used by scripted regression tests so Workbench `RplComponent` does not divert into the network default scanner).
+权威端 `RDF_RadarNetworkComponent` 现在直接挂 `RDF_RadarSensor`，不再维护第二套 Scanner 配置。
+`SetForceLocalScan(true)` forces the local channel (used by scripted regression tests so Workbench `RplComponent` does not divert into the network path).
 
 ---
 

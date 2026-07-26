@@ -51,11 +51,11 @@
 
 ### P1 — 工程、性能、架构
 
-- [ ] 散射体表空间网格索引（当前线性遍历）
-- [ ] 拆分过重的 `RDF_RadarScanner`（CFAR / 候选 / 物理链）
-- [ ] Network 对齐 Sensor（权威端统一门面，避免旁路双 Scanner）
-- [ ] 收窄门面穿透：`GetDemStatusShort` 等到 Sensor，减少 `GetScanner()` 依赖
-- [ ] DEM 模组内只读发布包（当前偏 `$profile` 开发路径）
+- [x] 散射体表空间网格索引（当前线性遍历）
+- [x] 拆分过重的 `RDF_RadarScanner`（CFAR / 候选 / 物理链）
+- [x] Network 对齐 Sensor（权威端统一门面，避免旁路双 Scanner）
+- [x] 收窄门面穿透：`GetDemStatusShort` 等到 Sensor，减少 `GetScanner()` 依赖
+- [x] DEM 模组内只读发布包（当前偏 `$profile` 开发路径）
 - [ ] 拆分 `tools/dem/rdf_radar_mass_battle_sim.py`（scenario / engine / eval / render）
 - [ ] 加厚 Python 单测（CFAR / track）；可选与 Enforce 同输入 golden
 
@@ -97,7 +97,7 @@
 - [x] 深水捷径、列 span、材质分类
 - [x] 运行时 manifest / tile 解析与 LRU 缓存
 - [x] 雷达杂波功率 + WLR 地面采样接入
-- [ ] （P1）模组内只读发布数据包
+- [x] （P1）模组内只读发布数据包
 - [ ] （P2）柱状 span 遮挡 / 多径
 
 ---
@@ -106,9 +106,9 @@
 
 - [x] Sensor API 文档与 Demo 接线
 - [x] `.gitignore`：`out/`、`TrainData/`、`*.rdb`、根目录数字 JPG
-- [ ] 删除空目录 `Radar/Detection`、`Radar/Tracking`（若仍存在）
-- [ ] CHANGELOG 后半英文重复段压缩或标注归档
-- [ ] `LICENSE` / `LICENSE.txt` 二选一（确认工具兼容后再合并）
+- [x] 删除空目录 `Radar/Detection`、`Radar/Tracking`（若仍存在）
+- [x] CHANGELOG 顶部补 P1 A+B 摘要（不压缩历史段）
+- [ ] `LICENSE` / `LICENSE.txt` 二选一（仅检查，暂不合并）
 
 ---
 

@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 2026-07-27 — P1 工程核心 + 轻量项（A+B）
+
+- AutoRunner 的 DEM 状态读取改走 `RDF_RadarSensor.GetDemStatusShort()`，去掉 Demo 层 `GetScanner()` 穿透。
+- `RDF_RadarScattererRegistry` 增加 XZ 空间网格与 `CollectInSphere`，`ScanFromRegistry` 改走球域网格查询。
+- `RDF_RadarScanner` 拆分协作类：`RDF_RadarCandidateCollect`（候选收集）与 `RDF_RadarCfarProcessor`（CFAR 门限）。
+- `RDF_RadarNetworkComponent` 权威扫描改挂 `RDF_RadarSensor`，避免网络层和 Sensor 层双 Scanner 配置漂移。
+- DEM 运行时加载新增双路径：优先 `$profile:RDF/DemData/`，缺失时回退 `DemData/`（模组内只读发布目录）。
+- 仓库卫生：更新 `TODO.md` 勾选、补充本摘要，`LICENSE` 与 `LICENSE.txt` 仅检查未合并。
+
+---
+
 ## 2026-07-27 — PPI 扫线 / 雷达视轴用错了坐标轴
 
 Enfusion 实体朝向是 `GetWorldTransform()[2]`（与原版 heading / 迫击炮方位 / LOS 一致），

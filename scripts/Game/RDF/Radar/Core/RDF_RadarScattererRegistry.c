@@ -43,6 +43,9 @@ class RDF_RadarScatterer
     float m_EmitAntennaGainDbi;
     float m_LastRefreshTime = -1.0;
     ProjectileMoveComponent m_MoveComponent;
+    int m_GridIx;
+    int m_GridIz;
+    bool m_HasGridCell = false;
 }
 
 // Global table of radar-relevant entities. Entities are scatterers or emitters
@@ -61,6 +64,11 @@ class RDF_RadarScattererRegistry
     // spawned target waits behind a backlog that never drains.
     protected static ref map<IEntity, bool> s_Seen;
     protected static ref array<IEntity> s_SeenPruneScratch;
+    protected static ref map<string, ref array<ref RDF_RadarScatterer>> s_CellBuckets;
+
+    protected static float s_GridCellSizeM = 256.0;
+    protected static int s_StatGridQueries;
+    protected static int s_StatGridHits;
 
     protected static float s_LastTickTime = -1000.0;
     protected static float s_LastTickWallS = -1000.0;
@@ -119,12 +127,60 @@ class RDF_RadarScattererRegistry
     }
 
     //------------------------------------------------------------------------------------------------
+    static void CollectInSphere(vector origin, float radiusM, notnull array<ref RDF_RadarScatterer> outEntries)
+    {
+        EnsureContainers();
+        outEntries.Clear();
+        if (radiusM <= 0.0)
+            return;
+
+        s_StatGridQueries = s_StatGridQueries + 1;
+
+        float cell = s_GridCellSizeM;
+        if (cell < 1.0)
+            cell = 1.0;
+
+        int minIx = Math.Floor((origin[0] - radiusM) / cell);
+        int maxIx = Math.Floor((origin[0] + radiusM) / cell);
+        int minIz = Math.Floor((origin[2] - radiusM) / cell);
+        int maxIz = Math.Floor((origin[2] + radiusM) / cell);
+        float radiusSq = radiusM * radiusM;
+
+        for (int ix = minIx; ix <= maxIx; ix++)
+        {
+            for (int iz = minIz; iz <= maxIz; iz++)
+            {
+                string key = GridKey(ix, iz);
+                ref array<ref RDF_RadarScatterer> bucket = s_CellBuckets.Get(key);
+                if (!bucket)
+                    continue;
+
+                for (int i = 0; i < bucket.Count(); i++)
+                {
+                    RDF_RadarScatterer entry = bucket.Get(i);
+                    if (!entry || !entry.m_Alive || !entry.m_Entity)
+                        continue;
+                    vector d = entry.m_Position - origin;
+                    if (d.LengthSq() > radiusSq)
+                        continue;
+                    outEntries.Insert(entry);
+                }
+            }
+        }
+
+        s_StatGridHits = s_StatGridHits + outEntries.Count();
+    }
+
+    //------------------------------------------------------------------------------------------------
     static string GetStatsLine()
     {
         EnsureContainers();
         string line = "scat=" + s_Entries.Count().ToString();
         line = line + " pend=" + s_Pending.Count().ToString();
         line = line + " seen=" + s_Seen.Count().ToString();
+        line = line + " cells=" + s_CellBuckets.Count().ToString();
+        line = line + " gridQ=" + s_StatGridQueries.ToString();
+        line = line + " gridHit=" + s_StatGridHits.ToString();
         line = line + " sweeps=" + s_StatDiscoveries.ToString();
         line = line + " ok=" + s_StatClassified.ToString();
         line = line + " rej=" + s_StatRejected.ToString();
@@ -179,6 +235,7 @@ class RDF_RadarScattererRegistry
 
         entry.m_Position = worldPos;
         entry.m_Alive = true;
+        UpdateEntryGridCell(entry);
         entry.m_Emitting = emitting;
         entry.m_EmitStrength = strength;
         if (frequencyHz > 0.0)
@@ -204,6 +261,7 @@ class RDF_RadarScattererRegistry
                 e.m_Alive = false;
                 e.m_Emitting = false;
                 e.m_Entity = null;
+                RemoveEntryFromGrid(e);
                 s_Entries.Remove(i);
                 ForgetSeen(entity);
                 return;
@@ -256,6 +314,7 @@ class RDF_RadarScattererRegistry
         s_Entries.Clear();
         s_Pending.Clear();
         s_Seen.Clear();
+        s_CellBuckets.Clear();
         s_RefreshCursor = 0;
         s_LastDiscoveryTime = -1000.0;
         s_LastDiscoveryWallS = -1000.0;
@@ -397,6 +456,7 @@ class RDF_RadarScattererRegistry
             if (!entry)
                 continue;
             s_Entries.Insert(entry);
+            InsertEntryToGrid(entry);
             s_StatClassified = s_StatClassified + 1;
         }
     }
@@ -550,7 +610,10 @@ class RDF_RadarScattererRegistry
             if (!entry || !entry.m_Alive || !entry.m_Entity)
             {
                 if (entry)
+                {
                     entry.m_Alive = false;
+                    RemoveEntryFromGrid(entry);
+                }
                 s_Entries.Remove(index);
                 s_StatPruned = s_StatPruned + 1;
                 continue;
@@ -559,6 +622,7 @@ class RDF_RadarScattererRegistry
             vector newPos = ReadPosition(entry.m_Entity);
             vector physicsVel = ReadVelocity(entry.m_Entity, entry.m_MoveComponent);
             ApplyKinematicsSample(entry, newPos, physicsVel, worldTimeS);
+            UpdateEntryGridCell(entry);
             ReadPose(entry.m_Entity, entry);
             RefreshDemAndAgl(entry, world, worldTimeS);
 
@@ -568,6 +632,7 @@ class RDF_RadarScattererRegistry
                 entry.m_Alive = false;
                 // Out of range now, but a later sweep must be able to re-add it.
                 ForgetSeen(entry.m_Entity);
+                RemoveEntryFromGrid(entry);
                 s_Entries.Remove(index);
                 s_StatPruned = s_StatPruned + 1;
                 continue;
@@ -743,6 +808,85 @@ class RDF_RadarScattererRegistry
     }
 
     //------------------------------------------------------------------------------------------------
+    protected static string GridKey(int ix, int iz)
+    {
+        return ix.ToString() + ":" + iz.ToString();
+    }
+
+    //------------------------------------------------------------------------------------------------
+    protected static void GetGridCoords(vector pos, out int ix, out int iz)
+    {
+        float cell = s_GridCellSizeM;
+        if (cell < 1.0)
+            cell = 1.0;
+        ix = Math.Floor(pos[0] / cell);
+        iz = Math.Floor(pos[2] / cell);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    protected static void InsertEntryToGrid(RDF_RadarScatterer entry)
+    {
+        if (!entry)
+            return;
+
+        int ix, iz;
+        GetGridCoords(entry.m_Position, ix, iz);
+        string key = GridKey(ix, iz);
+
+        ref array<ref RDF_RadarScatterer> bucket = s_CellBuckets.Get(key);
+        if (!bucket)
+        {
+            bucket = new array<ref RDF_RadarScatterer>();
+            s_CellBuckets.Insert(key, bucket);
+        }
+
+        bucket.Insert(entry);
+        entry.m_GridIx = ix;
+        entry.m_GridIz = iz;
+        entry.m_HasGridCell = true;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    protected static void RemoveEntryFromGrid(RDF_RadarScatterer entry)
+    {
+        if (!entry || !entry.m_HasGridCell)
+            return;
+
+        string key = GridKey(entry.m_GridIx, entry.m_GridIz);
+        ref array<ref RDF_RadarScatterer> bucket = s_CellBuckets.Get(key);
+        if (bucket)
+        {
+            for (int i = bucket.Count() - 1; i >= 0; i--)
+            {
+                if (bucket.Get(i) == entry)
+                    bucket.Remove(i);
+            }
+            if (bucket.Count() <= 0)
+                s_CellBuckets.Remove(key);
+        }
+
+        entry.m_HasGridCell = false;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    protected static void UpdateEntryGridCell(RDF_RadarScatterer entry)
+    {
+        if (!entry)
+            return;
+
+        int ix, iz;
+        GetGridCoords(entry.m_Position, ix, iz);
+        if (entry.m_HasGridCell)
+        {
+            if (entry.m_GridIx == ix && entry.m_GridIz == iz)
+                return;
+            RemoveEntryFromGrid(entry);
+        }
+
+        InsertEntryToGrid(entry);
+    }
+
+    //------------------------------------------------------------------------------------------------
     protected static void EnsureContainers()
     {
         if (!s_Entries)
@@ -755,6 +899,8 @@ class RDF_RadarScattererRegistry
             s_Seen = new map<IEntity, bool>();
         if (!s_SeenPruneScratch)
             s_SeenPruneScratch = new array<IEntity>();
+        if (!s_CellBuckets)
+            s_CellBuckets = new map<string, ref array<ref RDF_RadarScatterer>>();
     }
 
     //------------------------------------------------------------------------------------------------

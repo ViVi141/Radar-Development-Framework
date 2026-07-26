@@ -28,11 +28,27 @@ class RDF_DemRuntimeLoader
             return false;
         }
 
-        string rootDir = RDF_DemBakeConstants.DEM_DATA_DIR + worldKey + "/";
-        string manifestPath = rootDir + "manifest.csv";
-        if (!FileIO.FileExists(manifestPath))
+        array<string> roots = new array<string>();
+        roots.Insert(RDF_DemBakeConstants.DEM_DATA_DIR + worldKey + "/");
+        roots.Insert(RDF_DemBakeConstants.PACKAGED_DEM_DATA_DIR + worldKey + "/");
+
+        string rootDir = string.Empty;
+        string manifestPath = string.Empty;
+        for (int rootIdx = 0; rootIdx < roots.Count(); rootIdx++)
         {
-            Warn("Manifest missing: " + manifestPath);
+            string candidateRoot = roots.Get(rootIdx);
+            string candidateManifest = candidateRoot + "manifest.csv";
+            if (!FileIO.FileExists(candidateManifest))
+                continue;
+
+            rootDir = candidateRoot;
+            manifestPath = candidateManifest;
+            break;
+        }
+
+        if (manifestPath.IsEmpty())
+        {
+            Warn("Manifest missing: profile=" + roots.Get(0) + "manifest.csv packaged=" + roots.Get(1) + "manifest.csv");
             return false;
         }
 
@@ -127,6 +143,9 @@ class RDF_DemRuntimeLoader
             Warn("Manifest channels missing required fields.");
             return false;
         }
+
+        if (!rootDir.StartsWith(RDF_DemBakeConstants.DEM_DATA_DIR))
+            Print("[RDF DEM Runtime] using packaged DEM root: " + rootDir, LogLevel.NORMAL);
 
         manifest.m_RootDir = rootDir;
         manifest.m_TilesDir = rootDir + "tiles/";

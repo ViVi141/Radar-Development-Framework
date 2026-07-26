@@ -5,6 +5,7 @@ class RDF_DemBakeConstants
     static const string PROFILE_ROOT = "$profile:RDF/";
     static const string BAKE_FLAG_FILE = "$profile:RDF/BakeDemFull.flag";
     static const string DEM_DATA_DIR = "$profile:RDF/DemData/";
+    static const string PACKAGED_DEM_DATA_DIR = "DemData/";
 
     // Grid: change these then delete tiles/ and re-bake for finer DEM.
     // 4 m / 32 = ANNA standard; Fine: CELL_M=2, TILE_CELLS=64; Target: CELL_M=1, TILE_CELLS=128.

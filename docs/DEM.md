@@ -39,11 +39,17 @@ python tools\dem\rdf_dem_bake_help.py
 
 ## 运行时加载（游戏内）
 
-- `RDF_DemRuntimeLoader`：严格解析 manifest / tile
+- `RDF_DemRuntimeLoader`：严格解析 manifest / tile，按顺序尝试 `$profile:RDF/DemData/<world>/` → `DemData/<world>/`
 - `RDF_DemRuntimeCache`：世界坐标采样 + 默认 16 tile LRU + 每扫描加载预算
 - 雷达侧：`RDF_RadarSettings.m_EnableDemClutter`（默认开；无 DEM 时安全退化）
 
 状态：HUD 模式行显示 `DEM OK` / `DEM OFF`。
+
+发布包回退约定：
+
+1. 先在 Workbench 烘焙到 `$profile:RDF/DemData/<world>/...`。
+2. 将同目录结构复制到模组根 `DemData/<world>/...`。
+3. 发布后运行时仍优先读 `$profile`，缺失时自动回退到模组内只读 DEM。
 
 ## 离线打包与仿真
 

@@ -241,8 +241,8 @@ class RDF_RadarAutoRunner
             string modeText = "PPI";
             if (ctx && ctx.m_UsedNetwork)
                 modeText = "PPI | NET";
-            else if (m_Sensor.GetScanner())
-                modeText = "PPI | " + m_Sensor.GetScanner().GetDemStatusShort();
+            else
+                modeText = "PPI | " + m_Sensor.GetDemStatusShort();
             RDF_RadarHUD.SetMode(modeText);
             float hudRange = m_Sensor.GetSettings().m_Range;
             vector hudOrigin = "0 0 0";

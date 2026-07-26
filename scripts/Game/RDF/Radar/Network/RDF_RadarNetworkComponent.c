@@ -6,7 +6,7 @@ class RDF_RadarNetworkComponentClass : RDF_RadarNetworkAPIClass
 class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
 {
     protected RplComponent m_RplComponent;
-    protected ref RDF_RadarScanner m_Scanner;
+    protected ref RDF_RadarSensor m_Sensor;
     protected ref array<ref RDF_RadarTarget> m_LastTargets;
     protected float m_LastScanTime = 0.0;
     protected vector m_LastScanOrigin = "0 0 0";
@@ -31,8 +31,8 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         m_RplComponent = RplComponent.Cast(owner.FindComponent(RplComponent));
         if (!m_LastTargets)
             m_LastTargets = new array<ref RDF_RadarTarget>();
-        if (!m_Scanner)
-            m_Scanner = new RDF_RadarScanner();
+        if (!m_Sensor)
+            m_Sensor = new RDF_RadarSensor();
     }
 
     override bool IsNetworkAvailable()
@@ -83,7 +83,10 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         m_Verbose = config.m_KeepUndetected;
         // Keep a full settings object on the authority scanner (not just the
         // handful of replicated scalars), so projectile / WLR test configs apply.
-        m_Scanner = new RDF_RadarScanner(config);
+        if (!m_Sensor)
+            m_Sensor = new RDF_RadarSensor();
+        m_Sensor.Configure(config);
+        m_Sensor.SetForceLocalScan(true);
         Replication.BumpMe();
     }
 
@@ -129,9 +132,9 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         if (!subject)
             return;
 
-        if (!m_Scanner)
-            m_Scanner = new RDF_RadarScanner();
-        RDF_RadarSettings settings = m_Scanner.GetSettings();
+        if (!m_Sensor)
+            m_Sensor = new RDF_RadarSensor();
+        RDF_RadarSettings settings = m_Sensor.GetSettings();
         if (!settings)
             return;
         settings.m_Enabled = m_DemoEnabled;
@@ -139,11 +142,16 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         settings.m_UpdateInterval = m_UpdateInterval;
         settings.m_KeepUndetected = m_Verbose;
 
-        array<ref RDF_RadarTarget> results = new array<ref RDF_RadarTarget>();
-        m_Scanner.Scan(subject, results);
-        UpdateLocalResults(results);
+        BaseWorld world = GetGame().GetWorld();
+        float worldTimeS = 0.0;
+        if (world)
+            worldTimeS = world.GetWorldTime() * 0.001;
 
-        string payload = SerializePayload(results);
+        m_Sensor.SetForceLocalScan(true);
+        m_Sensor.ScanOnce(subject, null, worldTimeS);
+        UpdateLocalResults(m_Sensor.GetPlots());
+
+        string payload = SerializePayload(m_LastTargets);
         if (!payload || payload == string.Empty)
             return;
         Rpc(RpcDo_ReceiveScanPayload, payload);
@@ -163,11 +171,15 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
                     m_LastTargets.Insert(t);
             }
         }
-        if (m_Scanner)
+        if (m_Sensor)
         {
-            m_LastScanOrigin = m_Scanner.GetLastOrigin();
-            m_LastScanForward = m_Scanner.GetLastForward();
-            m_LastScanRange = m_Scanner.GetLastRange();
+            RDF_RadarScanContext ctx = m_Sensor.GetScanContext();
+            if (ctx)
+            {
+                m_LastScanOrigin = ctx.m_Origin;
+                m_LastScanForward = ctx.m_Forward;
+                m_LastScanRange = ctx.m_RangeM;
+            }
         }
         if (GetGame().GetWorld())
             m_LastScanTime = GetGame().GetWorld().GetWorldTime();
