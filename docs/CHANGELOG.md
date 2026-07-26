@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 2026-07-27 — 逼真档真正加压
+
+- `ApplyRealisticChannel`：默认开 CFAR；`m_MeasNoiseScale=3.5`；距离偏置 5 m；方位/俯仰偏置加大；轻雨衰 0.05 dB/km
+- Lock / Airborne / ShellFire 逼真路径不再事后关掉 CFAR；DEM 杂波回归仍关 CFAR（测功率不测门限）
+- ShellFire 逼真 WLR 误差带仍为 800 m
+
+---
+
 ## 2026-07-27 — Sprint A/B：通道逼真 + 扫描可观测性
 
 按 TODO 收益序落地：

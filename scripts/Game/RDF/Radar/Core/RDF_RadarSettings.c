@@ -145,6 +145,7 @@ class RDF_RadarSettings
     void ApplyIdealChannel()
     {
         m_RealisticChannel = false;
+        m_EnableCfarGate = false;
         m_MeasNoiseScale = 0.0;
         m_MeasRangeBiasM = 0.0;
         m_MeasAzimuthBiasDeg = 0.0;
@@ -157,20 +158,21 @@ class RDF_RadarSettings
     }
 
     //------------------------------------------------------------------------------------------------
-    // Gameplay / fidelity profile: CRLB noise + small bias, thermal CFAR fill,
+    // Gameplay / fidelity profile: louder measurement noise, thermal CFAR fill,
     // clear-air atmosphere. Tests that enable this must use wider error bands.
     void ApplyRealisticChannel()
     {
         m_RealisticChannel = true;
         m_EnableMeasurementSynthesis = true;
-        m_MeasNoiseScale = 1.0;
-        m_MeasRangeBiasM = 2.0;
-        m_MeasAzimuthBiasDeg = 0.05;
-        m_MeasElevationBiasDeg = 0.05;
+        m_EnableCfarGate = true;
+        m_MeasNoiseScale = 3.5;
+        m_MeasRangeBiasM = 5.0;
+        m_MeasAzimuthBiasDeg = 0.2;
+        m_MeasElevationBiasDeg = 0.15;
         m_MeasDopplerBiasHz = 0.0;
         m_EnableCfarThermalFill = true;
         m_EnableAtmosphericLoss = true;
         m_AtmLossDbPerKmOneWay = -1.0;
-        m_RainLossDbPerKmOneWay = 0.0;
+        m_RainLossDbPerKmOneWay = 0.05;
     }
 }

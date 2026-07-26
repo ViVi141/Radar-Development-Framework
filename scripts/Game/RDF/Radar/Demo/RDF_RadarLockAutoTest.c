@@ -387,13 +387,18 @@ class RDF_RadarLockAutoTest
         hw.Validate();
         cfg.m_Hardware = hw;
         if (RDF_RadarAutoTestSuite.IsRealisticChannel())
+        {
             cfg.ApplyRealisticChannel();
+            // Keep entity for lock association; CFAR+thermal stay on.
+            cfg.m_KeepEntityTruth = true;
+        }
         else
+        {
             cfg.ApplyIdealChannel();
-        // Lock regression asserts entity classification / lock machine, not CFAR Pfa.
-        cfg.m_EnableCfarGate = false;
-        cfg.m_KeepEntityTruth = true;
-        cfg.m_EnableMeasurementSynthesis = false;
+            cfg.m_EnableCfarGate = false;
+            cfg.m_KeepEntityTruth = true;
+            cfg.m_EnableMeasurementSynthesis = false;
+        }
         cfg.Validate();
         ApplySensorConfig(cfg);
     }

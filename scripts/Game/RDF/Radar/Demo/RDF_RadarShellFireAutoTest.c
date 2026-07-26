@@ -406,13 +406,19 @@ class RDF_RadarShellFireAutoTest
         hw.Validate();
         cfg.m_Hardware = hw;
         if (RDF_RadarAutoTestSuite.IsRealisticChannel())
+        {
             cfg.ApplyRealisticChannel();
+            // Keep projectile identity for WLR; CFAR+thermal+meas noise stay on.
+            cfg.m_EnableMeasurementSynthesis = true;
+            cfg.m_KeepEntityTruth = true;
+        }
         else
+        {
             cfg.ApplyIdealChannel();
-        // Keep projectile identity for WLR track assertions.
-        cfg.m_EnableMeasurementSynthesis = true;
-        cfg.m_KeepEntityTruth = true;
-        cfg.m_EnableCfarGate = false;
+            cfg.m_EnableMeasurementSynthesis = true;
+            cfg.m_KeepEntityTruth = true;
+            cfg.m_EnableCfarGate = false;
+        }
         cfg.Validate();
         ApplySensorConfig(cfg);
     }

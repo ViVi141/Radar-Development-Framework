@@ -347,13 +347,21 @@ class RDF_RadarAutoTest
         hw.Validate();
         cfg.m_Hardware = hw;
         if (RDF_RadarAutoTestSuite.IsRealisticChannel())
+        {
             cfg.ApplyRealisticChannel();
+            // Clutter regression still needs entity-truth power, not CFAR plots.
+            cfg.m_EnableMeasurementSynthesis = false;
+            cfg.m_KeepEntityTruth = true;
+            cfg.m_EnableCfarGate = false;
+            cfg.m_EnableCfarThermalFill = false;
+        }
         else
+        {
             cfg.ApplyIdealChannel();
-        // DEM measures clutter on entity-truth plots; synthesis would mask that.
-        cfg.m_EnableMeasurementSynthesis = false;
-        cfg.m_KeepEntityTruth = true;
-        cfg.m_EnableCfarGate = false;
+            cfg.m_EnableMeasurementSynthesis = false;
+            cfg.m_KeepEntityTruth = true;
+            cfg.m_EnableCfarGate = false;
+        }
         cfg.Validate();
         return cfg;
     }
