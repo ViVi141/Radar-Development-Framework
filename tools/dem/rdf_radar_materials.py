@@ -211,6 +211,37 @@ class Sigma0Table:
     def from_json(path: str | Path) -> "Sigma0Table":
         with open(path, "r", encoding="utf-8") as handle:
             data = json.load(handle)
+
+        # RDF_SURF_TABLE_V1 (game + workshop SurfaceTable.json)
+        if str(data.get("magic", "")) == "RDF_SURF_TABLE_V1":
+            band = str(data.get("band", "X")).upper()
+            sea_state = int(data.get("sea_state", 3))
+            base = Sigma0Table.builtin(band, sea_state)
+            if "theta_ref_deg" in data:
+                base.theta_ref_rad = math.radians(float(data["theta_ref_deg"]))
+            for entry in data.get("entries", []):
+                if not isinstance(entry, dict):
+                    continue
+                sid = int(entry.get("id", -1))
+                name = str(entry.get("name", ""))
+                if sid < 0 or sid >= SURF_COUNT:
+                    if name in SURF_NAMES:
+                        sid = SURF_NAMES.index(name)
+                    else:
+                        continue
+                if "sigma0_ref_db" in entry:
+                    base.sigma0_ref_linear[sid] = _db_to_lin(
+                        float(entry["sigma0_ref_db"])
+                    )
+                if "gamma_k" in entry:
+                    base.exponent[sid] = float(entry["gamma_k"])
+                scale = float(entry.get("clutter_scale", 1.0))
+                if scale > 0.0 and abs(scale - 1.0) > 1e-9:
+                    base.sigma0_ref_linear[sid] *= scale
+            base.source = f"surf_table:{path}"
+            return base
+
+        # Legacy calibration dict (sigma0_ref_db / exponent maps)
         band = str(data.get("band", "X")).upper()
         sea_state = int(data.get("sea_state", 3))
         base = Sigma0Table.builtin(band, sea_state)
@@ -226,6 +257,14 @@ class Sigma0Table:
         base.source = f"json:{path}"
         return base
 
+    @staticmethod
+    def from_surface_table_default() -> "Sigma0Table":
+        """Load addon RadarData/SurfaceTable.json when present."""
+        root = Path(__file__).resolve().parents[2]
+        path = root / "RadarData" / "SurfaceTable.json"
+        if path.is_file():
+            return Sigma0Table.from_json(path)
+        return Sigma0Table.builtin("X", 3)
     def to_calibration_dict(self) -> dict:
         refs_db = {}
         exps = {}

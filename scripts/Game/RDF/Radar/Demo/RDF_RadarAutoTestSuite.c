@@ -4,6 +4,7 @@
 // Usage:
 //   RDF_RadarAutoTestSuite.StartAll();            // ideal channel (logic loop)
 //   RDF_RadarAutoTestSuite.StartAllRealistic();   // realistic channel + wider bands
+//   RDF_RadarAutoTestSuite.Stop();                // clear stuck "already running"
 class RDF_RadarAutoTestSuite
 {
     protected static bool s_TickRegistered;
@@ -28,8 +29,11 @@ class RDF_RadarAutoTestSuite
         return s_RealisticChannel;
     }
 
+    // Hard reset for stuck static state after aborted Play / Debugger re-entry.
     static void Stop()
     {
+        StopChildTests();
+        RDF_RadarAutoTestGate.ForceClear();
         s_Running = false;
         s_Step = -1;
         Print("[RDF Radar AutoTestSuite] stopped.");
@@ -40,18 +44,46 @@ class RDF_RadarAutoTestSuite
         return s_Running;
     }
 
+    protected static void StopChildTests()
+    {
+        if (RDF_RadarAutoTest.IsRunning())
+            RDF_RadarAutoTest.Stop();
+        if (RDF_RadarLockAutoTest.IsRunning())
+            RDF_RadarLockAutoTest.Stop();
+        if (RDF_RadarAirborneScanTest.IsRunning())
+            RDF_RadarAirborneScanTest.Stop();
+        if (RDF_RadarShellFireAutoTest.IsRunning())
+            RDF_RadarShellFireAutoTest.Stop();
+    }
+
     protected static void BeginSuite(bool realistic)
     {
+        // Recover zombie suite flags: marked running but nothing is actually busy.
         if (s_Running)
         {
-            Print("[RDF Radar AutoTestSuite] already running.");
-            return;
+            bool stepBusy = false;
+            if (s_Step >= 0)
+                stepBusy = IsStepRunning(s_Step);
+            if (!stepBusy && !RDF_RadarAutoTestGate.IsBusy())
+            {
+                Print("[RDF Radar AutoTestSuite] clearing stale running flag.");
+                s_Running = false;
+                s_Step = -1;
+            }
+            else
+            {
+                Print("[RDF Radar AutoTestSuite] already running (step="
+                    + s_Step.ToString()
+                    + "). Call RDF_RadarAutoTestSuite.Stop() first.");
+                return;
+            }
         }
+
         if (RDF_RadarAutoTestGate.IsBusy())
         {
             Print("[RDF Radar AutoTestSuite] gate busy by "
                 + RDF_RadarAutoTestGate.GetOwner()
-                + "; stop that test first.", LogLevel.WARNING);
+                + "; stop that test first, or RDF_RadarAutoTestSuite.Stop().", LogLevel.WARNING);
             return;
         }
 
@@ -82,9 +114,10 @@ class RDF_RadarAutoTestSuite
         if (nowS - s_StepStartWallS > s_StepTimeoutS)
         {
             Print(string.Format(
-                "[RDF Radar AutoTestSuite] step %1 timed out after %2s",
+                "[RDF Radar AutoTestSuite] step %1 timed out after %2s — forcing stop",
                 s_Step.ToString(),
                 s_StepTimeoutS.ToString()), LogLevel.ERROR);
+            StopChildTests();
             s_Running = false;
             s_Step = -1;
             return;

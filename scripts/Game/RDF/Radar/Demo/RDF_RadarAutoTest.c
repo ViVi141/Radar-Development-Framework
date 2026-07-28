@@ -286,7 +286,7 @@ class RDF_RadarAutoTest
         ApplySensorConfig(cfg);
         RDF_RadarAutoRunner.StartAutoRun();
 
-        // budget0 must not reuse warm DEM hits from earlier phases.
+        // budget0: drop warm SURF tiles so only liveY+UNKNOWN fallback remains.
         if (phaseIdx == 3)
         {
             RDF_RadarSensor sensor = GetSensor();
@@ -482,8 +482,13 @@ class RDF_RadarAutoTest
         if (!passScaleSensitive)
             passScaleSensitive = on5SnrShift || floorSatChain;
 
-        bool passBudgetZeroNoDem = budget0.m_DemValidSamples == 0;
-        bool passBudgetZeroNoClutter = budget0.GetAvgClutterW() <= 0.000000000000001;
+        // Tile-load budget gates SURF pack loads only. With liveY, TrySampleAt
+        // still returns valid cells (GetSurfaceY + UNKNOWN) and SurfaceTable
+        // still produces clutter — so "no dem / no clutter" is obsolete.
+        bool passBudgetZeroLiveSamples = budget0.m_DemValidSamples > 0;
+        bool budget0ClutterVisible = budget0.GetAvgClutterW() > CLUTTER_EPS;
+        bool budget0SnrDegraded = budget0.GetAvgSnrDb() < off.GetAvgSnrDb() - 1.0;
+        bool passBudgetZeroLiveClutter = budget0ClutterVisible || budget0SnrDegraded;
 
         bool allPass = passScansPresent
             && passDiscovery
@@ -492,8 +497,8 @@ class RDF_RadarAutoTest
             && passOnHasDem
             && passOnClutterNonZero
             && passScaleSensitive
-            && passBudgetZeroNoDem
-            && passBudgetZeroNoClutter;
+            && passBudgetZeroLiveSamples
+            && passBudgetZeroLiveClutter;
 
         array<string> lines = new array<string>();
         lines.Insert("RDF Radar DEM AutoTest");
@@ -507,8 +512,8 @@ class RDF_RadarAutoTest
         lines.Insert("  on_has_dem_samples " + BoolLabel(passOnHasDem));
         lines.Insert("  on_clutter_nonzero " + BoolLabel(passOnClutterNonZero));
         lines.Insert("  scale_sensitive " + BoolLabel(passScaleSensitive));
-        lines.Insert("  budget0_no_dem " + BoolLabel(passBudgetZeroNoDem));
-        lines.Insert("  budget0_no_clutter " + BoolLabel(passBudgetZeroNoClutter));
+        lines.Insert("  budget0_live_samples " + BoolLabel(passBudgetZeroLiveSamples));
+        lines.Insert("  budget0_live_clutter " + BoolLabel(passBudgetZeroLiveClutter));
         lines.Insert("");
         lines.Insert("debug:");
         lines.Insert("  on1_clutter_visible " + BoolLabel(on1ClutterVisible));
@@ -516,6 +521,8 @@ class RDF_RadarAutoTest
         lines.Insert("  on1_snr_shift " + BoolLabel(on1SnrShift));
         lines.Insert("  on5_snr_shift " + BoolLabel(on5SnrShift));
         lines.Insert("  floor_saturated_chain " + BoolLabel(floorSatChain));
+        lines.Insert("  budget0_clutter_visible " + BoolLabel(budget0ClutterVisible));
+        lines.Insert("  budget0_snr_degraded " + BoolLabel(budget0SnrDegraded));
         lines.Insert("");
         lines.Insert("phases:");
         AppendCaseLines(lines, off);

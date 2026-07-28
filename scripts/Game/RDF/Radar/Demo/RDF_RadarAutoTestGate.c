@@ -31,6 +31,12 @@ class RDF_RadarAutoTestGate
             s_Owner = "";
     }
 
+    // Suite.Stop() / emergency clear when owner is unknown or zombie.
+    static void ForceClear()
+    {
+        s_Owner = "";
+    }
+
     static bool IsBusy()
     {
         if (!s_Owner)

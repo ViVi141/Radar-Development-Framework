@@ -16,6 +16,11 @@ class RDF_DemBakeConstants
     static const int DEM_BIN_CELL_BYTES = 6;
     static const float DEM_BIN_Y_SCALE = 0.1;
 
+    // Surface-class JSON (RDF_SURF_JSON_V1): live GetSurfaceY + packaged surface map.
+    static const string DEM_SURF_MANIFEST_NAME = "surf_manifest.json";
+    static const string DEM_SURF_CHUNKS_DIR = "surf_chunks/";
+    static const string DEM_SURF_MAGIC = "RDF_SURF_JSON_V1";
+
     // Grid: change these then delete tiles/ and re-bake for finer DEM.
     // 4 m / 32 = ANNA standard; Fine: CELL_M=2, TILE_CELLS=64; Target: CELL_M=1, TILE_CELLS=128.
     static const float CELL_M = 4.0;

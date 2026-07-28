@@ -357,6 +357,17 @@ class RDF_RadarPhysicalDetect
             clutterSigmaM2,
             distance,
             patternGain);
+        float surfaceAttenDbPerKm =
+            RDF_RadarClutterModel.GetSurfaceAttenuationDbPerKm(surfaceClass);
+        if (surfaceAttenDbPerKm > 0.0)
+        {
+            float surfaceLossLin = RDF_RadarClutterModel.AtmosphericLossLinear(
+                distance,
+                surfaceAttenDbPerKm,
+                0.0);
+            if (surfaceLossLin > 1.0)
+                receivedClutter = receivedClutter / surfaceLossLin;
+        }
         if (receivedClutter <= 0.0)
             return 0.0;
 

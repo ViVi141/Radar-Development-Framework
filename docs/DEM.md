@@ -1,32 +1,82 @@
 # RDF DEM — 烘焙与运行时
 
-DEM（数字高程/表面网格）为雷达杂波与离线电磁仿真提供地形基底。
+DEM / 地表类数据为雷达杂波与离线电磁仿真提供地形基底。
 
-## 数据流
+## 游戏内杂波（推荐）
+
+**高度**用引擎实时 `BaseWorld.GetSurfaceY`（官方 `.ttile` 背后数据，精度更好）。  
+**地表类**用自建 `RDF_SURF_JSON_V1`（只发 JSON，体积远小于完整 DEM）。
+
+```
+烘焙 CSV → rdf_dem_pack_surface_json.py
+  → DemData/<world>/surf_manifest.json
+  → DemData/<world>/surf_chunks/row_<iz>.json
+运行时 TrySampleAt:
+  surface_class ← SURF JSON
+  terrain_y     ← GetSurfaceY（优先）
+```
+
+打包：
+
+```powershell
+python tools\dem\rdf_dem_pack_surface_json.py --world GM_Arland --from-bin
+python tools\dem\rdf_dem_pack_surface_json.py --world GM_Eden --from-bin
+python tools\dem\rdf_dem_pack_surface_json.py --world GM_Cain --from-bin
+```
+
+体积大约：Arland ~2.3 MB；Eden/Cain ~20 MB（相对 `.dem.data` ~60 MB）。  
+工坊：Resource Browser 选中 `surf_manifest.json` 与 `surf_chunks/*.json` → **Register** → Publish。
+
+## SurfaceTable（类 → 电磁参数）
+
+**工坊推荐**：`RadarData/SurfaceTable.conf`（Enfusion 原生，已带 `.meta`）
+
+| 资源 | 用途 |
+|------|------|
+| `RadarData/SurfaceTable.conf` | 游戏内主表（`RDF_RadarSurfaceTableConf`） |
+| `RadarData/SurfaceTable.json` | Python / profile 覆盖 / JSON 回退 |
+
+加载顺序：`$profile:.../SurfaceTable.json` → 模组 `.conf` → 模组 `.json` → 内置。
+
+每类字段：`sigma0_ref_db`、`gamma_k`、`clutter_scale`、`dielectric`、`roughness`、`attenuation_db_per_km`  
+（conf 中为 `m_fSigma0RefDb` 等 Attribute 名）
+
+Workbench 中可直接编辑 `.conf`；改完后确保 Resource Browser 仍已 Register。
+
+## 运行时查找顺序
+
+1. `$profile:.../DemData/<world>/surf_manifest.json`
+2. 模组 `DemData/<world>/surf_manifest.json`（**工坊推荐**）
+3. `$profile` V3 CSV（开发全量 DEM）
+4. `$profile` 全量 DEM JSON / `.dem.data`
+5. 模组全量 DEM JSON / `.dem.data` / CSV
+6. 皆无 → `mode=LIVE`（仅 `GetSurfaceY`，地表类 = UNKNOWN）
+
+采样时：只要世界已加载，**一律优先用 `GetSurfaceY` 覆盖**烘焙高度（含全量 DEM 回退路径）。
+
+日志：`mode=SURF|LIVE|CSV|JSON|BIN`，`liveY=1`。  
+HUD：`SURF` / `LIVE` / `DEM OK` / `DEM OFF`。
+
+## 数据流（开发烘焙）
 
 ```
 Workbench Play + BakeDemFull.flag
     → RDF_DemTileBake 写出 V3 CSV
-    → $profile:RDF/DemData/<world>/manifest.csv
-    → $profile:RDF/DemData/<world>/tiles/tile_<ix>_<iz>.csv
-         ├─ 游戏内 RDF_DemRuntimeCache（开发优先读 CSV）
-         ├─ python tools/dem/rdf_dem_pack_bin.py → DemData/<world>/<world>.dem.data（工坊）
+    → $profile:RDF/DemData/<world>/manifest.csv + tiles/*.csv
+         ├─ 游戏内优先 SURF JSON；否则可读 CSV
+         ├─ python tools/dem/rdf_dem_pack_surface_json.py → surf_*.json（工坊）
+         ├─ python tools/dem/rdf_dem_pack_bin.py → .dem.data（遗留/离线）
          └─ python tools/dem/rdf_dem_pack.py → TrainData/*.npz（离线仿真）
 ```
 
 ## 游戏内烘焙
 
-1. World Editor 插件菜单：`RDF Bake DEM Heightfield`  
-   （或创建 `$profile:RDF/BakeDemFull.flag` / `SCR_BaseGameMode.RequestDemBake()`）
-2. 打开世界后保持 **Play**，看 Script 日志 `[RDF DEM Bake] progress=...`
-3. 完成后存在：
-   - `manifest.csv`
-   - `tiles/tile_*.csv`
-   - `bake_complete.txt`
+1. World Editor：`RDF Bake DEM Heightfield`  
+   （或 `$profile:RDF/BakeDemFull.flag` / `SCR_BaseGameMode.RequestDemBake()`）
+2. Play 中看 `[RDF DEM Bake] progress=...`
+3. 产出 `manifest.csv`、`tiles/tile_*.csv`、`bake_complete.txt`
 
-常量见 `scripts/Game/RDF/DEM/RDF_DemBakeConstants.c`（默认 `CELL_M=4`，`TILE_CELLS=32`）。
-
-帮助脚本：
+常量：`RDF_DemBakeConstants`（默认 `CELL_M=4`，`TILE_CELLS=32`）。
 
 ```powershell
 python tools\dem\rdf_dem_bake_help.py
@@ -34,58 +84,19 @@ python tools\dem\rdf_dem_bake_help.py
 
 ## V3 CSV 要点
 
-- 每格：`terrain_y`、坡度、水深、密度、`surface_class`、`n_spans`、最多 8 组绝对世界 Y 区间
-- 深水格走海面捷径（不做海底 Trace）
-- 列实体查询可开关：`ENABLE_COLUMN_ENTITY_QUERY`
-- **游戏内杂波当前只用** `terrain_y` + `surface_class`；span 供离线仿真
+- 每格：`terrain_y`、坡度、水深、密度、`surface_class`、`n_spans`…
+- **游戏内杂波**：实时高度 + 地表类；span 主要给离线仿真
 
-## 二进制包 `RDF_DEM_BIN_V1`（工坊推荐）
+## 遗留：全量 DEM 包
 
-CSV 通常**不会**随创意工坊发布。发布用单个 `.dem.data`：
+| 格式 | 路径 | 说明 |
+|------|------|------|
+| `RDF_DEM_BIN_V1` | `<world>.dem.data` | 含量化高度；工坊曾不稳定 |
+| `RDF_DEM_JSON_V1` | `manifest.json` + `jchunks/` | 全量 hex；体积大 |
+| `RDF_SURF_JSON_V1` | `surf_manifest.json` + `surf_chunks/` | **推荐发布** |
 
-| 项 | 说明 |
-|----|------|
-| 路径 | `DemData/<world>/<world>.dem.data` |
-| 内容 | 杂波核心字段；**无 span**；高程量化 **0.1 m** |
-| 体积 | Eden/Cain ~60 MB；Arland ~7 MB（相对 CSV 约 1/13） |
-
-打包：
-
-```powershell
-python tools\dem\rdf_dem_pack_bin.py --world GM_Arland
-python tools\dem\rdf_dem_pack_bin.py --world GM_Eden
-python tools\dem\rdf_dem_pack_bin.py --world GM_Cain
-```
-
-默认读 `$profile:.../DemData/<world>`，写出到模组根 `DemData/<world>/<world>.dem.data`。
-
-### Workbench 注册（必做，否则工坊仍可能丢掉）
-
-1. Resource Browser 选中 `DemData/**/*.dem.data`
-2. **Register**（生成 `.meta`，Build Presence 含 Runtime）
-3. 再 **Publish Project**
-
-地图作者：烘焙自己的世界 → `rdf_dem_pack_bin.py --world <世界名>` → 把 `.dem.data` 放进地图模组 `DemData/<世界名>/` 并 Register。
-
-## 运行时查找顺序
-
-1. `$profile:RDF/DemData/<world>/manifest.csv`（开发）
-2. `$profile:.../<world>.dem.data`
-3. 模组 `DemData/<world>/<world>.dem.data`（发布）
-4. 模组 `DemData/<world>/manifest.csv`（旧 CSV 兼容）
-
-日志：`[RDF DEM Runtime] ready ... mode=CSV|BIN`。  
-HUD：`DEM OK` / `DEM OFF`。  
-雷达：`m_EnableDemClutter`（默认开；无 DEM 安全退化）。
-
-`DemData/` 默认 **不进 Git**；本机保留 `.dem.data` 即可。  
-模组内当前仅有二进制包（已删 CSV tiles / manifest）：
-
-- `GM_Arland/GM_Arland.dem.data`（~7 MB）
-- `GM_Eden/GM_Eden.dem.data`（~60 MB）
-- `GM_Cain/GM_Cain.dem.data`（~60 MB）
-
-工坊发布 Register 上述 `.dem.data` 即可。
+`DemData/` 默认不进 Git；模组内仅保留 SURF JSON（已无 `.dem.data`）。
+离线仿真仍用 `$profile` CSV 或自行 `rdf_dem_pack_bin.py`。
 
 ## 离线 npz 仿真
 
@@ -98,4 +109,4 @@ python tools\dem\rdf_radar_framework_demo.py --preset shorad
 
 ## 联机注意
 
-DEM 文件本机加载；检测结果可通过 `RDF_RadarNetworkComponent` 服务器权威同步（不能替代 DEM 文件）。
+DEM/SURF 本机加载；检测结果可通过 `RDF_RadarNetworkComponent` 同步（不能替代地表文件）。

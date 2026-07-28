@@ -99,6 +99,9 @@ class RDF_DemBinPack
         manifest.m_TileCountZ = tileCountZ;
         manifest.m_MaxSpans = 1;
         manifest.m_IsBinaryPack = true;
+        manifest.m_IsJsonPack = false;
+        manifest.m_IsSurfacePack = false;
+        manifest.m_PreferLiveTerrainY = true;
         manifest.m_BinPackPath = packPath;
         manifest.m_BinYScale = yScale;
         manifest.m_BinTileByteOffset = new map<string, int>();

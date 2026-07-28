@@ -15,12 +15,20 @@ class RDF_DemRuntimeManifest
     string m_RootDir;
     string m_TilesDir;
 
-    // Binary pack (workshop). When set, LoadTile seeks this file instead of CSV.
+    // Binary pack (workshop legacy .dem.data). When set, LoadTile seeks this file instead of CSV.
     bool m_IsBinaryPack;
     string m_BinPackPath;
     float m_BinYScale;
     ref map<string, int> m_BinTileByteOffset;
     ref map<string, int> m_BinTileByteLength;
+
+    // Full DEM JSON pack (workshop legacy/full): manifest.json + jchunks/row_*.json
+    bool m_IsJsonPack;
+
+    // Surface-class-only JSON (workshop preferred): surf_manifest.json + surf_chunks/
+    // Height is sampled live via BaseWorld.GetSurfaceY when PreferLiveTerrainY is set.
+    bool m_IsSurfacePack;
+    bool m_PreferLiveTerrainY;
 }
 
 class RDF_DemRuntimeCellSample

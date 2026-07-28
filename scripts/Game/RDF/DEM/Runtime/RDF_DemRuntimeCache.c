@@ -1,10 +1,12 @@
-// Runtime DEM tile cache with bounded LRU + world-space sampling.
+// Runtime DEM / surface-class tile cache with bounded LRU + world-space sampling.
+// Prefer live BaseWorld.GetSurfaceY for terrain height when available.
 class RDF_DemRuntimeCache
 {
     protected ref RDF_DemRuntimeManifest m_Manifest;
     protected string m_WorldKey;
     protected bool m_Ready;
     protected bool m_LastInitFailed;
+    protected bool m_LiveHeightOnly;
 
     protected ref map<string, ref RDF_DemRuntimeTile> m_TilesByKey;
     protected ref map<string, int> m_TileTouchOrder;
@@ -19,6 +21,7 @@ class RDF_DemRuntimeCache
     protected int m_StatLoadFails;
     protected int m_StatEvictions;
     protected int m_StatBudgetBlocks;
+    protected int m_StatLiveHeight;
 
     void RDF_DemRuntimeCache()
     {
@@ -33,6 +36,7 @@ class RDF_DemRuntimeCache
         m_WorldKey = string.Empty;
         m_Ready = false;
         m_LastInitFailed = false;
+        m_LiveHeightOnly = false;
         m_TilesByKey.Clear();
         m_TileTouchOrder.Clear();
         m_TouchCounter = 0;
@@ -64,11 +68,12 @@ class RDF_DemRuntimeCache
                 Print("[RDF DEM Runtime] init failed: world key empty", LogLevel.WARNING);
             m_LastInitFailed = true;
             m_Ready = false;
+            m_LiveHeightOnly = false;
             m_WorldKey = string.Empty;
             return false;
         }
 
-        if (m_Ready && m_WorldKey == worldKey && m_Manifest)
+        if (m_Ready && m_WorldKey == worldKey && (m_Manifest || m_LiveHeightOnly))
             return true;
 
         // Avoid reopening missing/unbaked DEM files every scan (disk hitch).
@@ -83,42 +88,61 @@ class RDF_DemRuntimeCache
             m_WorldKey = worldKey;
             m_LastInitFailed = false;
             m_Ready = false;
+            m_LiveHeightOnly = false;
             m_Manifest = null;
         }
 
         RDF_DemRuntimeManifest manifest;
-        if (!RDF_DemRuntimeLoader.LoadManifest(worldKey, manifest))
+        if (RDF_DemRuntimeLoader.LoadManifest(worldKey, manifest))
         {
-            if (!m_LastInitFailed)
-                Print("[RDF DEM Runtime] init failed: manifest not ready for " + worldKey, LogLevel.WARNING);
-            m_Manifest = null;
-            m_Ready = false;
-            m_LastInitFailed = true;
-            return false;
+            m_Manifest = manifest;
+            m_LiveHeightOnly = false;
+            m_Ready = true;
+            m_LastInitFailed = false;
+            string mode = "CSV";
+            if (manifest.m_IsSurfacePack)
+                mode = "SURF";
+            else if (manifest.m_IsJsonPack)
+                mode = "JSON";
+            else if (manifest.m_IsBinaryPack)
+                mode = "BIN";
+            Print(string.Format(
+                "[RDF DEM Runtime] ready world=%1 cell=%2 tile=%3 count=%4x%5 cache=%6 mode=%7 liveY=%8",
+                worldKey,
+                manifest.m_CellM.ToString(),
+                manifest.m_TileCells.ToString(),
+                manifest.m_TileCountX.ToString(),
+                manifest.m_TileCountZ.ToString(),
+                m_MaxTiles.ToString(),
+                mode,
+                BoolToLiveFlag(manifest.m_PreferLiveTerrainY)), LogLevel.NORMAL);
+            return true;
         }
 
-        m_Manifest = manifest;
-        m_Ready = true;
-        m_LastInitFailed = false;
-        string mode = "CSV";
-        if (manifest.m_IsBinaryPack)
-            mode = "BIN";
-        Print(string.Format(
-            "[RDF DEM Runtime] ready world=%1 cell=%2 tile=%3 count=%4x%5 cache=%6 mode=%7",
-            worldKey,
-            manifest.m_CellM.ToString(),
-            manifest.m_TileCells.ToString(),
-            manifest.m_TileCountX.ToString(),
-            manifest.m_TileCountZ.ToString(),
-            m_MaxTiles.ToString(),
-            mode), LogLevel.NORMAL);
-        return true;
+        // No packaged surface/DEM: still allow clutter grazing via live surface height.
+        BaseWorld world = GetGame().GetWorld();
+        if (world)
+        {
+            m_Manifest = null;
+            m_LiveHeightOnly = true;
+            m_Ready = true;
+            m_LastInitFailed = false;
+            Print("[RDF DEM Runtime] ready world=" + worldKey
+                + " mode=LIVE (GetSurfaceY, surface=UNKNOWN)", LogLevel.NORMAL);
+            return true;
+        }
+
+        // World not ready yet — soft fail so a later scan can become LIVE/SURF.
+        m_Manifest = null;
+        m_Ready = false;
+        m_LiveHeightOnly = false;
+        return false;
     }
 
     //--------------------------------------------------------------------------------------------
     bool IsReady()
     {
-        return m_Ready && m_Manifest != null;
+        return m_Ready && (m_Manifest != null || m_LiveHeightOnly);
     }
 
     //--------------------------------------------------------------------------------------------
@@ -134,6 +158,10 @@ class RDF_DemRuntimeCache
     {
         if (!m_Ready)
             return "DEM OFF";
+        if (m_LiveHeightOnly)
+            return "LIVE";
+        if (m_Manifest && m_Manifest.m_IsSurfacePack)
+            return "SURF";
         return "DEM OK";
     }
 
@@ -141,13 +169,14 @@ class RDF_DemRuntimeCache
     string GetStatsLine()
     {
         return string.Format(
-            "hit=%1 miss=%2 load=%3 fail=%4 evict=%5 budget=%6",
+            "hit=%1 miss=%2 load=%3 fail=%4 evict=%5 budget=%6 liveY=%7",
             m_StatHits.ToString(),
             m_StatMisses.ToString(),
             m_StatLoads.ToString(),
             m_StatLoadFails.ToString(),
             m_StatEvictions.ToString(),
-            m_StatBudgetBlocks.ToString());
+            m_StatBudgetBlocks.ToString(),
+            m_StatLiveHeight.ToString());
     }
 
     //--------------------------------------------------------------------------------------------
@@ -156,6 +185,10 @@ class RDF_DemRuntimeCache
         outSample = null;
         if (!InitializeForCurrentWorld())
             return false;
+
+        if (m_LiveHeightOnly)
+            return TrySampleLiveOnly(worldX, worldZ, outSample);
+
         if (!m_Manifest)
             return false;
 
@@ -164,6 +197,9 @@ class RDF_DemRuntimeCache
             || worldX >= m_Manifest.m_BoundsMaxX
             || worldZ >= m_Manifest.m_BoundsMaxZ)
         {
+            // Outside surface/DEM bounds: still try live height for grazing.
+            if (TrySampleLiveOnly(worldX, worldZ, outSample))
+                return true;
             m_StatMisses = m_StatMisses + 1;
             return false;
         }
@@ -186,16 +222,22 @@ class RDF_DemRuntimeCache
         RDF_DemRuntimeTile tile;
         if (!TryGetTile(tileIx, tileIz, tile))
         {
+            // Tile not loaded yet (budget): fall back to live height + unknown surface.
+            if (TrySampleLiveOnly(worldX, worldZ, outSample))
+                return true;
             m_StatMisses = m_StatMisses + 1;
             return false;
         }
 
         if (!tile.TryGetCell(localIx, localIz, outSample))
         {
+            if (TrySampleLiveOnly(worldX, worldZ, outSample))
+                return true;
             m_StatMisses = m_StatMisses + 1;
             return false;
         }
 
+        ApplyLiveTerrainY(worldX, worldZ, outSample);
         m_StatHits = m_StatHits + 1;
         return true;
     }
@@ -244,6 +286,76 @@ class RDF_DemRuntimeCache
         TouchTile(key);
         outTile = loaded;
         return true;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected bool TrySampleLiveOnly(
+        float worldX,
+        float worldZ,
+        out RDF_DemRuntimeCellSample outSample)
+    {
+        outSample = null;
+        float liveY;
+        if (!TryGetLiveTerrainY(worldX, worldZ, liveY))
+            return false;
+
+        RDF_DemRuntimeCellSample sample = new RDF_DemRuntimeCellSample();
+        sample.m_Valid = true;
+        sample.m_TerrainY = liveY;
+        sample.m_SurfaceClass = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
+        sample.m_DensityGcm3 = 0.5;
+        sample.m_NSpans = 1;
+        sample.m_SpanLo.Insert(liveY);
+        sample.m_SpanHi.Insert(liveY);
+        outSample = sample;
+        m_StatLiveHeight = m_StatLiveHeight + 1;
+        m_StatHits = m_StatHits + 1;
+        return true;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected void ApplyLiveTerrainY(
+        float worldX,
+        float worldZ,
+        notnull RDF_DemRuntimeCellSample sample)
+    {
+        if (!sample)
+            return;
+        if (m_Manifest && !m_Manifest.m_PreferLiveTerrainY && !m_Manifest.m_IsSurfacePack)
+            return;
+
+        float liveY;
+        if (!TryGetLiveTerrainY(worldX, worldZ, liveY))
+            return;
+
+        sample.m_TerrainY = liveY;
+        if (sample.m_NSpans >= 1 && sample.m_SpanLo && sample.m_SpanHi)
+        {
+            if (sample.m_SpanLo.Count() > 0)
+                sample.m_SpanLo.Set(0, liveY);
+            if (sample.m_SpanHi.Count() > 0)
+                sample.m_SpanHi.Set(0, liveY);
+        }
+        m_StatLiveHeight = m_StatLiveHeight + 1;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected bool TryGetLiveTerrainY(float worldX, float worldZ, out float outY)
+    {
+        outY = 0.0;
+        BaseWorld world = GetGame().GetWorld();
+        if (!world)
+            return false;
+        outY = world.GetSurfaceY(worldX, worldZ);
+        return true;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected string BoolToLiveFlag(bool value)
+    {
+        if (value)
+            return "1";
+        return "0";
     }
 
     //--------------------------------------------------------------------------------------------
@@ -302,5 +414,6 @@ class RDF_DemRuntimeCache
         m_StatLoadFails = 0;
         m_StatEvictions = 0;
         m_StatBudgetBlocks = 0;
+        m_StatLiveHeight = 0;
     }
 }

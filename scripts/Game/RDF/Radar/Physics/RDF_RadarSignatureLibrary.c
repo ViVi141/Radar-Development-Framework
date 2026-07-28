@@ -26,6 +26,8 @@ class RDF_RadarSignatureLibrary
     static const string SIG_FILE = "$profile:RDF/Signatures/rdf_radar_signatures.csv";
     static const string SIG_BIN_FILE = "$profile:RDF/Signatures/rdf_radar_signatures.sig.data";
     static const string SIG_BIN_PACKAGED = "Signatures/rdf_radar_signatures.sig.data";
+    static const ResourceName SIG_CONF_PACKAGED =
+        "{C8A3F15E902B47D1}Signatures/rdf_radar_signatures.conf";
     static const string SIG_MAGIC = "RDF_RADAR_SIG_V2";
     static const string SIG_BIN_MAGIC = "RDFSIG1";
     static const int SIG_BIN_VERSION = 1;
@@ -278,11 +280,67 @@ class RDF_RadarSignatureLibrary
         if (!s_ByKey)
             s_ByKey = new map<string, ref RDF_RadarSignature>();
 
+        // 1) Packaged Enfusion .conf (workshop)
+        if (LoadBakedConf(SIG_CONF_PACKAGED))
+            return true;
+
+        // 2) Profile CSV (dev bake)
+        if (LoadBakedCsv(SIG_FILE))
+            return true;
+
+        // 3) Legacy binary (removed from package; keep for old local files)
         if (LoadBakedBinary(SIG_BIN_FILE))
             return true;
         if (LoadBakedBinary(SIG_BIN_PACKAGED))
             return true;
-        return LoadBakedCsv(SIG_FILE);
+
+        return false;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    protected static bool LoadBakedConf(ResourceName path)
+    {
+        if (path.IsEmpty())
+            return false;
+
+        RDF_RadarSignatureTableConf conf =
+            SCR_ConfigHelperT<RDF_RadarSignatureTableConf>.GetConfigObject(path);
+        if (!conf)
+            return false;
+        if (!conf.m_aEntries || conf.m_aEntries.Count() < 1)
+            return false;
+
+        int loaded = 0;
+        int n = conf.m_aEntries.Count();
+        for (int i = 0; i < n; i++)
+        {
+            RDF_RadarSignatureEntryConf e = conf.m_aEntries.Get(i);
+            if (!e)
+                continue;
+            if (e.m_sKey == "")
+                continue;
+
+            RDF_RadarSignature sig = new RDF_RadarSignature();
+            sig.m_Key = e.m_sKey;
+            sig.m_SizeX = e.m_fSizeX;
+            sig.m_SizeY = e.m_fSizeY;
+            sig.m_SizeZ = e.m_fSizeZ;
+            sig.m_CharacteristicLengthM = e.m_fCharLengthM;
+            sig.m_MeanRcsM2 = e.m_fMeanRcsM2;
+            sig.m_SwerlingModel = e.m_iSwerling;
+            sig.m_TypeHint = e.m_iTypeHint;
+            sig.m_Baked = true;
+            if (sig.m_CharacteristicLengthM < 0.1)
+                sig.m_CharacteristicLengthM = 0.1;
+
+            s_ByKey.Set(sig.m_Key, sig);
+            loaded = loaded + 1;
+        }
+
+        s_StatBakedLoaded = loaded;
+        Print("[RDF Radar Sig] baked conf loaded: " + loaded.ToString()
+            + " from " + path, LogLevel.NORMAL);
+        return loaded > 0;
     }
 
     //------------------------------------------------------------------------------------------------

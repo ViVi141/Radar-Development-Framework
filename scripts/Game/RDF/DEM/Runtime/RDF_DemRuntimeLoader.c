@@ -28,8 +28,23 @@ class RDF_DemRuntimeLoader
             return false;
         }
 
-        // 1) Profile V3 CSV (dev bake)
+        // 1) Profile surface JSON (live height + surface class; workshop format)
         string profileRoot = RDF_DemBakeConstants.DEM_DATA_DIR + worldKey + "/";
+        if (RDF_DemSurfaceJsonPack.TryLoadManifest(profileRoot, worldKey, outManifest))
+        {
+            Print("[RDF DEM Runtime] using profile SURF JSON: " + profileRoot, LogLevel.NORMAL);
+            return true;
+        }
+
+        // 2) Packaged surface JSON (workshop preferred ship path)
+        string packagedRoot = RDF_DemBakeConstants.PACKAGED_DEM_DATA_DIR + worldKey + "/";
+        if (RDF_DemSurfaceJsonPack.TryLoadManifest(packagedRoot, worldKey, outManifest))
+        {
+            Print("[RDF DEM Runtime] using packaged SURF JSON: " + packagedRoot, LogLevel.NORMAL);
+            return true;
+        }
+
+        // 3) Profile V3 CSV (dev bake, full DEM)
         string profileManifest = profileRoot + "manifest.csv";
         if (FileIO.FileExists(profileManifest))
         {
@@ -37,7 +52,14 @@ class RDF_DemRuntimeLoader
                 return true;
         }
 
-        // 2) Profile binary pack
+        // 4) Profile full DEM JSON
+        if (RDF_DemJsonPack.TryLoadManifest(profileRoot, worldKey, outManifest))
+        {
+            Print("[RDF DEM Runtime] using profile JSON DEM: " + profileRoot, LogLevel.NORMAL);
+            return true;
+        }
+
+        // 5) Profile binary pack
         string profileBin = RDF_DemBinPack.BuildPackPath(profileRoot, worldKey);
         if (RDF_DemBinPack.TryLoadManifest(profileBin, worldKey, outManifest))
         {
@@ -45,8 +67,14 @@ class RDF_DemRuntimeLoader
             return true;
         }
 
-        // 3) Packaged binary (workshop)
-        string packagedRoot = RDF_DemBakeConstants.PACKAGED_DEM_DATA_DIR + worldKey + "/";
+        // 6) Packaged full DEM JSON
+        if (RDF_DemJsonPack.TryLoadManifest(packagedRoot, worldKey, outManifest))
+        {
+            Print("[RDF DEM Runtime] using packaged JSON DEM: " + packagedRoot, LogLevel.NORMAL);
+            return true;
+        }
+
+        // 7) Packaged binary (legacy)
         string packagedBin = RDF_DemBinPack.BuildPackPath(packagedRoot, worldKey);
         if (RDF_DemBinPack.TryLoadManifest(packagedBin, worldKey, outManifest))
         {
@@ -54,7 +82,7 @@ class RDF_DemRuntimeLoader
             return true;
         }
 
-        // 4) Packaged V3 CSV fallback
+        // 8) Packaged V3 CSV fallback
         string packagedManifest = packagedRoot + "manifest.csv";
         if (FileIO.FileExists(packagedManifest))
         {
@@ -65,8 +93,8 @@ class RDF_DemRuntimeLoader
             }
         }
 
-        Warn("DEM missing for " + worldKey
-            + " (profile CSV/bin + packaged bin/CSV)");
+        Warn("DEM/SURF missing for " + worldKey
+            + " (profile/packaged SURF JSON, then CSV/JSON/bin DEM)");
         return false;
     }
 
@@ -171,6 +199,9 @@ class RDF_DemRuntimeLoader
         }
 
         manifest.m_IsBinaryPack = false;
+        manifest.m_IsJsonPack = false;
+        manifest.m_IsSurfacePack = false;
+        manifest.m_PreferLiveTerrainY = true;
         manifest.m_RootDir = rootDir;
         manifest.m_TilesDir = rootDir + "tiles/";
         outManifest = manifest;
@@ -192,6 +223,12 @@ class RDF_DemRuntimeLoader
             Warn("Tile index out of range: " + tileIx.ToString() + "," + tileIz.ToString());
             return false;
         }
+
+        if (manifest.m_IsSurfacePack)
+            return RDF_DemSurfaceJsonPack.LoadTile(manifest, tileIx, tileIz, outTile);
+
+        if (manifest.m_IsJsonPack)
+            return RDF_DemJsonPack.LoadTile(manifest, tileIx, tileIz, outTile);
 
         if (manifest.m_IsBinaryPack)
             return RDF_DemBinPack.LoadTile(manifest, tileIx, tileIz, outTile);

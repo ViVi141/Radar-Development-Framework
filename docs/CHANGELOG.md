@@ -1,5 +1,36 @@
 # CHANGELOG
 
+## 2026-07-29 — 特征表改为 Enfusion .conf
+
+- `Signatures/rdf_radar_signatures.conf` + `.meta`（`{C8A3F15E902B47D1}`，759 条）
+- 加载：模组 `.conf` → profile CSV → 遗留 `.sig.data`
+- 已删除 `rdf_radar_signatures.sig.data`；打包：`python tools/dem/rdf_sig_pack_conf.py`
+
+## 2026-07-29 — 删除模组内遗留 `.dem.data`
+
+- 已删 `GM_Arland` / `GM_Eden` / `GM_Cain` 的 `.dem.data`（约 127 MB）
+- 模组 `DemData/` 仅保留 SURF JSON（`surf_manifest.json` + `surf_chunks/`）
+
+## 2026-07-29 — SurfaceTable 改为 Enfusion .conf
+
+- `RadarData/SurfaceTable.conf` + `.meta`（`{B4E81F2A7C903D65}`）
+- `RDF_RadarSurfaceTableConf` / `RDF_RadarSurfaceEntryConf`
+- 加载：profile JSON → 模组 `.conf` → 模组 JSON → 内置
+
+## 2026-07-29 — SurfaceTable：地表类 → 电磁参数
+
+- `RadarData/SurfaceTable.json`（`RDF_SURF_TABLE_V1`）：σ⁰、gamma_k、clutter_scale、dielectric、roughness、attenuation
+- `RDF_RadarSurfaceTable` 加载；`RDF_RadarClutterModel` 改查表
+- 杂波路径应用 `attenuation_db_per_km`（双程）
+- Python `Sigma0Table.from_json` 兼容该格式
+
+## 2026-07-29 — 杂波：实时 GetSurfaceY + 地表类 SURF JSON
+
+- 高度优先 `BaseWorld.GetSurfaceY`（官方地形）；地表类用 `RDF_SURF_JSON_V1`
+- 查找顺序：profile/packaged `surf_manifest.json` → 全量 CSV/JSON/bin DEM → LIVE 回退
+- `tools/dem/rdf_dem_pack_surface_json.py`；已生成 Arland(~2.3MB) / Eden·Cain(~20MB)
+- HUD：`SURF` / `LIVE` / `DEM OK`
+
 ## 2026-07-29 — 模组内去掉 DEM CSV
 
 - `DemData/` 仅保留 `GM_Eden` / `GM_Arland` / `GM_Cain` 的 `.dem.data`

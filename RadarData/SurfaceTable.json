@@ -1,0 +1,129 @@
+{
+  "magic": "RDF_SURF_TABLE_V1",
+  "version": 1,
+  "band": "X",
+  "sea_state": 3,
+  "theta_ref_deg": 30.0,
+  "entries": [
+    {
+      "id": 0,
+      "name": "unknown",
+      "sigma0_ref_db": -18.0,
+      "gamma_k": 1.0,
+      "clutter_scale": 1.0,
+      "dielectric": 10.0,
+      "roughness": 0.08,
+      "attenuation_db_per_km": 0.0
+    },
+    {
+      "id": 1,
+      "name": "water",
+      "sigma0_ref_db": -22.0,
+      "gamma_k": 1.4,
+      "clutter_scale": 1.0,
+      "dielectric": 80.0,
+      "roughness": 0.02,
+      "attenuation_db_per_km": 0.0
+    },
+    {
+      "id": 2,
+      "name": "vegetation",
+      "sigma0_ref_db": -14.0,
+      "gamma_k": 0.8,
+      "clutter_scale": 1.0,
+      "dielectric": 15.0,
+      "roughness": 0.3,
+      "attenuation_db_per_km": 0.5
+    },
+    {
+      "id": 3,
+      "name": "soil",
+      "sigma0_ref_db": -18.0,
+      "gamma_k": 1.0,
+      "clutter_scale": 1.0,
+      "dielectric": 10.0,
+      "roughness": 0.08,
+      "attenuation_db_per_km": 0.0
+    },
+    {
+      "id": 4,
+      "name": "sand",
+      "sigma0_ref_db": -20.0,
+      "gamma_k": 1.1,
+      "clutter_scale": 1.0,
+      "dielectric": 4.0,
+      "roughness": 0.05,
+      "attenuation_db_per_km": 0.0
+    },
+    {
+      "id": 5,
+      "name": "gravel",
+      "sigma0_ref_db": -16.0,
+      "gamma_k": 1.0,
+      "clutter_scale": 1.0,
+      "dielectric": 6.0,
+      "roughness": 0.12,
+      "attenuation_db_per_km": 0.0
+    },
+    {
+      "id": 6,
+      "name": "asphalt",
+      "sigma0_ref_db": -12.0,
+      "gamma_k": 1.0,
+      "clutter_scale": 1.0,
+      "dielectric": 5.0,
+      "roughness": 0.02,
+      "attenuation_db_per_km": 0.0
+    },
+    {
+      "id": 7,
+      "name": "hard",
+      "sigma0_ref_db": -10.0,
+      "gamma_k": 1.0,
+      "clutter_scale": 1.0,
+      "dielectric": 6.0,
+      "roughness": 0.03,
+      "attenuation_db_per_km": 0.0
+    },
+    {
+      "id": 8,
+      "name": "wood",
+      "sigma0_ref_db": -18.0,
+      "gamma_k": 1.0,
+      "clutter_scale": 1.0,
+      "dielectric": 3.0,
+      "roughness": 0.1,
+      "attenuation_db_per_km": 0.2
+    },
+    {
+      "id": 9,
+      "name": "metal",
+      "sigma0_ref_db": -5.0,
+      "gamma_k": 0.5,
+      "clutter_scale": 1.0,
+      "dielectric": 1000.0,
+      "roughness": 0.01,
+      "attenuation_db_per_km": 0.0
+    },
+    {
+      "id": 10,
+      "name": "snow_ice",
+      "sigma0_ref_db": -20.0,
+      "gamma_k": 1.0,
+      "clutter_scale": 1.0,
+      "dielectric": 3.0,
+      "roughness": 0.04,
+      "attenuation_db_per_km": 0.0
+    },
+    {
+      "id": 11,
+      "name": "fabric",
+      "sigma0_ref_db": -24.0,
+      "gamma_k": 1.0,
+      "clutter_scale": 1.0,
+      "dielectric": 2.0,
+      "roughness": 0.15,
+      "attenuation_db_per_km": 0.0
+    }
+  ]
+}

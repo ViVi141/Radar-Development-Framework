@@ -1,58 +1,28 @@
 // Absolute radar equation helpers + σ⁰ clutter model (matches Python tools).
 // Pr = Pt * Gt * Gr * λ² * σ / ((4π)³ * R⁴ * L)
+// Surface EM params come from RDF_RadarSurfaceTable (RadarData/SurfaceTable.json).
 class RDF_RadarClutterModel
 {
-    static const float THETA_REF_RAD = 0.523598775598; // 30 deg
     static const float MIN_GRAZING_RAD = 0.00872664625; // 0.5 deg
     static const float MAX_SIGMA0 = 10.0;
     static const float C_LIGHT = 299792458.0;
     static const float FOUR_PI = 12.5663706144;
 
     //------------------------------------------------------------------------------------------------
-    // σ⁰ (linear, m²/m²) at reference grazing for ERDF_DemSurfaceClass (X-band defaults).
+    // σ⁰ (linear, m²/m²) at reference grazing for ERDF_DemSurfaceClass.
     static float GetSigma0Ref(int surfaceClass)
     {
-        if (surfaceClass == ERDF_DemSurfaceClass.RDF_DEM_SURF_WATER)
-            return 0.0063095734448; // -22 dB
-        if (surfaceClass == ERDF_DemSurfaceClass.RDF_DEM_SURF_VEGETATION)
-            return 0.0398107170553; // -14 dB
-        if (surfaceClass == ERDF_DemSurfaceClass.RDF_DEM_SURF_SOIL)
-            return 0.0158489319246; // -18 dB
-        if (surfaceClass == ERDF_DemSurfaceClass.RDF_DEM_SURF_SAND)
-            return 0.01; // -20 dB
-        if (surfaceClass == ERDF_DemSurfaceClass.RDF_DEM_SURF_GRAVEL)
-            return 0.0251188643151; // -16 dB
-        if (surfaceClass == ERDF_DemSurfaceClass.RDF_DEM_SURF_ASPHALT)
-            return 0.063095734448; // -12 dB
-        if (surfaceClass == ERDF_DemSurfaceClass.RDF_DEM_SURF_HARD)
-            return 0.1; // -10 dB
-        if (surfaceClass == ERDF_DemSurfaceClass.RDF_DEM_SURF_WOOD)
-            return 0.0158489319246; // -18 dB
-        if (surfaceClass == ERDF_DemSurfaceClass.RDF_DEM_SURF_METAL)
-            return 0.316227766017; // -5 dB
-        if (surfaceClass == ERDF_DemSurfaceClass.RDF_DEM_SURF_SNOW_ICE)
-            return 0.01; // -20 dB
-        if (surfaceClass == ERDF_DemSurfaceClass.RDF_DEM_SURF_FABRIC)
-            return 0.0039810717055; // -24 dB
-        return 0.0158489319246; // unknown ≈ soil -18 dB
+        return RDF_RadarSurfaceTable.GetSigma0RefLin(surfaceClass);
     }
 
     //------------------------------------------------------------------------------------------------
     static float GetSigma0Exponent(int surfaceClass)
     {
-        if (surfaceClass == ERDF_DemSurfaceClass.RDF_DEM_SURF_WATER)
-            return 1.4;
-        if (surfaceClass == ERDF_DemSurfaceClass.RDF_DEM_SURF_VEGETATION)
-            return 0.8;
-        if (surfaceClass == ERDF_DemSurfaceClass.RDF_DEM_SURF_SAND)
-            return 1.1;
-        if (surfaceClass == ERDF_DemSurfaceClass.RDF_DEM_SURF_METAL)
-            return 0.5;
-        return 1.0;
+        return RDF_RadarSurfaceTable.GetGammaK(surfaceClass);
     }
 
     //------------------------------------------------------------------------------------------------
-    // Constant-gamma: σ⁰(θ) = σ⁰_ref * (sinθ / sinθ_ref)^k
+    // Constant-gamma: σ⁰(θ) = σ⁰_ref * (sinθ / sinθ_ref)^k * clutter_scale
     static float GetSigma0(int surfaceClass, float grazingRad)
     {
         float theta = grazingRad;
@@ -63,11 +33,13 @@ class RDF_RadarClutterModel
 
         float refValue = GetSigma0Ref(surfaceClass);
         float exponent = GetSigma0Exponent(surfaceClass);
-        float ratio = Math.Sin(theta) / Math.Sin(THETA_REF_RAD);
+        float thetaRef = RDF_RadarSurfaceTable.GetThetaRefRad();
+        float ratio = Math.Sin(theta) / Math.Sin(thetaRef);
         if (ratio < 0.000001)
             ratio = 0.000001;
 
         float value = refValue * Math.Pow(ratio, exponent);
+        value = value * RDF_RadarSurfaceTable.GetClutterScale(surfaceClass);
         if (value > MAX_SIGMA0)
             value = MAX_SIGMA0;
         return value;
@@ -77,6 +49,13 @@ class RDF_RadarClutterModel
     static float GetCanopySigma0(float grazingRad)
     {
         return GetSigma0(ERDF_DemSurfaceClass.RDF_DEM_SURF_VEGETATION, grazingRad);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // One-way foliage/volume attenuation from SurfaceTable (dB/km).
+    static float GetSurfaceAttenuationDbPerKm(int surfaceClass)
+    {
+        return RDF_RadarSurfaceTable.GetAttenuationDbPerKm(surfaceClass);
     }
 
     //------------------------------------------------------------------------------------------------

@@ -299,7 +299,9 @@ def main() -> None:
         _max_dem_range(terrain, cell_m, radar_ix, radar_iz),
         hardware.instrumented_range_m,
     )
-    sigma0 = Sigma0Table.builtin(hardware.band, 3)
+    sigma0 = Sigma0Table.from_surface_table_default()
+    if hardware.band.upper() != sigma0.band.upper():
+        sigma0 = Sigma0Table.builtin(hardware.band, 3)
     sector_config = SectorConfig(
         radar_ix=radar_ix,
         radar_iz=radar_iz,
