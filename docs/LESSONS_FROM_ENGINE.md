@@ -1,4 +1,10 @@
+> **Languages / 语言**: [中文](#中文) · [English](#english)
+
 # 从引擎用法中提炼的经验
+
+---
+
+## 中文
 
 本文档记录从 Arma Reforger / Enfusion 引擎及官方/社区代码中总结的经验，供 RDF 及类似项目参考。
 
@@ -264,3 +270,274 @@ RDF 通过 `RDF_LidarSettings.m_TraceSmokeOcclusion` 控制，采用双 Trace �
 ---
 
 *文档维护：随项目与引擎使用持续补充。*
+
+---
+
+## English
+
+# Lessons distilled from engine usage
+
+Notes from Arma Reforger / Enfusion engine and official/community code, for RDF and similar projects.
+
+---
+
+## 1. TraceMove basics
+
+### 1.1 Core API
+
+```c
+float hitFraction = world.TraceMove(param, TraceFilter);
+```
+
+- `TraceParam`: inputs Start/End, Flags, LayerMask, Exclude, etc.; outputs TraceEnt, SurfaceProps, TraceNorm.
+- `TraceFilter(entity)`: optional callback; return `false` to exclude that entity (ray passes through).
+
+### 1.2 Common flags & fields
+
+| Field | Meaning |
+|-------|---------|
+| `TraceFlags.WORLD` | World / terrain |
+| `TraceFlags.ENTS` | Entities |
+| `TraceFlags.VISIBILITY` | Visibility occluders (particles, smoke) — LOS / laser blocked |
+| `TraceParam.Exclude` | Exclude a single entity |
+| `TraceParam.ExcludeArray` | Exclude an entity array |
+| `TraceParam.TargetLayers` | Physics layers (e.g. `EPhysicsLayerDefs.FireGeometry`) |
+| `TraceParam.SurfaceProps` | Hit surface material (GameMaterial) |
+| `TraceParam.TraceNorm` | Hit surface normal |
+| `TraceParam.TraceEnt` | Hit entity |
+
+### 1.3 hitFraction & hit position interpolation
+
+- `TraceMove` returns `hitFraction` (0–1), the fraction along the ray to the hit.
+- **Top-down ray** (Start above, End below):
+
+  ```c
+  surfaceY = trace.Start[1] - (trace.Start[1] - trace.End[1]) * traceCoef;
+  ```
+
+- **SnapToGeometry style** (Start above, End below):
+
+  ```c
+  pos[1] = trace.Start[1] + (trace.End[1] - trace.Start[1]) * traceDistPercentage;
+  ```
+
+---
+
+## 2. Rotor contact (RPC_OnContactBroadcast)
+
+### 2.1 TraceFilter excludes self-collision
+
+```c
+protected bool TraceFilter(notnull IEntity e)
+{
+    return e != GetOwner() && e != m_RootDamageManager.GetOwner();
+}
+// ...
+GetGame().GetWorld().TraceMove(trace, TraceFilter);
+```
+
+- Exclude rotor and airframe so self-hits do not yield wrong materials.
+
+### 2.2 Short ray along normal to re-sample material
+
+```c
+trace.Start = contactPos + contactNormal;
+trace.End   = contactPos - contactNormal;
+```
+
+- Physics contact may lack material; short TraceMove reads `GameMaterial` from `SurfaceProps`.
+- Particles/SFX keyed off material.
+
+### 2.3 Physics on server, FX on client
+
+- Collision physics on server; particles/SFX via `[RplRpc(RplChannel.Unreliable, RplRcver.Broadcast)]` to clients.
+
+---
+
+## 3. Impact particles (RPC_OnImpactParticlesBroadcast)
+
+### 3.1 Particle orientation matrix
+
+```c
+vector transform[4];
+Math3D.MatrixFromUpVec(contactNormal, transform);
+transform[3] = contactPos;
+EmitParticles(transform, resourceName);
+```
+
+- `MatrixFromUpVec` builds a matrix with the normal as “up”; `transform[3]` is position.
+- Particles emit along the contact normal.
+
+### 3.2 Material → particle resource
+
+```c
+GameMaterial contactMat = trace.SurfaceProps;
+HitEffectInfo effectInfo = contactMat.GetHitEffectInfo();
+ResourceName resourceName = effectInfo.GetBayonetHitParticleEffect();
+
+if (resourceName.IsEmpty())
+    resourceName = GetDefaultParticles()[magnitude];
+```
+
+- Material → `GetHitEffectInfo()` → specific effect (e.g. bayonet hit).
+- If unset, pick default particles by `magnitude`.
+
+---
+
+## 4. LOS / occlusion (IsObstructed)
+
+### 4.1 TraceFilter passes through certain types
+
+```c
+protected static bool IsCharacter(notnull IEntity entity)
+{
+    return ChimeraCharacter.Cast(entity) == null;  // 角色返回 false，射线穿透
+}
+```
+
+- Entities returning `false` are penetrated by the ray.
+- For LOS, ignore characters; only terrain/obstacles count.
+
+### 4.2 hitFraction vs threshold
+
+```c
+if (world.TraceMove(m_RaycastParam, IsCharacter) < GetRaycastThreshold())
+```
+
+- `hitFraction < threshold`: hit before the target → obstructed.
+
+### 4.3 Same object is not obstruction
+
+```c
+IEntity parentEntityRay = m_RaycastParam.TraceEnt.GetRootParent();
+IEntity parentEntityAct = entAction.GetRootParent();
+if (parentEntityRay != parentEntityAct)
+    return true;  // 命中的是别的物体 → 遮挡
+```
+
+- Hits on the interactable itself or its children (same root parent) are not obstruction.
+
+---
+
+## 5. Terrain helpers (SCR_TerrainHelper)
+
+### 5.1 GetTerrainY / GetHeightAboveTerrain
+
+- **GetTerrainY**: downward trace from `pos` or `GetSurfaceY` → surface height.
+- **GetHeightAboveTerrain**: `pos[1] - GetTerrainY(...)`.
+
+### 5.2 GetTerrainNormal
+
+- Ray: `pos + vector.Up` → `pos - vector.Up` (short vertical down).
+- On hit, use `trace.TraceNorm` as terrain normal.
+
+### 5.3 GetTerrainBasis
+
+- Build a 4×4 surface frame from the normal; Snap/Orient to terrain.
+
+### 5.4 SnapToGeometry
+
+- `trace.ExcludeArray`: exclude listed entities.
+- `trace.TargetLayers = EPhysicsLayerDefs.FireGeometry`: fire geometry only.
+- Output: snapped position + `trace.TraceNorm`.
+
+### 5.5 Optional custom TraceParam
+
+- Methods accept optional `TraceParam trace` to customize Flags, Exclude, ExcludeArray, etc.
+- When `trace.Flags == 0`, auto-set `TraceFlags.WORLD | TraceFlags.ENTS`.
+
+---
+
+## 6. General lessons
+
+### 6.1 Typical TraceFilter uses
+
+| Goal | Callback |
+|------|----------|
+| Exclude self | `return e != GetOwner()` |
+| Pass through characters | `return ChimeraCharacter.Cast(e) == null` |
+| Exclude many entities | test membership in an exclude list |
+
+### 6.2 RPC channel choice
+
+- **Unreliable**: particles, SFX, non-critical viz; loss OK.
+- **Reliable**: detection results, critical state sync.
+
+### 6.3 Validate hit results
+
+- Do not trust a single field; combine `TraceEnt`, `SurfaceProps`, `hitFraction`, etc.
+- RDF already filters far-plane/sky false hits with `hitFraction >= 0.9999`.
+
+### 6.4 Extra TraceParam fields
+
+| Field | Typical use |
+|-------|-------------|
+| Exclude | Exclude scan subject |
+| ExcludeArray | Batch exclude |
+| TargetLayers | Limit physics layers |
+| TraceNorm | Surface normal (clutter RCS, facing) |
+
+---
+
+## 7. Mapping to RDF
+
+| Engine / sample practice | RDF counterpart or takeaway |
+|--------------------------|-----------------------------|
+| TraceFilter exclude self | `Exclude = subject` or custom TraceFilter |
+| Short ray re-sample material | Long rays already read SurfaceProps; extend as needed |
+| RPC broadcast FX | Mirror LiDAR network server/client split |
+| Unreliable channel | Non-critical viz sync |
+| hitFraction check | Existing 0.9999 far-plane filter |
+| ExcludeArray | Batch exclude |
+| GetTerrainY / TraceNorm | Clutter RCS, terrain scatter |
+| TargetLayers | Limit to fire/collision geometry |
+
+---
+
+## 8. Actionable suggestions
+
+1. Keep `param.Exclude = subject`; add `TraceFilter` for subject + children when needed.
+2. Clutter/RCS can use `GetTerrainY` and `TraceNorm` for hit kind and surface facing.
+3. LiDAR/radar network viz: Unreliable for non-critical frames, Reliable for critical detects.
+
+---
+
+## 9. Already in RDF: Trace target mode switch
+
+`RDF_LidarSettings` adds `m_TraceTargetMode` (`ERDF_TraceTargetMode`):
+
+| Mode / option | TraceFlags | Meaning |
+|---------------|------------|---------|
+| 0 / `TERRAIN_ONLY` | `TraceFlags.WORLD` | Terrain / water / static world only |
+| 1 / `ALL` | `TraceFlags.WORLD` + `TraceFlags.ENTS` | Terrain + entities |
+| 2 / `ENTITIES_ONLY` | `TraceFlags.ENTS` | Entities only (vehicles, characters); no terrain |
+
+Usage (create config, then set properties):
+
+```c
+// 直接设置（RDF_LidarSettings 仍用 ERDF_TraceTargetMode 枚举）
+scanner.GetSettings().m_TraceTargetMode = ERDF_TraceTargetMode.TERRAIN_ONLY;
+scanner.GetSettings().Validate();
+
+// Demo 预设：m_TraceTargetMode 为 int（0=仅地形, 1=全部, 2=仅实体）
+RDF_LidarDemoConfig cfg = RDF_LidarDemoConfig.CreateDefault(256);
+cfg.m_TraceTargetMode = 2;
+RDF_LidarAutoRunner.StartWithConfig(cfg);
+
+// 运行时切换
+RDF_LidarAutoRunner.SetDemoTraceTargetMode(0);
+```
+
+Radar (`RDF_RadarSettings` extends `RDF_LidarSettings`) supports the same.
+
+---
+
+## 10. Smoke blocking laser (TraceFlags.VISIBILITY)
+
+To let smoke/particles block laser sensing, include `TraceFlags.VISIBILITY` on Trace. Real-world meaning: smoke block = no valid return; smoke and everything behind counts as miss.
+
+RDF gates this with `RDF_LidarSettings.m_TraceSmokeOcclusion` via dual Trace (visibility vs geometry): if visibility hits first, `hit=false` and no data. Verified with vanilla smoke grenades.
+
+---
+
+*Maintained as project and engine usage evolve.*

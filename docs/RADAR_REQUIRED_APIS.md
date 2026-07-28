@@ -1,4 +1,10 @@
+> **Languages / 语言**: [中文](#中文) · [English](#english)
+
 # 雷达系统所需游戏 API — 列表与验证
+
+---
+
+## 中文
 
 本文档列出当前游戏内雷达实现（见 [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md)）所用的 Enfusion / Arma Reforger 脚本 API，并通过引擎 API 检索进行验证。验证日期：按文档编写时查询结果为准。
 
@@ -122,3 +128,132 @@
 - **雷达可被探测**：自维护“主动雷达”注册表 + 在对方扫描时合并进目标列表，无需新引擎 API。
 
 所有上表标为 ✅ 的 API 均已在检索中验证存在；❓/⚠️ 项依赖项目内已有用法或 BIKI 文档。实现约定以本列表、[RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md)、[VEHICLE_RADAR_LOCK_GUIDE.md](VEHICLE_RADAR_LOCK_GUIDE.md) 为准。
+
+---
+
+## English
+
+# Game APIs required by the radar system — checklist & verification
+
+This document lists the Enfusion / Arma Reforger script APIs used by the in-game radar implementation (see [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md)), verified via engine API search. Verification date: as of the queries run when this doc was written.
+
+---
+
+## 1. Verification notes
+
+- **Source**: `call_mcp_tool(server: "user-enfusion-mcp", toolName: "api_search", ...)` results.
+- **Status**: ✅ = found and usable in engine/Arma docs; ⚠️ = depends on existing RDF usage or needs runtime confirmation; ❓ = not hit alone in api_search, but covered indirectly by related classes/methods.
+- **Citations**: Doc links from BIKI URLs returned by api_search (EnfusionScriptAPIPublic / ArmaReforgerScriptAPIPublic).
+
+---
+
+## 2. World & entity queries (shells / vehicles / radar candidates)
+
+| API | Purpose | Status | Notes |
+|-----|---------|--------|-------|
+| **BaseWorld / World** | World interface; entry for entity queries and Trace | ✅ | `World` extends `BaseWorld`; `GetGame().GetWorld()`, `subject.GetWorld()` return `World`. Doc: EnfusionScriptAPIPublic/interfaceWorld.html, interfaceBaseWorld.html |
+| **BaseWorld.QueryEntitiesBySphere** | Entities in scan radius (sphere) | ✅ | `bool QueryEntitiesBySphere(vector center, float radius, QueryEntitiesCallback addEntity, QueryEntitiesCallback filterEntity=null, EQueryEntitiesFlags queryFlags=EQueryEntitiesFlags.ALL)` |
+| **BaseWorld.QueryEntitiesByAABB** | Entities in axis-aligned box | ✅ | `bool QueryEntitiesByAABB(vector mins, vector maxs, QueryEntitiesCallback addEntity, QueryEntitiesCallback filterEntity=null, EQueryEntitiesFlags queryFlags=EQueryEntitiesFlags.ALL)` |
+| **BaseWorld.QueryEntitiesByOBB** | Entities in oriented box (sector/cone approx.) | ✅ | `bool QueryEntitiesByOBB(vector mins, vector maxs, vector matrix[4], QueryEntitiesCallback addEntity, QueryEntitiesCallback filterEntity=null, EQueryEntitiesFlags queryFlags=EQueryEntitiesFlags.ALL)` |
+| **BaseWorld.QueryEntitiesByLine** | Entities along a line segment | ✅ | Useful for entity hits along a ray direction |
+| **QueryEntitiesCallback** | Entity callback: `bool callback(IEntity e)` | ✅ | Used as addEntity / filterEntity in Query methods; return true to accept/include. |
+| **EQueryEntitiesFlags** | Query filter flags | ✅ | Default `EQueryEntitiesFlags.ALL`; narrow as needed. |
+| **BaseWorld.GetActiveEntities** | Currently active entity list | ✅ | `void GetActiveEntities(notnull out array<IEntity> entities)`; fallback or combine with Query. |
+| **BaseWorld.GetWorldTime** | World time (ms) | ✅ | `float GetWorldTime()`; track timestamps and scan intervals. |
+| **BaseWorld.GetSurfaceY** | Terrain height | ✅ | Height filtering and terrain-related logic. |
+
+---
+
+## 3. Rays & visibility (Trace)
+
+| API | Purpose | Status | Notes |
+|-----|---------|--------|-------|
+| **BaseWorld.TraceMove** | Ray cast (start→end) | ✅ | `float TraceMove(inout TraceParam param, TraceFilterCallback filterCallback=null)`; returns 0..1 hit fraction. |
+| **TraceParam** | Ray I/O struct | ✅ | Fields include: Start, End, LayerMask, TargetLayers, **Flags** (TraceFlags), Exclude, ExcludeArray, Include, IncludeArray, **TraceEnt** (hit entity), **SurfaceProps** (hit surface), TraceNorm, etc. Doc: interfaceTraceParam.html |
+| **TraceFlags** | Detection kinds | ✅ | e.g. WORLD, ENTS, VISIBILITY; used by RDF — see LESSONS_FROM_ENGINE.md. |
+| **TraceFilterCallback** | Filter callback: `bool filter(IEntity e)` | ✅ | Return false to let the ray pass through that entity. |
+| **World.TracePosition** | Single-point collision test | ✅ | e.g. whether a point is inside geometry. |
+| **ChimeraCharacter.TraceMoveWithoutCharacters** | Trace optimized to skip characters | ✅ | Arma extension; optional to reduce filter cost. |
+
+---
+
+## 4. Entities & transforms (IEntity)
+
+| API | Purpose | Status | Notes |
+|-----|---------|--------|-------|
+| **IEntity** | Entity base class | ✅ | Extends Managed; GetID, GetParent, GetRootParent, GetChildren, GetSibling, **GetWorld()**, GetPrefabData, etc. Doc: interfaceIEntity.html |
+| **IEntity.GetWorld** | World owning the entity | ✅ | `BaseWorld GetWorld()` |
+| **IEntity.GetWorldTransform** | World transform matrix | ✅ | RDF already uses `subject.GetWorldTransform(worldMat)` (RDF_LidarScanner, RDF_LidarVisualizer). IEntity has GetWorldTransform in Enfusion. |
+| **IEntity.GetParent / GetRootParent** | Hierarchy & vehicle root | ✅ | Subject resolve; exclude self from scan. |
+| **IEntity.GetID** | Unique entity ID | ✅ | Cross-frame track association (same shell). |
+| **EntityID** | Entity ID type | ✅ | Pairs with GetID. |
+| **SCR_EntityHelper.FindComponent** | Find component on entity | ✅ | `Managed FindComponent(notnull IEntity entity, TypeName componentType, ...)`; identify projectiles (ProjectileMoveComponent, etc.). |
+
+---
+
+## 5. Projectiles (shell / missile tracking)
+
+| API | Purpose | Status | Notes |
+|-----|---------|--------|-------|
+| **Projectile** | Projectile entity type (Arma) | ✅ | EntityTypes group; filter “is shell/missile”. Doc: ArmaReforgerScriptAPIPublic/interfaceProjectile.html |
+| **ProjectileClass** | Projectile prefab data | ✅ | Extends BaseGameEntityClass, GameEntityClass. |
+| **ProjectileMoveComponent** | Projectile motion component | ✅ | `GetVelocity()`; `Launch(...)`, etc. FindComponent on projectile entities. Doc: interfaceProjectileMoveComponent.html |
+| **ProjectileMoveComponent.GetVelocity** | Body velocity vector | ✅ | `vector GetVelocity()`; trajectory and prediction. |
+| **BaseProjectileComponent** | Projectile component base | ✅ | GetInstigator, GetParentProjectile, etc.; missiles inherit this. |
+| **MissileMoveComponent.GetVelocity** | Missile velocity | ✅ | Similar to ProjectileMoveComponent. |
+| **EjectableProjectile** | Ejectable (casings, etc.) | ✅ | Subclass of Projectile; filter as needed. |
+
+Suggested identification: `QueryEntitiesBySphere`, then in the callback `FindComponent(entity, ProjectileMoveComponent)` or check `GetPrefabData()` / class name for Projectile family.
+
+---
+
+## 6. Physics & velocity (optional)
+
+| API | Purpose | Status | Notes |
+|-----|---------|--------|-------|
+| **Physics.GetVelocity** | Rigid-body linear velocity | ✅ | If a projectile lacks ProjectileMoveComponent but has Physics. |
+| **Physics.GetWorldTransform** | Rigid-body world transform | ✅ | Position and orientation. |
+| **CharacterControllerComponent.GetVelocity** | Character velocity | ✅ | Vehicle/infantry targets. |
+
+---
+
+## 7. Game entry & world access
+
+| API | Purpose | Status | Notes |
+|-----|---------|--------|-------|
+| **GetGame()** | Game singleton | ❓ | Global entry; RDF and engine scripts widely use `GetGame().GetWorld()`; api_search did not hit “GetGame” alone — treated as engine convention. |
+| **GetGame().GetWorld()** | Current World | ✅ | Returns `World` (BaseWorld); used by RDF. |
+| **WorldController.GetWorld** | World from controller | ✅ | `proto external World GetWorld()`. |
+
+---
+
+## 8. Network sync (radar state, tracks, detectable lists)
+
+| API | Purpose | Status | Notes |
+|-----|---------|--------|-------|
+| **RplProp / RplComponent** | Replicated props & components | ❓ | RDF LiDAR network uses `[RplProp]` etc.; not directly hit by api_search — Enfusion replication annotations/base classes. |
+| **RplRpc** | RPC methods | ❓ | Same; used by RDF — see RDF_LidarNetworkComponent. |
+| **Replication** | Server-authoritative sync | ⚠️ | Follow existing RDF network modules and BIKI “Replication” docs. |
+
+---
+
+## 9. Radar “detectable” registration (custom logic)
+
+| Need | Approach | Status |
+|------|----------|--------|
+| Radar entity list | Self-maintained `array<IEntity>` or WorldSystem registry; no engine-specific API | N/A |
+| Emit / silent state | Component fields + optional RplProp sync | N/A |
+| Radiated power / range math | Scalar math + world pose (GetWorldTransform / origin) | N/A |
+
+“Detectable” needs no extra engine API: when scanning, merge a self-maintained “emitting radars” list into `QueryEntitiesBySphere` results, or query via WorldSystem.
+
+---
+
+## 10. Summary & usage tips
+
+- **Entity query**: use **World (BaseWorld)** `QueryEntitiesBySphere` / `QueryEntitiesByAABB` / `QueryEntitiesByOBB` + **QueryEntitiesCallback**, then filter by type (vehicles, **Projectile**/ProjectileMoveComponent, self-registered radars).
+- **Visibility**: **TraceMove** from radar origin to a representative target point; use **TraceParam** (Flags, Exclude, TraceEnt, SurfaceProps) for occlusion.
+- **Projectiles**: **Projectile**, **ProjectileMoveComponent.GetVelocity()**, and **IEntity.GetID()** for detect + multi-frame track; stamp tracks with **GetWorldTime()**.
+- **Radar detectable**: maintain an “active radar” registry and merge into the peer’s target list on scan — no new engine API.
+
+All ✅ APIs above were verified in search; ❓/⚠️ items rely on in-repo usage or BIKI. Conventions follow this list, [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md), and [VEHICLE_RADAR_LOCK_GUIDE.md](VEHICLE_RADAR_LOCK_GUIDE.md).
