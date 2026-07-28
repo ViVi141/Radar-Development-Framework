@@ -95,6 +95,8 @@ class RDF_LidarAutoRunner
 
     static void StartAutoRun()
     {
+        // Lazy bind: only when LiDAR demo actually starts (not on every game start).
+        RDF_LidarNetworkUtils.BindAutoRunnerToLocalSubject(true);
         GetInstance().m_Running = true;
     }
 

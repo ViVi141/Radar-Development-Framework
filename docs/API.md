@@ -155,7 +155,7 @@ Network 模块内置实现，基于 Rpl 同步状态与扫描结果。
 ### RDF_LidarNetworkUtils
 网络辅助工具：
 - `static RDF_LidarNetworkAPI FindNetworkAPI(IEntity entity)` — 从实体或其父链上查找网络 API
-- `static bool BindAutoRunnerToLocalSubject(bool preferVehicle = true)` — 自动绑定本地玩家主体上的网络 API
+- `static bool BindAutoRunnerToLocalSubject(bool preferVehicle = true)` — 绑定本地玩家主体上的网络 API（由 `StartAutoRun` 惰性调用；开局不预绑）
 
 ### RDF_LidarNetworkScanner
 网络扫描适配器（非 Demo）：

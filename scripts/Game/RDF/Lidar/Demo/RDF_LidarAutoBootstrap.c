@@ -1,5 +1,6 @@
 // Bootstrap for LiDAR, Radar demo, and RDF DEM tile bake.
 // LiDAR params: RDF_LidarDemoConfig. DEM bake: create $profile:RDF/BakeDemFull.flag.
+// Default silent: no LiDAR/Radar start and no network bind unless explicitly enabled.
 modded class SCR_BaseGameMode
 {
     protected static bool s_RadarBootstrapEnabled = false;
@@ -7,8 +8,6 @@ modded class SCR_BaseGameMode
     override void OnGameStart()
     {
         super.OnGameStart();
-
-        RDF_LidarNetworkUtils.BindAutoRunnerToLocalSubject(true);
 
         if (RDF_LidarDemoConfig.IsBootstrapEnabled())
         {

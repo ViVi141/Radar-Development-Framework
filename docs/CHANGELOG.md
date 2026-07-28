@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2026-07-28 — 开局静默：移除 LiDAR 网络预绑定
+
+- `OnGameStart` 不再调用 `BindAutoRunnerToLocalSubject`
+- 仅在 `RDF_LidarAutoRunner.StartAutoRun`（含 Bootstrap / `StartWithConfig`）时惰性绑定
+
 ## 2026-07-28 — 主动雷达弹制导（助推 / 中段 / 末段 PN）
 
 - `RDF_RadarRocketGuidance` 改为 ARH 三段：BOOST 推力+弱 loft → MIDCOURSE 数据链拦截点 PN → TERMINAL 导引头视场内真 PN
