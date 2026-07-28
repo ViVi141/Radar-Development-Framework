@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2026-07-29 — 模组内去掉 DEM CSV
+
+- `DemData/` 仅保留 `GM_Eden` / `GM_Arland` / `GM_Cain` 的 `.dem.data`
+- 特征表仅保留 `Signatures/rdf_radar_signatures.sig.data`
+
 ## 2026-07-28 — DEM / 特征表二进制可打包格式
 
 - `RDF_DEM_BIN_V1`：每世界一个 `DemData/<world>/<world>.dem.data`（Seek 按 tile；无 span；高程 0.1 m）

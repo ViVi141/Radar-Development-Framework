@@ -78,8 +78,14 @@ python tools\dem\rdf_dem_pack_bin.py --world GM_Cain
 HUD：`DEM OK` / `DEM OFF`。  
 雷达：`m_EnableDemClutter`（默认开；无 DEM 安全退化）。
 
-`DemData/` 体积大，默认 **不进 Git**；本机 / 发布机保留文件即可。  
-工坊发布**只需** `<world>.dem.data`（Register 后）；不必带上万个 `tiles/*.csv`。
+`DemData/` 默认 **不进 Git**；本机保留 `.dem.data` 即可。  
+模组内当前仅有二进制包（已删 CSV tiles / manifest）：
+
+- `GM_Arland/GM_Arland.dem.data`（~7 MB）
+- `GM_Eden/GM_Eden.dem.data`（~60 MB）
+- `GM_Cain/GM_Cain.dem.data`（~60 MB）
+
+工坊发布 Register 上述 `.dem.data` 即可。
 
 ## 离线 npz 仿真
 
