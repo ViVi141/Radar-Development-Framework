@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-07-27 — LiDAR Scan 堆损坏修复（Workbench）
+
+- **根因**：`TraceMove` 起点落在 subject 壳体/AABB 内时，高频 Scan 可触发 SEH `0xc0000374`
+- `RDF_LidarScanner`：按局部半轴推算出壳 `Start`（`m_StartClearanceM`）；复用成员 `TraceParam`；不再写 `owned ColliderName`
+- `RDF_LidarSettings`：新增 `m_StartClearanceM`、`m_CaptureSurface`、`m_MaxRayCount`（默认软上限 4096）
+- `ScanDirectedRays` / `TraceDirectedRay`：统一走同一安全 Trace 路径
+
+---
+
 ## 2026-07-27 — Showcase 可视化去闪烁
 
 - 世界 Shape 去掉 `ONCE`：在两次 AutoRunner 重绘之间保持可见（CallLater≈5 Hz 时不再闪）

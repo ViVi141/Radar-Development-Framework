@@ -22,18 +22,24 @@ class RDF_LidarSettings
     float m_UpdateInterval = 5.0;
     bool m_UseBoundsCenter = true;
     bool m_UseLocalOffset = true;
+    //! Extra meters beyond local AABB along each ray before TraceMove Start (avoids in-solid traces).
+    float m_StartClearanceM = 0.25;
+    //! When false, skip GameMaterial capture (safer / cheaper for navigation consumers).
+    bool m_CaptureSurface = true;
+    //! Soft upper bound for a single Scan() (Workbench heap safety). 0 = no clamp beyond Max(1).
+    int m_MaxRayCount = 4096;
 
     // Validate and clamp settings to safe defaults/ranges.
     void Validate()
     {
-        // Ray count: minimum 1, no upper limit
         m_RayCount = Math.Max(m_RayCount, 1);
-        // Range: 0.1 .. 100000.0 (100 km, aligned with radar for long-range scans)
+        if (m_MaxRayCount > 0 && m_RayCount > m_MaxRayCount)
+            m_RayCount = m_MaxRayCount;
         m_Range = Math.Clamp(m_Range, 0.1, 100000.0);
-        // Update interval: at least 0.01s
         m_UpdateInterval = Math.Max(0.01, m_UpdateInterval);
+        if (m_StartClearanceM < 0.05)
+            m_StartClearanceM = 0.05;
 
-        // Derive TraceFlags from m_TraceTargetMode (see LESSONS_FROM_ENGINE.md).
         switch (m_TraceTargetMode)
         {
             case ETraceTargetMode.TERRAIN_ONLY:

@@ -17,6 +17,9 @@
 - `m_LayerMask` (int): 物理层掩码（默认 `EPhysicsLayerPresets.Projectile`）
 - `m_UseBoundsCenter` (bool): 是否使用实体包围盒中心作为扫描原点（默认 true）
 - `m_UseLocalOffset` (bool): 是否将 `m_OriginOffset` 视为实体局部空间偏移（默认 true）
+- `m_StartClearanceM` (float): 沿每条射线在 AABB 外再推出的安全距离（默认 0.25）；避免 Trace 起点在壳体内
+- `m_CaptureSurface` (bool): 是否捕获 `GameMaterial`（默认 true）；导航类消费者可关
+- `m_MaxRayCount` (int): 单次 `Scan` 软上限（默认 4096，0=不额外限制）
 
 方法：
 - `void Validate()` — 对设置进行防护性校验与 clamp（在扫描前会被自动调用）。
