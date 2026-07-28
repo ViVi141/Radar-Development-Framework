@@ -13,6 +13,8 @@ class RDF_RadarSettings
     bool m_IncludeRadarEmitters = true;
     // When true, RADAR_EMITTER plots use one-way Friis ESM power (not skin R^4).
     bool m_EnableEsmReceive = false;
+    // After each dwell, report SEARCH/TRACK/LOCK threats into RDF_RadarRwr.
+    bool m_EnableRwrReporting = true;
     // Read candidates from the global scatterer table (incremental discovery)
     // instead of searching the world on every scan.
     bool m_UseScattererRegistry = true;

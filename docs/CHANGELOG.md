@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 2026-07-28 — RWR 被照射 / 被锁定告警
+
+- 新增 `RDF_RadarRwr`：SEARCH / TRACK / LOCK 威胁表（TTL ~1.5s）
+- 主动雷达每 dwell 写入；ESM 模式不写；`m_EnableRwrReporting`
+- API：`HasSearchWarning` / `HasTrackWarning` / `HasLockWarning` / `CollectForVictim` / `GetStatusShort`
+- Component：`HasRwrLockWarning()` 等对 owner 查询
+- 回归：`RDF_RadarRwrAutoTest.Start()`（不进 `StartAll`）
+
+---
+
 ## 2026-07-28 — ESM 模式 + 反辐射瞄点 API
 
 - **ESM 功率**：`ReceivedPowerEsmW`（单向 Friis \(R^2\)）；`m_EnableEsmReceive`；`RADAR_EMITTER` 走侦收、跳过 DEM 杂波/MTI

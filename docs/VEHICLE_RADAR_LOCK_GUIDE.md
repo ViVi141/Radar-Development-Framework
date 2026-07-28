@@ -91,6 +91,24 @@ sensor.LockArmTrackId(trackId); // 仅辐射源航迹
 
 单独回归：`RDF_RadarEsmArmAutoTest.Start()`。
 
+### 2.2.2 RWR（被照射 / 被锁定）
+
+主动雷达扫描后会把威胁写入 `RDF_RadarRwr`。载具侧每帧查询：
+
+```c
+if (RDF_RadarRwr.HasLockWarning(owner))
+{
+    // 锁定告警音 / HUD
+}
+else if (RDF_RadarRwr.HasSearchWarning(owner))
+{
+    // 搜索照射提示
+}
+```
+
+`RDF_RadarComponent.HasRwrLockWarning()` 等价于对本实体查询。  
+回归：`RDF_RadarRwrAutoTest.Start()`。
+
 ### 2.3 武器打击：与 Reforger 武器系统对接
 
 RDF 的弹道模块用于轨迹预测和 WLR，不负责武器制导。武器“锁定并打击”

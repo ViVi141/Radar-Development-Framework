@@ -159,6 +159,32 @@ class RDF_RadarComponent : ScriptComponent
         return GetSensor().GetArmAim(entity, worldPos, radiating);
     }
 
+    // RWR for this component's owner (being painted / locked by other radars).
+    bool HasRwrSearchWarning()
+    {
+        return RDF_RadarRwr.HasSearchWarning(GetOwner());
+    }
+
+    bool HasRwrTrackWarning()
+    {
+        return RDF_RadarRwr.HasTrackWarning(GetOwner());
+    }
+
+    bool HasRwrLockWarning()
+    {
+        return RDF_RadarRwr.HasLockWarning(GetOwner());
+    }
+
+    string GetRwrStatusShort()
+    {
+        return RDF_RadarRwr.GetStatusShort(GetOwner());
+    }
+
+    void CollectRwrThreats(notnull array<ref RDF_RadarRwrThreat> outThreats)
+    {
+        RDF_RadarRwr.CollectForVictim(GetOwner(), outThreats);
+    }
+
     protected void SyncEmitting(bool emitting)
     {
         if (!m_NetworkAPI)

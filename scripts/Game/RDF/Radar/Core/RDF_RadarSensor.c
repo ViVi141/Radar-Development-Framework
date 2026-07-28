@@ -292,6 +292,8 @@ class RDF_RadarSensor
         s.m_EnablePhysicalDetection = true;
         s.m_DetectionSnrDb = 6.0;
         s.m_EnableMechanicalScan = false;
+        // Receive-only: do not paint victims on the RWR table.
+        s.m_EnableRwrReporting = false;
         // Keep emitter entity links so GetArmAim / LockArmTrackId can resolve RF.
         s.m_KeepEntityTruth = true;
         s.m_Hardware = RDF_RadarHardware.CreateShorad();
@@ -390,6 +392,32 @@ class RDF_RadarSensor
             return false;
         }
         return m_LockManager.GetArmAim(entity, worldPos, radiating);
+    }
+
+    // Platform RWR: is this entity currently painted / tracked / locked by RDF radars?
+    bool HasRwrSearchWarning(IEntity victim)
+    {
+        return RDF_RadarRwr.HasSearchWarning(victim);
+    }
+
+    bool HasRwrTrackWarning(IEntity victim)
+    {
+        return RDF_RadarRwr.HasTrackWarning(victim);
+    }
+
+    bool HasRwrLockWarning(IEntity victim)
+    {
+        return RDF_RadarRwr.HasLockWarning(victim);
+    }
+
+    string GetRwrStatusShort(IEntity victim)
+    {
+        return RDF_RadarRwr.GetStatusShort(victim);
+    }
+
+    void CollectRwrThreats(IEntity victim, notnull array<ref RDF_RadarRwrThreat> outThreats)
+    {
+        RDF_RadarRwr.CollectForVictim(victim, outThreats);
     }
 
     array<ref RDF_RadarTarget> GetPlots()
@@ -588,8 +616,101 @@ class RDF_RadarSensor
         m_Context.m_Mode = m_Mode;
         m_Context.m_UsedNetwork = usedNetwork;
 
+        PublishRwrThreats(subject, trackOrigin, worldTimeS);
+
         if (m_Handler)
             m_Handler.OnScanComplete(this, m_Plots, m_Tracker, m_Context);
+    }
+
+    // Notify illuminated platforms (RWR). Skipped for ESM receive-only.
+    protected void PublishRwrThreats(IEntity subject, vector origin, float worldTimeS)
+    {
+        if (!m_Settings || !m_Settings.m_EnableRwrReporting)
+            return;
+        if (m_Mode == ERDF_RadarSensorMode.RDF_RADAR_MODE_ESM)
+            return;
+        if (!subject)
+            return;
+
+        if (m_Plots)
+        {
+            for (int i = 0; i < m_Plots.Count(); i++)
+            {
+                RDF_RadarTarget plot = m_Plots.Get(i);
+                if (!plot || !plot.m_Detected)
+                    continue;
+                IEntity victim = ResolveRwrVictim(plot);
+                if (!victim)
+                    continue;
+                RDF_RadarRwr.Report(
+                    subject,
+                    victim,
+                    ERDF_RadarRwrLevel.RDF_RWR_SEARCH,
+                    origin,
+                    worldTimeS,
+                    m_ScanSerial);
+            }
+        }
+
+        array<ref RDF_RadarTrack> tracks = GetTracks();
+        if (tracks)
+        {
+            for (int j = 0; j < tracks.Count(); j++)
+            {
+                RDF_RadarTrack tr = tracks.Get(j);
+                if (!tr || !tr.m_Entity)
+                    continue;
+                if (tr.m_HitCount < 1)
+                    continue;
+
+                ERDF_RadarRwrLevel lvl = ERDF_RadarRwrLevel.RDF_RWR_SEARCH;
+                if (tr.m_Confirmed)
+                    lvl = ERDF_RadarRwrLevel.RDF_RWR_TRACK;
+
+                RDF_RadarRwr.Report(
+                    subject,
+                    tr.m_Entity,
+                    lvl,
+                    origin,
+                    worldTimeS,
+                    m_ScanSerial);
+            }
+        }
+
+        if (m_LockManager && m_LockManager.HasTarget())
+        {
+            IEntity lockedEnt = m_LockManager.GetLockedEntity();
+            if (lockedEnt)
+            {
+                ERDF_RadarLockState st = m_LockManager.GetState();
+                if (st == ERDF_RadarLockState.RDF_RADAR_LOCK_ACQUIRING
+                    || st == ERDF_RadarLockState.RDF_RADAR_LOCK_TRACKING
+                    || st == ERDF_RadarLockState.RDF_RADAR_LOCK_COAST)
+                {
+                    RDF_RadarRwr.Report(
+                        subject,
+                        lockedEnt,
+                        ERDF_RadarRwrLevel.RDF_RWR_LOCK,
+                        origin,
+                        worldTimeS,
+                        m_ScanSerial);
+                }
+            }
+        }
+    }
+
+    protected IEntity ResolveRwrVictim(RDF_RadarTarget plot)
+    {
+        if (!plot)
+            return null;
+        if (plot.m_Entity)
+            return plot.m_Entity;
+        if (plot.m_ScattererId <= 0)
+            return null;
+        RDF_RadarScatterer entry = RDF_RadarScattererRegistry.FindById(plot.m_ScattererId);
+        if (!entry)
+            return null;
+        return entry.m_Entity;
     }
 
     string GetStatusShort()

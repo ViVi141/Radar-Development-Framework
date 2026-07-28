@@ -89,6 +89,33 @@ Regression (standalone): `RDF_RadarEsmArmAutoTest.Start()`.
 
 `SEARCH` enables `m_EnableEsmReceive` so other radars that are emitting use Friis \(R^2\), not skin \(R^4\). Emitter entity links are kept when ESM receive is on so ARM can resolve RF.
 
+### RWR — being searched / tracked / locked
+
+Active radars (SEARCH / STARE / WLR) publish threats into `RDF_RadarRwr` after each dwell. Victims query:
+
+```c
+// Any entity (e.g. player vehicle):
+if (RDF_RadarRwr.HasLockWarning(myEntity))
+{
+    // audio / HUD spike
+}
+else if (RDF_RadarRwr.HasSearchWarning(myEntity))
+{
+    // softer search tone
+}
+
+array<ref RDF_RadarRwrThreat> threats = new array<ref RDF_RadarRwrThreat>();
+RDF_RadarRwr.CollectForVictim(myEntity, threats);
+Print(RDF_RadarRwr.GetStatusShort(myEntity)); // RWR CLEAR / SEARCH / TRACK / LOCK
+
+// On RDF_RadarComponent attached to the victim platform:
+if (radarComp.HasRwrLockWarning()) { ... }
+```
+
+Levels: `RDF_RWR_SEARCH` (detected plot) → `RDF_RWR_TRACK` (confirmed track) → `RDF_RWR_LOCK` (lock manager).  
+ESM mode does not report (receive-only). Disable with `m_EnableRwrReporting = false`.  
+Regression: `RDF_RadarRwrAutoTest.Start()`.
+
 ---
 
 ## Minimal usage

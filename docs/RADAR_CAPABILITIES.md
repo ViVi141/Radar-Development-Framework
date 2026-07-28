@@ -25,6 +25,7 @@
 - 扇区 / 可选机械扫描内，发现**载具、炮弹、主动辐射源**（仅作散射体输入）
 - **ESM 模式**（`RDF_RADAR_MODE_ESM`）：仅辐射源；单向 Friis 侦收功率；平台静默不登记发射
 - **反辐射瞄点 API**：`GetArmAim` / `LockArmTrackId`（关辐射丢锁）；不含导弹 prefab
+- **RWR**：被搜索 / 跟踪 / 锁定告警（`RDF_RadarRwr`）；无专用 UI，模组读 API
 - 通视用 `TraceMove`；遮挡时可选 **NLOS 地面反射弱检**
 - 硬件参数 → 雷达方程、多普勒、MTI、处理增益、SNR 门限（辐射源在 `m_EnableEsmReceive` 下用 ESM 方程）
 - DEM σ⁰ **地面杂波**进入噪声分母（ESM 路径跳过）
