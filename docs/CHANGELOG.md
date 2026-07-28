@@ -7,7 +7,7 @@
 - **ShellFire**：真值发射/落点 + WLR 解算发射/落点标记
 - 机型名由 `RDF_RadarSignatureLibrary.FormatDisplayName` 从 prefab key 解析，不再硬编码 Mi-8
 - 飞机轨迹：历史采样点（`trail` / `.`）+ 恒速外推未来路径（`+` / `pred +25s`）
-- 图标改用官方 `MapMarkerConfig`：飞机 `arrow-medium`（青）、轨迹 `dot`（橙）、预测 `arrow-small`（绿）、炮弹 `drop-point` / `mark-exclamation`
+- 图标改用更易辨认的官方符号：飞机当前位置用军事符号 `AIR` + `ROTARY_WING`/`FIXED_WING`；轨迹 `circle`、预测 `waypoint`、落点 `cross`；标签用 `AC` / `past` / `pred` / `launch` / `impact`
 
 ---
 

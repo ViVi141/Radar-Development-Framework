@@ -9,17 +9,15 @@ class RDF_RadarAutoTestMapOverlay
     protected static const float PREDICT_HORIZON_S = 25.0;
     protected static const int PREDICT_SAMPLES = 10;
     // Official PLACED_CUSTOM icon indices from configs/Map/MapMarkerConfig.conf
-    // (icons_mapMarkersUI.imageset quads, 0-based in m_aPlacedMarkerIcons).
-    protected static const int ICON_TRAIL = 4; // dot
-    protected static const int ICON_PREDICT = 79; // arrow-small
-    protected static const int ICON_AIRCRAFT = 76; // arrow-medium
-    protected static const int ICON_LAUNCH = 6; // drop-point
-    protected static const int ICON_IMPACT = 15; // mark-exclamation
+    // Aircraft current pos uses PLACED_MILITARY AIR + ROTARY/FIXED_WING instead.
+    protected static const int ICON_TRAIL = 0; // circle — past samples
+    protected static const int ICON_PREDICT = 40; // waypoint — future samples
+    protected static const int ICON_LAUNCH = 6; // drop-point — shell launch
+    protected static const int ICON_IMPACT = 2; // cross — shell impact
 
     // Official color indices: white, orange, darkOrange, darkRed, red, green, ...
     protected static const int COLOR_TRAIL = 1; // orange
     protected static const int COLOR_PREDICT = 5; // green
-    protected static const int COLOR_AIRCRAFT = 8; // cyan
     protected static const int COLOR_LAUNCH = 2; // darkOrange
     protected static const int COLOR_IMPACT = 4; // red
 
@@ -384,9 +382,9 @@ class RDF_RadarAutoTestMapOverlay
 
             m_DrawHistoryPos.Insert(m_HistoryPos.Get(i));
             if (i == 0)
-                m_HistoryLabels.Insert("trail");
+                m_HistoryLabels.Insert("past start");
             else
-                m_HistoryLabels.Insert(".");
+                m_HistoryLabels.Insert("past");
         }
 
         int np = m_PredictPos.Count();
@@ -395,7 +393,7 @@ class RDF_RadarAutoTestMapOverlay
             if (j == (np - 1))
                 m_PredictLabels.Insert("pred +" + Math.Round(PREDICT_HORIZON_S).ToString() + "s");
             else
-                m_PredictLabels.Insert("+");
+                m_PredictLabels.Insert("pred");
         }
     }
 
@@ -429,42 +427,77 @@ class RDF_RadarAutoTestMapOverlay
             prefix = "RDF AC";
         string title = prefix + " " + modelName;
         string text = string.Format(
-            "%1  alt=%2m  hdg=%3",
+            "AC %1  alt=%2m  hdg=%3",
             title,
             Math.Round(pos[1]).ToString(),
             Math.Round(headingDeg).ToString());
 
         int wx = Math.Round(pos[0]);
         int wz = Math.Round(pos[2]);
-        int rot = Math.Round(headingDeg);
+        int airIconFlags = ResolveAircraftSymbolIcon(m_Aircraft);
 
         if (!m_AircraftMarker || !m_AircraftMarker.GetRootWidget())
         {
             if (m_AircraftMarker)
                 RemoveAircraftMarker();
-            m_AircraftMarker = CreateMarker(
-                mgr, wx, wz, rot, text, COLOR_AIRCRAFT, ICON_AIRCRAFT);
+            m_AircraftMarker = CreateAircraftMilitaryMarker(mgr, wx, wz, text, airIconFlags);
         }
         else
         {
             bool restyle = false;
-            if (m_AircraftMarker.GetIconEntry() != ICON_AIRCRAFT)
+            if (m_AircraftMarker.GetType() != SCR_EMapMarkerType.PLACED_MILITARY)
                 restyle = true;
-            if (m_AircraftMarker.GetColorEntry() != COLOR_AIRCRAFT)
+            if (m_AircraftMarker.GetFlags() != airIconFlags)
                 restyle = true;
             if (restyle)
             {
                 RemoveAircraftMarker();
-                m_AircraftMarker = CreateMarker(
-                    mgr, wx, wz, rot, text, COLOR_AIRCRAFT, ICON_AIRCRAFT);
+                m_AircraftMarker = CreateAircraftMilitaryMarker(mgr, wx, wz, text, airIconFlags);
             }
             else
             {
-                ApplyMarkerLive(m_AircraftMarker, wx, wz, rot, text);
+                ApplyMarkerLive(m_AircraftMarker, wx, wz, 0, text);
             }
         }
 
         SyncPathMarkers(mgr);
+    }
+
+    protected int ResolveAircraftSymbolIcon(IEntity aircraft)
+    {
+        if (!aircraft)
+            return EMilitarySymbolIcon.FIXED_WING;
+
+        HelicopterControllerComponent heli = HelicopterControllerComponent.Cast(
+            aircraft.FindComponent(HelicopterControllerComponent));
+        if (heli)
+            return EMilitarySymbolIcon.ROTARY_WING;
+
+        return EMilitarySymbolIcon.FIXED_WING;
+    }
+
+    protected SCR_MapMarkerBase CreateAircraftMilitaryMarker(
+        SCR_MapMarkerManagerComponent mgr,
+        int worldX,
+        int worldZ,
+        string text,
+        int iconFlags)
+    {
+        if (!mgr)
+            return null;
+
+        SCR_MapMarkerBase marker = mgr.PrepareMilitaryMarker(
+            EMilitarySymbolIdentity.UNKNOWN,
+            EMilitarySymbolDimension.AIR,
+            iconFlags);
+        if (!marker)
+            return null;
+
+        marker.SetWorldPos(worldX, worldZ);
+        marker.SetCustomText(text);
+        marker.SetRotation(0);
+        mgr.InsertStaticMarker(marker, true);
+        return marker;
     }
 
     protected void SyncPathMarkers(SCR_MapMarkerManagerComponent mgr)
@@ -482,7 +515,7 @@ class RDF_RadarAutoTestMapOverlay
             m_HistoryMarkers,
             COLOR_TRAIL,
             ICON_TRAIL,
-            "trail",
+            "past",
             false);
         SyncPointList(
             mgr,
@@ -492,7 +525,7 @@ class RDF_RadarAutoTestMapOverlay
             COLOR_PREDICT,
             ICON_PREDICT,
             "pred",
-            true);
+            false);
     }
 
     protected void SyncShellMarkers()
@@ -512,7 +545,7 @@ class RDF_RadarAutoTestMapOverlay
             m_LaunchMarkers,
             COLOR_LAUNCH,
             ICON_LAUNCH,
-            "RDF Launch",
+            "launch",
             false);
         SyncPointList(
             mgr,
@@ -521,18 +554,8 @@ class RDF_RadarAutoTestMapOverlay
             m_ImpactMarkers,
             COLOR_IMPACT,
             ICON_IMPACT,
-            "RDF Impact",
+            "impact",
             false);
-    }
-
-    protected float HeadingDegBetween(vector from, vector to)
-    {
-        float dx = to[0] - from[0];
-        float dz = to[2] - from[2];
-        float headingDeg = Math.Atan2(dz, dx) * 57.29577951;
-        if (headingDeg < 0.0)
-            headingDeg = headingDeg + 360.0;
-        return headingDeg;
     }
 
     protected void SyncPointList(
@@ -584,7 +607,12 @@ class RDF_RadarAutoTestMapOverlay
                     fromPos = positions.Get(i - 1);
                     toPos = positions.Get(i);
                 }
-                rot = Math.Round(HeadingDegBetween(fromPos, toPos));
+                float dx = toPos[0] - fromPos[0];
+                float dz = toPos[2] - fromPos[2];
+                float headingDeg = Math.Atan2(dz, dx) * 57.29577951;
+                if (headingDeg < 0.0)
+                    headingDeg = headingDeg + 360.0;
+                rot = Math.Round(headingDeg);
             }
 
             bool needCreate = false;
