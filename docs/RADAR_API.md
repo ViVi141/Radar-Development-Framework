@@ -344,6 +344,9 @@ RDF_RadarAutoRunner.SetShowcaseVisuals(true);  // default
 RDF_RadarAutoRunner.SetShowcaseVisuals(false); // minimal / gameplay
 ```
 
-PPI HUD sits in the **bottom-right** corner at 128×128 (compact, translucent),
-loaded from `UI/layouts/RDF/RadarPPI.layout` via `CreateWidgets`.
+PPI HUD sits in the **bottom-right** as a ~480×500 terminal panel:
+PPI 192×192 plus **A-Scope**, **Range–Doppler** map, and **SNR waterfall**
+(plot measurements only — no entity truth). Loaded from
+`UI/layouts/RDF/RadarPPI.layout` via `CreateWidgets`.
+Helpers: `RDF_RadarHudCharts`.
 Public API: `RDF_RadarHUD.Show` / `Hide` / `FeedScan` / `SetMode` / `SetDisplayRange`.

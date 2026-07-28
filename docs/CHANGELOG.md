@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-07-28 — Radar HUD 终端图表（A-Scope / R-D / Waterfall）
+
+- PPI 面板扩至约 **480×500**，PPI canvas **192×192**
+- 新增 plot 侧栏图（测量值，非实体真值）：`A-SCOPE`、`R-D MAP`（64×48）、`WATERFALL`（72×64）
+- 辅助：`RDF_RadarHudCharts`（binning / 伪彩 / 按行 RLE 绘制）
+- layout：`UI/layouts/RDF/RadarPPI.layout`
+
+---
+
 ## 2026-07-28 — AutoTest 地图叠加（M 键）
 
 - 新增 `RDF_RadarAutoTestMapOverlay`：地图打开时用本地 `PLACED_CUSTOM` 标记
