@@ -19,7 +19,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
-from rdf_dem_io import choose_radar_site, default_tile_dir, load_dem
+from rdf_dem_io import choose_radar_site, default_tile_dir, load_dem, resolve_dem_source
 from rdf_radar_ew import (
     DeceptionJammer,
     EWStack,
@@ -284,16 +284,46 @@ def main() -> None:
     parser.add_argument("--azimuth-count", type=int, default=180)
     parser.add_argument("--ew", action="store_true")
     parser.add_argument("--output", default="")
+    parser.add_argument(
+        "--dem-npz",
+        default="",
+        help="Heightfield npz from rdf_ttile_unpack.py.",
+    )
+    parser.add_argument(
+        "--use-ttile",
+        action="store_true",
+        help="Prefer tools/dem/out/<World>_ttile_height.npz.",
+    )
+    parser.add_argument(
+        "--surf-dir",
+        default="",
+        help="SURF JSON dir. Default: addon DemData/<GM_World>/.",
+    )
+    parser.add_argument(
+        "--no-surf",
+        action="store_true",
+        help="Do not overlay SURF surface_class onto ttile height.",
+    )
     args = parser.parse_args()
 
     hardware = get_preset(args.preset)
-    tile_dir = default_tile_dir(args.world)
-    dem = load_dem(tile_dir, load_spans=True)
+    dem = resolve_dem_source(
+        world=args.world,
+        dem_npz=args.dem_npz,
+        prefer_ttile=args.use_ttile,
+        load_spans=True,
+        surf_dir=args.surf_dir,
+        merge_surf=not args.no_surf,
+    )
     terrain = np.asarray(dem["terrain"])
     cell_m = float(dem["cell_m"])
-    radar_iz, radar_ix = choose_radar_site(terrain)
+    margin = 128
+    if terrain.shape[0] < margin * 2 + 8:
+        margin = max(8, terrain.shape[0] // 8)
+    radar_iz, radar_ix = choose_radar_site(terrain, margin=margin)
     dem["_radar_ix"] = radar_ix
     dem["_radar_iz"] = radar_iz
+    print(f"DEM source={dem.get('source', '?')} shape={terrain.shape} cell={cell_m}")
 
     max_range = min(
         _max_dem_range(terrain, cell_m, radar_ix, radar_iz),

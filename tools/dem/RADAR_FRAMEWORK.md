@@ -57,7 +57,10 @@ Generated images/CSV under `tools/dem/out/` are gitignored — do not commit.
 python tools\dem\rdf_radar_framework_demo.py --preset shorad
 python tools\dem\rdf_radar_framework_demo.py --preset shorad --ew
 python tools\dem\rdf_radar_framework_demo.py --preset p18
+python tools\dem\rdf_radar_framework_demo.py --use-ttile --world GM_Eden --preset shorad
 python tools\dem\rdf_radar_mass_battle_sim.py
+python tools\dem\rdf_radar_mass_battle_sim.py --use-ttile --world GM_Eden
+python tools\dem\rdf_ttile_unpack.py
 python tools\dem\test_rdf_radar_ballistics.py
 ```
 
@@ -68,6 +71,11 @@ Outputs under `tools/dem/out/`:
 - `*_tracks.csv`
 - `mass_battle_*.png`
 - `mass_battle_*.csv`
+- `*_ttile_height.png` / `.npz` (from `rdf_ttile_unpack.py`)
+
+`--use-ttile` loads `out/<World>_ttile_height.npz` (2 m height from official
+`.ttile`) and overlays packaged `DemData/<GM_World>/` SURF JSON for
+`surface_class` → σ⁰. Use `--no-surf` to skip the overlay, or `--surf-dir`.
 
 ## Current fidelity boundaries
 

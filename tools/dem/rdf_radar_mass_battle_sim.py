@@ -31,7 +31,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
-from rdf_dem_io import choose_radar_site, default_tile_dir, load_dem
+from rdf_dem_io import choose_radar_site, default_tile_dir, load_dem, resolve_dem_source
 from rdf_radar_channel import MultipathModel, SwerlingModel
 from rdf_radar_physics import (
     RadarHardware,
@@ -1315,6 +1315,11 @@ def _resolve_battle_dem(
     dem_dir: str,
     no_dem: bool,
     seed: int,
+    dem_npz: str = "",
+    use_ttile: bool = False,
+    world: str = "GM_Eden",
+    surf_dir: str = "",
+    merge_surf: bool = True,
 ) -> tuple[np.ndarray, float, float, float, float, GroundYFn, str]:
     """Return terrain, cell_m, radar_ix/iz/y, ground_y_fn, source label."""
     if no_dem:
@@ -1326,36 +1331,44 @@ def _resolve_battle_dem(
         ground_fn = flat_ground_y_fn(radar_y)
         return terrain, cell_m, radar_ix, radar_iz, radar_y, ground_fn, "flat"
 
-    tile_dir = dem_dir
-    if not tile_dir:
-        tile_dir = default_tile_dir("GM_Eden")
-    if tile_dir and os.path.isdir(tile_dir):
-        try:
-            dem = load_dem(tile_dir, load_spans=False)
-            terrain = np.asarray(dem["terrain"], dtype=np.float32)
-            cell_m = float(dem["cell_m"])
-            radar_iz_i, radar_ix_i = choose_radar_site(terrain)
-            radar_ix = float(radar_ix_i)
-            radar_iz = float(radar_iz_i)
-            radar_y = float(terrain[radar_iz_i, radar_ix_i])
-            if not np.isfinite(radar_y):
-                radar_y = 100.0
-            ground_fn = dem_ground_y_fn(
-                terrain, cell_m, radar_ix, radar_iz, radar_y
-            )
-            return (
-                terrain,
-                cell_m,
-                radar_ix,
-                radar_iz,
-                radar_y,
-                ground_fn,
-                f"tiles:{tile_dir}",
-            )
-        except SystemExit:
-            pass
-        except OSError:
-            pass
+    try:
+        dem = resolve_dem_source(
+            world=world,
+            dem_dir=dem_dir,
+            dem_npz=dem_npz,
+            prefer_ttile=use_ttile,
+            load_spans=False,
+            surf_dir=surf_dir,
+            merge_surf=merge_surf,
+        )
+        terrain = np.asarray(dem["terrain"], dtype=np.float32)
+        cell_m = float(dem["cell_m"])
+        margin = 128
+        if terrain.shape[0] < margin * 2 + 8:
+            margin = max(8, terrain.shape[0] // 8)
+        radar_iz_i, radar_ix_i = choose_radar_site(terrain, margin=margin)
+        radar_ix = float(radar_ix_i)
+        radar_iz = float(radar_iz_i)
+        radar_y = float(terrain[radar_iz_i, radar_ix_i])
+        if not np.isfinite(radar_y) or radar_y < 1.0:
+            radar_y = 100.0
+        ground_fn = dem_ground_y_fn(
+            terrain, cell_m, radar_ix, radar_iz, radar_y
+        )
+        source = str(dem.get("source", "dem"))
+        return (
+            terrain,
+            cell_m,
+            radar_ix,
+            radar_iz,
+            radar_y,
+            ground_fn,
+            source,
+        )
+    except SystemExit:
+        pass
+    except OSError:
+        pass
 
     cell_m = 20.0
     terrain = make_synthetic_dem(512, cell_m, 100.0, seed=seed + 19)
@@ -1392,6 +1405,31 @@ def main() -> None:
         "then falls back to a synthetic hilly DEM.",
     )
     parser.add_argument(
+        "--dem-npz",
+        default="",
+        help="Heightfield npz from rdf_ttile_unpack.py (overrides --dem-dir).",
+    )
+    parser.add_argument(
+        "--use-ttile",
+        action="store_true",
+        help="Prefer tools/dem/out/<World>_ttile_height.npz over TrainData tiles.",
+    )
+    parser.add_argument(
+        "--surf-dir",
+        default="",
+        help="SURF JSON dir (surf_manifest.json). Default: addon DemData/<GM_World>/.",
+    )
+    parser.add_argument(
+        "--no-surf",
+        action="store_true",
+        help="Do not overlay SURF surface_class onto ttile height.",
+    )
+    parser.add_argument(
+        "--world",
+        default="GM_Eden",
+        help="World key for default tile/ttile paths (GM_Eden / GM_Arland / GM_Cain).",
+    )
+    parser.add_argument(
         "--no-dem",
         action="store_true",
         help="Force flat ground (legacy WLR plane at radar altitude).",
@@ -1426,7 +1464,16 @@ def main() -> None:
     )
 
     terrain, cell_m, radar_ix, radar_iz, radar_y, ground_y_fn, dem_source = (
-        _resolve_battle_dem(args.dem_dir, args.no_dem, args.seed)
+        _resolve_battle_dem(
+            args.dem_dir,
+            args.no_dem,
+            args.seed,
+            dem_npz=args.dem_npz,
+            use_ttile=args.use_ttile,
+            world=args.world,
+            surf_dir=args.surf_dir,
+            merge_surf=not args.no_surf,
+        )
     )
     print(
         f"DEM source={dem_source} cell={cell_m:.1f} m "
