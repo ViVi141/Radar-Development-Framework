@@ -43,7 +43,8 @@ enum ERDF_RadarSensorMode
 {
     RDF_RADAR_MODE_SEARCH,  // sector search, vehicles + shells + emitters
     RDF_RADAR_MODE_STARE,   // wide stare, no mechanical scan
-    RDF_RADAR_MODE_WLR      // projectile focus + ballistic WLR + DEM ground
+    RDF_RADAR_MODE_WLR,     // projectile focus + ballistic WLR + DEM ground
+    RDF_RADAR_MODE_ESM      // receive-only: emitters via one-way Friis; silent platform
 }
 ```
 
@@ -61,7 +62,32 @@ Preset factories (same settings objects):
 - `RDF_RadarSensor.CreateSearchSettings`
 - `RDF_RadarSensor.CreateStareSettings`
 - `RDF_RadarSensor.CreateWlrSettings`
-- `RDF_RadarDemoConfig.CreateSearch` / `CreateStare` / `CreateWlr`
+- `RDF_RadarSensor.CreateEsmSettings`
+- `RDF_RadarDemoConfig.CreateSearch` / `CreateStare` / `CreateWlr` / `CreateEsm`
+
+### ESM + anti-radiation aim (no weapon prefab)
+
+```c
+sensor.ConfigureMode(ERDF_RadarSensorMode.RDF_RADAR_MODE_ESM, 64);
+// ... Tick each frame ...
+IEntity ent;
+vector aim;
+bool radiating;
+if (sensor.GetArmAim(ent, aim, radiating) && radiating)
+{
+    // Weapon / seeker reads aim; when the emitter goes silent, GetArmAim fails
+    // and the lock is dropped (SetArmRequireLiveEmitter).
+}
+
+// Manual pick from an emitter track id:
+sensor.LockArmTrackId(trackId);
+```
+
+Also on `RDF_RadarComponent`: `GetArmAim` / `LockArmTrackId`.  
+Registry helper: `RDF_RadarEmitterRegistry.IsEmitting(entity)`.  
+Regression (standalone): `RDF_RadarEsmArmAutoTest.Start()`.
+
+`SEARCH` enables `m_EnableEsmReceive` so other radars that are emitting use Friis \(R^2\), not skin \(R^4\). Emitter entity links are kept when ESM receive is on so ARM can resolve RF.
 
 ---
 
@@ -194,10 +220,11 @@ if (sensor.GetLockedTarget(target, aimPos))
 `GetStatusShort()` appends the lock state, e.g. `LOCK TRACKING id=3 r=812m az=41`.
 
 Entity component convenience: `RDF_RadarComponent.LockTrackId`, `Unlock`,
-`GetLockedTarget`, `GetLockManager`.
+`GetLockedTarget`, `LockArmTrackId`, `GetArmAim`, `GetLockManager`.
 
 Demo / regression: `RDF_RadarLockAutoTest.Start()` spawns a moving vehicle and
 verifies SEARCH → ACQUIRING → TRACKING with a usable aim point.
+ESM / ARM: `RDF_RadarEsmArmAutoTest.Start()` (standalone, not in `StartAll`).
 
 ---
 

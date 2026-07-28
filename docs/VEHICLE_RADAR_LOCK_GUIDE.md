@@ -70,6 +70,27 @@ if (radarComponent.GetLockedTarget(target, aimPos))
 
 回归示例：`RDF_RadarLockAutoTest.Start()`。
 
+### 2.2.1 ESM / 反辐射瞄点
+
+被动侦收模式与反辐射瞄点（无武器 prefab，仅 API）：
+
+```c
+sensor.ConfigureMode(ERDF_RadarSensorMode.RDF_RADAR_MODE_ESM, 64);
+
+IEntity ent;
+vector aim;
+bool radiating;
+if (sensor.GetArmAim(ent, aim, radiating) && radiating)
+{
+    // 制导读 aim；辐射源 SetEmitting(false) 后自动丢锁
+}
+
+sensor.LockArmTrackId(trackId); // 仅辐射源航迹
+// RDF_RadarEmitterRegistry.IsEmitting(ent);
+```
+
+单独回归：`RDF_RadarEsmArmAutoTest.Start()`。
+
 ### 2.3 武器打击：与 Reforger 武器系统对接
 
 RDF 的弹道模块用于轨迹预测和 WLR，不负责武器制导。武器“锁定并打击”

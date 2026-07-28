@@ -55,6 +55,11 @@ class RDF_RadarTarget
     float m_LosHitFraction;
     // Power scale: 1 for direct path; <1 for NLOS ground-bounce approximation.
     float m_MultipathFactor;
+    // Emitter RF summary (filled for RADAR_EMITTER plots; used by ESM receive).
+    float m_EmitFrequencyHz;
+    float m_EmitPeakPowerW;
+    float m_EmitAntennaGainDbi;
+    float m_EmitStrength = 1.0;
     string m_BeamName;
     int m_ScanNumber;
 }

@@ -23,9 +23,11 @@
 ### 检测与物理门限
 
 - 扇区 / 可选机械扫描内，发现**载具、炮弹、主动辐射源**（仅作散射体输入）
+- **ESM 模式**（`RDF_RADAR_MODE_ESM`）：仅辐射源；单向 Friis 侦收功率；平台静默不登记发射
+- **反辐射瞄点 API**：`GetArmAim` / `LockArmTrackId`（关辐射丢锁）；不含导弹 prefab
 - 通视用 `TraceMove`；遮挡时可选 **NLOS 地面反射弱检**
-- 硬件参数 → 雷达方程、多普勒、MTI、处理增益、SNR 门限
-- DEM σ⁰ **地面杂波**进入噪声分母
+- 硬件参数 → 雷达方程、多普勒、MTI、处理增益、SNR 门限（辐射源在 `m_EnableEsmReceive` 下用 ESM 方程）
+- DEM σ⁰ **地面杂波**进入噪声分母（ESM 路径跳过）
 - **测量合成**：距离门中心 + 波束角抖动 + 多普勒反解径向速度（SNR 越低越抖）
 - **测量噪声/偏差可调**：理想档 vs 逼真档（`MeasNoiseScale` 等）；下游可 override `RDF_RadarMeasurementModel`
 - **大气 / 降雨 / 天气驱动损耗**：简化模型，可关；逼真档可开天气雨雾衰

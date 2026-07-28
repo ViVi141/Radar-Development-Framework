@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 2026-07-28 — ESM 模式 + 反辐射瞄点 API
+
+- **ESM 功率**：`ReceivedPowerEsmW`（单向 Friis \(R^2\)）；`m_EnableEsmReceive`；`RADAR_EMITTER` 走侦收、跳过 DEM 杂波/MTI
+- **模式**：`RDF_RADAR_MODE_ESM` / `CreateEsmSettings` / `RDF_RadarDemoConfig.CreateEsm`；ESM 平台不登记自身发射
+- **ARM API**：`LockArmTrackId` / `GetArmAim` / `IsEmitting`；关辐射立即解锁（`SetArmRequireLiveEmitter`）
+- **回归**：`RDF_RadarEsmArmAutoTest.Start()`（不进 `StartAll`）
+- 文档：`RADAR_API` / `RADAR_CAPABILITIES` / `VEHICLE_RADAR_LOCK_GUIDE`
+
+---
+
 ## 2026-07-28 — 可视化靠近官方（ShapeManager + Layout HUD）
 
 - 新增 `RDF_DebugShapeManager`（对齐 `SCR_DebugShapeManager` 子集：`AddLine` / `AddPolyLine` / `AddSphere` / `AddCircleXZ` / `AddCircleArcXZ` / `Add` / `Clear`）

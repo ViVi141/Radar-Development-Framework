@@ -415,6 +415,13 @@ class RDF_RadarScanner
             t.m_MeanRcsM2 = entry.m_MeanRcsM2;
             t.m_SwerlingModel = entry.m_SwerlingModel;
             t.m_AglM = entry.m_AglM;
+            if (isEmitter)
+            {
+                t.m_EmitFrequencyHz = entry.m_EmitFrequencyHz;
+                t.m_EmitPeakPowerW = entry.m_EmitPeakPowerW;
+                t.m_EmitAntennaGainDbi = entry.m_EmitAntennaGainDbi;
+                t.m_EmitStrength = entry.m_EmitStrength;
+            }
             if (entry.m_DemSampleValid)
             {
                 t.m_DemSampleValid = true;
@@ -640,6 +647,18 @@ class RDF_RadarScanner
             t.m_MultipathFactor = 1.0;
             t.m_IsAnonymous = false;
             t.m_IsFalsePlot = false;
+            if (priorityType == ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER)
+            {
+                RDF_RadarScatterer emitEntry = RDF_RadarScattererRegistry.Find(ent);
+                if (emitEntry)
+                {
+                    t.m_EmitFrequencyHz = emitEntry.m_EmitFrequencyHz;
+                    t.m_EmitPeakPowerW = emitEntry.m_EmitPeakPowerW;
+                    t.m_EmitAntennaGainDbi = emitEntry.m_EmitAntennaGainDbi;
+                    t.m_EmitStrength = emitEntry.m_EmitStrength;
+                    t.m_ScattererId = emitEntry.m_ScattererId;
+                }
+            }
             bool reusedPhysical = false;
             RDF_RadarTarget physicalSource;
             if (m_ScanReuseCache)
@@ -1106,6 +1125,10 @@ class RDF_RadarScanner
         target.m_MultipathFactor = source.m_MultipathFactor;
         target.m_BeamName = source.m_BeamName;
         target.m_ScanNumber = source.m_ScanNumber;
+        target.m_EmitFrequencyHz = source.m_EmitFrequencyHz;
+        target.m_EmitPeakPowerW = source.m_EmitPeakPowerW;
+        target.m_EmitAntennaGainDbi = source.m_EmitAntennaGainDbi;
+        target.m_EmitStrength = source.m_EmitStrength;
     }
 
     protected float NormalizeAngleRad(float angle)

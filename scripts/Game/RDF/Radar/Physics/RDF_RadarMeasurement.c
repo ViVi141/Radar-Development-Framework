@@ -97,9 +97,18 @@ class RDF_RadarMeasurement
 
         if (!settings.m_KeepEntityTruth)
         {
-            target.m_Entity = null;
-            target.m_IsAnonymous = true;
-            target.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_ANONYMOUS;
+            bool keepEmitterForArm = false;
+            if (settings.m_EnableEsmReceive)
+            {
+                if (target.m_Type == ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER)
+                    keepEmitterForArm = true;
+            }
+            if (!keepEmitterForArm)
+            {
+                target.m_Entity = null;
+                target.m_IsAnonymous = true;
+                target.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_ANONYMOUS;
+            }
         }
     }
 

@@ -12,6 +12,7 @@ class RDF_RadarDemoConfig
         s.m_IncludeVehicles = true;
         s.m_IncludeProjectiles = true;
         s.m_IncludeRadarEmitters = true;
+        s.m_EnableEsmReceive = true;
         s.m_Hardware = RDF_RadarHardware.CreateShorad();
         s.m_EnablePhysicalDetection = true;
         s.m_DetectionSnrDb = 8.0;
@@ -67,6 +68,11 @@ class RDF_RadarDemoConfig
     static RDF_RadarSettings CreateWlr(int maxTargets = 128)
     {
         return RDF_RadarSensor.CreateWlrSettings(maxTargets);
+    }
+
+    static RDF_RadarSettings CreateEsm(int maxTargets = 64)
+    {
+        return RDF_RadarSensor.CreateEsmSettings(maxTargets);
     }
 
     static RDF_RadarSettings CreateWithDeceptionJammer(int maxTargets = 64)

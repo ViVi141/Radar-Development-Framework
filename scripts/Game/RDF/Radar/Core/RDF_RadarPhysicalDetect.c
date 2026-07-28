@@ -117,6 +117,84 @@ class RDF_RadarPhysicalDetect
                 target.m_Entity,
                 target.m_Type);
         }
+
+        bool useEsm = false;
+        if (settings.m_EnableEsmReceive)
+        {
+            if (target.m_Type == ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER)
+                useEsm = true;
+        }
+
+        if (useEsm)
+        {
+            float emitFreq = target.m_EmitFrequencyHz;
+            if (emitFreq <= 0.0)
+                emitFreq = hardware.m_FrequencyHz;
+            float emitPeak = target.m_EmitPeakPowerW;
+            if (emitPeak <= 0.0)
+                emitPeak = hardware.m_PeakPowerW;
+            float emitGain = target.m_EmitAntennaGainDbi;
+            float emitStrength = target.m_EmitStrength;
+            if (emitStrength <= 0.0)
+                emitStrength = 1.0;
+
+            // One-way pattern: use receive beam gain (not squared two-way).
+            target.m_ReceivedPowerW = RDF_RadarClutterModel.ReceivedPowerEsmW(
+                emitPeak,
+                emitGain,
+                emitFreq,
+                hardware.m_AntennaGainDbi,
+                hardware.m_SystemLossDb,
+                distance,
+                emitStrength,
+                patternGain);
+            target.m_ReceivedPowerW = target.m_ReceivedPowerW * target.m_MultipathFactor;
+            if (settings.m_EnableAtmosphericLoss)
+            {
+                float atmDbEsm = settings.m_AtmLossDbPerKmOneWay;
+                if (atmDbEsm < 0.0)
+                    atmDbEsm = RDF_RadarClutterModel.AtmosphericOneWayDbPerKm(emitFreq);
+                // One-way path: use half of the two-way AtmosphericLossLinear factor.
+                float latmTwoWay = RDF_RadarClutterModel.AtmosphericLossLinear(
+                    distance,
+                    atmDbEsm,
+                    scanRainLossDbPerKm);
+                float latmOneWay = Math.Sqrt(latmTwoWay);
+                if (latmOneWay > 1.0)
+                    target.m_ReceivedPowerW = target.m_ReceivedPowerW / latmOneWay;
+            }
+
+            target.m_DopplerHz = 0.0;
+            target.m_MtiGain = 1.0;
+            float processingGainEsm = hardware.GetProcessingGain();
+            target.m_ProcessedPowerW = target.m_ReceivedPowerW * processingGainEsm;
+            target.m_CfarPowerW = target.m_ProcessedPowerW;
+            target.m_ClutterPowerW = 0.0;
+            target.m_ClutterToNoiseDb = -300.0;
+
+            float noisePowerEsm = hardware.GetNoisePowerW() * processingGainEsm;
+            noisePowerEsm = noisePowerEsm + settings.m_AdditionalNoisePowerW;
+            if (settings.m_EwStack)
+            {
+                float ewNoiseEsm = settings.m_EwStack.GetAdditionalNoisePowerW(
+                    origin,
+                    scanForward,
+                    hardware);
+                noisePowerEsm = noisePowerEsm + ewNoiseEsm * processingGainEsm;
+            }
+            float snrEsm = target.m_ProcessedPowerW / Math.Max(
+                0.000000000000000000000000000001,
+                noisePowerEsm);
+            target.m_SnrDb = RDF_RadarClutterModel.LinToDb(snrEsm);
+            target.m_Detected = target.m_SnrDb >= settings.m_DetectionSnrDb;
+
+            float scanPeriodEsm = hardware.GetScanPeriodS();
+            target.m_ScanNumber = 0;
+            if (scanPeriodEsm < 1000000.0)
+                target.m_ScanNumber = Math.Floor(worldTime / scanPeriodEsm);
+            return;
+        }
+
         target.m_ReceivedPowerW = RDF_RadarClutterModel.ReceivedPowerW(
             hardware.m_PeakPowerW,
             hardware.m_AntennaGainDbi,

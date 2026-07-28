@@ -262,6 +262,10 @@ class RDF_RadarScanReuseCache
         t.m_MultipathFactor = src.m_MultipathFactor;
         t.m_BeamName = src.m_BeamName;
         t.m_ScanNumber = src.m_ScanNumber;
+        t.m_EmitFrequencyHz = src.m_EmitFrequencyHz;
+        t.m_EmitPeakPowerW = src.m_EmitPeakPowerW;
+        t.m_EmitAntennaGainDbi = src.m_EmitAntennaGainDbi;
+        t.m_EmitStrength = src.m_EmitStrength;
         return t;
     }
 }

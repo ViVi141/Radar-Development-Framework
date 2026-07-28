@@ -170,6 +170,41 @@ class RDF_RadarClutterModel
     }
 
     //------------------------------------------------------------------------------------------------
+    // One-way ESM / RWR receive (Friis): Pr = Pt Gt Gr λ² / ((4π)² R² L) * strength * pattern.
+    // patternOneWay is the receiver antenna power pattern (not two-way radar).
+    static float ReceivedPowerEsmW(
+        float emitPeakPowerW,
+        float emitAntennaGainDbi,
+        float emitFrequencyHz,
+        float receiveAntennaGainDbi,
+        float systemLossDb,
+        float rangeM,
+        float emitStrength,
+        float patternOneWay)
+    {
+        if (rangeM < 1.0)
+            rangeM = 1.0;
+        if (emitPeakPowerW <= 0.0)
+            return 0.0;
+        if (emitFrequencyHz <= 0.0)
+            return 0.0;
+        if (patternOneWay <= 0.0)
+            return 0.0;
+        if (emitStrength <= 0.0)
+            return 0.0;
+
+        float wavelength = C_LIGHT / emitFrequencyHz;
+        float gt = DbToLin(emitAntennaGainDbi);
+        float gr = DbToLin(receiveAntennaGainDbi);
+        float lossLin = DbToLin(systemLossDb);
+        float denom = FOUR_PI * FOUR_PI * lossLin;
+        float friis =
+            emitPeakPowerW * gt * gr * wavelength * wavelength / denom;
+        return friis * emitStrength * patternOneWay
+            / (rangeM * rangeM);
+    }
+
+    //------------------------------------------------------------------------------------------------
     // Clear-air one-way loss near sea level (engineering fit, dB/km).
     static float AtmosphericOneWayDbPerKm(float frequencyHz)
     {

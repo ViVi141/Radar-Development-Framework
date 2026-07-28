@@ -37,6 +37,16 @@ class RDF_RadarEmitterRegistry
         RDF_RadarScattererRegistry.SetEmitting(owner, emitting);
     }
 
+    static bool IsEmitting(IEntity owner)
+    {
+        if (!owner)
+            return false;
+        RDF_RadarScatterer entry = RDF_RadarScattererRegistry.Find(owner);
+        if (!entry)
+            return false;
+        return entry.m_Emitting;
+    }
+
     static void GetEmittingInSphere(
         vector center,
         float radius,
@@ -72,6 +82,10 @@ class RDF_RadarEmitterRegistry
             t.m_MeanRcsM2 = e.m_MeanRcsM2;
             t.m_SwerlingModel = e.m_SwerlingModel;
             t.m_AglM = e.m_AglM;
+            t.m_EmitFrequencyHz = e.m_EmitFrequencyHz;
+            t.m_EmitPeakPowerW = e.m_EmitPeakPowerW;
+            t.m_EmitAntennaGainDbi = e.m_EmitAntennaGainDbi;
+            t.m_EmitStrength = e.m_EmitStrength;
             t.m_Time = worldTime;
             outTargets.Insert(t);
         }

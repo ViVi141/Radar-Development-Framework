@@ -3,7 +3,8 @@ enum ERDF_RadarSensorMode
 {
     RDF_RADAR_MODE_SEARCH,
     RDF_RADAR_MODE_STARE,
-    RDF_RADAR_MODE_WLR
+    RDF_RADAR_MODE_WLR,
+    RDF_RADAR_MODE_ESM
 }
 
 // Last completed scan geometry (PPI / HUD / fusion consumers).
@@ -160,6 +161,13 @@ class RDF_RadarSensor
             else
                 settings = CreateWlrSettings(128);
         }
+        else if (mode == ERDF_RadarSensorMode.RDF_RADAR_MODE_ESM)
+        {
+            if (maxTargets > 0)
+                settings = CreateEsmSettings(maxTargets);
+            else
+                settings = CreateEsmSettings(64);
+        }
         else
         {
             if (mode == ERDF_RadarSensorMode.RDF_RADAR_MODE_STARE)
@@ -179,6 +187,20 @@ class RDF_RadarSensor
         }
         Configure(settings);
         m_Context.m_Mode = m_Mode;
+
+        if (m_LockManager)
+        {
+            if (mode == ERDF_RadarSensorMode.RDF_RADAR_MODE_ESM)
+            {
+                m_LockManager.SetTypeFilter(false, false, true);
+                m_LockManager.SetAutoAcquire(true);
+                m_LockManager.SetArmRequireLiveEmitter(true);
+            }
+            else
+            {
+                m_LockManager.SetArmRequireLiveEmitter(false);
+            }
+        }
     }
 
     static RDF_RadarSettings CreateSearchSettings(int maxTargets)
@@ -192,6 +214,7 @@ class RDF_RadarSensor
         s.m_IncludeVehicles = true;
         s.m_IncludeProjectiles = true;
         s.m_IncludeRadarEmitters = true;
+        s.m_EnableEsmReceive = true;
         s.m_Hardware = RDF_RadarHardware.CreateShorad();
         // SEARCH is a general surveillance preset, not a pulse-Doppler MTI search.
         // Keep MTI off so stationary vehicles remain detectable by default.
@@ -245,6 +268,38 @@ class RDF_RadarSensor
             s.m_Hardware.AddElevationBeam("mortar_low", 15.0, 28.0, 0.0);
             s.m_Hardware.AddElevationBeam("mortar_mid", 35.0, 30.0, 0.0);
             s.m_Hardware.AddElevationBeam("mortar_high", 55.0, 28.0, -0.5);
+            s.m_Hardware.Validate();
+        }
+        s.Validate();
+        return s;
+    }
+
+    static RDF_RadarSettings CreateEsmSettings(int maxTargets)
+    {
+        RDF_RadarSettings s = new RDF_RadarSettings();
+        s.m_Range = 8000.0;
+        s.m_UpdateInterval = 0.25;
+        s.m_SectorHalfAngleDeg = 90.0;
+        s.m_MaxTargets = maxTargets;
+        s.m_MaxLosTracesPerScan = 64;
+        s.m_IncludeVehicles = false;
+        s.m_IncludeProjectiles = false;
+        s.m_IncludeRadarEmitters = true;
+        s.m_EnableEsmReceive = true;
+        s.m_EnableDemClutter = false;
+        s.m_EnableWeaponLocate = false;
+        s.m_EnableBallisticPrediction = false;
+        s.m_EnablePhysicalDetection = true;
+        s.m_DetectionSnrDb = 6.0;
+        s.m_EnableMechanicalScan = false;
+        // Keep emitter entity links so GetArmAim / LockArmTrackId can resolve RF.
+        s.m_KeepEntityTruth = true;
+        s.m_Hardware = RDF_RadarHardware.CreateShorad();
+        if (s.m_Hardware)
+        {
+            s.m_Hardware.m_ScanRpm = 0.0;
+            s.m_Hardware.m_EnableMti = false;
+            s.m_Hardware.m_AzimuthBeamwidthDeg = 30.0;
             s.m_Hardware.Validate();
         }
         s.Validate();
@@ -318,6 +373,23 @@ class RDF_RadarSensor
         if (!m_LockManager)
             return false;
         return m_LockManager.GetLockedTarget(entity, worldPos);
+    }
+
+    bool LockArmTrackId(int trackId)
+    {
+        return GetLockManager().LockArmTrackId(trackId);
+    }
+
+    bool GetArmAim(out IEntity entity, out vector worldPos, out bool radiating)
+    {
+        if (!m_LockManager)
+        {
+            entity = null;
+            worldPos = "0 0 0";
+            radiating = false;
+            return false;
+        }
+        return m_LockManager.GetArmAim(entity, worldPos, radiating);
     }
 
     array<ref RDF_RadarTarget> GetPlots()
@@ -527,6 +599,8 @@ class RDF_RadarSensor
             modeName = "STARE";
         else if (m_Mode == ERDF_RadarSensorMode.RDF_RADAR_MODE_WLR)
             modeName = "WLR";
+        else if (m_Mode == ERDF_RadarSensorMode.RDF_RADAR_MODE_ESM)
+            modeName = "ESM";
 
         string dem = GetDemStatusShort();
 

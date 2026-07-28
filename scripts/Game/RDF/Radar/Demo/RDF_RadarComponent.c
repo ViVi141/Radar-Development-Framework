@@ -28,14 +28,26 @@ class RDF_RadarComponent : ScriptComponent
             return;
 
         vector pos = GetOwnerOrigin(owner);
-        RegisterEmitter(owner, pos, true);
-        SyncEmitting(true);
+        bool advertise = ShouldAdvertiseEmission();
+        if (advertise)
+        {
+            RegisterEmitter(owner, pos, true);
+            SyncEmitting(true);
+        }
+        else
+        {
+            SyncEmitting(false);
+            RDF_RadarEmitterRegistry.SetEmitting(owner, false);
+        }
 
         if (!m_Sensor.Tick(owner, m_NetworkAPI))
             return;
 
-        RegisterEmitter(owner, pos, true);
-        SyncEmitting(true);
+        if (advertise)
+        {
+            RegisterEmitter(owner, pos, true);
+            SyncEmitting(true);
+        }
     }
 
     void SetEnabled(bool enabled)
@@ -65,6 +77,32 @@ class RDF_RadarComponent : ScriptComponent
         if (!m_Sensor)
             m_Sensor = new RDF_RadarSensor();
         m_Sensor.SetMode(mode);
+
+        IEntity owner = GetOwner();
+        if (!owner)
+            return;
+        vector pos = GetOwnerOrigin(owner);
+        if (ShouldAdvertiseEmission())
+        {
+            RegisterEmitter(owner, pos, true);
+            SyncEmitting(true);
+        }
+        else
+        {
+            SyncEmitting(false);
+            RDF_RadarEmitterRegistry.SetEmitting(owner, false);
+            RDF_RadarEmitterRegistry.Unregister(owner);
+        }
+    }
+
+    // ESM receive platforms stay RF-silent so they are not self-detected as emitters.
+    protected bool ShouldAdvertiseEmission()
+    {
+        if (!m_Sensor)
+            return true;
+        if (m_Sensor.GetMode() == ERDF_RadarSensorMode.RDF_RADAR_MODE_ESM)
+            return false;
+        return true;
     }
 
     RDF_RadarSensor GetSensor()
@@ -109,6 +147,16 @@ class RDF_RadarComponent : ScriptComponent
     bool GetLockedTarget(out IEntity entity, out vector worldPos)
     {
         return GetSensor().GetLockedTarget(entity, worldPos);
+    }
+
+    bool LockArmTrackId(int trackId)
+    {
+        return GetSensor().LockArmTrackId(trackId);
+    }
+
+    bool GetArmAim(out IEntity entity, out vector worldPos, out bool radiating)
+    {
+        return GetSensor().GetArmAim(entity, worldPos, radiating);
     }
 
     protected void SyncEmitting(bool emitting)

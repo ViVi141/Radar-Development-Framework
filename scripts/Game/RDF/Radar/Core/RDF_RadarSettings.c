@@ -11,6 +11,8 @@ class RDF_RadarSettings
     bool m_IncludeVehicles = true;
     bool m_IncludeProjectiles = true;
     bool m_IncludeRadarEmitters = true;
+    // When true, RADAR_EMITTER plots use one-way Friis ESM power (not skin R^4).
+    bool m_EnableEsmReceive = false;
     // Read candidates from the global scatterer table (incremental discovery)
     // instead of searching the world on every scan.
     bool m_UseScattererRegistry = true;

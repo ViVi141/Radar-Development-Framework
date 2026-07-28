@@ -24,6 +24,11 @@ class RDF_RadarLockManager
     protected bool m_AllowVehicles;
     protected bool m_AllowProjectiles;
     protected bool m_AllowEmitters;
+    // When true, drop lock immediately if the locked emitter stops radiating.
+    protected bool m_ArmRequireLiveEmitter;
+    // Set by LockArmTrackId; cleared on Unlock.
+    protected bool m_ArmLockActive;
+    protected ERDF_RadarTargetType m_LockedType;
 
     // State.
     protected ERDF_RadarLockState m_State;
@@ -49,6 +54,9 @@ class RDF_RadarLockManager
         m_AllowVehicles = true;
         m_AllowProjectiles = false;
         m_AllowEmitters = false;
+        m_ArmRequireLiveEmitter = false;
+        m_ArmLockActive = false;
+        m_LockedType = ERDF_RadarTargetType.RDF_RADAR_TARGET_ANONYMOUS;
         ResetState();
     }
 
@@ -63,6 +71,8 @@ class RDF_RadarLockManager
         m_LockedAzimuthDeg = 0.0;
         m_LastUpdateTimeS = -1.0;
         m_CoastElapsedSec = 0.0;
+        m_ArmLockActive = false;
+        m_LockedType = ERDF_RadarTargetType.RDF_RADAR_TARGET_ANONYMOUS;
     }
 
     // ---- Config setters ----
@@ -99,6 +109,16 @@ class RDF_RadarLockManager
         m_AllowEmitters = emitters;
     }
 
+    void SetArmRequireLiveEmitter(bool enabled)
+    {
+        m_ArmRequireLiveEmitter = enabled;
+    }
+
+    bool GetArmRequireLiveEmitter()
+    {
+        return m_ArmRequireLiveEmitter;
+    }
+
     // ---- Manual control ----
 
     // Force lock onto a specific track id (manual / HUD pick). Confirmed on next Update.
@@ -108,6 +128,20 @@ class RDF_RadarLockManager
             return false;
         m_LockedTrackId = trackId;
         m_LockedEntity = null;
+        m_ArmLockActive = false;
+        m_State = ERDF_RadarLockState.RDF_RADAR_LOCK_ACQUIRING;
+        m_CoastElapsedSec = 0.0;
+        return true;
+    }
+
+    // Anti-radiation lock: only valid for RADAR_EMITTER tracks (validated on Update).
+    bool LockArmTrackId(int trackId)
+    {
+        if (trackId < 0)
+            return false;
+        m_LockedTrackId = trackId;
+        m_LockedEntity = null;
+        m_ArmLockActive = true;
         m_State = ERDF_RadarLockState.RDF_RADAR_LOCK_ACQUIRING;
         m_CoastElapsedSec = 0.0;
         return true;
@@ -191,6 +225,32 @@ class RDF_RadarLockManager
         return true;
     }
 
+    // Anti-radiation aim point for weapon scripts. radiating reflects live Emit registry.
+    bool GetArmAim(out IEntity entity, out vector worldPos, out bool radiating)
+    {
+        entity = null;
+        worldPos = "0 0 0";
+        radiating = false;
+
+        if (m_LockedTrackId < 0)
+            return false;
+        if (m_LockedType != ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER)
+            return false;
+        if (m_State != ERDF_RadarLockState.RDF_RADAR_LOCK_TRACKING
+            && m_State != ERDF_RadarLockState.RDF_RADAR_LOCK_ACQUIRING
+            && m_State != ERDF_RadarLockState.RDF_RADAR_LOCK_COAST)
+        {
+            return false;
+        }
+
+        entity = m_LockedEntity;
+        worldPos = m_LockedPosition;
+        radiating = RDF_RadarEmitterRegistry.IsEmitting(m_LockedEntity);
+        if (m_ArmRequireLiveEmitter && !radiating)
+            return false;
+        return true;
+    }
+
     // Apply authoritative lock summary from network (entity link stays null).
     void ApplySyncedState(ERDF_RadarLockState state, int trackId, vector aimPos)
     {
@@ -238,7 +298,26 @@ class RDF_RadarLockManager
         {
             if (locked)
             {
+                if (m_ArmLockActive || m_ArmRequireLiveEmitter)
+                {
+                    if (locked.m_Type != ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER)
+                    {
+                        Unlock();
+                        return;
+                    }
+                    if (!RDF_RadarEmitterRegistry.IsEmitting(locked.m_Entity))
+                    {
+                        Unlock();
+                        return;
+                    }
+                }
                 UpdateFromTrack(locked, radarOrigin, radarForward, worldTimeS);
+                return;
+            }
+            if (m_ArmLockActive || m_ArmRequireLiveEmitter)
+            {
+                // Lost emitter track or silent: no coast for ARM.
+                Unlock();
                 return;
             }
             EnterOrContinueCoast(worldTimeS);
@@ -281,8 +360,12 @@ class RDF_RadarLockManager
         m_LockedVelocity = track.m_FilteredVelocity;
         m_LockedRangeM = rangeM;
         m_LockedAzimuthDeg = azDeg;
+        m_LockedType = track.m_Type;
         m_LastUpdateTimeS = worldTimeS;
         m_CoastElapsedSec = 0.0;
+
+        if (m_ArmRequireLiveEmitter)
+            m_ArmLockActive = true;
 
         bool stable = track.m_Confirmed;
         if (track.m_HitCount < m_AcquireHits)
