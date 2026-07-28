@@ -81,7 +81,9 @@ scripts/Game/RDF/
 scripts/Game/RDF/Radar/
 ├── Core/
 │   ├── RDF_RadarSettings.c / RDF_RadarTypes.c / RDF_RadarHardware.c
-│   ├── RDF_RadarScanner.c              读散射体表 + Trace + 物理 + 测量合成
+│   ├── RDF_RadarScanner.c              编排：Registry/Legacy 扫描 + Trace + 复用预算
+│   ├── RDF_RadarScanGeometry.c         LOS / 实体中心 / 速度几何辅助
+│   ├── RDF_RadarPhysicalDetect.c       雷达方程 / NLOS / DEM 杂波 / SNR
 │   ├── RDF_RadarScattererRegistry.c    全局散射体/辐射源表（增量维护）
 │   ├── RDF_RadarEmitterRegistry.c      辐射标记门面（转发到散射体表）
 │   ├── RDF_RadarCandidateCollect.c     候选收集辅助

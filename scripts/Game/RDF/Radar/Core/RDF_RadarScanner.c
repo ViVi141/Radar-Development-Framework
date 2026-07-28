@@ -5,7 +5,6 @@ class RDF_RadarScanner
 {
     protected static const float DEG_TO_RAD = 0.0174532925199;
     protected static const float RAD_TO_DEG = 57.2957795;
-    protected static const float LIGHT_SPEED = 299792458.0;
     protected static const float LOS_CACHE_MAX_AGE_S = 0.25;
     protected static const float LOS_CACHE_MAX_ORIGIN_SHIFT_M = 1.5;
     protected static const float LOS_CACHE_MAX_TARGET_SHIFT_M = 3.0;
@@ -21,17 +20,11 @@ class RDF_RadarScanner
     protected vector m_LastOrigin = "0 0 0";
     protected vector m_LastForward = "1 0 0";
     protected float m_LastRange = 2000.0;
-    protected ref array<IEntity> m_QueryCandidates;
-    protected ref array<IEntity> m_CandidateScratch;
     protected ref array<ref RDF_RadarScatterer> m_ScattererCandidates;
-    protected ref array<ref array<float>> m_CfarPowerGrid;
-    protected ref array<bool> m_CfarRowHits;
     protected ref RDF_RadarCandidateCollect m_CandidateCollect;
     protected ref RDF_RadarCfarProcessor m_CfarProcessor;
     protected ref RDF_RadarLosCache m_LosCache;
     protected ref RDF_RadarScanReuseCache m_ScanReuseCache;
-    protected int m_CfarCachedAzBins;
-    protected int m_CfarCachedRangeBins;
     protected bool m_SettingsValidated;
     protected int m_StatReuseHits;
     protected int m_StatFreshUpdates;
@@ -48,17 +41,11 @@ class RDF_RadarScanner
             m_Settings = new RDF_RadarSettings();
 
         m_DemCache = new RDF_DemRuntimeCache();
-        m_QueryCandidates = new array<IEntity>();
-        m_CandidateScratch = new array<IEntity>();
         m_ScattererCandidates = new array<ref RDF_RadarScatterer>();
-        m_CfarPowerGrid = new array<ref array<float>>();
-        m_CfarRowHits = new array<bool>();
         m_CandidateCollect = new RDF_RadarCandidateCollect();
         m_CfarProcessor = new RDF_RadarCfarProcessor();
         m_LosCache = new RDF_RadarLosCache();
         m_ScanReuseCache = new RDF_RadarScanReuseCache();
-        m_CfarCachedAzBins = 0;
-        m_CfarCachedRangeBins = 0;
         m_SettingsValidated = false;
         m_ScanRainLossDbPerKm = 0.0;
     }
@@ -282,7 +269,7 @@ class RDF_RadarScanner
             vector pos = entry.m_Position;
             // Aim LOS at the geometric center so ground vehicles are not
             // blocked by terrain before their chassis origin (often on the ground).
-            vector losEnd = GetScattererLosEnd(entry);
+            vector losEnd = RDF_RadarScanGeometry.GetScattererLosEnd(entry);
             vector toTarget = losEnd - origin;
             float distSq = toTarget.LengthSq();
             if (distSq < minDistSq || distSq > rangeSq)
@@ -371,7 +358,7 @@ class RDF_RadarScanner
                 param.TraceEnt = null;
                 hitFraction = world.TraceMove(param, null);
                 losUsed = losUsed + 1;
-                losClear = IsLineOfSightClear(hitFraction, param.TraceEnt, entry.m_Entity);
+                losClear = RDF_RadarScanGeometry.IsLineOfSightClear(hitFraction, param.TraceEnt, entry.m_Entity);
                 if (m_LosCache)
                 {
                     m_LosCache.Store(
@@ -443,7 +430,9 @@ class RDF_RadarScanner
             if (reusedPhysical)
                 ApplyPhysicalReuse(t, physicalSource);
             else
-                ProcessPhysicalDetection(t, origin, forward, worldTime, world);
+                RDF_RadarPhysicalDetect.Process(
+                    t, origin, forward, worldTime, world,
+                    m_Settings, m_DemCache, m_ScanRainLossDbPerKm);
 
             if (m_ScanReuseCache)
             {
@@ -501,7 +490,7 @@ class RDF_RadarScanner
             if (!ent || ent == subject)
                 continue;
 
-            vector pos = GetEntityLosEnd(ent);
+            vector pos = RDF_RadarScanGeometry.GetEntityLosEnd(ent);
             vector toTarget = pos - origin;
             float distSq = toTarget.LengthSq();
             if (distSq < minDistSq || distSq > rangeSq)
@@ -524,7 +513,7 @@ class RDF_RadarScanner
             if (!isProjectile && !isVehicle)
                 continue;
 
-            vector entityVelocity = GetEntityVelocity(ent);
+            vector entityVelocity = RDF_RadarScanGeometry.GetEntityVelocity(ent);
             float speedMs = entityVelocity.Length();
             ERDF_RadarTargetType priorityType = ERDF_RadarTargetType.RDF_RADAR_TARGET_VEHICLE;
             if (isProjectile)
@@ -592,7 +581,7 @@ class RDF_RadarScanner
                 param.TraceEnt = null;
                 hitFraction = world.TraceMove(param, null);
                 losUsed = losUsed + 1;
-                losClear = IsLineOfSightClear(hitFraction, param.TraceEnt, ent);
+                losClear = RDF_RadarScanGeometry.IsLineOfSightClear(hitFraction, param.TraceEnt, ent);
                 if (m_LosCache)
                 {
                     m_LosCache.Store(
@@ -637,7 +626,9 @@ class RDF_RadarScanner
             if (reusedPhysical)
                 ApplyPhysicalReuse(t, physicalSource);
             else
-                ProcessPhysicalDetection(t, origin, forward, worldTime, world);
+                RDF_RadarPhysicalDetect.Process(
+                    t, origin, forward, worldTime, world,
+                    m_Settings, m_DemCache, m_ScanRainLossDbPerKm);
 
             if (m_ScanReuseCache)
             {
@@ -677,7 +668,7 @@ class RDF_RadarScanner
             if (dotE < cosHalfAngle)
                 continue;
 
-            vector emitterVelocity = GetEntityVelocity(et.m_Entity);
+            vector emitterVelocity = RDF_RadarScanGeometry.GetEntityVelocity(et.m_Entity);
             float emitterSpeedMs = emitterVelocity.Length();
             int emitterPriorityBand = 2;
             if (m_ScanReuseCache)
@@ -750,7 +741,7 @@ class RDF_RadarScanner
                 param.TraceEnt = null;
                 hitFractionE = world.TraceMove(param, null);
                 losUsed = losUsed + 1;
-                losClearE = IsLineOfSightClear(hitFractionE, param.TraceEnt, et.m_Entity);
+                losClearE = RDF_RadarScanGeometry.IsLineOfSightClear(hitFractionE, param.TraceEnt, et.m_Entity);
                 if (m_LosCache && et.m_Entity)
                 {
                     m_LosCache.Store(
@@ -789,7 +780,9 @@ class RDF_RadarScanner
             if (reusedEmitterPhysical)
                 ApplyPhysicalReuse(et, emitterPhysicalSource);
             else
-                ProcessPhysicalDetection(et, origin, forward, worldTime, world);
+                RDF_RadarPhysicalDetect.Process(
+                    et, origin, forward, worldTime, world,
+                    m_Settings, m_DemCache, m_ScanRainLossDbPerKm);
 
             if (m_ScanReuseCache)
             {
@@ -860,35 +853,11 @@ class RDF_RadarScanner
             outCandidates);
     }
 
-    protected bool OnSphereCandidateEntity(IEntity entity)
-    {
-        if (!entity)
-            return false;
-        if (!RDF_RadarEntityClassifier.IsRadarCandidate(entity))
-            return true;
-        if (!m_QueryCandidates)
-            m_QueryCandidates = new array<IEntity>();
-        m_QueryCandidates.Insert(entity);
-        return true;
-    }
-
     protected void SortEntitiesByDistance(notnull array<IEntity> entities, vector origin)
     {
         if (!m_CandidateCollect)
             m_CandidateCollect = new RDF_RadarCandidateCollect();
         m_CandidateCollect.SortEntitiesByDistance(entities, origin);
-    }
-
-    protected bool ContainsEntity(
-        notnull array<IEntity> entities,
-        IEntity entity)
-    {
-        for (int i = 0; i < entities.Count(); i++)
-        {
-            if (entities.Get(i) == entity)
-                return true;
-        }
-        return false;
     }
 
     protected bool ContainsTargetEntity(
@@ -996,181 +965,6 @@ class RDF_RadarScanner
         m_CfarProcessor.ApplyGate(outTargets, origin, scanForward, halfAngleRad, m_Settings);
     }
 
-    protected void EnsureCfarGrid(int azBins, int rangeBins)
-    {
-        if (!m_CfarPowerGrid)
-            m_CfarPowerGrid = new array<ref array<float>>();
-
-        if (m_CfarCachedAzBins != azBins || m_CfarCachedRangeBins != rangeBins)
-        {
-            m_CfarPowerGrid.Clear();
-            for (int az = 0; az < azBins; az++)
-            {
-                array<float> row = new array<float>();
-                row.Reserve(rangeBins);
-                for (int rb = 0; rb < rangeBins; rb++)
-                    row.Insert(0.0);
-                m_CfarPowerGrid.Insert(row);
-            }
-            m_CfarCachedAzBins = azBins;
-            m_CfarCachedRangeBins = rangeBins;
-            return;
-        }
-
-        for (int azClear = 0; azClear < azBins; azClear++)
-        {
-            array<float> clearRow = m_CfarPowerGrid.Get(azClear);
-            for (int rbClear = 0; rbClear < rangeBins; rbClear++)
-                clearRow.Set(rbClear, 0.0);
-        }
-    }
-
-    protected void GetCfarCellIndices(
-        RDF_RadarTarget target,
-        vector origin,
-        float scanAzimuth,
-        float halfAngleRad,
-        float maxRange,
-        int azBins,
-        int rangeBins,
-        out int outAzIndex,
-        out int outRangeIndex)
-    {
-        outAzIndex = -1;
-        outRangeIndex = -1;
-        if (!target)
-            return;
-        vector toTarget = target.m_Position - origin;
-        float dist = toTarget.Length();
-        if (dist <= 0.001)
-            return;
-        if (dist > maxRange)
-            dist = maxRange;
-
-        float targetAzimuth = Math.Atan2(toTarget[2], toTarget[0]);
-        float rel = NormalizeAngleRad(targetAzimuth - scanAzimuth);
-        if (halfAngleRad > 0.0001)
-        {
-            if (rel < -halfAngleRad || rel > halfAngleRad)
-                return;
-        }
-
-        float azNorm = 0.5;
-        if (halfAngleRad > 0.0001)
-            azNorm = (rel + halfAngleRad) / (2.0 * halfAngleRad);
-        azNorm = Math.Clamp(azNorm, 0.0, 0.999999);
-        float rangeNorm = dist / Math.Max(1.0, maxRange);
-        rangeNorm = Math.Clamp(rangeNorm, 0.0, 0.999999);
-
-        outAzIndex = Math.Floor(azNorm * azBins);
-        outRangeIndex = Math.Floor(rangeNorm * rangeBins);
-        if (outAzIndex < 0)
-            outAzIndex = 0;
-        if (outAzIndex >= azBins)
-            outAzIndex = azBins - 1;
-        if (outRangeIndex < 0)
-            outRangeIndex = 0;
-        if (outRangeIndex >= rangeBins)
-            outRangeIndex = rangeBins - 1;
-    }
-
-    protected float GetTargetCfarPowerW(RDF_RadarTarget target)
-    {
-        if (!target)
-            return 0.0;
-        if (target.m_CfarPowerW > 0.0)
-            return target.m_CfarPowerW;
-        if (target.m_ProcessedPowerW > 0.0)
-            return target.m_ProcessedPowerW;
-        if (target.m_ReceivedPowerW > 0.0)
-            return target.m_ReceivedPowerW;
-        return 0.0;
-    }
-
-    protected float EstimateCfarNoiseFloorW(
-        vector origin,
-        vector scanForward)
-    {
-        if (!m_Settings || !m_Settings.m_Hardware)
-            return 0.000000000000000000000000000001;
-
-        RDF_RadarHardware hardware = m_Settings.m_Hardware;
-        float processingGain = hardware.GetProcessingGain();
-        float noise = hardware.GetNoisePowerW() * processingGain;
-        noise = noise + m_Settings.m_AdditionalNoisePowerW;
-        if (m_Settings.m_EwStack)
-        {
-            float ewNoiseRf = m_Settings.m_EwStack.GetAdditionalNoisePowerW(
-                origin,
-                scanForward,
-                hardware);
-            noise = noise + ewNoiseRf * processingGain;
-        }
-        if (noise < 0.000000000000000000000000000001)
-            noise = 0.000000000000000000000000000001;
-        return noise;
-    }
-
-    protected RDF_RadarTarget BuildAnonymousTarget(
-        vector origin,
-        float scanAzimuth,
-        float halfAngleRad,
-        float maxRange,
-        int azBins,
-        int rangeBins,
-        int azIndex,
-        int rangeIndex,
-        float cellPowerW,
-        float noiseFloorW)
-    {
-        float azCenterNorm = (azIndex + 0.5) / azBins;
-        float rangeCenterNorm = (rangeIndex + 0.5) / rangeBins;
-        float relAz = 0.0;
-        if (halfAngleRad > 0.0001)
-            relAz = (azCenterNorm * 2.0 - 1.0) * halfAngleRad;
-        float azimuth = scanAzimuth + relAz;
-        float distance = rangeCenterNorm * maxRange;
-        if (distance < m_Settings.m_MinDistance)
-            distance = m_Settings.m_MinDistance;
-        if (distance > maxRange)
-            distance = maxRange;
-
-        vector dir = Vector(Math.Cos(azimuth), 0.0, Math.Sin(azimuth));
-        RDF_RadarTarget t = new RDF_RadarTarget();
-        t.m_Entity = null;
-        t.m_Position = origin + dir * distance;
-        t.m_Distance = distance;
-        t.m_Velocity = "0 0 0";
-        t.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_ANONYMOUS;
-        t.m_Time = 0.0;
-        t.m_AzimuthDeg = azimuth * RAD_TO_DEG;
-        t.m_ElevationDeg = 0.0;
-        t.m_RadialSpeedMs = 0.0;
-        t.m_RcsM2 = 0.0;
-        t.m_ReceivedPowerW = cellPowerW;
-        t.m_ProcessedPowerW = cellPowerW;
-        t.m_DopplerHz = 0.0;
-        t.m_MtiGain = 1.0;
-        t.m_DemSurfaceClass = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
-        t.m_DemSampleValid = false;
-        t.m_ClutterPowerW = 0.0;
-        t.m_ClutterToNoiseDb = -300.0;
-        float snrLinear = cellPowerW / Math.Max(
-            0.000000000000000000000000000001,
-            noiseFloorW);
-        t.m_SnrDb = RDF_RadarClutterModel.LinToDb(snrLinear);
-        t.m_Detected = true;
-        t.m_IsAnonymous = true;
-        t.m_IsFalsePlot = false;
-        t.m_CfarPowerW = cellPowerW;
-        t.m_LosBlocked = false;
-        t.m_LosHitFraction = 1.0;
-        t.m_MultipathFactor = 1.0;
-        t.m_BeamName = "cfar";
-        t.m_ScanNumber = 0;
-        return t;
-    }
-
     protected void RemoveUndetectedTargets(notnull array<ref RDF_RadarTarget> targets)
     {
         if (!m_CfarProcessor)
@@ -1219,491 +1013,9 @@ class RDF_RadarScanner
         target.m_ScanNumber = source.m_ScanNumber;
     }
 
-    protected static bool IsLineOfSightClear(float hitFraction, IEntity traceEnt, IEntity target)
-    {
-        // Reached the end point with no earlier blocker.
-        if (hitFraction >= 0.999)
-            return true;
-        if (!traceEnt || !target)
-            return false;
-        // Hit the target root, or any child collider under it (common for vehicles).
-        if (IsEntityOrChildOf(traceEnt, target))
-            return true;
-        return false;
-    }
-
-    // True when hitEntity is target, or a descendant of target in the entity tree.
-    protected static bool IsEntityOrChildOf(IEntity hitEntity, IEntity target)
-    {
-        if (!hitEntity || !target)
-            return false;
-        IEntity cur = hitEntity;
-        int guard = 0;
-        while (cur && guard < 16)
-        {
-            if (cur == target)
-                return true;
-            cur = cur.GetParent();
-            guard = guard + 1;
-        }
-        return false;
-    }
-
-    // Prefer geometric center for Trace / range. Chassis origins often sit on
-    // the ground plane and lose LOS to terrain before the vehicle body.
-    protected static vector GetScattererLosEnd(RDF_RadarScatterer entry)
-    {
-        if (!entry)
-            return "0 0 0";
-        if (!entry.m_Entity)
-            return entry.m_Position;
-
-        vector worldMat[4];
-        entry.m_Entity.GetWorldTransform(worldMat);
-        vector mins;
-        vector maxs;
-        entry.m_Entity.GetBounds(mins, maxs);
-        vector centerLocal = (mins + maxs) * 0.5;
-        vector size = maxs - mins;
-        float extent = Math.AbsFloat(size[0]) + Math.AbsFloat(size[1]) + Math.AbsFloat(size[2]);
-        if (extent < 0.05)
-        {
-            // Degenerate bounds: lift a little above origin.
-            vector lifted = entry.m_Position;
-            lifted[1] = lifted[1] + 1.2;
-            return lifted;
-        }
-
-        return worldMat[3]
-            + (worldMat[0] * centerLocal[0])
-            + (worldMat[1] * centerLocal[1])
-            + (worldMat[2] * centerLocal[2]);
-    }
-
-    protected static vector GetEntityPosition(IEntity entity)
-    {
-        if (!entity)
-            return "0 0 0";
-        vector mat[4];
-        entity.GetWorldTransform(mat);
-        return mat[3];
-    }
-
-    protected static vector GetEntityLosEnd(IEntity entity)
-    {
-        if (!entity)
-            return "0 0 0";
-        vector worldMat[4];
-        entity.GetWorldTransform(worldMat);
-        vector mins;
-        vector maxs;
-        entity.GetBounds(mins, maxs);
-        vector centerLocal = (mins + maxs) * 0.5;
-        vector size = maxs - mins;
-        float extent = Math.AbsFloat(size[0]) + Math.AbsFloat(size[1]) + Math.AbsFloat(size[2]);
-        if (extent < 0.05)
-        {
-            vector lifted = worldMat[3];
-            lifted[1] = lifted[1] + 1.2;
-            return lifted;
-        }
-        return worldMat[3]
-            + (worldMat[0] * centerLocal[0])
-            + (worldMat[1] * centerLocal[1])
-            + (worldMat[2] * centerLocal[2]);
-    }
-
-    protected static vector GetEntityVelocity(IEntity entity)
-    {
-        if (!entity)
-            return "0 0 0";
-        GenericEntity generic = GenericEntity.Cast(entity);
-        if (generic)
-        {
-            ProjectileMoveComponent pm = ProjectileMoveComponent.Cast(generic.FindComponent(ProjectileMoveComponent));
-            if (pm)
-                return pm.GetVelocity();
-        }
-        Physics physics = entity.GetPhysics();
-        if (physics)
-            return physics.GetVelocity();
-        return "0 0 0";
-    }
-
-    protected void ProcessPhysicalDetection(
-        RDF_RadarTarget target,
-        vector origin,
-        vector scanForward,
-        float worldTime,
-        BaseWorld world)
-    {
-        if (!target)
-            return;
-
-        target.m_Detected = true;
-        target.m_BeamName = "geometry";
-        if (!target.m_DemSampleValid)
-        {
-            target.m_DemSurfaceClass = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
-            target.m_DemSampleValid = false;
-        }
-        target.m_ClutterPowerW = 0.0;
-        target.m_ClutterToNoiseDb = -300.0;
-        target.m_CfarPowerW = 0.0;
-        if (target.m_LosHitFraction <= 0.0 && !target.m_LosBlocked)
-            target.m_LosHitFraction = 1.0;
-        if (target.m_MultipathFactor <= 0.0)
-            target.m_MultipathFactor = 1.0;
-
-        vector toTarget = target.m_Position - origin;
-        float distance = toTarget.Length();
-        if (distance <= 0.001)
-        {
-            target.m_Detected = false;
-            target.m_MultipathFactor = 0.0;
-            return;
-        }
-
-        vector los = toTarget / distance;
-        float horizontalRange = Math.Sqrt(
-            toTarget[0] * toTarget[0] + toTarget[2] * toTarget[2]);
-        float elevationRad = Math.Atan2(toTarget[1], Math.Max(0.001, horizontalRange));
-        float elevationDeg = elevationRad * RAD_TO_DEG;
-
-        float scanAzimuth = Math.Atan2(scanForward[2], scanForward[0]);
-        float targetAzimuth = Math.Atan2(los[2], los[0]);
-        float azimuthOffsetRad = NormalizeAngleRad(targetAzimuth - scanAzimuth);
-        float azimuthOffsetDeg = azimuthOffsetRad * RAD_TO_DEG;
-
-        target.m_AzimuthDeg = targetAzimuth * RAD_TO_DEG;
-        target.m_ElevationDeg = elevationDeg;
-        target.m_RadialSpeedMs = -(
-            target.m_Velocity[0] * los[0]
-            + target.m_Velocity[1] * los[1]
-            + target.m_Velocity[2] * los[2]);
-
-        // Geometry-only mode: keep Detected=true after polar fill. Do not apply
-        // NLOS / SNR / CFAR rejects (used by lock-layer and other regressions).
-        RDF_RadarHardware hardware = m_Settings.m_Hardware;
-        if (!m_Settings.m_EnablePhysicalDetection || !hardware)
-        {
-            if (target.m_LosBlocked)
-                target.m_MultipathFactor = 0.25;
-            else
-                target.m_MultipathFactor = 1.0;
-            return;
-        }
-
-        if (target.m_LosBlocked)
-        {
-            target.m_MultipathFactor = ComputeNlosMultipathFactor(
-                origin,
-                target.m_Position,
-                distance,
-                target.m_LosHitFraction,
-                world,
-                target.m_AglM,
-                target.m_DemSampleValid,
-                target.m_DemTerrainY);
-            if (target.m_MultipathFactor <= 0.0)
-            {
-                target.m_Detected = false;
-                return;
-            }
-        }
-        else
-        {
-            target.m_MultipathFactor = 1.0;
-        }
-
-        string beamName;
-        float patternGain = RDF_RadarClutterModel.GetStrongestBeamGain(
-            hardware,
-            azimuthOffsetDeg,
-            elevationDeg,
-            beamName);
-        target.m_BeamName = beamName;
-        if (target.m_LosBlocked)
-            target.m_BeamName = beamName + "/nlos";
-
-        // Registry entries carry a cached RCS; only estimate when absent.
-        if (target.m_RcsM2 <= 0.0)
-        {
-            target.m_RcsM2 = RDF_RadarRcsModel.GetEntityRcsM2(
-                target.m_Entity,
-                target.m_Type);
-        }
-        target.m_ReceivedPowerW = RDF_RadarClutterModel.ReceivedPowerW(
-            hardware.m_PeakPowerW,
-            hardware.m_AntennaGainDbi,
-            hardware.m_FrequencyHz,
-            hardware.m_SystemLossDb,
-            target.m_RcsM2,
-            distance,
-            patternGain);
-        target.m_ReceivedPowerW = target.m_ReceivedPowerW * target.m_MultipathFactor;
-        if (m_Settings.m_EnableAtmosphericLoss)
-        {
-            float atmDb = m_Settings.m_AtmLossDbPerKmOneWay;
-            if (atmDb < 0.0)
-                atmDb = RDF_RadarClutterModel.AtmosphericOneWayDbPerKm(hardware.m_FrequencyHz);
-            float latm = RDF_RadarClutterModel.AtmosphericLossLinear(
-                distance,
-                atmDb,
-                m_ScanRainLossDbPerKm);
-            if (latm > 1.0)
-                target.m_ReceivedPowerW = target.m_ReceivedPowerW / latm;
-        }
-
-        float wavelength = hardware.GetWavelengthM();
-        target.m_DopplerHz = RDF_RadarClutterModel.DopplerHz(
-            target.m_RadialSpeedMs,
-            wavelength);
-        target.m_MtiGain = 1.0;
-        if (hardware.m_EnableMti)
-        {
-            target.m_MtiGain = RDF_RadarClutterModel.MtiTwoPulseGain(
-                target.m_DopplerHz,
-                hardware.m_PrfHz);
-            if (target.m_MtiGain < 0.000001)
-                target.m_MtiGain = 0.000001;
-        }
-
-        float processingGain = hardware.GetProcessingGain();
-        target.m_ProcessedPowerW =
-            target.m_ReceivedPowerW * processingGain * target.m_MtiGain;
-        target.m_CfarPowerW = target.m_ProcessedPowerW;
-
-        float clutterPower = 0.0;
-        if (m_Settings.m_EnableDemClutter && m_DemCache)
-        {
-            clutterPower = ComputeDemClutterPower(
-                target,
-                origin,
-                distance,
-                azimuthOffsetDeg,
-                elevationDeg,
-                patternGain,
-                hardware,
-                processingGain);
-        }
-        target.m_ClutterPowerW = clutterPower;
-
-        float noisePower = hardware.GetNoisePowerW() * processingGain;
-        noisePower = noisePower + m_Settings.m_AdditionalNoisePowerW;
-        noisePower = noisePower + clutterPower;
-        if (m_Settings.m_EwStack)
-        {
-            float ewNoiseRf = m_Settings.m_EwStack.GetAdditionalNoisePowerW(
-                origin,
-                scanForward,
-                hardware);
-            noisePower = noisePower + ewNoiseRf * processingGain;
-        }
-        float snrLinear = target.m_ProcessedPowerW / Math.Max(
-            0.000000000000000000000000000001,
-            noisePower);
-        target.m_SnrDb = RDF_RadarClutterModel.LinToDb(snrLinear);
-        if (clutterPower > 0.0)
-        {
-            float clutterFraction = clutterPower / Math.Max(
-                0.000000000000000000000000000001,
-                noisePower);
-            target.m_ClutterToNoiseDb = RDF_RadarClutterModel.LinToDb(clutterFraction);
-        }
-        target.m_Detected = target.m_SnrDb >= m_Settings.m_DetectionSnrDb;
-
-        float scanPeriod = hardware.GetScanPeriodS();
-        target.m_ScanNumber = 0;
-        if (scanPeriod < 1000000.0)
-            target.m_ScanNumber = Math.Floor(worldTime / scanPeriod);
-    }
-
-    protected float ComputeDemClutterPower(
-        RDF_RadarTarget target,
-        vector origin,
-        float distance,
-        float azimuthOffsetDeg,
-        float elevationDeg,
-        float patternGain,
-        RDF_RadarHardware hardware,
-        float processingGain)
-    {
-        if (!target || !hardware || !m_DemCache)
-            return 0.0;
-        if (distance <= 0.001)
-            return 0.0;
-        if (m_Settings.m_DemClutterScale <= 0.0)
-            return 0.0;
-
-        float terrainY = 0.0;
-        int surfaceClass = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
-        if (target.m_DemSampleValid)
-        {
-            terrainY = target.m_DemTerrainY;
-            surfaceClass = target.m_DemSurfaceClass;
-        }
-        else
-        {
-            RDF_DemRuntimeCellSample demSample;
-            if (!m_DemCache.TrySampleAt(target.m_Position[0], target.m_Position[2], demSample))
-                return 0.0;
-            if (!demSample || !demSample.m_Valid)
-                return 0.0;
-            terrainY = demSample.m_TerrainY;
-            surfaceClass = demSample.m_SurfaceClass;
-            target.m_DemSampleValid = true;
-            target.m_DemSurfaceClass = surfaceClass;
-            target.m_DemTerrainY = terrainY;
-        }
-
-        float radarAboveGround = origin[1] - terrainY;
-        if (radarAboveGround < 0.0)
-            radarAboveGround = -radarAboveGround;
-        float grazingRad = Math.Atan2(radarAboveGround, Math.Max(1.0, distance));
-
-        float sigma0 = RDF_RadarClutterModel.GetSigma0(
-            surfaceClass,
-            grazingRad);
-        sigma0 = sigma0 * m_Settings.m_DemClutterScale;
-        if (sigma0 <= 0.0)
-            return 0.0;
-
-        float cellSizeM = m_DemCache.GetCellSizeM();
-
-        float azWidthM = distance * (hardware.m_AzimuthBeamwidthDeg * DEG_TO_RAD);
-        azWidthM = Math.AbsFloat(azWidthM);
-        if (azWidthM < cellSizeM)
-            azWidthM = cellSizeM;
-
-        float rangeResolutionM = EstimateRangeResolutionM(hardware);
-        float areaM2 = rangeResolutionM * azWidthM;
-        float minArea = cellSizeM * cellSizeM;
-        if (areaM2 < minArea)
-            areaM2 = minArea;
-
-        float clutterSigmaM2 = sigma0 * areaM2;
-        float receivedClutter = RDF_RadarClutterModel.ReceivedPowerW(
-            hardware.m_PeakPowerW,
-            hardware.m_AntennaGainDbi,
-            hardware.m_FrequencyHz,
-            hardware.m_SystemLossDb,
-            clutterSigmaM2,
-            distance,
-            patternGain);
-        if (receivedClutter <= 0.0)
-            return 0.0;
-
-        float clutterMti = 1.0;
-        if (hardware.m_EnableMti)
-            clutterMti = hardware.m_MtiClutterFloor;
-        if (clutterMti < 0.000001)
-            clutterMti = 0.000001;
-
-        return receivedClutter * processingGain * clutterMti;
-    }
-
-    // NLOS-only bounce scale using image-method path length and |Gamma|^2.
-    // Early Trace blockers further weaken the return (hitFraction small).
-    protected float ComputeNlosMultipathFactor(
-        vector origin,
-        vector targetPos,
-        float distance,
-        float hitFraction,
-        BaseWorld world,
-        float targetAglM,
-        bool haveTargetTerrain,
-        float targetTerrainYCached)
-    {
-        if (!m_Settings || !m_Settings.m_EnableNlosMultipath)
-            return 0.0;
-        if (distance < 1.0)
-            return 0.0;
-
-        float originTerrainY = SampleTerrainY(origin[0], origin[2], world);
-        float targetTerrainY = targetTerrainYCached;
-        if (!haveTargetTerrain)
-            targetTerrainY = SampleTerrainY(targetPos[0], targetPos[2], world);
-
-        float hr = origin[1] - originTerrainY;
-        float ht = targetPos[1] - targetTerrainY;
-        if (targetAglM >= 0.0)
-            ht = targetAglM;
-        if (hr < 0.5)
-            hr = 0.5;
-        if (ht < 0.5)
-            ht = 0.5;
-        if (ht > m_Settings.m_NlosMaxTargetAglM)
-            return 0.0;
-
-        float sumH = hr + ht;
-        float bounceRange = Math.Sqrt(distance * distance + sumH * sumH);
-        if (bounceRange < 1.0)
-            return 0.0;
-
-        float ratio = distance / bounceRange;
-        float geom = ratio * ratio * ratio * ratio;
-        float gamma = m_Settings.m_NlosReflectionAbs;
-        float factor = gamma * gamma * geom;
-
-        float depthScale = hitFraction;
-        if (depthScale < 0.2)
-            depthScale = 0.2;
-        if (depthScale > 1.0)
-            depthScale = 1.0;
-        factor = factor * depthScale;
-
-        if (factor < m_Settings.m_NlosMinFactor)
-            return 0.0;
-        if (factor > 1.0)
-            factor = 1.0;
-        return factor;
-    }
-
-    protected float SampleTerrainY(float worldX, float worldZ, BaseWorld world)
-    {
-        RDF_DemRuntimeCellSample demSample;
-        if (m_DemCache && m_Settings && m_Settings.m_EnableDemClutter)
-        {
-            if (m_DemCache.TrySampleAt(worldX, worldZ, demSample))
-            {
-                if (demSample && demSample.m_Valid)
-                    return demSample.m_TerrainY;
-            }
-        }
-
-        if (world)
-            return world.GetSurfaceY(worldX, worldZ);
-        return 0.0;
-    }
-
-    protected float EstimateRangeResolutionM(RDF_RadarHardware hardware)
-    {
-        if (!hardware)
-            return 1.0;
-
-        float byBandwidth = 0.0;
-        if (hardware.m_BandwidthHz > 0.0)
-            byBandwidth = LIGHT_SPEED / (2.0 * hardware.m_BandwidthHz);
-
-        float byPulseWidth = 0.0;
-        if (hardware.m_PulseWidthS > 0.0)
-            byPulseWidth = LIGHT_SPEED * hardware.m_PulseWidthS * 0.5;
-
-        if (byBandwidth > 0.0)
-            return Math.Max(0.5, byBandwidth);
-        if (byPulseWidth > 0.0)
-            return Math.Max(0.5, byPulseWidth);
-        return 1.0;
-    }
-
     protected float NormalizeAngleRad(float angle)
     {
-        while (angle > Math.PI)
-            angle = angle - Math.PI * 2.0;
-        while (angle < -Math.PI)
-            angle = angle + Math.PI * 2.0;
-        return angle;
+        return RDF_RadarScanGeometry.NormalizeAngleRad(angle);
     }
 
     protected vector GetSubjectOrigin(IEntity subject)

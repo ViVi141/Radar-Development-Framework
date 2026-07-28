@@ -124,7 +124,7 @@ Realistic：`RDF_RadarAutoTestSuite.StartAllRealistic()`
 
 ### 工程 / 性能
 
-- [x] 散射体 XZ 网格 · Scanner 拆分 · DEM `$profile`→`DemData/`
+- [x] 散射体 XZ 网格 · Scanner 编排拆分（Geometry + PhysicalDetect）· DEM `$profile`→`DemData/`
 - [x] LOS 缓存 · 多帧预算 · 优先级扫描 · 低速物理复用
 
 ### 测试

@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 2026-07-28 — RDF_RadarScanner 拆分
+
+- 新增 `RDF_RadarScanGeometry`：LOS / 实体中心 / 速度辅助
+- 新增 `RDF_RadarPhysicalDetect`：雷达方程、NLOS、DEM 杂波、大气衰、SNR
+- `RDF_RadarScanner`：删除已迁出的 CFAR 遗留实现与未用候选缓冲；编排层约 1070 行
+
+---
+
 ## 2026-07-28 — 规范性 / 整洁性修复
 
 - 文档同步：`RADAR_CAPABILITIES` / `RADAR_GAME_FRAMEWORK` / `API` 雷达摘要 / `DEVELOPMENT` 树 / `DEM` 联机说明 / README 双档测试，对齐 TODO 与 RADAR_API
