@@ -91,7 +91,7 @@
 - [ ] 拆分 `rdf_radar_mass_battle_sim.py`
 - [ ] Python CFAR / track 单测 + 可选 Enforce golden
 - [ ] IFF / 数据链抽象
-- [ ] 游戏内 AutoTest 批跑或最小 CI
+- [ ] 游戏内 AutoTest 批跑或最小 CI（`StartAll` 已有；此处指无 Debugger 手工触发的自动化/CI）
 - [ ] LiDAR：PPI 动画、DiagMenu、Sensor 门面对齐
 
 ### 5 — 停车场（低收益或高风险，默认不做）
@@ -119,30 +119,34 @@ Realistic：`RDF_RadarAutoTestSuite.StartAllRealistic()`
 ### 功能链
 
 - [x] 扫描 + Trace LOS / NLOS · 分类跟踪 · 雷达方程 / 多普勒 / MTI / SNR
-- [x] PPI · DEM 杂波 · CA-CFAR · EW / 欺骗 · 测量合成
-- [x] 弹道 + WLR · 散射体表 / Signature / Swerling
-- [x] `RDF_RadarSensor` · `RDF_RadarLockManager` · `GetLockedTarget`
+- [x] PPI · DEM 杂波 · CA/GO/SO-CFAR · EW / 欺骗 · 测量合成
+- [x] 弹道 + WLR（多点真空拟合）· 散射体表 / Signature / Swerling
+- [x] `RDF_RadarSensor`（SEARCH / STARE / WLR / ESM）· `RDF_RadarLockManager` · `GetLockedTarget` / `GetArmAim`
+- [x] RWR（`RDF_RadarRwr`）· ESM 侦收 · 反辐射瞄点
+- [x] 火箭制导示例（`RDF_RadarRocketGuidance` + Lock-Fire 回归）
 - [x] Network 权威端挂 Sensor
 - [x] Network：关键配置 RplProp + 扫描结果 Broadcast（plots / tracks / WLR / lock）+ 发射态
 
 ### 工程 / 性能
 
 - [x] 散射体 XZ 网格 · Scanner 编排拆分（Geometry + PhysicalDetect）· DEM `$profile`→`DemData/`
-- [x] LOS 缓存 · 多帧预算 · 优先级扫描 · 低速物理复用
+- [x] LOS 缓存 · 多帧预算 · 优先级扫描 · 低速物理复用 · `m_FairScanCursor`
+- [x] SurfaceTable / Signature `.conf`（工坊）+ JSON/CSV 回退
 
 ### 测试
 
-- [x] `AutoTestSuite` 5/5（Ballistics / DEM / Lock / Airborne / ShellFire）
+- [x] `AutoTestSuite` 5/5（Ballistics / DEM / Lock / Airborne / ShellFire）；双档 ideal / realistic
+- [x] 独立回归：RWR / ESM-ARM / Rocket Lock-Fire；地图叠加 `RDF_RadarAutoTestMapOverlay`
 - [x] 测试不加辐射源 / 抬 RCS / 强制写表
 
 ### DEM / 仓库
 
-- [x] V3 烘焙 · 运行时 LRU · 杂波 + WLR 地面
+- [x] V3 烘焙 · SURF JSON 发布包 · 运行时 GetSurfaceY + LRU · 杂波 + WLR 地面
 - [x] `.gitignore` · 空目录清理 · P1 CHANGELOG 摘要
 
 ### LiDAR（维护）
 
-- [x] 点云 / HUD / CSV / 网络 / Bootstrap  
+- [x] 点云 / HUD（`LidarPPI.layout`）/ CSV / 网络 / Bootstrap  
 - 体验项见上方 §4
 
 ---

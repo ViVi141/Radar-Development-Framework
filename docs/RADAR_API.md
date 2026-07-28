@@ -116,6 +116,16 @@ Levels: `RDF_RWR_SEARCH` (detected plot) → `RDF_RWR_TRACK` (confirmed track) �
 ESM mode does not report (receive-only). Disable with `m_EnableRwrReporting = false`.  
 Regression: `RDF_RadarRwrAutoTest.Start()`.
 
+Sensor convenience (same semantics, any victim entity):
+
+```c
+sensor.HasRwrSearchWarning(victim);
+sensor.HasRwrTrackWarning(victim);
+sensor.HasRwrLockWarning(victim);
+sensor.GetRwrStatusShort(victim);
+sensor.CollectRwrThreats(victim, threats);
+```
+
 ---
 
 ## Minimal usage
@@ -350,6 +360,7 @@ RDF_RadarAutoRunner.SetShowcaseVisuals(true);  // default
 RDF_RadarAutoRunner.SetShowcaseVisuals(false); // minimal / gameplay
 ```
 
-PPI HUD sits in the **bottom-right** corner at 128×128 (compact, translucent),
-loaded from `UI/layouts/RDF/RadarPPI.layout` via `CreateWidgets`.
+PPI HUD sits in the **bottom-right** (panel **144×184**, PPI canvas **128×128**,
+compact, translucent), loaded from `UI/layouts/RDF/RadarPPI.layout` via
+`CreateWidgets`.
 Public API: `RDF_RadarHUD.Show` / `Hide` / `FeedScan` / `SetMode` / `SetDisplayRange`.

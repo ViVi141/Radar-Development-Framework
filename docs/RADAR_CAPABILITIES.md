@@ -46,9 +46,9 @@
 - 量测驱动 α-β 跟踪 + `PredictAt` 外推（最近邻波门；匿名/假目标可进跟踪）
 - **锁定层** `RDF_RadarLockManager`：SEARCH → 截获 → 跟踪 → coast + `GetLockedTarget`
 - AutoTest 双档：`RDF_RadarAutoTestSuite.StartAll()`（ideal）/
-  `StartAllRealistic()`（逼真误差带）
+  `StartAllRealistic()`（逼真误差带）；套件 5 项 + 独立 RWR / ESM-ARM / Rocket
 - 单项：DEM / Ballistics / ShellFire / Airborne / Lock
-- **公共门面** `RDF_RadarSensor`（SEARCH / STARE / WLR → Plots / Tracks / Lock），见 [RADAR_API.md](RADAR_API.md)
+- **公共门面** `RDF_RadarSensor`（SEARCH / STARE / WLR / ESM → Plots / Tracks / Lock / ARM / RWR），见 [RADAR_API.md](RADAR_API.md)
 
 ### 观感上「像雷达」的部分
 
@@ -76,7 +76,7 @@
 
 - 多假设关联 / JPDA（现为单假设最近邻）
 - 多雷达组网、IFF、数据链融合
-- 搜索 → 截获 → 跟踪的**资源管理**与**武器制导对接**（锁定状态机已有）
+- 搜索 → 截获 → 跟踪的**资源管理**；武器制导有示例（`RDF_RadarRocketGuidance`），通用武器对接仍靠模组
 
 ### 电子战
 
@@ -117,7 +117,7 @@
 
 ## 5. 建议优先级（只选三条时）
 
-1. 锁定层对接武器  
+1. 锁定层对接武器（示例制导已有；产品武器仍需模组接入）  
 2. 更细多径/绕射近似（有明确山地场景需求时）  
 3. DEM 发布包与联机数据一致性  
 

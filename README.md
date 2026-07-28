@@ -13,8 +13,8 @@ Arma Reforger 用的模块化传感器开发框架：**LiDAR**、**雷达**、**
 | 模块 | 状态 | 说明 |
 |------|------|------|
 | LiDAR | 维护中 | 射线点云、可视化、HUD、CSV、联机同步 |
-| Radar | 已落地 | 实体扫描、物理检测、DEM 杂波、PPI、自动化测试 |
-| DEM | 已落地 | Workbench 烘焙 V3 CSV + 游戏内 LRU 加载 |
+| Radar | 已落地 | 实体扫描、物理检测、DEM 杂波、PPI、ESM/RWR、联机权威、自动化测试 |
+| DEM | 已落地 | 烘焙 V3 CSV；发布用 SURF JSON；运行时 GetSurfaceY + SURF（回退 CSV/BIN/LIVE） |
 
 ---
 
@@ -22,11 +22,15 @@ Arma Reforger 用的模块化传感器开发框架：**LiDAR**、**雷达**、**
 
 ```
 scripts/Game/RDF/
+  Common/    RDF_DebugShapeManager（世界 Shape 托管）
   Lidar/     Core / Visual / Util / Demo / Network / UI
   Radar/     Core / Physics / EW / Network / Visual / UI / Demo / Util
-  DEM/       烘焙 + Runtime/（manifest/tile 解析与缓存）
+  DEM/       烘焙 + Runtime/（SURF JSON / BIN / CSV 解析与 LRU）
 scripts/WorkbenchGame/RDF/
   RDF_DemBakePlugin.c / RDF_RadarSignatureBakePlugin.c
+RadarData/   SurfaceTable.conf（地表类电磁参数）
+Signatures/  rdf_radar_signatures.conf（目标特征）
+UI/layouts/RDF/  RadarPPI.layout / LidarPPI.layout
 tools/dem/   离线打包、雷达物理原型、框架 Demo
 docs/        文档
 ```
@@ -51,6 +55,7 @@ RDF_LidarAutoRunner.SetDemoEnabled(true);
 ```c
 RDF_RadarSensor sensor = new RDF_RadarSensor();
 sensor.ConfigureMode(ERDF_RadarSensorMode.RDF_RADAR_MODE_SEARCH, 64);
+// 模式：SEARCH / STARE / WLR / ESM
 sensor.Tick(subject, null);
 array<ref RDF_RadarTarget> plots = sensor.GetPlots();
 array<ref RDF_RadarTrack> tracks = sensor.GetTracks();
@@ -76,7 +81,7 @@ RDF_RadarAutoRunner.SetHudEnabled(true);   // PPI HUD（品红=辐射源 / 绿=�
 `RDF_RadarSensor.CreateSearchSettings` / `CreateStareSettings` / `CreateWlrSettings` 起步。
 
 ```c
-// 推荐：顺序跑完全部（理想档）
+// 推荐：顺序跑完全部（理想档）— 仅下列 5 项
 RDF_RadarAutoTestSuite.StartAll();
 // 逼真档（测量噪声 / 热填空 / 大气等加压，误差带验收）
 RDF_RadarAutoTestSuite.StartAllRealistic();
@@ -86,23 +91,36 @@ RDF_RadarManualDemo.Start();
 RDF_RadarManualDemo.Probe();   // 诊断 Det 0/0
 RDF_RadarManualDemo.Stop();
 
-// 或单独跑：
+// 套件内单项：
 RDF_RadarAutoTest.Start();                 // DEM 杂波回归
 RDF_RadarBallisticsAutoTest.Start();       // 弹道/WLR 数学
 RDF_RadarShellFireAutoTest.Start();        // 实弹放炮 + WLR
 RDF_RadarAirborneScanTest.StartKeepTarget(); // 空中目标 + PPI
 RDF_RadarLockAutoTest.Start();             // 空中目标锁定状态机
+
+// 独立回归（不进 StartAll；一次只跑一个）：
+RDF_RadarRwrAutoTest.Start();              // RWR 被照射/锁定告警
+RDF_RadarEsmArmAutoTest.Start();           // ESM + GetArmAim / 静默丢锁
+RDF_RadarRocketLockFireAutoTest.Start();   // 锁定 → Hydra70 制导打击
 ```
 
-各测试的场景与雷达配置：
+套件内场景与雷达配置：
 
 | 测试 | 目标 | Sensor 预设 | 验证点 |
 |---|---|---|---|
-| Ballistics | 纯数学，无实体 | — | 弹道积分、反推、WLR 解算 |
+| Ballistics | 纯数学，无实体 | — | 弹道积分、反推、多点真空拟合 WLR |
 | DEM AutoTest | 3 架 Mi-8 悬停在视轴 400/700/1000 m | `CreateSearchSettings` + 90° 宽波束 | 杂波随 DEM 开关/scale/budget 正确变化 |
 | Lock | 1 架 Mi-8 沿视轴 800 m 处飞半径 120 m 跑道（方位摆动 ±8.5°） | `CreateStareSettings` + 20° 火控窄波束 | SEARCH→ACQUIRING→TRACKING→COAST 状态机 |
 | Airborne | 1 架 Mi-8 绕场约 345 m 盘旋 | `CreateSearchSettings` + 40° 波束 | 物理检测 + 按载具分类（emitter 计数必须为 0） |
-| ShellFire | 实发 82 mm 迫击炮弹（RCS 0.01 m²） | `CreateWlrSettings` | 弹丸发现/检测/跟踪 + 反推炮位 |
+| ShellFire | 实发 82 mm 迫击炮弹（RCS 0.01 m²） | `CreateWlrSettings` | 弹丸发现/检测/跟踪 + 反推炮位（理想 ≤250 m / 逼真 ≤800 m） |
+
+独立回归：
+
+| 测试 | 验证点 |
+|---|---|
+| RWR | 目标实体上 SEARCH/TRACK/LOCK 告警 |
+| ESM/ARM | ESM 侦收 + `GetArmAim`；辐射源静默后丢锁 |
+| Rocket Lock-Fire | 锁定 Mi-8 → Hydra70 BOOST/MIDCOURSE/TERMINAL 制导 |
 
 测试约定：**不得给被探测物体添加任何探测助攻** —— 不加辐射源标记、不改 RCS、不预先写进散射体表。
 目标必须由发现扫掠自行找到，并靠自身回波被检测。各测试的 `discovered_unaided` 检查即用于守住这条线。
@@ -125,12 +143,14 @@ RDF_RadarLockAutoTest.Start();             // 空中目标锁定状态机
 
 1. Workbench 插件：`RDF Bake DEM Heightfield`（或写 `BakeDemFull.flag`）
 2. Play 保持运行直到 `[RDF DEM Bake] Done`
-3. 输出：`$profile:RDF/DemData/<world>/`
+3. 开发输出：`$profile:RDF/DemData/<world>/`（V3 CSV）
+4. 工坊发布：打包 SURF JSON（高度运行时用 `GetSurfaceY`）
 
 详情：[docs/DEM.md](docs/DEM.md)
 
 ```powershell
 python tools\dem\rdf_dem_bake_help.py
+python tools\dem\rdf_dem_pack_surface_json.py --world GM_Eden --from-bin
 python tools\dem\rdf_dem_pack.py --world GM_Eden
 ```
 
