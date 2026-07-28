@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-07-28 — 文档与代码对齐
+
+- README / TODO / DEVELOPMENT / API / RADAR_* / OPTIMIZATION / VEHICLE_LOCK / tools DEM：
+  按当前代码补齐 ESM·RWR·Rocket·MapOverlay、SURF JSON 发布路径、CA/GO/SO-CFAR、
+  双档 ShellFire 误差带、PPI 面板尺寸、LiDAR layout HUD、`m_MaxRayCount` 软封顶、
+  Sensor RWR 包装 API、Python 打包/特征脚本清单
+
 ## 2026-07-29 — RCS 方位加入俯仰
 
 - `RDF_RadarRcsModel`：`ElevationFactor` / `AspectFactor3D` / `AspectRcsFromExtents3D`（鼻锥·侧向·俯视投影）

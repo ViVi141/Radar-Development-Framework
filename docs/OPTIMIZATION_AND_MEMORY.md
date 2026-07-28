@@ -64,7 +64,7 @@
 
 在 `RDF_LidarSettings` 或全局配置中可增加（或文档化）以下**安全上限**，防止误配或异常数据导致 OOM：
 
-- **m_RayCount**：运行时 clamp 到例如 `[1, 100000]`（当前仅最小值 1，无上限）。  
+- **m_RayCount**：`Validate()` 保证 ≥1；默认由 `m_MaxRayCount=4096` 软封顶（`0` = 不额外限制）。  
 - **单次扫描样本数**：若从网络或文件加载的 CSV 单帧样本数超过阈值（如 100000），可拒绝或截断并打日志。  
 - **HUD PPI blip 数**：单帧绘制 blip 数不超过 1024（或可配置）。
 
@@ -78,7 +78,7 @@
 - [x] 代码：`RDF_LidarHUD.UpdatePPI` 复用 `m_AllCmds` + blip 数硬上限（1024）
 - [x] 代码：`ParseCSVToSamples` 复用 `vals`/`f` 临时数组
 - [x] 代码：Visualizer `MAX_DRAW_RAYS = 50000`，绘制与 Reserve 均受上限约束
-- [ ] 文档：在 API.md 或 DEVELOPMENT.md 中说明“射线数建议上限”与“避免每帧 GetLastSamples”（可选）
+- [x] 文档：在 API.md / OPTIMIZATION 中说明 `m_MaxRayCount` 软封顶与射线数建议
 
 ---
 

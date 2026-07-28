@@ -8,7 +8,13 @@ presets, not core dependencies.
 - `rdf_dem_io.py`: terrain, material, and vertical-span environment.
 - `rdf_dem_pack.py` / `rdf_dem_bake_help.py` / `rdf_dem_preview.py`: pack,
   bake helpers, and heightfield preview (also covered in `docs/DEM.md`).
-- `rdf_radar_materials.py`: calibratable band/sea-state sigma-zero tables.
+- `rdf_dem_pack_bin.py` / `rdf_dem_pack_json.py` / `rdf_dem_pack_surface_json.py`:
+  pack V3 bake into `.dem.data`, full DEM JSON, or SURF JSON (workshop path).
+- `rdf_sig_pack_bin.py` / `rdf_sig_pack_json.py` / `rdf_sig_pack_conf.py`:
+  pack signature tables for game / profile / `.conf`.
+- `rdf_ttile_unpack.py`: unpack official `.ttile` height for offline overlays.
+- `rdf_radar_materials.py`: calibratable band/sea-state sigma-zero tables
+  (`calib/sigma0_x_ss3.json`).
 - `rdf_radar_physics.py`: hardware, waveform, elevation beams, radar equation,
   pulse compression, integration, Doppler, MTI, and CFAR.
 - `rdf_radar_channel.py`: frequency retune, multipath, Swerling RCS, spectral
@@ -21,6 +27,8 @@ presets, not core dependencies.
 - `rdf_radar_ew.py`: pluggable noise/deception effects and frequency schedules.
 - `rdf_radar_track.py`: nearest-neighbor association and alpha-beta filtering.
 - `rdf_radar_framework_demo.py`: clean/EW validation output and CSV dumps.
+- `rdf_radar_shellfire_offline.py`: offline shell-fire / WLR mirror of the
+  in-game ShellFire regression.
 - `rdf_radar_mass_battle_sim.py`: DEM-backed multi-radar / multi-target battle,
   trajectory prediction, and WLR evaluation (large monolith; split tracked in
   TODO.md).

@@ -73,6 +73,7 @@ scripts/Game/RDF/
     │   ├── RDF_LidarSubjectResolver.c 解析扫描主体（玩家/载具）
     │   ├── RDF_LidarExport.c          CSV 导出
     │   ├── RDF_LidarSampleUtils.c     统计与过滤
+    │   ├── RDF_LidarMaterialReflectivity.c  表面反射率（材质着色用）
     │   └── RDF_LidarScanCompleteHandler.c 扫描完成回调基类
     └── Demo/
         ├── RDF_LidarAutoBootstrap.c   统一 bootstrap（默认关闭）
@@ -92,39 +93,44 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarSettings.c / RDF_RadarTypes.c / RDF_RadarHardware.c
 │   ├── RDF_RadarScanner.c              编排：Registry/Legacy 扫描 + Trace + 复用预算
 │   ├── RDF_RadarScanGeometry.c         LOS / 实体中心 / 速度几何辅助
-│   ├── RDF_RadarPhysicalDetect.c       雷达方程 / NLOS / DEM 杂波 / SNR
+│   ├── RDF_RadarPhysicalDetect.c       雷达方程 / NLOS / DEM 杂波 / SNR / ESM
 │   ├── RDF_RadarScattererRegistry.c    全局散射体/辐射源表（增量维护）
 │   ├── RDF_RadarEmitterRegistry.c      辐射标记门面（转发到散射体表）
 │   ├── RDF_RadarCandidateCollect.c     候选收集辅助
 │   ├── RDF_RadarLosCache.c / RDF_RadarScanReuseCache.c / RDF_RadarScanPassContext.c
 │   ├── RDF_RadarCfarProcessor.c        扫描侧 CFAR 编排（热填空等）
 │   ├── RDF_RadarProjectileTracker.c    量测关联 / α-β / 弹道 PredictAt / WLR fix
-│   ├── RDF_RadarLockManager.c          锁定层 SEARCH/ACQUIRING/TRACKING/COAST
-│   └── RDF_RadarSensor.c               公共门面 SEARCH/STARE/WLR → Plots/Tracks/Lock
+│   ├── RDF_RadarLockManager.c          锁定层 SEARCH/ACQUIRING/TRACKING/COAST + ARM
+│   ├── RDF_RadarRwr.c                  被搜索/跟踪/锁定告警
+│   └── RDF_RadarSensor.c               公共门面 SEARCH/STARE/WLR/ESM → Plots/Tracks/Lock/ARM/RWR
 ├── Physics/
 │   ├── RDF_RadarRcsModel.c / RDF_RadarBallistics.c / RDF_RadarSignatureLibrary.c
+│   ├── RDF_RadarSignatureTableConf.c / RDF_RadarSurfaceTable.c / RDF_RadarSurfaceTableConf.c
 │   ├── RDF_RadarClutterModel.c         DEM σ⁰ → 杂波功率
 │   ├── RDF_RadarMeasurement.c          距离门/波束量化 + SNR 噪声
 │   ├── RDF_RadarMeasurementModel.c     CFAR 后 / Tracker 前可扩展测量误差
-│   └── RDF_RadarCfarGate.c             粗栅格 CA-CFAR 判检
+│   └── RDF_RadarCfarGate.c             粗栅格 CA/GO/SO-CFAR 判检
 ├── EW/
-│   └── RDF_RadarEwModel.c              噪声 + 欺骗假目标
+│   └── RDF_RadarEwModel.c              噪声 + 欺骗（静态假点 / 拖距 / 角闪烁 / 间歇）
 ├── Network/
 │   ├── RDF_RadarNetworkAPI.c           基类（含 intentional no-op；SetEnabled 别名 SetDemoEnabled）
 │   └── RDF_RadarNetworkComponent.c     服务器权威同步（挂 Sensor）
 ├── Visual/ / UI/
 │   ├── RDF_RadarVisualizer.c / RDF_RadarVisualSettings.c  （ShapeManager 托管）
-│   └── RDF_RadarHUD.c                  PPI ← UI/layouts/RDF/RadarPPI.layout
+│   └── RDF_RadarHUD.c                  PPI ← UI/layouts/RDF/RadarPPI.layout（面板 144×184 / 画布 128×128）
 ├── Util/
 │   └── RDF_RadarEntityClassifier.c
 └── Demo/
     ├── RDF_RadarAutoRunner.c / Bootstrap / Component / DemoConfig / ManualDemo
-    ├── RDF_RadarAutoTestSuite.c / RDF_RadarAutoTestGate.c
-    ├── RDF_RadarAutoTest.c             DEM 杂波回归
-    ├── RDF_RadarBallisticsAutoTest.c   弹道/WLR 数学回归
-    ├── RDF_RadarShellFireAutoTest.c    实弹 Spawn+Launch + WLR
-    ├── RDF_RadarAirborneScanTest.c     空中目标扫描
-    └── RDF_RadarLockAutoTest.c         载具锁定状态机演示/回归
+    ├── RDF_RadarAutoTestSuite.c / RDF_RadarAutoTestGate.c / RDF_RadarAutoTestMapOverlay.c
+    ├── RDF_RadarAutoTest.c             DEM 杂波回归（入 StartAll）
+    ├── RDF_RadarBallisticsAutoTest.c   弹道/WLR 数学回归（入 StartAll）
+    ├── RDF_RadarShellFireAutoTest.c    实弹 Spawn+Launch + WLR（入 StartAll）
+    ├── RDF_RadarAirborneScanTest.c     空中目标扫描（入 StartAll）
+    ├── RDF_RadarLockAutoTest.c         载具锁定状态机（入 StartAll）
+    ├── RDF_RadarRwrAutoTest.c          RWR 告警（独立）
+    ├── RDF_RadarEsmArmAutoTest.c       ESM + GetArmAim（独立）
+    ├── RDF_RadarRocketLockFireAutoTest.c / RDF_RadarRocketGuidance.c  锁定→制导（独立）
 ```
 
 数据流摘要见 [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md)；文件树若与仓库不一致，以 `scripts/Game/RDF/Radar/` 为准。
@@ -139,11 +145,14 @@ scripts/Game/RDF/DEM/
 ├── RDF_DemColumnSpans.c / RDF_DemWorldKey.c
 └── Runtime/
     ├── RDF_DemRuntimeTypes.c
-    ├── RDF_DemRuntimeLoader.c          manifest / tile CSV
-    └── RDF_DemRuntimeCache.c           世界坐标采样 + LRU
+    ├── RDF_DemRuntimeLoader.c          查找顺序编排
+    ├── RDF_DemRuntimeCache.c           世界坐标采样 + LRU
+    ├── RDF_DemSurfaceJsonPack.c        SURF JSON（工坊推荐）
+    ├── RDF_DemJsonPack.c               全量 DEM JSON
+    └── RDF_DemBinPack.c                .dem.data 二进制包
 ```
 
-烘焙与 `$profile` 路径见 [DEM.md](DEM.md)。
+烘焙与 `$profile` / 工坊路径见 [DEM.md](DEM.md)。
 
 ---
 

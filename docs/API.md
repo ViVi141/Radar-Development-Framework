@@ -8,7 +8,7 @@
 字段：
 - `m_Enabled` (bool): 是否启用扫描（默认 true）
 - `m_Range` (float): 扫描半径（默认 50.0）。在运行时会被 clamp 到 [0.1, 100000.0]（100 km）
-- `m_RayCount` (int): 射线数量（默认 512）。在运行时保证至少为 1，无上限。建议不超过 100000，3D 绘制时单帧最多绘制 50000 条（见 OPTIMIZATION_AND_MEMORY.md）
+- `m_RayCount` (int): 射线数量（默认 512）。`Validate()` 保证至少为 1；若 `m_MaxRayCount > 0`（默认 4096）则软封顶到该值，`0` = 不额外限制。建议不超过 100000，3D 绘制时单帧最多绘制 50000 条（见 OPTIMIZATION_AND_MEMORY.md）
 - `m_UpdateInterval` (float): 扫描间隔（秒，默认 5.0），最小值 0.01
 - `m_OriginOffset` (vector): 扫描原点偏移（默认 "0 0 0"），与 `m_UseLocalOffset` 配合使用
 - `m_TraceTargetMode` (ERDF_TraceTargetMode): 射线检测目标，对应 0=仅地形, 1=全部, 2=仅实体。Validate() 据此更新 m_TraceFlags
@@ -258,7 +258,7 @@ Network 模块内置实现，基于 Rpl 同步状态与扫描结果。
 
 ### RDF_LidarHUD : RDF_LidarScanCompleteHandler
 
-完全基于脚本的 LiDAR HUD，使用 `WorkspaceWidget.CreateWidgetInWorkspace` 动态创建所有控件，无需 `.layout` 文件。蓝/青色主题，PPI 俯视点云图 + 命中数 / 量程数据行。
+LiDAR HUD 由 layout 驱动：`UI/layouts/RDF/LidarPPI.layout`（`CreateWidgets`），脚本绑定控件名并用 `CanvasWidget` 绘制 PPI。蓝/青色主题，屏幕左下角；PPI 俯视点云图 + 命中数 / 量程数据行。首次加载前请在 Workbench Resource Browser 中打开/注册该 layout（或确认 `.meta` GUID 已入资源库）。
 
 **单例与显示控制**：
 
@@ -320,8 +320,7 @@ RDF_LidarHUD.AttachToAutoRunner();  // HUD 自此随每次扫描自动更新
 **布局（屏幕左下角）**：
 
 ```
-位置：X=20, Y=700（相对 1920×1080 参考分辨率）
-尺寸：215 × (头部 25 px + PPI 210 px + 数据行 2×21 px)
+PPI Canvas：210 × 210（见 LidarPPI.layout）
 ```
 
 | 子控件 | 类型 | 说明 |
@@ -384,13 +383,18 @@ This document is the first-version API summary covering the main public classes 
 Fields:
 - `m_Enabled` (bool): enable scanning (default true)
 - `m_Range` (float): scan radius (default 50.0). Clamped at runtime to [0.1, 100000.0] (100 km)
-- `m_RayCount` (int): number of rays (default 512). At runtime guaranteed to be at least 1.
+- `m_RayCount` (int): number of rays (default 512). At runtime guaranteed to be at least 1; soft-capped by `m_MaxRayCount` (default 4096, `0` = no extra limit).
 - `m_UpdateInterval` (float): scan interval in seconds (default 5.0), minimum 0.01
 - `m_OriginOffset` (vector): origin offset (default "0 0 0"), used with `m_UseLocalOffset`
+- `m_TraceTargetMode` (ERDF_TraceTargetMode): 0=terrain only, 1=all, 2=entities only; drives `m_TraceFlags` in `Validate()`
 - `m_TraceFlags` (int): trace flags (default `TraceFlags.WORLD | TraceFlags.ENTS`)
+- `m_TraceSmokeOcclusion` (bool): add `TraceFlags.VISIBILITY` so smoke/particles can block rays (default false)
 - `m_LayerMask` (int): physics layer mask (default `EPhysicsLayerPresets.Projectile`)
 - `m_UseBoundsCenter` (bool): use bounding-box center as origin (default true)
 - `m_UseLocalOffset` (bool): treat `m_OriginOffset` as local-space offset (default true)
+- `m_StartClearanceM` (float): clearance past AABB along each ray (default 0.25)
+- `m_CaptureSurface` (bool): capture `GameMaterial` (default true)
+- `m_MaxRayCount` (int): soft cap per `Scan` (default 4096, `0` = unlimited)
 
 Methods:
 - `void Validate()` — defensive validation and clamping (called automatically before scanning).
@@ -571,7 +575,7 @@ Methods: `void ApplyTo(RDF_LidarAutoRunner runner)` — apply config to runner.
 
 ### RDF_LidarHUD : RDF_LidarScanCompleteHandler
 
-Fully script-driven LiDAR HUD. All widgets are created dynamically via `WorkspaceWidget.CreateWidgetInWorkspace`; no `.layout` file required. Blue/cyan theme with a top-down PPI point-cloud view and hit/range data rows.
+Layout-driven LiDAR HUD: `UI/layouts/RDF/LidarPPI.layout` via `CreateWidgets`; script binds widget Names and draws PPI on `CanvasWidget`. Blue/cyan theme, bottom-left; top-down PPI point-cloud view plus hit/range data rows. Register the layout in Workbench Resource Browser before first load if the GUID is unresolved.
 
 **Singleton & visibility**:
 
@@ -630,11 +634,10 @@ RDF_LidarHUD.Show();
 RDF_LidarHUD.AttachToAutoRunner();
 ```
 
-**Layout** (bottom-left, 1920×1080 reference):
+**Layout** (bottom-left):
 
 ```
-Position: X=20, Y=700
-Size: 215 × (header 25 px + PPI 210 px + 2 data rows × 21 px)
+PPI Canvas: 210 × 210 (see LidarPPI.layout)
 ```
 
 **Notes**:
@@ -649,21 +652,22 @@ Size: 215 × (header 25 px + PPI 210 px + 2 data rows × 21 px)
 
 ### 核心类型
 
-- **首选** `RDF_RadarSensor`：`ConfigureMode` / `Tick` / `GetPlots` / `GetTracks` / `GetLockedTarget` / `ResetSession`。
-- 模式：SEARCH / STARE / WLR；默认量测匿名（切断 `m_Entity`），跟踪为最近邻波门关联。
+- **首选** `RDF_RadarSensor`：`ConfigureMode` / `Tick` / `GetPlots` / `GetTracks` / `GetLockedTarget` / `GetArmAim` / `HasRwr*` / `ResetSession`。
+- 模式：SEARCH / STARE / WLR / **ESM**；默认量测匿名（切断 `m_Entity`），跟踪为最近邻波门关联。
 - 通道：理想档 / 逼真档（测量噪声、CFAR 热填空、大气/天气衰减）；可 override `RDF_RadarMeasurementModel`。
 - `RDF_RadarSettings` / `RDF_RadarHardware` / EW 栈 / DEM 杂波等细节见 RADAR_API。
 
 ### Demo / UI / 测试
 
 - `RDF_RadarAutoRunner`：持有 Sensor；`StartWithConfig`、`SetMode`、`SetDemoEnabled`、`SetHudEnabled`。
-- `RDF_RadarHUD`：PPI（默认匿名量测色；假目标白；NLOS 青；`m_KeepEntityTruth` 时才用类型色）。
-- `RDF_RadarAutoTestSuite.StartAll()` / `StartAllRealistic()`。
-- 单项：`RDF_RadarAutoTest`、`Ballistics`、`ShellFire`、`AirborneScanTest`、`LockAutoTest`、`ManualDemo`。
+- `RDF_RadarHUD`：PPI（面板 144×184 / 画布 128×128；默认匿名量测色；假目标白；NLOS 青；`m_KeepEntityTruth` 时才用类型色）。
+- `RDF_RadarAutoTestSuite.StartAll()` / `StartAllRealistic()`（Ballistics → DEM → Lock → Airborne → ShellFire）。
+- 套件单项：`RDF_RadarAutoTest`、`Ballistics`、`ShellFire`、`AirborneScanTest`、`LockAutoTest`、`ManualDemo`。
+- 独立回归（不进 StartAll）：`RDF_RadarRwrAutoTest`、`RDF_RadarEsmArmAutoTest`、`RDF_RadarRocketLockFireAutoTest`；地图标记 `RDF_RadarAutoTestMapOverlay`。
 
 ### DEM 运行时（雷达杂波）
 
-- `RDF_DemRuntimeCache`：从 `$profile:RDF/DemData/<world>/` 加载 V3 tile；无数据时杂波链路关闭。详见 [DEM.md](DEM.md)。
+- `RDF_DemRuntimeCache`：优先 SURF JSON + 实时 `GetSurfaceY`；回退 `$profile` V3 CSV / 全量 JSON·BIN；皆无则 `LIVE`。详见 [DEM.md](DEM.md)。
 
 ---
 

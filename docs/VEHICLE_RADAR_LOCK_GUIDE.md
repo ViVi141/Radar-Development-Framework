@@ -4,14 +4,14 @@
 
 RDF 现已提供：
 
-- **雷达**：公共门面 `RDF_RadarSensor`（SEARCH / STARE / WLR），输出
+- **雷达**：公共门面 `RDF_RadarSensor`（SEARCH / STARE / WLR / ESM），输出
   `RDF_RadarTarget` plot 与 `RDF_RadarTrack` 航迹；实体入口为
   `RDF_RadarComponent`。见 [RADAR_API.md](RADAR_API.md)。
 - **LiDAR**：`RDF_LidarScanner` 射线点云，仍可用于近距感知或备用扫描。
 - **锁定层**：`RDF_RadarLockManager`（内置于 Sensor）已提供
   `SEARCH → ACQUIRING → TRACKING → COAST` 状态机、自动/手动选锁、断锁与瞄点续航。
-
-现在只剩**武器制导对接**需模组侧实现；本文给出最小路径与分工。
+- **制导示例**：`RDF_RadarRocketGuidance` + `RDF_RadarRocketLockFireAutoTest`
+  （Hydra70 BOOST/MIDCOURSE/TERMINAL）可作为武器对接参考；正式武器仍需模组侧接入。
 
 ---
 
@@ -21,7 +21,7 @@ RDF 现已提供：
 |------|----------|------------|
 | 载具能扫描载具 | ✅ `RDF_RadarSensor` / `RDF_RadarComponent`；或 `RDF_LidarScanner.Scan()` | 将扫描挂到载具，配置模式/量程/硬件 |
 | 锁定载具 | ✅ `RDF_RadarLockManager`：自动/手动选锁、断锁、coast、`GetLockedTarget` | 按需调过滤/门限，或改手动选锁 |
-| 武器锁定并打击 | ⚠️ RDF 有轨迹预测/WLR + 锁定目标，但不含武器制导 | **武器/导弹脚本**：每帧读 `GetLockedTarget` 驱动制导 |
+| 武器锁定并打击 | ⚠️ 有 `GetLockedTarget` + 火箭制导示例（`RDF_RadarRocketGuidance`）；不含通用武器 prefab | **武器/导弹脚本**：每帧读瞄点驱动制导（可参考 Lock-Fire 回归） |
 
 ---
 
@@ -111,14 +111,17 @@ else if (RDF_RadarRwr.HasSearchWarning(owner))
 
 ### 2.3 武器打击：与 Reforger 武器系统对接
 
-RDF 的弹道模块用于轨迹预测和 WLR，不负责武器制导。武器“锁定并打击”
-仍需要在你的**武器/发射物脚本**中：
+RDF 提供锁定瞄点与**示例制导**（`RDF_RadarRocketGuidance` /
+`RDF_RadarRocketLockFireAutoTest`：Hydra70 BOOST → MIDCOURSE → TERMINAL PN），
+但不含通用武器 prefab。正式武器仍要在你的**武器/发射物脚本**中：
 
-1. **获取目标**：从上述锁定管理器取 `GetLockedTarget()` → `IEntity` 或世界坐标。
-2. **制导**：若为制导弹，每帧用当前弹位与目标位置/速度计算朝向或加速度，驱动弹体转向目标；若为非制导武器，可用锁定目标做瞄准辅助（准星偏移或火控解算）。
-3. **引信/命中**：若引擎支持“命中检测”，用目标实体或目标 AABB 判断是否命中；否则用距离/半径判定。
+1. **获取目标**：从锁定管理器取 `GetLockedTarget()` → `IEntity` 或世界坐标；
+   ESM/ARM 用 `GetArmAim()`。
+2. **制导**：可参考 `RDF_RadarRocketGuidance.Update`；或每帧用弹位与目标
+   位置/速度自行算朝向。非制导武器可用锁定目标做瞄准辅助。
+3. **引信/命中**：用目标实体 / AABB / 距离半径判定。
 
-Reforger 的 BaseGame 中若有现成的制导导弹 API（如设置“目标实体”），只需把锁定管理器返回的 `IEntity` 传给它即可；若无，则需自己在弹体组件里每帧朝 `GetLockedTarget()` 的位置或预测位置推进。
+独立回归：`RDF_RadarRocketLockFireAutoTest.Start()`（不进 `StartAll`）。
 
 ---
 

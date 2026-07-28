@@ -66,6 +66,10 @@ feasible): [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md).
 - `m_EnableMeasurementSynthesis` (default true), `m_KeepEntityTruth` (debug),
   `m_MeasurementModel`, measurement noise scale
 - `m_TrackGateRangeM`, `m_TrackGateAzimuthDeg`, `m_TrackConfirmHits`, `m_TrackMaxMisses`
+- `m_EnableEsmReceive` (Friis \(R^2\) for emitters; SEARCH presets enable this)
+- `m_EnableRwrReporting` (publish SEARCH/TRACK/LOCK threats after each dwell)
+- `m_FairScanCursor` (fair round-robin dwell cursor; default true)
+- Include* flags (`m_IncludeVehicles` / projectiles / emitters, etc.)
 
 `RDF_RadarHardware`:
 
@@ -123,19 +127,25 @@ False plots are emitted as anonymous targets (`m_IsAnonymous=true`,
 
 ## Runtime DEM clutter source
 
-Runtime DEM loading uses the existing V3 bake output under:
+Preferred runtime path (see [DEM.md](DEM.md)):
 
-- `$profile:RDF/DemData/<world>/manifest.csv`
-- `$profile:RDF/DemData/<world>/tiles/tile_<ix>_<iz>.csv`
+- Height: live `BaseWorld.GetSurfaceY`
+- Surface class: `RDF_SURF_JSON_V1` under
+  `$profile` or mod `DemData/<world>/surf_manifest.json` + `surf_chunks/`
+- Electromagnetic params: `RadarData/SurfaceTable.conf` (workshop) with JSON fallback
+
+Legacy / development fallbacks: V3 CSV tiles (`manifest.csv` + `tiles/tile_*.csv`),
+full DEM JSON / `.dem.data`. If nothing is available → `mode=LIVE` (height only,
+surface class UNKNOWN).
 
 The scanner initializes a bounded LRU cache (`RDF_DemRuntimeCache`) and
-loads tiles on demand near sampled targets. Current defaults:
+loads tiles/chunks on demand near sampled targets. Current defaults:
 
 - max cached tiles: `16`
 - per-scan sync tile load budget: `2`
 
-When DEM data is unavailable or malformed, radar processing falls back to
-thermal noise + EW noise only, so legacy maps continue to run.
+When DEM / SURF data is unavailable or malformed, radar processing falls back to
+thermal noise + EW noise only (LIVE height still works), so legacy maps continue to run.
 
 ## Detection output
 
@@ -152,7 +162,8 @@ Each `RDF_RadarTarget` now includes:
 ## PPI HUD
 
 `RDF_RadarHUD` draws a north-up plan-position display (green phosphor theme,
-bottom-right) with range rings, a boresight sweep line, and one blip per target.
+bottom-right panel **144×184**, PPI canvas **128×128**) with range rings, a
+boresight sweep line, and one blip per target.
 
 - Blip colour: pale-yellow anonymous measurement plots (default), white
   deception false plot, cyan for detected NLOS multipath (`m_LosBlocked`);
@@ -220,7 +231,8 @@ RDF_RadarShellFireAutoTest.Start();
 
 About 42 s: fires O832DU every 6 s ahead of the local player, stares a wide
 projectile sector, then checks detected plots, confirmed tracks, and WLR launch
-error vs truth (pass ≤ 250 m). Report:
+error vs truth (ideal pass ≤ **250 m**; realistic channel ≤ **800 m** via
+`WLR_LAUNCH_PASS_REALISTIC_M`). Report:
 `$profile:RDF/RadarTests/radar_shellfire_autotest_<tick>.txt`.
 
 ## Automated ballistics / WLR math test
@@ -232,7 +244,8 @@ RDF_RadarBallisticsAutoTest.Start();
 ```
 
 Checks freefall impact time, AirDrag range shortening, crosswind shift,
-launch back-projection, and track apex WLR solve. Writes
+launch back-projection, and multi-point vacuum ballistic fit + AirDrag ground
+intersect (WLR-style gates; not apex-only). Writes
 `$profile:RDF/RadarTests/radar_ballistics_autotest_<tick>.txt`.
 
 Offline Python mirror:
@@ -261,12 +274,23 @@ The test spawns real unaided Mi-8 targets along the boresight (no emitter
 marks, no RCS boost, no pre-seeded scatterer rows). Targets must be found by
 discovery and detected via their own returns (`discovered_unaided` guard).
 
-Run the full suite with ideal vs realistic channels:
+Run the full suite with ideal vs realistic channels (order:
+Ballistics → DEM → Lock → Airborne → ShellFire):
 
 ```c
 RDF_RadarAutoTestSuite.StartAll();
 RDF_RadarAutoTestSuite.StartAllRealistic();
 ```
+
+Standalone regressions (**not** in `StartAll`; run one at a time):
+
+```c
+RDF_RadarRwrAutoTest.Start();            // RWR SEARCH/TRACK/LOCK on victim
+RDF_RadarEsmArmAutoTest.Start();         // ESM + GetArmAim / silence unlock
+RDF_RadarRocketLockFireAutoTest.Start(); // lock Mi-8 → Hydra70 guidance
+```
+
+Map markers while tests run: `RDF_RadarAutoTestMapOverlay` (e.g. Lock / Airborne).
 
 Output:
 
@@ -307,12 +331,13 @@ Output report:
 
 - Target candidates remain entity-first (scatterer registry + sphere/active
   fallback) and LOS still relies on `TraceMove`.
-- DEM runtime source is development profile data. For multiplayer parity each
-  scanning machine must have matching baked DEM **tile files**; detection
-  **results** can sync via `RDF_RadarNetworkComponent` (not a substitute for
-  local DEM).
-- EW supports directional noise plus simplified deception false-plot injection
-  (not full DRFM / range-gate pull-off).
+- DEM / surface: prefer SURF JSON + live `GetSurfaceY`; CSV/BIN are fallbacks.
+  Multiplayer parity for clutter still needs matching local SURF/DEM (or LIVE);
+  detection **results** sync via `RDF_RadarNetworkComponent` (not a substitute
+  for local terrain data).
+- EW supports directional noise plus deception (static false plots, range
+  walk-off, angle scintillation, intermittent false plots). Not full DRFM /
+  coherent range-gate pull-off.
 - Tracking associates by measurement gates (nearest neighbor), not entity
   identity. Default plots clear `m_Entity` unless `m_KeepEntityTruth`.
 - Product target: playable sensor gameplay, not an EM simulator. See
