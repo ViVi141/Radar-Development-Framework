@@ -76,8 +76,10 @@ RDF_RadarAutoRunner.SetHudEnabled(true);   // PPI HUD（品红=辐射源 / 绿=�
 `RDF_RadarSensor.CreateSearchSettings` / `CreateStareSettings` / `CreateWlrSettings` 起步。
 
 ```c
-// 推荐：顺序跑完全部
+// 推荐：顺序跑完全部（理想档）
 RDF_RadarAutoTestSuite.StartAll();
+// 逼真档（测量噪声 / 热填空 / 大气等加压，误差带验收）
+RDF_RadarAutoTestSuite.StartAllRealistic();
 
 // 手动摆车看 PPI（物理检测，默认关 MTI）
 RDF_RadarManualDemo.Start();
@@ -138,7 +140,7 @@ python tools\dem\rdf_dem_pack.py --world GM_Eden
 
 | 文件 | 内容 |
 |------|------|
-| [docs/API.md](docs/API.md) | LiDAR / Radar API 摘要 |
+| [docs/API.md](docs/API.md) | LiDAR / Radar API 摘要（雷达契约以 RADAR_API 为准） |
 | [docs/RADAR_API.md](docs/RADAR_API.md) | 雷达公共 Sensor 门面 |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 架构与扩展 |
 | [docs/RADAR_GAME_FRAMEWORK.md](docs/RADAR_GAME_FRAMEWORK.md) | 游戏内雷达框架 |
@@ -147,6 +149,7 @@ python tools\dem\rdf_dem_pack.py --world GM_Eden
 | [docs/RADAR_REQUIRED_APIS.md](docs/RADAR_REQUIRED_APIS.md) | 引擎 API 对照 |
 | [docs/VEHICLE_RADAR_LOCK_GUIDE.md](docs/VEHICLE_RADAR_LOCK_GUIDE.md) | 载具锁定/打击思路 |
 | [docs/OPTIMIZATION_AND_MEMORY.md](docs/OPTIMIZATION_AND_MEMORY.md) | 性能与内存 |
+| [docs/LESSONS_FROM_ENGINE.md](docs/LESSONS_FROM_ENGINE.md) | 引擎踩坑与反模式 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 变更历史 |
 | [TODO.md](TODO.md) | 已完成 / 待办 |
 

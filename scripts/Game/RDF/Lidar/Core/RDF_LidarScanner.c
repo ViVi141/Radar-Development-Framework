@@ -288,7 +288,7 @@ class RDF_LidarScanner
                 if (m_Settings.m_CaptureSurface)
                     hitSurface = GameMaterial.Cast(param.SurfaceProps);
 
-                if (m_Settings.m_TraceTargetMode == ETraceTargetMode.ENTITIES_ONLY)
+                if (m_Settings.m_TraceTargetMode == ERDF_TraceTargetMode.ENTITIES_ONLY)
                 {
                     float surfaceY = world.GetSurfaceY(hitPos[0], hitPos[2]);
                     if (hitPos[1] <= surfaceY)

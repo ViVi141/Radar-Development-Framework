@@ -11,7 +11,7 @@
 - `m_RayCount` (int): 射线数量（默认 512）。在运行时保证至少为 1，无上限。建议不超过 100000，3D 绘制时单帧最多绘制 50000 条（见 OPTIMIZATION_AND_MEMORY.md）
 - `m_UpdateInterval` (float): 扫描间隔（秒，默认 5.0），最小值 0.01
 - `m_OriginOffset` (vector): 扫描原点偏移（默认 "0 0 0"），与 `m_UseLocalOffset` 配合使用
-- `m_TraceTargetMode` (ETraceTargetMode): 射线检测目标，对应 0=仅地形, 1=全部, 2=仅实体。Validate() 据此更新 m_TraceFlags
+- `m_TraceTargetMode` (ERDF_TraceTargetMode): 射线检测目标，对应 0=仅地形, 1=全部, 2=仅实体。Validate() 据此更新 m_TraceFlags
 - `m_TraceFlags` (int): 射线检测标志（由 `m_TraceTargetMode` 推导，默认 `TraceFlags.WORLD | TraceFlags.ENTS`）
 - `m_TraceSmokeOcclusion` (bool): 为 true 时加入 `TraceFlags.VISIBILITY`，烟雾/粒子等可见性遮挡物可阻挡激光射线（默认 false）
 - `m_LayerMask` (int): 物理层掩码（默认 `EPhysicsLayerPresets.Projectile`）
@@ -121,12 +121,13 @@
 - `static float GetAverageDistance(samples, bool hitsOnly = true)` — 平均距离（hitsOnly 为 true 时仅统计命中）
 
 ### RDF_LidarNetworkAPI
-网络同步 API 基类（默认空实现），用于解耦 Demo 与网络逻辑。
+网络同步 API 基类（默认 intentional no-op），用于解耦运行时与网络逻辑。
 
 主要方法：
 - `bool IsNetworkAvailable()` — 网络层是否可用
-- `void SetDemoEnabled(bool enabled)` — 设置演示启用状态（服务器权威）
-- `void SetDemoConfig(RDF_LidarDemoConfig config)` — 设置演示配置（服务器权威）
+- `void SetEnabled(bool enabled)` — 设置启用状态（服务器权威；组件 override）
+- `void SetConfig(RDF_LidarDemoConfig config)` — 设置配置（服务器权威；组件 override）
+- `void SetDemoEnabled(bool enabled)` / `SetDemoConfig(...)` — 兼容别名，内部转发到 `SetEnabled` / `SetConfig`
 - `void RequestScan()` — 请求服务器执行扫描（客户端调用，无参数，服务器使用组件所属实体作为扫描主体）
 - `bool HasSyncedSamples()` — 是否已有同步样本
 - `array<ref RDF_LidarSample> GetLastScanResults()` — 获取最后扫描结果
@@ -486,10 +487,10 @@ Static statistics & filters for sample arrays:
 - `static float GetAverageDistance(samples, bool hitsOnly = true)`
 
 ### RDF_LidarNetworkAPI
-Network sync API base (default empty implementation) to decouple demo and networking:
+Network sync API base (intentional no-op defaults):
 - `bool IsNetworkAvailable()`
-- `void SetDemoEnabled(bool enabled)`
-- `void SetDemoConfig(RDF_LidarDemoConfig config)`
+- `void SetEnabled(bool enabled)` / `void SetConfig(RDF_LidarDemoConfig config)` — preferred
+- `void SetDemoEnabled` / `SetDemoConfig` — legacy aliases forwarding to SetEnabled/SetConfig
 - `void RequestScan()`
 - `bool HasSyncedSamples()`
 - `array<ref RDF_LidarSample> GetLastScanResults()`
@@ -644,29 +645,21 @@ Size: 215 × (header 25 px + PPI 210 px + 2 data rows × 21 px)
 
 ## Radar（摘要）
 
-实体优先扫描 + 可选物理检测（硬件 / SNR / DEM 杂波）。完整字段与流水线见 [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md)。
+**雷达对外契约以 [RADAR_API.md](RADAR_API.md) 为准**；流水线见 [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md)；能力边界见 [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md)。
 
 ### 核心类型
 
-- **首选** `RDF_RadarSensor`：模式配置 + Tick + `GetPlots`/`GetTracks`。见 [RADAR_API.md](RADAR_API.md)。
-- `RDF_RadarTarget`：几何 + SNR / 检测标志；含 `m_LosBlocked`、`m_MultipathFactor`（NLOS）。
-- `ERDF_RadarTargetType`：载具 / 抛射物 / 辐射源（emitter）。
-- `RDF_RadarSettings`：另含 `m_EnableNlosMultipath`、`m_EnableDemClutter`、`m_Hardware`、`m_EwStack` 等。
-- `RDF_RadarScanner.Scan`：候选 → Trace（通视或 NLOS 弱检）→ RCS/功率×多径 → 多普勒/MTI/杂波 → SNR（高级/内部）。
-
-### 注册与跟踪
-
-- `RDF_RadarEmitterRegistry`：主动辐射注册 / 球内查询。
-- `RDF_RadarProjectileTracker`：轨迹与 α-β 滤波（通常经 Sensor 访问）。
-- `RDF_RadarEntityClassifier`：抛射物 / 载具粗分类。
+- **首选** `RDF_RadarSensor`：`ConfigureMode` / `Tick` / `GetPlots` / `GetTracks` / `GetLockedTarget` / `ResetSession`。
+- 模式：SEARCH / STARE / WLR；默认量测匿名（切断 `m_Entity`），跟踪为最近邻波门关联。
+- 通道：理想档 / 逼真档（测量噪声、CFAR 热填空、大气/天气衰减）；可 override `RDF_RadarMeasurementModel`。
+- `RDF_RadarSettings` / `RDF_RadarHardware` / EW 栈 / DEM 杂波等细节见 RADAR_API。
 
 ### Demo / UI / 测试
 
 - `RDF_RadarAutoRunner`：持有 Sensor；`StartWithConfig`、`SetMode`、`SetDemoEnabled`、`SetHudEnabled`。
-- `RDF_RadarHUD`：PPI（品红=emitter，绿=载具，橙=抛射物）。
-- `RDF_RadarComponent`：挂实体，内部 `GetSensor()`。
-- `RDF_RadarDemoConfig.CreateDefault` / `CreateSearch` / `CreateStare` / `CreateWlr` / `CreateLongRange` / `CreateProjectileOnly`。
-- `RDF_RadarAutoTest.Start()`、`RDF_RadarBallisticsAutoTest.Start()`、`RDF_RadarShellFireAutoTest.Start()`、`RDF_RadarAirborneScanTest.StartKeepTarget()`。
+- `RDF_RadarHUD`：PPI（默认匿名量测色；假目标白；NLOS 青；`m_KeepEntityTruth` 时才用类型色）。
+- `RDF_RadarAutoTestSuite.StartAll()` / `StartAllRealistic()`。
+- 单项：`RDF_RadarAutoTest`、`Ballistics`、`ShellFire`、`AirborneScanTest`、`LockAutoTest`、`ManualDemo`。
 
 ### DEM 运行时（雷达杂波）
 

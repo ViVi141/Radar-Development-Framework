@@ -1,5 +1,5 @@
 // Trace target mode: which geometry the raycast hits.
-enum ETraceTargetMode
+enum ERDF_TraceTargetMode
 {
     TERRAIN_ONLY,  // TraceFlags.WORLD only - ground, water, static world.
     ALL,           // WORLD | ENTS - terrain and entities.
@@ -14,7 +14,7 @@ class RDF_LidarSettings
     int m_RayCount = 512;
     vector m_OriginOffset = "0 0 0";
     // Switch: terrain-only, all (terrain+entities), or entities-only. Overrides m_TraceFlags when Validate() runs.
-    ETraceTargetMode m_TraceTargetMode = ETraceTargetMode.ALL;
+    ERDF_TraceTargetMode m_TraceTargetMode = ERDF_TraceTargetMode.ALL;
     int m_TraceFlags = TraceFlags.WORLD | TraceFlags.ENTS;
     // When true, add TraceFlags.VISIBILITY so smoke/particles (visibility occluders) block laser rays.
     bool m_TraceSmokeOcclusion = false;
@@ -42,13 +42,13 @@ class RDF_LidarSettings
 
         switch (m_TraceTargetMode)
         {
-            case ETraceTargetMode.TERRAIN_ONLY:
+            case ERDF_TraceTargetMode.TERRAIN_ONLY:
                 m_TraceFlags = TraceFlags.WORLD;
                 break;
-            case ETraceTargetMode.ALL:
+            case ERDF_TraceTargetMode.ALL:
                 m_TraceFlags = TraceFlags.WORLD | TraceFlags.ENTS;
                 break;
-            case ETraceTargetMode.ENTITIES_ONLY:
+            case ERDF_TraceTargetMode.ENTITIES_ONLY:
                 m_TraceFlags = TraceFlags.ENTS;
                 break;
             default:

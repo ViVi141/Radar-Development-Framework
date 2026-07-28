@@ -227,7 +227,7 @@ if (parentEntityRay != parentEntityAct)
 
 ## 九、RDF 已实现：Trace 目标模式开关
 
-`RDF_LidarSettings` 新增 `m_TraceTargetMode`（`ETraceTargetMode` 枚举）：
+`RDF_LidarSettings` 新增 `m_TraceTargetMode`（`ERDF_TraceTargetMode` 枚举）：
 
 | 模式 / 选项 | TraceFlags | 说明 |
 |-------------|------------|------|
@@ -238,8 +238,8 @@ if (parentEntityRay != parentEntityAct)
 用法（方式一：创建配置后设置属性）：
 
 ```c
-// 直接设置（RDF_LidarSettings 仍用 ETraceTargetMode 枚举）
-scanner.GetSettings().m_TraceTargetMode = ETraceTargetMode.TERRAIN_ONLY;
+// 直接设置（RDF_LidarSettings 仍用 ERDF_TraceTargetMode 枚举）
+scanner.GetSettings().m_TraceTargetMode = ERDF_TraceTargetMode.TERRAIN_ONLY;
 scanner.GetSettings().Validate();
 
 // Demo 预设：m_TraceTargetMode 为 int（0=仅地形, 1=全部, 2=仅实体）

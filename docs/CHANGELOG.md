@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 2026-07-28 — 规范性 / 整洁性修复
+
+- 文档同步：`RADAR_CAPABILITIES` / `RADAR_GAME_FRAMEWORK` / `API` 雷达摘要 / `DEVELOPMENT` 树 / `DEM` 联机说明 / README 双档测试，对齐 TODO 与 RADAR_API
+- `RDF_DemMaterialTable`：不再写 `TraceParam.ColliderName`（引擎 owned 缓冲反模式）
+- Network API：新增 `SetEnabled` / `SetConfig`；`SetDemo*` 保留为 AutoRunner 兼容别名
+- LiDAR Network 子树 Tab→4 spaces；`RDF_LidarScanPayloadBuffer` 命名；`ERDF_TraceTargetMode`；`RDF_LidarDemoCycler.c` 文件名对齐类名
+- 双语注释清理；`tools/dem/requirements.txt` + 离线脚本列表补全
+
+---
+
 ## 2026-07-27 — LiDAR Scan 堆损坏修复（Workbench）
 
 - **根因**：`TraceMove` 起点落在 subject 壳体/AABB 内时，高频 Scan 可触发 SEH `0xc0000374`

@@ -62,4 +62,5 @@ python tools\dem\rdf_radar_framework_demo.py --preset shorad
 
 ## 联机注意
 
-`$profile` DEM 是本机文件；各端自行扫描时需各自具备同一套烘焙数据。雷达检测结果目前不跨机复制。
+`$profile` DEM **瓦片**是本机文件；各端自行扫描时需各自具备同一套烘焙数据。  
+雷达**检测结果**可通过 `RDF_RadarNetworkComponent` 做服务器权威同步（不能替代本机 DEM 文件）。

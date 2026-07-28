@@ -21,14 +21,19 @@ feasible): [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md).
 6. Estimate entity RCS; scale received power by `m_MultipathFactor`.
 7. Select the strongest configured elevation beam.
 8. Evaluate monostatic received power, Doppler, MTI, processing gain, noise,
-   DEM clutter power, and SNR.
-9. Optional coarse-bin CA-CFAR over azimuth/range power bins (gates existing
-   plots only).
+   DEM clutter power, optional atmospheric/rain/weather loss, and SNR.
+9. Optional coarse-bin CA-CFAR over azimuth/range power bins; empty cells may
+   be filled with thermal noise (`m_EnableCfarThermalFill`) so Pfa is measurable.
 10. **Measurement synthesis** (`RDF_RadarMeasurement`): quantize range to bin
-    center, add SNR-scaled angle/Doppler noise, rebuild plot kinematics;
-    clear `m_Entity` unless `m_KeepEntityTruth`.
+    center, add SNR-scaled angle/Doppler noise (scale via settings / ideal vs
+    realistic), rebuild plot kinematics; clear `m_Entity` unless
+    `m_KeepEntityTruth`. Optional post-CFAR override:
+    `RDF_RadarMeasurementModel`.
 11. Feed accepted plots to the measurement-driven alpha-beta tracker
-    (nearest-neighbor gates + `PredictAt`).
+    (nearest-neighbor gates + `PredictAt`). Anonymous / false plots can
+    associate; they are not display-only.
+12. Optional lock layer (`RDF_RadarLockManager`) on tracks for SEARCH →
+    ACQUIRING → TRACKING → COAST; exposed via `RDF_RadarSensor.GetLockedTarget`.
 
 ## Main configuration
 
@@ -52,8 +57,11 @@ feasible): [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md).
 - `m_NlosReflectionAbs`, `m_NlosMinFactor`, `m_NlosMaxTargetAglM`
 - `m_AdditionalNoisePowerW`
 - `m_EwStack`
-- `m_EnableCfarGate`, `m_CfarGuardCells`, `m_CfarTrainingCells`, `m_CfarPfa`, `m_RangeBinCount`
-- `m_EnableMeasurementSynthesis` (default true), `m_KeepEntityTruth` (debug)
+- `m_EnableCfarGate`, `m_CfarGuardCells`, `m_CfarTrainingCells`, `m_CfarPfa`,
+  `m_RangeBinCount`, `m_EnableCfarThermalFill`
+- `m_EnableAtmosphericLoss` / weather-driven rain-fog loss (see RADAR_API)
+- `m_EnableMeasurementSynthesis` (default true), `m_KeepEntityTruth` (debug),
+  `m_MeasurementModel`, measurement noise scale
 - `m_TrackGateRangeM`, `m_TrackGateAzimuthDeg`, `m_TrackConfirmHits`, `m_TrackMaxMisses`
 
 `RDF_RadarHardware`:
@@ -156,10 +164,11 @@ HUD mode label includes DEM status in local mode and `NET` in synchronized mode.
 
 Use `RDF_RadarNetworkComponent` on the radar owner together with `RplComponent`.
 `RDF_RadarAutoRunner` and `RDF_RadarComponent` auto-detect
-`RDF_RadarNetworkAPI` on the subject:
+`RDF_RadarNetworkAPI` on the subject. Prefer driving gameplay through
+`RDF_RadarSensor` on the authority; the network component syncs scan results.
 
 1. client calls `RequestScan()`,
-2. server runs `RDF_RadarScanner`,
+2. server runs the authoritative scan path (Sensor / Scanner),
 3. server broadcasts compact payload (scan meta + target rows),
 4. clients update local synced target cache and feed HUD/tracker from cache.
 
@@ -229,9 +238,16 @@ It executes four phases automatically:
 3. DEM clutter ON (`scale=5.0`)
 4. DEM clutter ON with tile-load budget `0` (degraded path)
 
-The test injects synthetic moving radar-emitter targets by reusing active
-entities as emitter owners and updating registry positions every tick. This
-avoids dependence on aircraft AI behavior in editor tests.
+The test spawns real unaided Mi-8 targets along the boresight (no emitter
+marks, no RCS boost, no pre-seeded scatterer rows). Targets must be found by
+discovery and detected via their own returns (`discovered_unaided` guard).
+
+Run the full suite with ideal vs realistic channels:
+
+```c
+RDF_RadarAutoTestSuite.StartAll();
+RDF_RadarAutoTestSuite.StartAllRealistic();
+```
 
 Output:
 
@@ -270,9 +286,15 @@ Output report:
 
 ## Current boundaries
 
-- Target candidates remain entity-first (sphere query + active fallback) and
-  LOS still relies on `TraceMove`.
+- Target candidates remain entity-first (scatterer registry + sphere/active
+  fallback) and LOS still relies on `TraceMove`.
 - DEM runtime source is development profile data. For multiplayer parity each
-  scanning machine must have matching baked DEM files.
-- EW now supports directional noise plus deception false-plot injection.
-- Tracking still associates by entity identity; anonymous plots are display-only.
+  scanning machine must have matching baked DEM **tile files**; detection
+  **results** can sync via `RDF_RadarNetworkComponent` (not a substitute for
+  local DEM).
+- EW supports directional noise plus simplified deception false-plot injection
+  (not full DRFM / range-gate pull-off).
+- Tracking associates by measurement gates (nearest neighbor), not entity
+  identity. Default plots clear `m_Entity` unless `m_KeepEntityTruth`.
+- Product target: playable sensor gameplay, not an EM simulator. See
+  [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md) and [TODO.md](../TODO.md).

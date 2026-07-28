@@ -6,22 +6,29 @@ presets, not core dependencies.
 ## Layers
 
 - `rdf_dem_io.py`: terrain, material, and vertical-span environment.
+- `rdf_dem_pack.py` / `rdf_dem_bake_help.py` / `rdf_dem_preview.py`: pack,
+  bake helpers, and heightfield preview (also covered in `docs/DEM.md`).
 - `rdf_radar_materials.py`: calibratable band/sea-state sigma-zero tables.
 - `rdf_radar_physics.py`: hardware, waveform, elevation beams, radar equation,
   pulse compression, integration, Doppler, MTI, and CFAR.
 - `rdf_radar_channel.py`: frequency retune, multipath, Swerling RCS, spectral
   overlap helpers.
 - `rdf_radar_targets.py`: target state and time-parametric trajectories.
-- `rdf_radar_sector_sim.py`: static full-sector RF/clutter snapshot.
+- `rdf_radar_sector_sim.py` / `rdf_radar_sector_preview.py`: static full-sector
+  RF/clutter snapshot and sector preview plots.
 - `rdf_radar_scan.py`: `scan(t)`, dwell updates, persistent PPI, moving-track
   intercepts, per-beam measurements, hop-aware retune.
 - `rdf_radar_ew.py`: pluggable noise/deception effects and frequency schedules.
 - `rdf_radar_track.py`: nearest-neighbor association and alpha-beta filtering.
 - `rdf_radar_framework_demo.py`: clean/EW validation output and CSV dumps.
 - `rdf_radar_mass_battle_sim.py`: DEM-backed multi-radar / multi-target battle,
-  trajectory prediction, and WLR evaluation.
+  trajectory prediction, and WLR evaluation (large monolith; split tracked in
+  TODO.md).
 - `test_rdf_radar_ballistics.py`: deterministic ballistics, wind, drag, DEM
   intersection, and WLR regression tests.
+
+Install: `pip install -r tools/dem/requirements.txt` (numpy + matplotlib).
+Generated images/CSV under `tools/dem/out/` are gitignored — do not commit.
 
 ## Framework contracts
 

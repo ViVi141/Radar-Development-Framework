@@ -40,7 +40,7 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         return m_RplComponent != null;
     }
 
-    override void SetDemoEnabled(bool enabled)
+    override void SetEnabled(bool enabled)
     {
         if (!IsNetworkAvailable())
             return;
@@ -58,10 +58,10 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
     [RplRpc(RplChannel.Reliable, RplRcver.Server)]
     protected void RpcAsk_SetDemoEnabled(bool enabled)
     {
-        SetDemoEnabled(enabled);
+        SetEnabled(enabled);
     }
 
-    override void SetDemoConfig(RDF_RadarSettings config)
+    override void SetConfig(RDF_RadarSettings config)
     {
         if (!config || !IsNetworkAvailable())
             return;

@@ -4,24 +4,24 @@ class RDF_LidarNetworkComponentClass : RDF_LidarNetworkAPIClass
 }
 
 // Helper buffer used to assemble chunked CSV payloads received over unreliable RPCs.
-class RDF_ScanPayloadBuffer
+class RDF_LidarScanPayloadBuffer
 {
-	int m_Serial;
-	int m_ExpectedParts;
-	ref array<string> m_Parts;
-	int m_ReceivedParts;
-	float m_CreateTime;
+    int m_Serial;
+    int m_ExpectedParts;
+    ref array<string> m_Parts;
+    int m_ReceivedParts;
+    float m_CreateTime;
 
-	void RDF_ScanPayloadBuffer(int serial)
-	{
-		m_Serial = serial;
-		m_ExpectedParts = 0;
-		m_Parts = new array<string>();
-		m_ReceivedParts = 0;
-		m_CreateTime = 0.0;
-		if (GetGame().GetWorld())
-			m_CreateTime = GetGame().GetWorld().GetWorldTime();
-	} 
+    void RDF_LidarScanPayloadBuffer(int serial)
+    {
+        m_Serial = serial;
+        m_ExpectedParts = 0;
+        m_Parts = new array<string>();
+        m_ReceivedParts = 0;
+        m_CreateTime = 0.0;
+        if (GetGame().GetWorld())
+            m_CreateTime = GetGame().GetWorld().GetWorldTime();
+    } 
 }
 
 class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
@@ -29,441 +29,441 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
     protected RplComponent m_RplComponent;
     protected ref RDF_LidarScanner m_Scanner;
 
-	// Chunking and assembly helpers
-	const int RDF_MAX_CSV_CHUNK = 1000; // bytes per unreliable RPC chunk
-	const int RDF_MAX_PAYLOAD_BUFFERS = 16; // cap to prevent unbounded memory growth
-	protected int m_ScanSerial = 0;
-	protected ref array<ref RDF_ScanPayloadBuffer> m_PayloadBuffers;
+    // Chunking and assembly helpers
+    const int RDF_MAX_CSV_CHUNK = 1000; // bytes per unreliable RPC chunk
+    const int RDF_MAX_PAYLOAD_BUFFERS = 16; // cap to prevent unbounded memory growth
+    protected int m_ScanSerial = 0;
+    protected ref array<ref RDF_LidarScanPayloadBuffer> m_PayloadBuffers;
 
-	[RplProp(condition: RplCondition.NoOwner, onRplName: "OnDemoEnabledChanged")]
-	protected bool m_DemoEnabled = false;
+    [RplProp(condition: RplCondition.NoOwner, onRplName: "OnDemoEnabledChanged")]
+    protected bool m_DemoEnabled = false;
 
-	// Replicated primitive config fields (avoid replicating complex objects)
-	[RplProp(condition: RplCondition.NoOwner, onRplName: "OnDemoRayCountChanged")]
-	protected int m_RayCount = 256;
+    // Replicated primitive config fields (avoid replicating complex objects)
+    [RplProp(condition: RplCondition.NoOwner, onRplName: "OnDemoRayCountChanged")]
+    protected int m_RayCount = 256;
 
-	[RplProp(condition: RplCondition.NoOwner, onRplName: "OnDemoRangeChanged")]
-	protected float m_Range = 1000.0;
+    [RplProp(condition: RplCondition.NoOwner, onRplName: "OnDemoRangeChanged")]
+    protected float m_Range = 1000.0;
 
-	[RplProp(condition: RplCondition.NoOwner, onRplName: "OnDemoUpdateIntervalChanged")]
-	protected float m_UpdateInterval = 5.0;
+    [RplProp(condition: RplCondition.NoOwner, onRplName: "OnDemoUpdateIntervalChanged")]
+    protected float m_UpdateInterval = 5.0;
 
-	[RplProp(condition: RplCondition.NoOwner, onRplName: "OnDemoRenderWorldChanged")]
-	protected bool m_RenderWorld = true;
+    [RplProp(condition: RplCondition.NoOwner, onRplName: "OnDemoRenderWorldChanged")]
+    protected bool m_RenderWorld = true;
 
-	[RplProp(condition: RplCondition.NoOwner, onRplName: "OnDemoDrawOriginAxisChanged")]
-	protected bool m_DrawOriginAxis = false;
+    [RplProp(condition: RplCondition.NoOwner, onRplName: "OnDemoDrawOriginAxisChanged")]
+    protected bool m_DrawOriginAxis = false;
 
-	[RplProp(condition: RplCondition.NoOwner, onRplName: "OnDemoVerboseChanged")]
-	protected bool m_Verbose = false;
+    [RplProp(condition: RplCondition.NoOwner, onRplName: "OnDemoVerboseChanged")]
+    protected bool m_Verbose = false;
 
-	// Local (non-replicated) storage for last scan results
-	protected ref array<ref RDF_LidarSample> m_LastScanResults;
-	// Timestamp (world time) when last scan results were updated (local or received)
-	protected float m_LastScanTime = 0.0; 
+    // Local (non-replicated) storage for last scan results
+    protected ref array<ref RDF_LidarSample> m_LastScanResults;
+    // Timestamp (world time) when last scan results were updated (local or received)
+    protected float m_LastScanTime = 0.0; 
 
-	//------------------------------------------------------------------------------------------------
-	override void EOnInit(IEntity owner)
-	{
-		super.EOnInit(owner);
-		m_RplComponent = RplComponent.Cast(owner.FindComponent(RplComponent));
-		if (!m_RplComponent)
-		{
-			Print("RDF_LidarNetworkComponent: No RplComponent found on owner.", LogLevel.ERROR);
-			return;
-		}
-		if (!m_LastScanResults)
-			m_LastScanResults = new array<ref RDF_LidarSample>();
-		if (!m_PayloadBuffers)
-			m_PayloadBuffers = new array<ref RDF_ScanPayloadBuffer>();
-		if (!m_Scanner)
-			m_Scanner = new RDF_LidarScanner();
-	} 
+    //------------------------------------------------------------------------------------------------
+    override void EOnInit(IEntity owner)
+    {
+        super.EOnInit(owner);
+        m_RplComponent = RplComponent.Cast(owner.FindComponent(RplComponent));
+        if (!m_RplComponent)
+        {
+            Print("RDF_LidarNetworkComponent: No RplComponent found on owner.", LogLevel.ERROR);
+            return;
+        }
+        if (!m_LastScanResults)
+            m_LastScanResults = new array<ref RDF_LidarSample>();
+        if (!m_PayloadBuffers)
+            m_PayloadBuffers = new array<ref RDF_LidarScanPayloadBuffer>();
+        if (!m_Scanner)
+            m_Scanner = new RDF_LidarScanner();
+    } 
 
-	//------------------------------------------------------------------------------------------------
-	override bool IsNetworkAvailable()
-	{
-		return m_RplComponent != null;
-	}
-
-	//------------------------------------------------------------------------------------------------
-	override void SetDemoEnabled(bool enabled)
-	{
-		if (!IsNetworkAvailable())
-			return;
-
-		if (m_RplComponent.IsProxy())
-		{
-			Rpc(RpcAsk_SetDemoEnabled, enabled);
-			return;
-		}
-
-		m_DemoEnabled = enabled;
-		Replication.BumpMe();
-	}
-
-	//------------------------------------------------------------------------------------------------
-	[RplRpc(RplChannel.Reliable, RplRcver.Server)]
-	protected void RpcAsk_SetDemoEnabled(bool enabled)
-	{
-		SetDemoEnabled(enabled);
-	}
-
-	//------------------------------------------------------------------------------------------------
-	override void SetDemoConfig(RDF_LidarDemoConfig config)
-	{
-		if (!IsNetworkAvailable() || !config)
-			return;
-
-		// Client -> server request via RPC with primitives
-		if (m_RplComponent.IsProxy())
-		{
-			int rc = config.m_RayCount;
-			float ui = config.m_UpdateInterval;
-			float rng = config.m_Range;
-			bool rw = config.m_RenderWorld;
-			bool doa = config.m_DrawOriginAxis;
-			bool vb = config.m_Verbose;
-			Rpc(RpcAsk_SetDemoConfig, rc, ui, rng, rw, doa, vb);
-			return;
-		}
-
-		// Server applies primitives to RplProps
-		m_RayCount = Math.Max(config.m_RayCount, 1);
-		if (config.m_UpdateInterval > 0)
-			m_UpdateInterval = Math.Max(0.01, config.m_UpdateInterval);
-		if (config.m_Range > 0)
-			m_Range = Math.Clamp(config.m_Range, 0.1, 100000.0);
-		m_RenderWorld = config.m_RenderWorld;
-		m_DrawOriginAxis = config.m_DrawOriginAxis;
-		m_Verbose = config.m_Verbose;
-		Replication.BumpMe();
-	}
-
-	//------------------------------------------------------------------------------------------------
-	[RplRpc(RplChannel.Reliable, RplRcver.Server)]
-	protected void RpcAsk_SetDemoConfig(int rayCount, float updateInterval, float rangeM, bool renderWorld, bool drawOriginAxis, bool verbose)
-	{
-		rayCount = Math.Max(rayCount, 1);
-		if (updateInterval > 0 && updateInterval < 0.01)
-			updateInterval = 0.01;
-
-		m_RayCount = rayCount;
-		if (updateInterval > 0)
-			m_UpdateInterval = updateInterval;
-		if (rangeM > 0)
-			m_Range = Math.Clamp(rangeM, 0.1, 100000.0);
-		m_RenderWorld = renderWorld;
-		m_DrawOriginAxis = drawOriginAxis;
-		m_Verbose = verbose;
-		Replication.BumpMe();
-	}
-
-	//------------------------------------------------------------------------------------------------
-	override void RequestScan()
-	{
-		if (!IsNetworkAvailable())
-			return;
-
-		if (m_RplComponent.IsProxy())
-		{
-			Rpc(RpcAsk_PerformScan);
-			return;
-		}
-
-		PerformScanInternal();
-	}
-
-	//------------------------------------------------------------------------------------------------
-	[RplRpc(RplChannel.Reliable, RplRcver.Server)]
-	protected void RpcAsk_PerformScan()
-	{
-		PerformScanInternal();
-	}
-
-	//------------------------------------------------------------------------------------------------
-	protected void PerformScanInternal()
-	{
-		// Resolve subject from owner or default to local subject
-		IEntity subject = GetOwner();
-		if (!subject)
-			return;
-
-		array<ref RDF_LidarSample> results = new array<ref RDF_LidarSample>();
-		RDF_LidarScanner scanner = m_Scanner;
-		if (!scanner)
-		{
-			m_Scanner = new RDF_LidarScanner();
-			scanner = m_Scanner;
-		} 
-
-		// Apply replicated primitive config
-		scanner.GetSettings().m_RayCount = Math.Max(m_RayCount, 1);
-		scanner.GetSettings().m_UpdateInterval = Math.Max(0.01, m_UpdateInterval);
-		scanner.GetSettings().m_Range = Math.Clamp(m_Range, 0.1, 100000.0);
-
-		scanner.Scan(subject, results);
-		UpdateScanResults(results);
-
-		// Serialize results to CSV and broadcast to clients (chunk if large).
-		// Avoid serializing twice: produce CSV once, then apply compression on the string if needed.
-		string csv = RDF_LidarExport.SamplesToCSV(results);
-		if (!csv || csv == string.Empty)
-		{
-			// nothing to send
-			return;
-		}
-
-		// If payload is large, try compressing the already-built CSV to reduce CPU and allocations.
-		if (csv.Length() > (RDF_MAX_CSV_CHUNK * 3))
-			csv = "RLE:" + RDF_LidarExport.RLECompress(csv);
-
-		if (csv.Length() <= RDF_MAX_CSV_CHUNK)
-		{
-			Rpc(RpcDo_ScanCompleteWithPayload, csv);
-		}
-		else
-		{
-			m_ScanSerial++;
-			int partCount = Math.Ceil(csv.Length() / (float)RDF_MAX_CSV_CHUNK);
-			for (int i = 0; i < partCount; i++)
-			{
-				int start = i * RDF_MAX_CSV_CHUNK;
-				int len = Math.Min(RDF_MAX_CSV_CHUNK, csv.Length() - start);
-				string chunk = csv.Substring(start, len);
-				Rpc(RpcDo_ScanCompleteChunk, m_ScanSerial, i, i == (partCount - 1), chunk);
-			}
-		}
+    //------------------------------------------------------------------------------------------------
+    override bool IsNetworkAvailable()
+    {
+        return m_RplComponent != null;
     }
-	//------------------------------------------------------------------------------------------------
-	protected void UpdateScanResults(array<ref RDF_LidarSample> results)
-	{
-		if (!m_LastScanResults)
-			m_LastScanResults = new array<ref RDF_LidarSample>();
 
-		m_LastScanResults.Clear();
-		if (results)
-		{
-			m_LastScanResults.Reserve(results.Count());
-			foreach (RDF_LidarSample sample : results)
-			{
-				m_LastScanResults.Insert(sample);
-			}
-			// mark time on server when results are produced
-			if (GetGame().GetWorld())
-				m_LastScanTime = GetGame().GetWorld().GetWorldTime();
-		}
-		Replication.BumpMe();
-	} 
+    //------------------------------------------------------------------------------------------------
+    override void SetEnabled(bool enabled)
+    {
+        if (!IsNetworkAvailable())
+            return;
 
-	//------------------------------------------------------------------------------------------------
-	[RplRpc(RplChannel.Reliable, RplRcver.Broadcast)]
-	protected void RpcDo_ScanCompleteWithPayload(string csv)
-	{
-		// Deserialize CSV on clients and store locally
-		if (!csv || csv == string.Empty)
-			return;
+        if (m_RplComponent.IsProxy())
+        {
+            Rpc(RpcAsk_SetDemoEnabled, enabled);
+            return;
+        }
 
-		array<ref RDF_LidarSample> samples = RDF_LidarExport.ParseCSVToSamples(csv);
-		if (!samples || samples.Count() == 0)
-		{
-			if (m_Verbose)
-				Print("RDF_LidarNetworkComponent: Received empty/malformed CSV payload in RpcDo_ScanCompleteWithPayload", LogLevel.WARNING);
-		}
-		ApplyLocalScanResults(samples); 
-		// Clients may react to scan completion via other hooks
-	}
+        m_DemoEnabled = enabled;
+        Replication.BumpMe();
+    }
 
-	// Chunked arrival handler: assemble parts and apply when complete.
-	[RplRpc(RplChannel.Unreliable, RplRcver.Broadcast)]
-	protected void RpcDo_ScanCompleteChunk(int serial, int seq, bool isLast, string csvPart)
-	{
-		if (!csvPart || csvPart == string.Empty)
-			return;
+    //------------------------------------------------------------------------------------------------
+    [RplRpc(RplChannel.Reliable, RplRcver.Server)]
+    protected void RpcAsk_SetDemoEnabled(bool enabled)
+    {
+        SetEnabled(enabled);
+    }
 
-		if (!m_PayloadBuffers)
-			m_PayloadBuffers = new array<ref RDF_ScanPayloadBuffer>();
+    //------------------------------------------------------------------------------------------------
+    override void SetConfig(RDF_LidarDemoConfig config)
+    {
+        if (!IsNetworkAvailable() || !config)
+            return;
 
-		RDF_ScanPayloadBuffer buf = null;
-		foreach (RDF_ScanPayloadBuffer b : m_PayloadBuffers)
-		{
-			if (b.m_Serial == serial)
-			{
-				buf = b;
-				break;
-			}
-		}
+        // Client -> server request via RPC with primitives
+        if (m_RplComponent.IsProxy())
+        {
+            int rc = config.m_RayCount;
+            float ui = config.m_UpdateInterval;
+            float rng = config.m_Range;
+            bool rw = config.m_RenderWorld;
+            bool doa = config.m_DrawOriginAxis;
+            bool vb = config.m_Verbose;
+            Rpc(RpcAsk_SetDemoConfig, rc, ui, rng, rw, doa, vb);
+            return;
+        }
 
-		if (!buf)
-		{
-			// Cap buffer count to avoid unbounded memory growth (e.g. missing last chunk)
-			while (m_PayloadBuffers.Count() >= RDF_MAX_PAYLOAD_BUFFERS)
-				m_PayloadBuffers.Remove(0);
-			buf = new RDF_ScanPayloadBuffer(serial);
-			m_PayloadBuffers.Insert(buf);
-		}
+        // Server applies primitives to RplProps
+        m_RayCount = Math.Max(config.m_RayCount, 1);
+        if (config.m_UpdateInterval > 0)
+            m_UpdateInterval = Math.Max(0.01, config.m_UpdateInterval);
+        if (config.m_Range > 0)
+            m_Range = Math.Clamp(config.m_Range, 0.1, 100000.0);
+        m_RenderWorld = config.m_RenderWorld;
+        m_DrawOriginAxis = config.m_DrawOriginAxis;
+        m_Verbose = config.m_Verbose;
+        Replication.BumpMe();
+    }
 
-		// Store chunk directly into indexed slot to allow O(1) assembly and avoid O(n^2) searches.
-		if (buf.m_Parts.Count() <= seq)
-		{
-			int need = seq - buf.m_Parts.Count() + 1;
-			for (int k = 0; k < need; k++)
-				buf.m_Parts.Insert("");
-		}
-		// If slot was empty, increment received count
-		if (buf.m_Parts.Get(seq) == "")
-		{
-			buf.m_Parts.Set(seq, csvPart);
-			buf.m_ReceivedParts++;
-		}
-		else
-		{
-			// overwrite duplicate or retransmitted chunk
-			buf.m_Parts.Set(seq, csvPart);
-		}
-		if (isLast)
-			buf.m_ExpectedParts = seq + 1;
+    //------------------------------------------------------------------------------------------------
+    [RplRpc(RplChannel.Reliable, RplRcver.Server)]
+    protected void RpcAsk_SetDemoConfig(int rayCount, float updateInterval, float rangeM, bool renderWorld, bool drawOriginAxis, bool verbose)
+    {
+        rayCount = Math.Max(rayCount, 1);
+        if (updateInterval > 0 && updateInterval < 0.01)
+            updateInterval = 0.01;
 
-		// Cleanup old buffers (e.g., >10s) to avoid leaked incomplete payloads
-		float now = 0.0;
-		if (GetGame().GetWorld())
-			now = GetGame().GetWorld().GetWorldTime();
-		for (int bi = m_PayloadBuffers.Count() - 1; bi >= 0; bi--)
-		{
-			if (now - m_PayloadBuffers.Get(bi).m_CreateTime > 10.0)
-				m_PayloadBuffers.Remove(bi);
-		} 
+        m_RayCount = rayCount;
+        if (updateInterval > 0)
+            m_UpdateInterval = updateInterval;
+        if (rangeM > 0)
+            m_Range = Math.Clamp(rangeM, 0.1, 100000.0);
+        m_RenderWorld = renderWorld;
+        m_DrawOriginAxis = drawOriginAxis;
+        m_Verbose = verbose;
+        Replication.BumpMe();
+    }
 
-		// If we know expected part count and have all parts, attempt assembly
-		if (buf.m_ExpectedParts > 0 && buf.m_ReceivedParts >= buf.m_ExpectedParts)
-		{
-			string assembled = "";
-			for (int i = 0; i < buf.m_ExpectedParts; i++)
-			{
-				string part = buf.m_Parts.Get(i);
-				if (part == "")
-				{
-					// missing part; wait for further arrivals
-					return;
-				}
-				assembled += part;
-			}
+    //------------------------------------------------------------------------------------------------
+    override void RequestScan()
+    {
+        if (!IsNetworkAvailable())
+            return;
 
-			array<ref RDF_LidarSample> samples = RDF_LidarExport.ParseCSVToSamples(assembled);
-			if (!samples || samples.Count() == 0)
-			{
-				if (m_Verbose)
-					Print("RDF_LidarNetworkComponent: Parsed assembled CSV but got 0 samples (possible corruption)", LogLevel.WARNING);
-			}
-			ApplyLocalScanResults(samples);
-			// cleanup buffer
-			m_PayloadBuffers.RemoveItem(buf);
-		}
-	}
+        if (m_RplComponent.IsProxy())
+        {
+            Rpc(RpcAsk_PerformScan);
+            return;
+        }
 
-	// Apply scan results locally on clients without triggering replication
-	protected void ApplyLocalScanResults(array<ref RDF_LidarSample> results)
-	{
-		if (!m_LastScanResults)
-			m_LastScanResults = new array<ref RDF_LidarSample>();
+        PerformScanInternal();
+    }
 
-		m_LastScanResults.Clear();
-		if (results)
-		{
-			m_LastScanResults.Reserve(results.Count());
-			foreach (RDF_LidarSample s : results)
-				m_LastScanResults.Insert(s);
-			// mark time when client receives results
-			if (GetGame().GetWorld())
-				m_LastScanTime = GetGame().GetWorld().GetWorldTime();
-			if (m_Verbose)
-				Print("RDF_LidarNetworkComponent: Applied local scan results (" + m_LastScanResults.Count() + " samples)", LogLevel.NORMAL);
-		}
-		// notify local hooks
-		OnScanResultsChanged();
-	} 
-	//------------------------------------------------------------------------------------------------
-	override array<ref RDF_LidarSample> GetLastScanResults()
-	{
-		return m_LastScanResults;
-	}
+    //------------------------------------------------------------------------------------------------
+    [RplRpc(RplChannel.Reliable, RplRcver.Server)]
+    protected void RpcAsk_PerformScan()
+    {
+        PerformScanInternal();
+    }
 
-	//------------------------------------------------------------------------------------------------
-	override bool HasSyncedSamples()
-	{
-		if (!m_LastScanResults || m_LastScanResults.Count() == 0)
-			return false;
+    //------------------------------------------------------------------------------------------------
+    protected void PerformScanInternal()
+    {
+        // Resolve subject from owner or default to local subject
+        IEntity subject = GetOwner();
+        if (!subject)
+            return;
 
-		float now = 0.0;
-		if (GetGame().GetWorld())
-			now = GetGame().GetWorld().GetWorldTime();
+        array<ref RDF_LidarSample> results = new array<ref RDF_LidarSample>();
+        RDF_LidarScanner scanner = m_Scanner;
+        if (!scanner)
+        {
+            m_Scanner = new RDF_LidarScanner();
+            scanner = m_Scanner;
+        } 
 
-		// Treat data older than 60s as stale
-		if (now - m_LastScanTime > 60.0)
-			return false;
+        // Apply replicated primitive config
+        scanner.GetSettings().m_RayCount = Math.Max(m_RayCount, 1);
+        scanner.GetSettings().m_UpdateInterval = Math.Max(0.01, m_UpdateInterval);
+        scanner.GetSettings().m_Range = Math.Clamp(m_Range, 0.1, 100000.0);
 
-		return true;
-	}
+        scanner.Scan(subject, results);
+        UpdateScanResults(results);
 
-	//------------------------------------------------------------------------------------------------
-	void OnDemoEnabledChanged()
-	{
-		RDF_LidarAutoRunner.SetDemoEnabled(m_DemoEnabled, false);
-	}
+        // Serialize results to CSV and broadcast to clients (chunk if large).
+        // Avoid serializing twice: produce CSV once, then apply compression on the string if needed.
+        string csv = RDF_LidarExport.SamplesToCSV(results);
+        if (!csv || csv == string.Empty)
+        {
+            // nothing to send
+            return;
+        }
 
-	// Apply replicated primitive config to AutoRunner (called by individual RplProp change handlers)
-	protected void ApplyReplicatedConfigToRunner()
-	{
-		RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
-		cfg.m_RayCount = m_RayCount;
-		cfg.m_Range = m_Range;
-		cfg.m_UpdateInterval = m_UpdateInterval;
-		cfg.m_RenderWorld = m_RenderWorld;
-		cfg.m_DrawOriginAxis = m_DrawOriginAxis;
-		cfg.m_Verbose = m_Verbose;
-		RDF_LidarAutoRunner.SetDemoConfig(cfg, false);
-	}
+        // If payload is large, try compressing the already-built CSV to reduce CPU and allocations.
+        if (csv.Length() > (RDF_MAX_CSV_CHUNK * 3))
+            csv = "RLE:" + RDF_LidarExport.RLECompress(csv);
 
-	// Individual RplProp change callbacks
-	void OnDemoRayCountChanged()
-	{
-		ApplyReplicatedConfigToRunner();
-	}
+        if (csv.Length() <= RDF_MAX_CSV_CHUNK)
+        {
+            Rpc(RpcDo_ScanCompleteWithPayload, csv);
+        }
+        else
+        {
+            m_ScanSerial++;
+            int partCount = Math.Ceil(csv.Length() / (float)RDF_MAX_CSV_CHUNK);
+            for (int i = 0; i < partCount; i++)
+            {
+                int start = i * RDF_MAX_CSV_CHUNK;
+                int len = Math.Min(RDF_MAX_CSV_CHUNK, csv.Length() - start);
+                string chunk = csv.Substring(start, len);
+                Rpc(RpcDo_ScanCompleteChunk, m_ScanSerial, i, i == (partCount - 1), chunk);
+            }
+        }
+    }
+    //------------------------------------------------------------------------------------------------
+    protected void UpdateScanResults(array<ref RDF_LidarSample> results)
+    {
+        if (!m_LastScanResults)
+            m_LastScanResults = new array<ref RDF_LidarSample>();
 
-	void OnDemoRangeChanged()
-	{
-		ApplyReplicatedConfigToRunner();
-	}
+        m_LastScanResults.Clear();
+        if (results)
+        {
+            m_LastScanResults.Reserve(results.Count());
+            foreach (RDF_LidarSample sample : results)
+            {
+                m_LastScanResults.Insert(sample);
+            }
+            // mark time on server when results are produced
+            if (GetGame().GetWorld())
+                m_LastScanTime = GetGame().GetWorld().GetWorldTime();
+        }
+        Replication.BumpMe();
+    } 
 
-	void OnDemoUpdateIntervalChanged()
-	{
-		ApplyReplicatedConfigToRunner();
-	}
+    //------------------------------------------------------------------------------------------------
+    [RplRpc(RplChannel.Reliable, RplRcver.Broadcast)]
+    protected void RpcDo_ScanCompleteWithPayload(string csv)
+    {
+        // Deserialize CSV on clients and store locally
+        if (!csv || csv == string.Empty)
+            return;
 
-	void OnDemoRenderWorldChanged()
-	{
-		ApplyReplicatedConfigToRunner();
-	}
+        array<ref RDF_LidarSample> samples = RDF_LidarExport.ParseCSVToSamples(csv);
+        if (!samples || samples.Count() == 0)
+        {
+            if (m_Verbose)
+                Print("RDF_LidarNetworkComponent: Received empty/malformed CSV payload in RpcDo_ScanCompleteWithPayload", LogLevel.WARNING);
+        }
+        ApplyLocalScanResults(samples); 
+        // Clients may react to scan completion via other hooks
+    }
 
-	void OnDemoDrawOriginAxisChanged()
-	{
-		ApplyReplicatedConfigToRunner();
-	}
+    // Chunked arrival handler: assemble parts and apply when complete.
+    [RplRpc(RplChannel.Unreliable, RplRcver.Broadcast)]
+    protected void RpcDo_ScanCompleteChunk(int serial, int seq, bool isLast, string csvPart)
+    {
+        if (!csvPart || csvPart == string.Empty)
+            return;
 
-	void OnDemoVerboseChanged()
-	{
-		ApplyReplicatedConfigToRunner();
-	}
+        if (!m_PayloadBuffers)
+            m_PayloadBuffers = new array<ref RDF_LidarScanPayloadBuffer>();
 
-	// Legacy hook kept for compatibility
-	void OnDemoConfigChanged()
-	{
-		ApplyReplicatedConfigToRunner();
-	}
+        RDF_LidarScanPayloadBuffer buf = null;
+        foreach (RDF_LidarScanPayloadBuffer b : m_PayloadBuffers)
+        {
+            if (b.m_Serial == serial)
+            {
+                buf = b;
+                break;
+            }
+        }
 
-	//------------------------------------------------------------------------------------------------
-	void OnScanResultsChanged()
-	{
-		// Sync hook; local visualizer uses HasSyncedSamples + GetLastScanResults.
-	}
+        if (!buf)
+        {
+            // Cap buffer count to avoid unbounded memory growth (e.g. missing last chunk)
+            while (m_PayloadBuffers.Count() >= RDF_MAX_PAYLOAD_BUFFERS)
+                m_PayloadBuffers.Remove(0);
+            buf = new RDF_LidarScanPayloadBuffer(serial);
+            m_PayloadBuffers.Insert(buf);
+        }
+
+        // Store chunk directly into indexed slot to allow O(1) assembly and avoid O(n^2) searches.
+        if (buf.m_Parts.Count() <= seq)
+        {
+            int need = seq - buf.m_Parts.Count() + 1;
+            for (int k = 0; k < need; k++)
+                buf.m_Parts.Insert("");
+        }
+        // If slot was empty, increment received count
+        if (buf.m_Parts.Get(seq) == "")
+        {
+            buf.m_Parts.Set(seq, csvPart);
+            buf.m_ReceivedParts++;
+        }
+        else
+        {
+            // overwrite duplicate or retransmitted chunk
+            buf.m_Parts.Set(seq, csvPart);
+        }
+        if (isLast)
+            buf.m_ExpectedParts = seq + 1;
+
+        // Cleanup old buffers (e.g., >10s) to avoid leaked incomplete payloads
+        float now = 0.0;
+        if (GetGame().GetWorld())
+            now = GetGame().GetWorld().GetWorldTime();
+        for (int bi = m_PayloadBuffers.Count() - 1; bi >= 0; bi--)
+        {
+            if (now - m_PayloadBuffers.Get(bi).m_CreateTime > 10.0)
+                m_PayloadBuffers.Remove(bi);
+        } 
+
+        // If we know expected part count and have all parts, attempt assembly
+        if (buf.m_ExpectedParts > 0 && buf.m_ReceivedParts >= buf.m_ExpectedParts)
+        {
+            string assembled = "";
+            for (int i = 0; i < buf.m_ExpectedParts; i++)
+            {
+                string part = buf.m_Parts.Get(i);
+                if (part == "")
+                {
+                    // missing part; wait for further arrivals
+                    return;
+                }
+                assembled += part;
+            }
+
+            array<ref RDF_LidarSample> samples = RDF_LidarExport.ParseCSVToSamples(assembled);
+            if (!samples || samples.Count() == 0)
+            {
+                if (m_Verbose)
+                    Print("RDF_LidarNetworkComponent: Parsed assembled CSV but got 0 samples (possible corruption)", LogLevel.WARNING);
+            }
+            ApplyLocalScanResults(samples);
+            // cleanup buffer
+            m_PayloadBuffers.RemoveItem(buf);
+        }
+    }
+
+    // Apply scan results locally on clients without triggering replication
+    protected void ApplyLocalScanResults(array<ref RDF_LidarSample> results)
+    {
+        if (!m_LastScanResults)
+            m_LastScanResults = new array<ref RDF_LidarSample>();
+
+        m_LastScanResults.Clear();
+        if (results)
+        {
+            m_LastScanResults.Reserve(results.Count());
+            foreach (RDF_LidarSample s : results)
+                m_LastScanResults.Insert(s);
+            // mark time when client receives results
+            if (GetGame().GetWorld())
+                m_LastScanTime = GetGame().GetWorld().GetWorldTime();
+            if (m_Verbose)
+                Print("RDF_LidarNetworkComponent: Applied local scan results (" + m_LastScanResults.Count() + " samples)", LogLevel.NORMAL);
+        }
+        // notify local hooks
+        OnScanResultsChanged();
+    } 
+    //------------------------------------------------------------------------------------------------
+    override array<ref RDF_LidarSample> GetLastScanResults()
+    {
+        return m_LastScanResults;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    override bool HasSyncedSamples()
+    {
+        if (!m_LastScanResults || m_LastScanResults.Count() == 0)
+            return false;
+
+        float now = 0.0;
+        if (GetGame().GetWorld())
+            now = GetGame().GetWorld().GetWorldTime();
+
+        // Treat data older than 60s as stale
+        if (now - m_LastScanTime > 60.0)
+            return false;
+
+        return true;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    void OnDemoEnabledChanged()
+    {
+        RDF_LidarAutoRunner.SetDemoEnabled(m_DemoEnabled, false);
+    }
+
+    // Apply replicated primitive config to AutoRunner (called by individual RplProp change handlers)
+    protected void ApplyReplicatedConfigToRunner()
+    {
+        RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
+        cfg.m_RayCount = m_RayCount;
+        cfg.m_Range = m_Range;
+        cfg.m_UpdateInterval = m_UpdateInterval;
+        cfg.m_RenderWorld = m_RenderWorld;
+        cfg.m_DrawOriginAxis = m_DrawOriginAxis;
+        cfg.m_Verbose = m_Verbose;
+        RDF_LidarAutoRunner.SetDemoConfig(cfg, false);
+    }
+
+    // Individual RplProp change callbacks
+    void OnDemoRayCountChanged()
+    {
+        ApplyReplicatedConfigToRunner();
+    }
+
+    void OnDemoRangeChanged()
+    {
+        ApplyReplicatedConfigToRunner();
+    }
+
+    void OnDemoUpdateIntervalChanged()
+    {
+        ApplyReplicatedConfigToRunner();
+    }
+
+    void OnDemoRenderWorldChanged()
+    {
+        ApplyReplicatedConfigToRunner();
+    }
+
+    void OnDemoDrawOriginAxisChanged()
+    {
+        ApplyReplicatedConfigToRunner();
+    }
+
+    void OnDemoVerboseChanged()
+    {
+        ApplyReplicatedConfigToRunner();
+    }
+
+    // Legacy hook kept for compatibility
+    void OnDemoConfigChanged()
+    {
+        ApplyReplicatedConfigToRunner();
+    }
+
+    //------------------------------------------------------------------------------------------------
+    void OnScanResultsChanged()
+    {
+        // Sync hook; local visualizer uses HasSyncedSamples + GetLastScanResults.
+    }
 }

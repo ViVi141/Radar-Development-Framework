@@ -58,7 +58,7 @@ class RDF_RadarSettings
     bool m_EnableMeasurementSynthesis = true;
     // Debug only: keep m_Entity / soft type tags (cheats identity into the PPI).
     bool m_KeepEntityTruth = false;
-    // Channel fidelity. Ideal = logic-loop validation; Realistic = "合常理" errors.
+    // Channel fidelity. Ideal = logic-loop validation; Realistic = plausible errors.
     bool m_RealisticChannel = false;
     // Measurement synthesis extras (applied when synthesis is on).
     float m_MeasNoiseScale = 1.0;
@@ -157,7 +157,7 @@ class RDF_RadarSettings
 
     //------------------------------------------------------------------------------------------------
     // Deterministic / logic-loop profile: no random measurement noise, no thermal
-    // CFAR fill, no atmospheric loss. Suite default so regressions stay "过准".
+    // CFAR fill, no atmospheric loss. Suite default so regressions stay over-accurate.
     void ApplyIdealChannel()
     {
         m_RealisticChannel = false;

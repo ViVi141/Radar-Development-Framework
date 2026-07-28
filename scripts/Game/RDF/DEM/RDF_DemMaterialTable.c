@@ -428,7 +428,7 @@ class RDF_DemMaterialTable
         s_TraceParam.Exclude = null;
         s_TraceParam.TraceEnt = null;
         s_TraceParam.SurfaceProps = null;
-        s_TraceParam.ColliderName = string.Empty;
+        // Do not write ColliderName (engine-owned buffer on TraceParam).
 
         world.TraceMove(s_TraceParam, null);
 

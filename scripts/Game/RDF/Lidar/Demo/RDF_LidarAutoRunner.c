@@ -116,7 +116,7 @@ class RDF_LidarAutoRunner
 
         // Sync to network API if requested
         if (sync && IsNetworkAPIValid())
-            s_NetworkAPI.SetDemoEnabled(enabled);
+            s_NetworkAPI.SetEnabled(enabled);
 
         RDF_LidarAutoRunner inst = GetInstance();
         if (enabled)
@@ -309,11 +309,11 @@ class RDF_LidarAutoRunner
         if (!s) return;
         int m = Math.Clamp(mode, 0, 2);
         if (m == 0)
-            s.m_TraceTargetMode = ETraceTargetMode.TERRAIN_ONLY;
+            s.m_TraceTargetMode = ERDF_TraceTargetMode.TERRAIN_ONLY;
         else if (m == 1)
-            s.m_TraceTargetMode = ETraceTargetMode.ALL;
+            s.m_TraceTargetMode = ERDF_TraceTargetMode.ALL;
         else
-            s.m_TraceTargetMode = ETraceTargetMode.ENTITIES_ONLY;
+            s.m_TraceTargetMode = ERDF_TraceTargetMode.ENTITIES_ONLY;
         s.Validate();
     }
 
@@ -345,7 +345,7 @@ class RDF_LidarAutoRunner
 
         // Sync to network API if requested
         if (sync && IsNetworkAPIValid())
-            s_NetworkAPI.SetDemoConfig(cfg);
+            s_NetworkAPI.SetConfig(cfg);
 
         // If demo is already running, apply the new config so e.g. m_RenderWorld takes effect immediately.
         if (s_AutoEnabled && inst.m_DemoConfig)

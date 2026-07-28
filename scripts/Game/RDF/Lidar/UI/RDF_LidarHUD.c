@@ -211,14 +211,15 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
             inst.OnScanComplete(samples);
     }
 
-    // Wire the HUD as the AutoRunner scan-complete handler so it updates every scan.
-    // Equivalent to: RDF_LidarAutoRunner.SetScanCompleteHandler(RDF_LidarHUD.GetInstance())
+    // Demo convenience: wire HUD as AutoRunner scan-complete handler.
+    // Prefer FeedSamples() for non-demo consumers; equivalent to
+    // RDF_LidarAutoRunner.SetScanCompleteHandler(RDF_LidarHUD.GetInstance()).
     static void AttachToAutoRunner()
     {
         RDF_LidarAutoRunner.SetScanCompleteHandler(GetInstance());
     }
 
-    // Detach from AutoRunner (clears the handler).
+    // Clear AutoRunner scan-complete handler (Demo convenience).
     static void DetachFromAutoRunner()
     {
         RDF_LidarAutoRunner.SetScanCompleteHandler(null);

@@ -1,0 +1,15 @@
+# RDF tools/dem — Python offline helpers
+#
+# Script directory (not an installable package). Run from repo root or tools/dem.
+#
+# Core:
+#   numpy
+# Optional (previews / framework demos):
+#   matplotlib
+#
+# Example:
+#   pip install -r tools/dem/requirements.txt
+#   python tools/dem/test_rdf_radar_ballistics.py -v
+
+numpy>=1.24
+matplotlib>=3.7

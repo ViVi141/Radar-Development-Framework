@@ -69,7 +69,7 @@ scripts/Game/RDF/
         ├── RDF_LidarAutoBootstrap.c   统一 bootstrap（默认关闭）
         ├── RDF_LidarAutoRunner.c      演示唯一入口
         ├── RDF_LidarDemoConfig.c      配置与预设工厂
-        ├── RDF_LidarDemo_Cycler.c     策略轮换
+        ├── RDF_LidarDemoCycler.c       策略轮换
         └── RDF_LidarDemoStatsHandler.c 内置统计回调
 ```
 
@@ -84,28 +84,31 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarScanner.c              读散射体表 + Trace + 物理 + 测量合成
 │   ├── RDF_RadarScattererRegistry.c    全局散射体/辐射源表（增量维护）
 │   ├── RDF_RadarEmitterRegistry.c      辐射标记门面（转发到散射体表）
+│   ├── RDF_RadarCandidateCollect.c     候选收集辅助
+│   ├── RDF_RadarLosCache.c / RDF_RadarScanReuseCache.c / RDF_RadarScanPassContext.c
+│   ├── RDF_RadarCfarProcessor.c        扫描侧 CFAR 编排（热填空等）
 │   ├── RDF_RadarProjectileTracker.c    量测关联 / α-β / 弹道 PredictAt / WLR fix
 │   ├── RDF_RadarLockManager.c          锁定层 SEARCH/ACQUIRING/TRACKING/COAST
 │   └── RDF_RadarSensor.c               公共门面 SEARCH/STARE/WLR → Plots/Tracks/Lock
 ├── Physics/
-│   ├── RDF_RadarRcsModel.c
-│   ├── RDF_RadarBallistics.c           重力+AirDrag+全局风；DEM/地表 WLR 交点
-│   ├── RDF_RadarSignatureLibrary.c     按 prefab 的尺寸/RCS 特征表（离线烘焙 + 运行时查表）
+│   ├── RDF_RadarRcsModel.c / RDF_RadarBallistics.c / RDF_RadarSignatureLibrary.c
 │   ├── RDF_RadarClutterModel.c         DEM σ⁰ → 杂波功率
 │   ├── RDF_RadarMeasurement.c          距离门/波束量化 + SNR 噪声
+│   ├── RDF_RadarMeasurementModel.c     CFAR 后 / Tracker 前可扩展测量误差
 │   └── RDF_RadarCfarGate.c             粗栅格 CA-CFAR 判检
 ├── EW/
 │   └── RDF_RadarEwModel.c              噪声 + 欺骗假目标
 ├── Network/
-│   ├── RDF_RadarNetworkAPI.c
-│   └── RDF_RadarNetworkComponent.c     服务器权威同步
+│   ├── RDF_RadarNetworkAPI.c           基类（含 intentional no-op；SetEnabled 别名 SetDemoEnabled）
+│   └── RDF_RadarNetworkComponent.c     服务器权威同步（挂 Sensor）
 ├── Visual/ / UI/
-│   ├── RDF_RadarVisualizer.c
+│   ├── RDF_RadarVisualizer.c / RDF_RadarVisualSettings.c
 │   └── RDF_RadarHUD.c                  PPI（含匿名/假目标配色）
 ├── Util/
 │   └── RDF_RadarEntityClassifier.c
 └── Demo/
-    ├── RDF_RadarAutoRunner.c / Bootstrap / Component / DemoConfig
+    ├── RDF_RadarAutoRunner.c / Bootstrap / Component / DemoConfig / ManualDemo
+    ├── RDF_RadarAutoTestSuite.c / RDF_RadarAutoTestGate.c
     ├── RDF_RadarAutoTest.c             DEM 杂波回归
     ├── RDF_RadarBallisticsAutoTest.c   弹道/WLR 数学回归
     ├── RDF_RadarShellFireAutoTest.c    实弹 Spawn+Launch + WLR
@@ -113,7 +116,7 @@ scripts/Game/RDF/Radar/
     └── RDF_RadarLockAutoTest.c         载具锁定状态机演示/回归
 ```
 
-数据流摘要见 [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md)。
+数据流摘要见 [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md)；文件树若与仓库不一致，以 `scripts/Game/RDF/Radar/` 为准。
 
 ---
 
