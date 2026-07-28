@@ -173,6 +173,10 @@ class RDF_RadarAirborneScanTest
         m_LastDebugPrintWallS = m_StartWallS;
         m_Running = true;
 
+        RDF_RadarAutoTestMapOverlay.Start();
+        if (m_AirTarget)
+            RDF_RadarAutoTestMapOverlay.SetAircraft(m_AirTarget, "RDF Air");
+
         if (!s_TickRegistered)
         {
             s_TickRegistered = true;
@@ -183,12 +187,15 @@ class RDF_RadarAirborneScanTest
             "[RDF Radar AirTest] started radarOrigin=%1 targetPrefab=%2",
             m_RadarOrigin.ToString(),
             AIR_TARGET_PREFAB));
+        Print("[RDF Radar AirTest] open map (M) for aircraft + trail/pred path markers.");
     }
 
     protected void StopInternal(bool restore)
     {
         m_Running = false;
         RDF_RadarAutoTestGate.Release("Air");
+        RDF_RadarAutoTestMapOverlay.ClearAircraft();
+        RDF_RadarAutoTestMapOverlay.Stop();
 
         if (m_AirTarget && !s_KeepSpawnedTargetAfterTest)
         {
@@ -228,6 +235,8 @@ class RDF_RadarAirborneScanTest
 
         float nowS = System.GetTickCount() * 0.001;
         UpdateAirTargetMotion(nowS);
+        if (m_AirTarget)
+            RDF_RadarAutoTestMapOverlay.SetAircraft(m_AirTarget, "RDF Air");
         AccumulateLatestScan(nowS);
 
         if (nowS - m_StartWallS < m_DurationS)

@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 2026-07-28 — AutoTest 地图叠加（M 键）
+
+- 新增 `RDF_RadarAutoTestMapOverlay`：地图打开时用本地 `PLACED_CUSTOM` 标记
+- **Lock / Airborne**：飞机位置、高度、航向；Lock 测试增加 RWR SEARCH/LOCK 断言
+- **ShellFire**：真值发射/落点 + WLR 解算发射/落点标记
+- 机型名由 `RDF_RadarSignatureLibrary.FormatDisplayName` 从 prefab key 解析，不再硬编码 Mi-8
+- 飞机轨迹：历史采样点（`trail` / `.`）+ 恒速外推未来路径（`+` / `pred +25s`）
+- 图标改用官方 `MapMarkerConfig`：飞机 `arrow-medium`（青）、轨迹 `dot`（橙）、预测 `arrow-small`（绿）、炮弹 `drop-point` / `mark-exclamation`
+
+---
+
 ## 2026-07-28 — RWR 被照射 / 被锁定告警
 
 - 新增 `RDF_RadarRwr`：SEARCH / TRACK / LOCK 威胁表（TTL ~1.5s）

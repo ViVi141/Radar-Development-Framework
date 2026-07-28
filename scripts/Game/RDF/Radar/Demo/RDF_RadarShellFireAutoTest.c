@@ -191,6 +191,8 @@ class RDF_RadarShellFireAutoTest
         m_LastDebugWallS = m_StartWallS;
         m_Running = true;
 
+        RDF_RadarAutoTestMapOverlay.Start();
+
         if (!s_TickRegistered)
         {
             s_TickRegistered = true;
@@ -203,6 +205,7 @@ class RDF_RadarShellFireAutoTest
             SHELL_PREFAB,
             SHELL_ELEVATION_DEG.ToString(),
             SHELL_SPEED_COEF.ToString()));
+        Print("[RDF ShellFire AutoTest] open map (M) to see launch/impact markers.");
 
         // Fire immediately so the first arc is in coverage ASAP.
         TryFireShell();
@@ -212,6 +215,8 @@ class RDF_RadarShellFireAutoTest
     {
         m_Running = false;
         CleanupLiveShells();
+        RDF_RadarAutoTestMapOverlay.ClearShellPoints();
+        RDF_RadarAutoTestMapOverlay.Stop();
         RDF_RadarAutoTestGate.Release("ShellFire");
 
         if (!restore)
@@ -347,6 +352,7 @@ class RDF_RadarShellFireAutoTest
         float nowS = System.GetTickCount() * 0.001;
         RefreshLiveShellScatterers(nowS);
         DrawTruthMarkers();
+        PublishMapOverlay();
         AccumulateLatestScan();
         EvaluateTracks();
 
@@ -361,6 +367,64 @@ class RDF_RadarShellFireAutoTest
 
         FinalizeAndReport();
         StopInternal(true);
+    }
+
+    protected void PublishMapOverlay()
+    {
+        array<vector> launches = new array<vector>();
+        array<string> launchLabels = new array<string>();
+        array<vector> impacts = new array<vector>();
+        array<string> impactLabels = new array<string>();
+
+        if (m_Shots)
+        {
+            for (int i = 0; i < m_Shots.Count(); i++)
+            {
+                RDF_RadarShellShotTruth shot = m_Shots.Get(i);
+                if (!shot)
+                    continue;
+                launches.Insert(shot.m_LaunchPos);
+                launchLabels.Insert("RDF Truth Launch #" + (i + 1).ToString());
+                if (shot.m_ImpactTruthValid)
+                {
+                    impacts.Insert(shot.m_ImpactTruth);
+                    impactLabels.Insert("RDF Truth Impact #" + (i + 1).ToString());
+                }
+            }
+        }
+
+        RDF_RadarSensor sensor = GetSensor();
+        if (sensor)
+        {
+            array<ref RDF_RadarTrack> tracks = sensor.GetTracks();
+            if (tracks)
+            {
+                int wlrN = 0;
+                for (int t = 0; t < tracks.Count(); t++)
+                {
+                    RDF_RadarTrack tr = tracks.Get(t);
+                    if (!tr || !tr.IsProjectileTrack())
+                        continue;
+                    RDF_RadarWlrFix fix = tr.m_LastWlrFix;
+                    if (!fix)
+                        continue;
+                    wlrN = wlrN + 1;
+                    if (fix.m_LaunchValid)
+                    {
+                        launches.Insert(fix.m_LaunchPos);
+                        launchLabels.Insert("RDF WLR Launch #" + wlrN.ToString());
+                    }
+                    if (fix.m_ImpactValid)
+                    {
+                        impacts.Insert(fix.m_ImpactPos);
+                        impactLabels.Insert("RDF WLR Impact #" + wlrN.ToString());
+                    }
+                }
+            }
+        }
+
+        RDF_RadarAutoTestMapOverlay.SetShellPoints(
+            launches, launchLabels, impacts, impactLabels);
     }
 
     protected void ApplyTestRadarConfig()

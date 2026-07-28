@@ -153,6 +153,40 @@ class RDF_RadarSignatureLibrary
     }
 
     //------------------------------------------------------------------------------------------------
+    // Human-readable model name from an entity's signature key
+    // (e.g. "{GUID}Prefabs/.../SP01_Mi8MT_unarmed_transport.et" -> "SP01_Mi8MT_unarmed_transport").
+    static string FormatDisplayName(IEntity entity)
+    {
+        return FormatDisplayNameFromKey(MakeKey(entity));
+    }
+
+    //------------------------------------------------------------------------------------------------
+    static string FormatDisplayNameFromKey(string key)
+    {
+        if (key == "")
+            return "Unknown";
+
+        string s = key;
+        s.Replace("\\", "/");
+
+        int brace = s.IndexOf("}");
+        if (brace >= 0)
+            s = s.Substring(brace + 1, s.Length() - brace - 1);
+
+        int slash = s.LastIndexOf("/");
+        if (slash >= 0)
+            s = s.Substring(slash + 1, s.Length() - slash - 1);
+
+        int dot = s.LastIndexOf(".");
+        if (dot > 0)
+            s = s.Substring(0, dot);
+
+        if (s == "")
+            return "Unknown";
+        return s;
+    }
+
+    //------------------------------------------------------------------------------------------------
     static RDF_RadarSignature Find(string key)
     {
         EnsureLoaded();

@@ -58,6 +58,8 @@ class RDF_RadarLockAutoTest
     protected int m_LastLoggedState = -1;
     protected float m_LastProgressWallS;
     protected int m_RespawnCount;
+    protected int m_RwrSearchScans;
+    protected int m_RwrLockScans;
 
     protected ref RDF_RadarSettings m_PrevConfig;
     protected bool m_PrevDemoEnabled;
@@ -190,7 +192,13 @@ class RDF_RadarLockAutoTest
             m_LastScanSerial = -1;
         m_LastProgressWallS = m_StartWallS;
         m_LastDebugPrintWallS = m_StartWallS;
+        m_RwrSearchScans = 0;
+        m_RwrLockScans = 0;
         m_Running = true;
+
+        RDF_RadarAutoTestMapOverlay.Start();
+        if (m_Target)
+            RDF_RadarAutoTestMapOverlay.SetAircraft(m_Target, "RDF Lock");
 
         if (!s_TickRegistered)
         {
@@ -204,12 +212,15 @@ class RDF_RadarLockAutoTest
             m_OrbitCenter.ToString(),
             m_OrbitRadiusM.ToString(),
             m_OrbitAltitudeM.ToString()));
+        Print("[RDF Radar LockTest] open map (M) for aircraft + trail/pred path markers.");
     }
 
     protected void StopInternal(bool restore)
     {
         m_Running = false;
         RDF_RadarAutoTestGate.Release("Lock");
+        RDF_RadarAutoTestMapOverlay.ClearAircraft();
+        RDF_RadarAutoTestMapOverlay.Stop();
 
         if (m_Target && !s_KeepTargetAfterTest)
         {
@@ -253,6 +264,8 @@ class RDF_RadarLockAutoTest
 
         float nowS = System.GetTickCount() * 0.001;
         UpdateAirTargetMotion(nowS);
+        if (m_Target)
+            RDF_RadarAutoTestMapOverlay.SetAircraft(m_Target, "RDF Lock");
         AccumulateLatestScan(nowS);
 
         if (nowS - m_StartWallS < m_DurationS)
@@ -367,6 +380,7 @@ class RDF_RadarLockAutoTest
         cfg.m_ScattererMaxEntries = 2048;
         cfg.m_ScattererDiscoveryIntervalS = 0.5;
         cfg.m_KeepEntityTruth = true;
+        cfg.m_EnableRwrReporting = true;
         cfg.m_MaxLosTracesPerScan = 96;
         cfg.m_OriginOffset = Vector(0.0, 12.0, 0.0);
 
@@ -554,6 +568,14 @@ class RDF_RadarLockAutoTest
         if (sensor.GetLockedTarget(lockedEntity, lockedPos))
             m_LockedTargetScans = m_LockedTargetScans + 1;
 
+        if (m_Target)
+        {
+            if (RDF_RadarRwr.HasSearchWarning(m_Target))
+                m_RwrSearchScans = m_RwrSearchScans + 1;
+            if (RDF_RadarRwr.HasLockWarning(m_Target))
+                m_RwrLockScans = m_RwrLockScans + 1;
+        }
+
         if (state != m_LastLoggedState)
         {
             m_LastLoggedState = state;
@@ -590,6 +612,8 @@ class RDF_RadarLockAutoTest
         bool passAcquire = m_ReachedAcquiring;
         bool passTrack = m_ReachedTracking;
         bool passLockedPoint = m_LockedTargetScans > 0;
+        bool passRwrSearch = m_RwrSearchScans > 0;
+        bool passRwrLock = m_RwrLockScans > 0;
         // Physical path evidence: SNR must have been computed (not left at the
         // uninitialized -300 floor, and not the geometry placeholder ~0).
         bool passPhysicalSnr = m_MaxSnrDb > -299.0;
@@ -605,7 +629,7 @@ class RDF_RadarLockAutoTest
             passAcquire = true;
         bool allPass = passScans && passAlive && passPlots && passTracks
             && passAcquire && passTrack && passLockedPoint && passPhysicalSnr
-            && passDiscovery;
+            && passDiscovery && passRwrSearch && passRwrLock;
 
         array<string> lines = new array<string>();
         lines.Insert("RDF Radar Lock Test (physical Mi-8 orbit)");
@@ -622,6 +646,8 @@ class RDF_RadarLockAutoTest
         lines.Insert("  reached_acquiring " + BoolLabel(passAcquire));
         lines.Insert("  reached_tracking " + BoolLabel(passTrack));
         lines.Insert("  locked_point_usable " + BoolLabel(passLockedPoint));
+        lines.Insert("  rwr_search " + BoolLabel(passRwrSearch));
+        lines.Insert("  rwr_lock " + BoolLabel(passRwrLock));
         lines.Insert("  physical_snr " + BoolLabel(passPhysicalSnr));
         lines.Insert("");
         lines.Insert("metrics:");
@@ -636,8 +662,11 @@ class RDF_RadarLockAutoTest
         lines.Insert("  acquire_scans " + m_AcquireScans.ToString());
         lines.Insert("  track_scans " + m_TrackScans.ToString());
         lines.Insert("  locked_target_scans " + m_LockedTargetScans.ToString());
+        lines.Insert("  rwr_search_scans " + m_RwrSearchScans.ToString());
+        lines.Insert("  rwr_lock_scans " + m_RwrLockScans.ToString());
         lines.Insert("  respawn_count " + m_RespawnCount.ToString());
         lines.Insert("  radar_origin " + m_RadarOrigin.ToString());
+        lines.Insert("  map_overlay open M-key map for live aircraft marker");
 
         FileIO.MakeDirectory("$profile:RDF");
         FileIO.MakeDirectory("$profile:RDF/RadarTests");
