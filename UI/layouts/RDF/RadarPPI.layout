@@ -1,0 +1,190 @@
+FrameWidgetClass {
+ Name "rootFrame"
+ Slot FrameWidgetSlot "{A7C31E920F4B6801}" {
+  Anchor 0 0 0 0
+  PositionX 1760
+  OffsetLeft 1760
+  PositionY 880
+  OffsetTop 880
+  SizeX 144
+  OffsetRight -1904
+  SizeY 184
+  OffsetBottom -1064
+  Alignment 0 0
+ }
+ "Z Order" 90
+ {
+  FrameWidgetClass "{A7C31E920F4B6A01}" {
+   Name "Bezel"
+   Slot FrameWidgetSlot "{A7C31E920F4B6A02}" {
+    Anchor 0 0 1 1
+    PositionX 0
+    OffsetLeft 0
+    PositionY 0
+    OffsetTop 0
+    SizeX 144
+    OffsetRight 0
+    SizeY 184
+    OffsetBottom 0
+   }
+   Color 0.08 0.35 0.18 0.55
+   {
+    FrameWidgetClass "{A7C31E920F4B6820}" {
+     Name "Panel"
+     Slot FrameWidgetSlot "{A7C31E920F4B6803}" {
+      PositionX 1
+      OffsetLeft 1
+      PositionY 1
+      OffsetTop 1
+      SizeX 142
+      OffsetRight -143
+      SizeY 182
+      OffsetBottom -183
+     }
+     Color 0.01 0.03 0.02 0.92
+     {
+      TextWidgetClass "{A7C31E920F4B6806}" {
+       Name "TitleText"
+       Slot FrameWidgetSlot "{A7C31E920F4B6807}" {
+        PositionX 8
+        OffsetLeft 8
+        PositionY 4
+        OffsetTop 4
+        SizeX 70
+        OffsetRight -78
+        SizeY 16
+        OffsetBottom -20
+       }
+       Color 0.35 0.95 0.55 0.85
+       Text "RADAR"
+       "Font Size" 11
+       "Min Font Size" 10
+       "Vertical Alignment" Center
+       FontProperties FontProperties "{A7C31E920F4B68F1}" {
+        Font "{EABA4FE9D014CCEF}UI/Fonts/RobotoCondensed/RobotoCondensed_Bold.fnt"
+        ShadowSize 14
+        ShadowOffset 0 0
+        ShadowOpacity 0.55
+       }
+      }
+      TextWidgetClass "{A7C31E920F4B6808}" {
+       Name "ModeText"
+       Slot FrameWidgetSlot "{A7C31E920F4B6809}" {
+        PositionX 80
+        OffsetLeft 80
+        PositionY 4
+        OffsetTop 4
+        SizeX 54
+        OffsetRight -134
+        SizeY 16
+        OffsetBottom -20
+       }
+       Color 0.25 0.7 0.4 0.65
+       Text "PPI"
+       "Font Size" 10
+       "Min Font Size" 9
+       "Horizontal Alignment" Right
+       "Vertical Alignment" Center
+       FontProperties FontProperties "{A7C31E920F4B68F2}" {
+        Font "{EABA4FE9D014CCEF}UI/Fonts/RobotoCondensed/RobotoCondensed_Bold.fnt"
+       }
+      }
+      FrameWidgetClass "{A7C31E920F4B6B01}" {
+       Name "PpiOverlay"
+       Slot FrameWidgetSlot "{A7C31E920F4B680B}" {
+        PositionX 7
+        OffsetLeft 7
+        PositionY 22
+        OffsetTop 22
+        SizeX 128
+        OffsetRight -135
+        SizeY 128
+        OffsetBottom -150
+       }
+       {
+        CanvasWidgetClass "{A7C31E920F4B680C}" {
+         Name "PpiCanvas"
+         Slot FrameWidgetSlot "{A7C31E920F4B680D}" {
+          PositionX 0
+          OffsetLeft 0
+          PositionY 0
+          OffsetTop 0
+          SizeX 128
+          OffsetRight -128
+          SizeY 128
+          OffsetBottom -128
+         }
+         Clear 1
+         SizeInUnits 128 128
+        }
+        TextWidgetClass "{A7C31E920F4B6816}" {
+         Name "RingLabel"
+         Slot FrameWidgetSlot "{A7C31E920F4B6817}" {
+          PositionX 86
+          OffsetLeft 86
+          PositionY 4
+          OffsetTop 4
+          SizeX 38
+          OffsetRight -124
+          SizeY 12
+          OffsetBottom -16
+         }
+         Color 0.3 0.8 0.45 0.4
+         Text "1km"
+         "Font Size" 9
+         "Min Font Size" 8
+         "Horizontal Alignment" Right
+         FontProperties FontProperties "{A7C31E920F4B68F7}" {
+          Font "{EABA4FE9D014CCEF}UI/Fonts/RobotoCondensed/RobotoCondensed_Bold.fnt"
+         }
+        }
+       }
+      }
+      TextWidgetClass "{A7C31E920F4B6818}" {
+       Name "StatsText"
+       Slot FrameWidgetSlot "{A7C31E920F4B6819}" {
+        PositionX 6
+        OffsetLeft 6
+        PositionY 152
+        OffsetTop 152
+        SizeX 130
+        OffsetRight -136
+        SizeY 14
+        OffsetBottom -166
+       }
+       Color 0.4 0.9 0.55 0.8
+       Text "DET --   TRK --"
+       "Font Size" 10
+       "Min Font Size" 9
+       FontProperties FontProperties "{A7C31E920F4B68F8}" {
+        Font "{EABA4FE9D014CCEF}UI/Fonts/RobotoCondensed/RobotoCondensed_Bold.fnt"
+        ShadowSize 10
+        ShadowOffset 0 0
+        ShadowOpacity 0.4
+       }
+      }
+      TextWidgetClass "{A7C31E920F4B681A}" {
+       Name "LegendText"
+       Slot FrameWidgetSlot "{A7C31E920F4B681B}" {
+        PositionX 6
+        OffsetLeft 6
+        PositionY 166
+        OffsetTop 166
+        SizeX 130
+        OffsetRight -136
+        SizeY 12
+        OffsetBottom -178
+       }
+       Color 0.25 0.55 0.35 0.45
+       Text ""
+       "Font Size" 9
+       "Min Font Size" 8
+       FontProperties FontProperties "{A7C31E920F4B68F9}" {
+        Font "{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt"
+       }
+      }
+     }
+    }
+   }
+ }
+}

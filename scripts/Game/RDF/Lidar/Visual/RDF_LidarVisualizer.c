@@ -1,11 +1,12 @@
 // LiDAR point cloud visualizer using debug shapes.
+// Shape lifetime via RDF_DebugShapeManager (SCR_DebugShapeManager pattern).
 class RDF_LidarVisualizer
 {
     // Cap samples drawn per frame to avoid memory overflow with huge ray counts
     protected static const int MAX_DRAW_RAYS = 50000;
 
     protected ref RDF_LidarVisualSettings m_Settings;
-    protected ref array<ref Shape> m_DebugShapes;
+    protected ref RDF_DebugShapeManager m_ShapeMgr;
     protected ref array<ref RDF_LidarSample> m_Samples;
     protected float m_LastRange = 50.0;
     // Color strategy (injectable). Defaults to internal color builder.
@@ -18,7 +19,7 @@ class RDF_LidarVisualizer
         else
             m_Settings = new RDF_LidarVisualSettings();
 
-        m_DebugShapes = new array<ref Shape>();
+        m_ShapeMgr = new RDF_DebugShapeManager();
         m_Samples = new array<ref RDF_LidarSample>();
 
         m_ColorStrategy = new RDF_DefaultColorStrategy();
@@ -45,8 +46,8 @@ class RDF_LidarVisualizer
     // and stale IEntity refs from living until the next Render() — which may never come.
     void Reset()
     {
-        if (m_DebugShapes)
-            m_DebugShapes.Clear();
+        if (m_ShapeMgr)
+            m_ShapeMgr.Clear();
         if (m_Samples)
             m_Samples.Clear();
     }
@@ -85,18 +86,9 @@ class RDF_LidarVisualizer
                        || m_Settings.m_DrawOriginAxis
                        || !m_Settings.m_RenderWorld;
 
-        // Pre-allocate shape array only when something will actually be drawn. Cap to avoid OOM.
-        if (hasVisuals && m_DebugShapes)
-        {
-            m_DebugShapes.Clear();
-            int drawRays = Math.Min(rays, MAX_DRAW_RAYS);
-            int segs = Math.Max(1, m_Settings.m_RaySegments);
-            int extraPoint = 0;
-            if (m_Settings.m_DrawPoints)
-                extraPoint = 1;
-            int estShapes = 16 + drawRays * (segs + extraPoint);
-            m_DebugShapes.Reserve(estShapes);
-        }
+        // Clear previous frame shapes only when something will actually be drawn.
+        if (hasVisuals && m_ShapeMgr)
+            m_ShapeMgr.Clear();
 
         if (m_Samples)
         {
@@ -112,7 +104,7 @@ class RDF_LidarVisualizer
             return;
 
         // When "point cloud only": draw a black quad in front of the camera to hide the world (point cloud uses NOZBUFFER so it draws on top).
-        if (!m_Settings.m_RenderWorld && m_DebugShapes)
+        if (!m_Settings.m_RenderWorld && m_ShapeMgr)
             DrawPointCloudOnlyBackground();
 
         if (m_Settings.m_DrawOriginAxis && m_Samples.Count() > 0)
@@ -161,18 +153,10 @@ class RDF_LidarVisualizer
                 m_LastRange = 50.0;
         }
 
-        // Pre-allocate arrays to reduce per-frame reallocations. Cap draw count to avoid OOM.
+        // Cap draw count to avoid OOM; clear previous frame shapes.
         int drawLimit = Math.Min(samples.Count(), MAX_DRAW_RAYS);
-        if (m_DebugShapes)
-        {
-            m_DebugShapes.Clear();
-            int segs = Math.Max(1, m_Settings.m_RaySegments);
-            int extraPoint = 0;
-            if (m_Settings.m_DrawPoints)
-                extraPoint = 1;
-            int estShapes = 16 + drawLimit * (segs + extraPoint);
-            m_DebugShapes.Reserve(estShapes);
-        }
+        if (m_ShapeMgr)
+            m_ShapeMgr.Clear();
 
         // Use provided samples instead of scanning
         m_Samples.Clear();
@@ -184,7 +168,7 @@ class RDF_LidarVisualizer
 
         // Note: always use configured segmentation; do not apply automatic degradation here.
 
-        if (!m_Settings.m_RenderWorld && m_DebugShapes)
+        if (!m_Settings.m_RenderWorld && m_ShapeMgr)
             DrawPointCloudOnlyBackground();
 
         if (m_Settings.m_DrawOriginAxis && m_Samples.Count() > 0)
@@ -214,7 +198,7 @@ class RDF_LidarVisualizer
     // Draw a large black quad just in front of the local camera to occlude the world (used when m_RenderWorld is false).
     protected void DrawPointCloudOnlyBackground()
     {
-        if (!m_DebugShapes)
+        if (!m_ShapeMgr)
             return;
         PlayerController controller = GetGame().GetPlayerController();
         if (!controller)
@@ -246,12 +230,12 @@ class RDF_LidarVisualizer
         int bgFlags = ShapeFlags.NOOUTLINE | ShapeFlags.DOUBLESIDE | ShapeFlags.NOZBUFFER | ShapeFlags.ONCE;
         Shape bgShape = Shape.CreateTris(bgColor, bgFlags, tris, 2);
         if (bgShape)
-            m_DebugShapes.Insert(bgShape);
+            m_ShapeMgr.Add(bgShape);
     }
 
     protected void DrawOriginAxis(IEntity subject, vector origin)
     {
-        if (!m_DebugShapes || !subject || m_Settings.m_OriginAxisLength <= 0.0)
+        if (!m_ShapeMgr || !subject || m_Settings.m_OriginAxisLength <= 0.0)
             return;
 
         vector worldMat[4];
@@ -260,21 +244,11 @@ class RDF_LidarVisualizer
         vector axisY = worldMat[1];
         vector axisZ = worldMat[2];
         float len = m_Settings.m_OriginAxisLength;
+        ShapeFlags flags = ShapeFlags.NOOUTLINE | ShapeFlags.ONCE;
 
-        vector endX[2];
-        endX[0] = origin;
-        endX[1] = origin + axisX * len;
-        m_DebugShapes.Insert(Shape.CreateLines(ARGBF(1, 1, 0, 0), ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.ONCE, endX, 2));
-
-        vector endY[2];
-        endY[0] = origin;
-        endY[1] = origin + axisY * len;
-        m_DebugShapes.Insert(Shape.CreateLines(ARGBF(1, 0, 1, 0), ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.ONCE, endY, 2));
-
-        vector endZ[2];
-        endZ[0] = origin;
-        endZ[1] = origin + axisZ * len;
-        m_DebugShapes.Insert(Shape.CreateLines(ARGBF(1, 0, 0, 1), ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.ONCE, endZ, 2));
+        m_ShapeMgr.AddLine(origin, origin + axisX * len, ARGBF(1, 1, 0, 0), flags);
+        m_ShapeMgr.AddLine(origin, origin + axisY * len, ARGBF(1, 0, 1, 0), flags);
+        m_ShapeMgr.AddLine(origin, origin + axisZ * len, ARGBF(1, 0, 0, 1), flags);
     }
 
     // Batched mesh renderer: builds GPU-friendly triangle lists per-color-bucket and issues far fewer Shape calls.
@@ -283,7 +257,7 @@ class RDF_LidarVisualizer
     // - maxSamplesToDraw caps how many samples are drawn to avoid memory overflow (use samples.Count() for no cap).
     protected void DrawBatchedMeshes(IEntity subject, array<ref RDF_LidarSample> samples, int maxSamplesToDraw = -1)
     {
-        if (!m_DebugShapes || !samples || samples.Count() == 0 || !m_Settings)
+        if (!m_ShapeMgr || !samples || samples.Count() == 0 || !m_Settings)
             return;
         int drawLimit;
         if (maxSamplesToDraw >= 0)
@@ -427,7 +401,7 @@ class RDF_LidarVisualizer
             int triCountChunk = copyCount / 3;
             Shape s = Shape.CreateTris(color, flags, trisBuf, triCountChunk);
             if (s)
-                m_DebugShapes.Insert(s);
+                m_ShapeMgr.Add(s);
 
             offset += copyCount;
         }
@@ -436,30 +410,28 @@ class RDF_LidarVisualizer
     // New: draw point using the full sample so color/size strategies can access metadata
     protected void DrawPointFromSample(RDF_LidarSample sample)
     {
-        if (!m_DebugShapes || !sample)
+        if (!m_ShapeMgr || !sample)
             return;
 
         int color = BuildPointColorFromSample(sample);
         float size = BuildPointSizeFromSample(sample);
-        int shapeFlags = ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.TRANSP | ShapeFlags.ONCE;
-        Shape s = Shape.CreateSphere(color, shapeFlags, sample.m_HitPos, size);
-        m_DebugShapes.Insert(s);
+        ShapeFlags shapeFlags = ShapeFlags.NOOUTLINE | ShapeFlags.ONCE;
+        m_ShapeMgr.AddSphere(sample.m_HitPos, size, color, shapeFlags);
     }
 
     protected void DrawPoint(vector pos, float dist, bool hit)
     {
-        if (!m_DebugShapes)
+        if (!m_ShapeMgr)
             return;
 
         int color = BuildPointColor(dist, hit);
-        int shapeFlags = ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.TRANSP | ShapeFlags.ONCE;
-        Shape s = Shape.CreateSphere(color, shapeFlags, pos, m_Settings.m_PointSize);
-        m_DebugShapes.Insert(s);
+        ShapeFlags shapeFlags = ShapeFlags.NOOUTLINE | ShapeFlags.ONCE;
+        m_ShapeMgr.AddSphere(pos, m_Settings.m_PointSize, color, shapeFlags);
     }
 
     protected void DrawRay(vector start, vector end, float dist, bool hit)
     {
-        if (!m_DebugShapes)
+        if (!m_ShapeMgr)
             return;
 
         int segments = m_Settings.m_RaySegments;
@@ -467,18 +439,14 @@ class RDF_LidarVisualizer
             segments = 1;
 
         vector last = start;
+        ShapeFlags shapeFlags = ShapeFlags.NOOUTLINE | ShapeFlags.ONCE;
         for (int i = 1; i <= segments; i++)
         {
             float t = i / (float)segments;
-            vector p[2];
-            p[0] = last;
-            p[1] = start + (end - start) * t;
-            last = p[1];
-
+            vector next = start + (end - start) * t;
             int color = BuildRayColorAtT(t, hit);
-            int shapeFlags = ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.TRANSP | ShapeFlags.ONCE;
-            Shape s = Shape.CreateLines(color, shapeFlags, p, 2);
-            m_DebugShapes.Insert(s);
+            m_ShapeMgr.AddLine(last, next, color, shapeFlags);
+            last = next;
         }
     }
 

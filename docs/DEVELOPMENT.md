@@ -21,14 +21,20 @@ License: Apache-2.0
 
 ```
 scripts/Game/RDF/
+├── Common/    RDF_DebugShapeManager（世界空间 Shape 托管）
 ├── Lidar/     点云扫描、可视化、网络、HUD
 ├── Radar/     实体扫描、物理检测、EW、CFAR、网络同步、PPI、自动化测试
 └── DEM/       Workbench 烘焙 + Runtime 加载
+UI/layouts/RDF/
+├── RadarPPI.layout   雷达 PPI（右下角，绿磷光）
+└── LidarPPI.layout   LiDAR PPI（左下角，蓝主题）
 scripts/WorkbenchGame/RDF/
 ├── RDF_DemBakePlugin.c
 └── RDF_RadarSignatureBakePlugin.c   离线扫可放置 prefab → 特征 CSV
 tools/dem/     离线打包、雷达物理原型、批量战场仿真与回归测试
 ```
+
+首次加载 layout 前请在 Workbench Resource Browser 中打开/注册 `UI/layouts/RDF/*.layout`（或确认 `.meta` GUID 已入资源库），否则 `CreateWidgets` 会失败并打 ERROR 日志。玩法模组若要挂进 `SCR_HUDManager`，可复用同一 layout 路径。
 
 ---
 
@@ -49,11 +55,13 @@ scripts/Game/RDF/
     │   └── RDF_SweepSampleStrategy.c  扇区扫掠策略
     ├── Visual/
     │   ├── RDF_LidarVisualSettings.c  可视化参数（含仅点云开关）
-    │   ├── RDF_LidarVisualizer.c      渲染与数据获取
+    │   ├── RDF_LidarVisualizer.c      ShapeManager 托管 + 数据获取
     │   ├── RDF_LidarColorStrategy.c   颜色策略接口与默认实现
     │   ├── RDF_LidarMaterialColorStrategy.c  按密度 g/cm³ 着色、透明度随距离
     │   ├── RDF_IndexColorStrategy.c
     │   └── RDF_ThreeColorStrategy.c   近/中/远三段渐变
+    ├── UI/
+    │   └── RDF_LidarHUD.c             PPI ← UI/layouts/RDF/LidarPPI.layout
     ├── Network/
     │   ├── RDF_LidarNetworkAPI.c      网络同步基类
     │   ├── RDF_LidarNetworkComponent.c Rpl 实现（服务器权威）
@@ -104,8 +112,8 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarNetworkAPI.c           基类（含 intentional no-op；SetEnabled 别名 SetDemoEnabled）
 │   └── RDF_RadarNetworkComponent.c     服务器权威同步（挂 Sensor）
 ├── Visual/ / UI/
-│   ├── RDF_RadarVisualizer.c / RDF_RadarVisualSettings.c
-│   └── RDF_RadarHUD.c                  PPI（含匿名/假目标配色）
+│   ├── RDF_RadarVisualizer.c / RDF_RadarVisualSettings.c  （ShapeManager 托管）
+│   └── RDF_RadarHUD.c                  PPI ← UI/layouts/RDF/RadarPPI.layout
 ├── Util/
 │   └── RDF_RadarEntityClassifier.c
 └── Demo/
@@ -222,37 +230,23 @@ RDF_LidarAutoRunner.SetScanCompleteHandler(new MyHandler());
 
 ---
 
-## HUD 实现说明（无 .layout 文件）
+## HUD 实现说明（`.layout` + Canvas）
 
-Enfusion 的 `.layout` 文件是**二进制格式**，只能通过 Workbench 可视化编辑器创建。  
-`RDF_LidarHUD` 完全使用脚本动态构建所有控件：
+Radar / LiDAR PPI 面板结构由文本 `.layout` 定义（官方式），脚本通过 `Workspace.CreateWidgets` 实例化后按 `Name` 绑定：
+
+| Layout | 脚本 | 锚点 |
+|--------|------|------|
+| `UI/layouts/RDF/RadarPPI.layout` | `RDF_RadarHUD` | 右下 |
+| `UI/layouts/RDF/LidarPPI.layout` | `RDF_LidarHUD` | 左下 |
 
 ```c
-// 创建背景面板
-Widget bg = ws.CreateWidgetInWorkspace(
-    WidgetType.FrameWidgetTypeID,
-    x, y, w, h,
-    0,    // flags（0 = 默认）
-    null, // Color（null = 不透明白色，之后用 SetColorInt 覆盖）
-    90    // z-order（背景在底层）
-);
-bg.SetColorInt(ARGB(210, 0, 12, 7));
-bg.SetVisible(true);
-
-// 创建 CanvasWidget PPI 扫描图
-CanvasWidget canvas = CanvasWidget.Cast(ws.CreateWidgetInWorkspace(
-    WidgetType.CanvasWidgetTypeID, x, y, 210, 210, 0, null, 92));
-canvas.SetSizeInUnits(Vector(210, 210, 0));  // 单位 1:1 像素
-
-// 绘制圆形（TessellateCircle + PolygonDrawCommand）
-array<float> verts = new array<float>();
-canvas.TessellateCircle(Vector(105, 105, 0), 100.0, 48, verts);
-PolygonDrawCommand disc = new PolygonDrawCommand();
-disc.m_iColor   = ARGB(240, 0, 18, 9);
-disc.m_Vertices = verts;
-drawCmds.Insert(disc);
-canvas.SetDrawCommands(drawCmds);
+m_wRoot = GetGame().GetWorkspace().CreateWidgets(LAYOUT_PPI, null);
+m_Canvas = CanvasWidget.Cast(m_wRoot.FindAnyWidget("PpiCanvas"));
+m_wMode  = TextWidget.Cast(m_wRoot.FindAnyWidget("ModeText"));
+// Canvas 绘制仍用 TessellateCircle + SetDrawCommands（逻辑不变）
 ```
+
+世界空间调试图形由 `RDF_DebugShapeManager` 持有 `Shape` 引用（对齐 `SCR_DebugShapeManager`），环/弧优先 `CreateCircle` / `CreateCircleArc`。
 
 **关键约束**：
 - `SetDrawCommands` 只保存指针，调用者必须持有 `drawCmds` 数组的引用（成员变量）

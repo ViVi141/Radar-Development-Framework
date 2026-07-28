@@ -1,8 +1,8 @@
-// Radar PPI HUD - header bar + CanvasWidget 2D top-down plan-position display (north-up)
-// + data rows. All widgets created dynamically via WorkspaceWidget.CreateWidgetInWorkspace().
-// No .layout file required. Green "phosphor" theme to distinguish from the blue LiDAR HUD.
+// Radar PPI HUD — layout-driven panel + CanvasWidget north-up PPI.
+// Structure: UI/layouts/RDF/RadarPPI.layout (CreateWidgets); script binds Names and draws Canvas.
+// Green phosphor theme to distinguish from the blue LiDAR HUD.
 //
-// Screen layout (bottom-right corner, compact so it does not eat the view):
+// Screen layout (bottom-right corner):
 //
 //  +================================+
 //  | (o) RADAR        <preset>     |  header
@@ -18,21 +18,15 @@
 
 class RDF_RadarHUD
 {
-    // ---- panel geometry (reference px; origin computed at Build from workspace) ----
-    static const int PX_W       = 136;
-    static const int PX_HDR_H   = 22;
+    //! Registered layout resource (open once in Workbench if GUID not resolved).
+    static const ResourceName LAYOUT_PPI = "{A7C31E920F4B6D81}UI/layouts/RDF/RadarPPI.layout";
 
     static const int PX_RADAR_H = 128;
     static const int PX_RADAR_W = 128;
-
-    static const int PX_ROW_H   = 18;
-    static const int PX_PAD_X   = 5;
-    static const int PX_PAD_Y   = 3;
-
-    static const int PX_H       = PX_HDR_H + PX_RADAR_H + 2 * PX_ROW_H + 4;
-    // Tuck into the corner; keep clear of screen edges / common UI chrome.
-    static const int PX_MARGIN_RIGHT = 14;
-    static const int PX_MARGIN_BOTTOM = 14;
+    //! Root panel size (must match RadarPPI.layout rootFrame).
+    static const int PANEL_W = 144;
+    static const int PANEL_H = 184;
+    static const int PANEL_MARGIN = 16;
 
     // ---- PPI canvas internals (unit coords == pixel coords 1:1) ----
     static const float PPI_CX   = 64.0;
@@ -46,23 +40,18 @@ class RDF_RadarHUD
     float m_WlrAlertRadiusM = 80.0;
     bool m_DrawWlrAlerts = true;
 
-    // Resolved at BuildWidgets() from WorkspaceWidget size (bottom-right).
-    protected int m_PxLeft = 20;
-    protected int m_PxTop = 700;
-    protected int m_PxDataY = 937;
+    // ---- ARGB colours (CRT phosphor green) ----
+    static const int COL_TITLE    = ARGB(220,  90,  245, 140);
+    static const int COL_MODE     = ARGB(165,  65,  180, 100);
+    static const int COL_DATA     = ARGB(205, 100, 230, 140);
+    static const int COL_MUTED    = ARGB(115,  60,  140,  90);
 
-    // ---- ARGB colours (green phosphor theme) ----
-    static const int COL_PANEL    = ARGB(165,  6,  16,  8);
-    static const int COL_HDR      = ARGB(210, 12,  30,  16);
-    static const int COL_TITLE    = ARGB(255, 120, 255, 140);
-    static const int COL_MODE     = ARGB(255, 90,  220, 120);
-    static const int COL_DATA     = ARGB(255, 120, 235, 150);
-    static const int COL_COMPASS  = ARGB(180, 90,  220, 120);
-
-    static const int COL_PPI_BG     = ARGB(240, 6,   20,  10);
-    static const int COL_PPI_RING   = ARGB( 70, 60,  200, 100);
-    static const int COL_PPI_SWEEP  = ARGB(160, 120, 255, 140);
-    static const int COL_PPI_RADAR  = ARGB(255, 0,   255, 120);
+    static const int COL_PPI_BG     = ARGB(255,  2,   10,   6);
+    static const int COL_PPI_RING   = ARGB( 90, 40,  200, 110);
+    static const int COL_PPI_RING2  = ARGB( 45, 30,  140,  80);
+    static const int COL_PPI_CROSS  = ARGB( 55, 35,  160,  95);
+    static const int COL_PPI_SWEEP  = ARGB(200, 100, 255, 150);
+    static const int COL_PPI_RADAR  = ARGB(255, 40,  255, 140);
 
     // Blip colours by target type.
     static const int COL_VEHICLE  = ARGB(255,  60, 255, 120);   // green
@@ -83,11 +72,12 @@ class RDF_RadarHUD
 
     protected float m_LastUpdateTime = 0.0;
 
-    protected ref array<ref Widget> m_AllWidgets;
+    protected Widget m_wRoot;
     protected CanvasWidget m_Canvas;
     protected TextWidget   m_wMode;
     protected TextWidget   m_wStats;
     protected TextWidget   m_wLegend;
+    protected TextWidget   m_wRingLabel;
 
     protected ref array<ref CanvasWidgetCommand> m_StaticCmds;
     protected ref array<ref CanvasWidgetCommand> m_AllCmds;
@@ -125,7 +115,7 @@ class RDF_RadarHUD
 
     static void Show()
     {
-        // Always rebuild: stale m_AllWidgets after Hide/workspace swap would
+        // Always rebuild: stale root after Hide/workspace swap would
         // otherwise leave the PPI invisible with no console error.
         RDF_RadarHUD inst = GetInstance();
         inst.DestroyWidgets();
@@ -156,7 +146,7 @@ class RDF_RadarHUD
     static bool IsVisible()
     {
         RDF_RadarHUD inst = GetInstance();
-        return inst && inst.m_AllWidgets != null;
+        return inst && inst.m_wRoot != null;
     }
 
     // Push one scan into the HUD. origin/forward are world-space; range sets the
@@ -169,7 +159,7 @@ class RDF_RadarHUD
         RDF_RadarProjectileTracker tracker)
     {
         RDF_RadarHUD inst = GetInstance();
-        if (!inst || !inst.m_AllWidgets)
+        if (!inst || !inst.m_wRoot)
             return;
         inst.Update(targets, origin, forward, range, tracker);
     }
@@ -212,12 +202,14 @@ class RDF_RadarHUD
 
         UpdatePPI(targets, origin, forward, tracker);
         UpdateDataRows(targets, tracker);
+        UpdateRingLabel();
     }
 
-    // ---- build all widgets once ----
+    //------------------------------------------------------------------------------------------------
+    //! Instantiate RadarPPI.layout and bind named widgets.
     protected void BuildWidgets()
     {
-        if (m_AllWidgets)
+        if (m_wRoot)
             return;
 
         WorkspaceWidget ws = GetGame().GetWorkspace();
@@ -227,95 +219,89 @@ class RDF_RadarHUD
             return;
         }
 
-        ResolveLayoutOrigin(ws);
+        m_wRoot = ws.CreateWidgets(LAYOUT_PPI, null);
+        if (!m_wRoot)
+        {
+            Print("[RDF_RadarHUD] ERROR: CreateWidgets failed for RadarPPI.layout — register UI/layouts/RDF in Workbench", LogLevel.ERROR);
+            return;
+        }
 
-        m_AllWidgets = new array<ref Widget>();
+        m_wRoot.SetVisible(true);
+        PinRootBottomRight(ws);
 
-        MakeFrame(ws, m_PxLeft, m_PxTop, PX_W, PX_H, 90, COL_PANEL);
-        MakeFrame(ws, m_PxLeft, m_PxTop, PX_W, PX_HDR_H, 91, COL_HDR);
-
-        Widget wTitle = MakeText(ws, m_PxLeft + PX_PAD_X, m_PxTop + PX_PAD_Y,
-                                 72, PX_HDR_H - PX_PAD_Y, 95, COL_TITLE);
-        TextWidget.Cast(wTitle).SetText("(o) RADAR");
-        TextWidget.Cast(wTitle).SetExactFontSize(14);
-
-        Widget wMode = MakeText(ws, m_PxLeft + 74, m_PxTop + PX_PAD_Y,
-                                PX_W - 78, PX_HDR_H - PX_PAD_Y, 95, COL_MODE);
-        m_wMode = TextWidget.Cast(wMode);
-        m_wMode.SetText("PPI");
-        m_wMode.SetExactFontSize(12);
-
-        int canvasTop = m_PxTop + PX_HDR_H;
-        Widget wCanvas = ws.CreateWidgetInWorkspace(
-            WidgetType.CanvasWidgetTypeID,
-            m_PxLeft, canvasTop, PX_RADAR_W, PX_RADAR_H,
-            0, null, 92);
+        Widget wCanvas = m_wRoot.FindAnyWidget("PpiCanvas");
         if (wCanvas)
         {
             m_Canvas = CanvasWidget.Cast(wCanvas);
-            m_Canvas.SetVisible(true);
-            m_Canvas.SetSizeInUnits(Vector(PX_RADAR_W, PX_RADAR_H, 0));
-            m_AllWidgets.Insert(wCanvas);
-            BuildStaticDrawCommands();
+            if (m_Canvas)
+            {
+                m_Canvas.SetVisible(true);
+                m_Canvas.SetSizeInUnits(Vector(PX_RADAR_W, PX_RADAR_H, 0));
+                BuildStaticDrawCommands();
+            }
         }
         else
         {
-            Print("[RDF_RadarHUD] WARN: CanvasWidget creation failed", LogLevel.WARNING);
+            Print("[RDF_RadarHUD] WARN: PpiCanvas not found in layout", LogLevel.WARNING);
         }
 
-        // Compass labels (north-up plan display).
-        MakeCompassLabel(ws, m_PxLeft + 58, canvasTop + 4,   "N");
-        MakeCompassLabel(ws, m_PxLeft + 58, canvasTop + 112, "S");
-        MakeCompassLabel(ws, m_PxLeft + 4,   canvasTop + 56, "W");
-        MakeCompassLabel(ws, m_PxLeft + 114, canvasTop + 56, "E");
+        m_wMode = TextWidget.Cast(m_wRoot.FindAnyWidget("ModeText"));
+        m_wStats = TextWidget.Cast(m_wRoot.FindAnyWidget("StatsText"));
+        m_wLegend = TextWidget.Cast(m_wRoot.FindAnyWidget("LegendText"));
+        m_wRingLabel = TextWidget.Cast(m_wRoot.FindAnyWidget("RingLabel"));
 
-        string ringLabel = RangeLabel(m_DisplayRange * 0.5);
-        Widget wRingLbl = MakeText(ws,
-            m_PxLeft + (int)PPI_CX + 2,
-            canvasTop + (int)(PPI_CY - PPI_RING) - 1,
-            40, 12, 96, ARGB(130, 70, 200, 110));
-        TextWidget.Cast(wRingLbl).SetText(ringLabel);
-        TextWidget.Cast(wRingLbl).SetExactFontSize(10);
+        if (m_wMode)
+            m_wMode.SetColorInt(COL_MODE);
+        if (m_wStats)
+            m_wStats.SetColorInt(COL_DATA);
+        if (m_wLegend)
+            m_wLegend.SetColorInt(COL_MUTED);
 
-        m_wStats  = TextWidget.Cast(MakeDataRow(ws, 0, "Det --   Trk --"));
-        m_wLegend = TextWidget.Cast(MakeDataRow(ws, 1, "orange=launch  blue=impact  white=false"));
-        TextWidget.Cast(m_wLegend).SetExactFontSize(11);
+        Widget wTitle = m_wRoot.FindAnyWidget("TitleText");
+        if (wTitle)
+            wTitle.SetColorInt(COL_TITLE);
+        if (m_wMode)
+            m_wMode.SetColorInt(COL_MODE);
 
-        Print(string.Format(
-            "[RDF_RadarHUD] HUD built widgets=%1 at left=%2 top=%3 (workspace %4x%5) — look BOTTOM-RIGHT",
-            m_AllWidgets.Count().ToString(),
-            m_PxLeft.ToString(),
-            m_PxTop.ToString(),
-            ws.GetWidth().ToString(),
-            ws.GetHeight().ToString()));
+        UpdateRingLabel();
+
+        Print("[RDF_RadarHUD] HUD built from RadarPPI.layout — look BOTTOM-RIGHT");
     }
 
-    protected void ResolveLayoutOrigin(WorkspaceWidget ws)
+    //------------------------------------------------------------------------------------------------
+    //! Force root into workspace bottom-right (layout Anchor alone is unreliable under CreateWidgets).
+    protected void PinRootBottomRight(WorkspaceWidget ws)
     {
-        int screenW = 1920;
-        int screenH = 1080;
-        if (ws)
-        {
-            int w = ws.GetWidth();
-            int h = ws.GetHeight();
-            if (w > 200)
-                screenW = w;
-            if (h > 200)
-                screenH = h;
-        }
+        if (!m_wRoot || !ws)
+            return;
 
-        m_PxLeft = screenW - PX_W - PX_MARGIN_RIGHT;
-        if (m_PxLeft < PX_MARGIN_RIGHT)
-            m_PxLeft = PX_MARGIN_RIGHT;
+        int screenW = ws.GetWidth();
+        int screenH = ws.GetHeight();
+        if (screenW < 200)
+            screenW = 1920;
+        if (screenH < 200)
+            screenH = 1080;
 
-        m_PxTop = screenH - PX_H - PX_MARGIN_BOTTOM;
-        if (m_PxTop < PX_MARGIN_BOTTOM)
-            m_PxTop = PX_MARGIN_BOTTOM;
+        int left = screenW - PANEL_W - PANEL_MARGIN;
+        int top = screenH - PANEL_H - PANEL_MARGIN;
+        if (left < PANEL_MARGIN)
+            left = PANEL_MARGIN;
+        if (top < PANEL_MARGIN)
+            top = PANEL_MARGIN;
 
-        m_PxDataY = m_PxTop + PX_HDR_H + PX_RADAR_H + 2;
+        FrameSlot.SetAnchor(m_wRoot, 0.0, 0.0);
+        FrameSlot.SetSize(m_wRoot, PANEL_W, PANEL_H);
+        FrameSlot.SetPos(m_wRoot, left, top);
     }
 
-    // ---- build PPI static draw commands ----
+    protected void UpdateRingLabel()
+    {
+        if (!m_wRingLabel)
+            return;
+        m_wRingLabel.SetText(RangeLabel(m_DisplayRange * 0.5));
+    }
+
+    // ---- CRT face: black disc, range rings, crosshair, origin pip ----
     protected void BuildStaticDrawCommands()
     {
         if (!m_Canvas)
@@ -327,32 +313,41 @@ class RDF_RadarHUD
         vector center = Vector(PPI_CX, PPI_CY, 0);
 
         array<float> bgVerts = new array<float>();
-        m_Canvas.TessellateCircle(center, PPI_R, 48, bgVerts);
+        m_Canvas.TessellateCircle(center, PPI_R, 56, bgVerts);
         PolygonDrawCommand bgDisc = new PolygonDrawCommand();
         bgDisc.m_iColor   = COL_PPI_BG;
         bgDisc.m_Vertices = bgVerts;
         m_StaticCmds.Insert(bgDisc);
 
-        array<float> ring100Verts = new array<float>();
-        m_Canvas.TessellateCircle(center, PPI_R - 1.0, 48, ring100Verts);
-        LineDrawCommand ring100 = new LineDrawCommand();
-        ring100.m_iColor         = COL_PPI_RING;
-        ring100.m_fWidth         = 1.0;
-        ring100.m_bShouldEnclose = true;
-        ring100.m_Vertices       = ring100Verts;
-        m_StaticCmds.Insert(ring100);
+        AddPpiRing(center, PPI_R * 0.25, COL_PPI_RING2, 40);
+        AddPpiRing(center, PPI_RING, COL_PPI_RING2, 44);
+        AddPpiRing(center, PPI_R * 0.75, COL_PPI_RING2, 48);
+        AddPpiRing(center, PPI_R - 1.0, COL_PPI_RING, 56);
 
-        array<float> ring50Verts = new array<float>();
-        m_Canvas.TessellateCircle(center, PPI_RING, 48, ring50Verts);
-        LineDrawCommand ring50 = new LineDrawCommand();
-        ring50.m_iColor         = COL_PPI_RING;
-        ring50.m_fWidth         = 1.0;
-        ring50.m_bShouldEnclose = true;
-        ring50.m_Vertices       = ring50Verts;
-        m_StaticCmds.Insert(ring50);
+        array<float> crossNS = new array<float>();
+        crossNS.Insert(PPI_CX);
+        crossNS.Insert(PPI_CY - PPI_R + 2.0);
+        crossNS.Insert(PPI_CX);
+        crossNS.Insert(PPI_CY + PPI_R - 2.0);
+        LineDrawCommand axisNS = new LineDrawCommand();
+        axisNS.m_iColor   = COL_PPI_CROSS;
+        axisNS.m_fWidth   = 1.0;
+        axisNS.m_Vertices = crossNS;
+        m_StaticCmds.Insert(axisNS);
+
+        array<float> crossEW = new array<float>();
+        crossEW.Insert(PPI_CX - PPI_R + 2.0);
+        crossEW.Insert(PPI_CY);
+        crossEW.Insert(PPI_CX + PPI_R - 2.0);
+        crossEW.Insert(PPI_CY);
+        LineDrawCommand axisEW = new LineDrawCommand();
+        axisEW.m_iColor   = COL_PPI_CROSS;
+        axisEW.m_fWidth   = 1.0;
+        axisEW.m_Vertices = crossEW;
+        m_StaticCmds.Insert(axisEW);
 
         array<float> radarVerts = new array<float>();
-        m_Canvas.TessellateCircle(center, 4.0, 12, radarVerts);
+        m_Canvas.TessellateCircle(center, 2.5, 12, radarVerts);
         PolygonDrawCommand radarDot = new PolygonDrawCommand();
         radarDot.m_iColor   = COL_PPI_RADAR;
         radarDot.m_Vertices = radarVerts;
@@ -362,6 +357,20 @@ class RDF_RadarHUD
             m_AllCmds.Insert(cmd);
 
         m_Canvas.SetDrawCommands(m_AllCmds);
+    }
+
+    protected void AddPpiRing(vector center, float radius, int color, int segments)
+    {
+        if (!m_Canvas || radius < 2.0)
+            return;
+        array<float> verts = new array<float>();
+        m_Canvas.TessellateCircle(center, radius, segments, verts);
+        LineDrawCommand ring = new LineDrawCommand();
+        ring.m_iColor         = color;
+        ring.m_fWidth         = 1.0;
+        ring.m_bShouldEnclose = true;
+        ring.m_Vertices       = verts;
+        m_StaticCmds.Insert(ring);
     }
 
     // ---- update PPI with new scan data ----
@@ -629,16 +638,18 @@ class RDF_RadarHUD
 
         if (m_wStats)
         {
-            string s = "Det " + detected.ToString() + "/" + total.ToString()
-                + "   Trk " + confirmedTracks.ToString()
-                + "   WLR " + wlrFixes.ToString();
+            string s = "DET " + detected.ToString() + "/" + total.ToString()
+                + "  TRK " + confirmedTracks.ToString()
+                + "  WLR " + wlrFixes.ToString();
             if (best)
             {
-                s = s + "   " + TypeTag(best.m_Type) + " "
-                    + RangeLabel(best.m_Distance) + " " + F0(best.m_SnrDb) + "dB";
+                s = s + "  ·  " + TypeTag(best.m_Type) + " "
+                    + RangeLabel(best.m_Distance);
             }
             m_wStats.SetText(s);
         }
+        if (m_wLegend)
+            m_wLegend.SetText("");
     }
 
     protected string TypeTag(ERDF_RadarTargetType type)
@@ -652,70 +663,17 @@ class RDF_RadarHUD
         return "VEH";
     }
 
-    // ---- widget helpers ----
-    protected Widget MakeFrame(WorkspaceWidget ws, int x, int y, int w, int h, int z, int color)
-    {
-        Widget fw = ws.CreateWidgetInWorkspace(WidgetType.FrameWidgetTypeID, x, y, w, h, 0, null, z);
-        if (fw)
-        {
-            fw.SetColorInt(color);
-            fw.SetVisible(true);
-            m_AllWidgets.Insert(fw);
-        }
-        return fw;
-    }
-
-    protected Widget MakeText(WorkspaceWidget ws, int x, int y, int w, int h, int z, int color)
-    {
-        Widget tw = ws.CreateWidgetInWorkspace(WidgetType.TextWidgetTypeID, x, y, w, h, 0, null, z);
-        if (tw)
-        {
-            tw.SetColorInt(color);
-            tw.SetVisible(true);
-            m_AllWidgets.Insert(tw);
-        }
-        return tw;
-    }
-
-    protected Widget MakeCompassLabel(WorkspaceWidget ws, int x, int y, string label)
-    {
-        Widget w = MakeText(ws, x, y, 14, 14, 96, COL_COMPASS);
-        if (w)
-        {
-            TextWidget tw = TextWidget.Cast(w);
-            tw.SetText(label);
-            tw.SetExactFontSize(13);
-        }
-        return w;
-    }
-
-    protected Widget MakeDataRow(WorkspaceWidget ws, int rowIdx, string defaultText)
-    {
-        int y = m_PxDataY + rowIdx * PX_ROW_H + PX_PAD_Y;
-        Widget w = MakeText(ws, m_PxLeft + PX_PAD_X, y, PX_W - PX_PAD_X * 2, PX_ROW_H - 2, 95, COL_DATA);
-        if (w)
-        {
-            TextWidget tw = TextWidget.Cast(w);
-            tw.SetText(defaultText);
-            tw.SetExactFontSize(11);
-        }
-        return w;
-    }
-
+    // ---- destroy layout root ----
     protected void DestroyWidgets()
     {
-        if (!m_AllWidgets)
-            return;
-        foreach (Widget w : m_AllWidgets)
-        {
-            if (w)
-                w.RemoveFromHierarchy();
-        }
-        m_AllWidgets = null;
+        if (m_wRoot)
+            m_wRoot.RemoveFromHierarchy();
+        m_wRoot      = null;
         m_Canvas     = null;
         m_wMode      = null;
         m_wStats     = null;
         m_wLegend    = null;
+        m_wRingLabel = null;
         m_StaticCmds = null;
         m_AllCmds    = null;
     }

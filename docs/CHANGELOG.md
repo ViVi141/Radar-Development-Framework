@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 2026-07-28 — 可视化靠近官方（ShapeManager + Layout HUD）
+
+- 新增 `RDF_DebugShapeManager`（对齐 `SCR_DebugShapeManager` 子集：`AddLine` / `AddPolyLine` / `AddSphere` / `AddCircleXZ` / `AddCircleArcXZ` / `Add` / `Clear`）
+- `RDF_RadarVisualizer`：四层 Shape 改由 ShapeManager 托管；距离环 / 告警环 / 扇区弧走官方 `CreateCircle*`
+- `RDF_LidarVisualizer`：Shape 生命周期改交 ShapeManager（batched mesh 逻辑不变）
+- PPI HUD：`UI/layouts/RDF/RadarPPI.layout` / `LidarPPI.layout` + `Workspace.CreateWidgets`；公开 `Show`/`Hide`/`FeedScan`/`FeedSamples` 签名不变
+- 文档：`DEVELOPMENT` / `RADAR_API` 登记 Common 与 layout 路径
+
+---
+
 ## 2026-07-28 — Network Sprint：官方模式同步补强
 
 - **RplProp**：关键 Settings 原子字段（扇区 / maxTargets / WLR / CFAR / SNR / Include*）+ `onRpl` 写回权威 Sensor；空回调已实现

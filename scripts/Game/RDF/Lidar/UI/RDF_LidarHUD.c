@@ -1,41 +1,29 @@
-// LiDAR HUD - header bar + CanvasWidget 2D top-down point cloud display (view-aligned) + data rows.
-// All widgets created dynamically via WorkspaceWidget.CreateWidgetInWorkspace().
-// No .layout file required.
+// LiDAR HUD — layout-driven panel + CanvasWidget view-aligned PPI.
+// Structure: UI/layouts/RDF/LidarPPI.layout (CreateWidgets); script binds Names and draws Canvas.
+// Blue/cyan theme to distinguish from radar green.
 //
-// Screen layout (bottom-left, 1920x1080 reference px):
+// Screen layout (bottom-left):
 //
-//  +==========================================+  Y=700
-//  | [>] LiDAR              Point Cloud      |  header H=25
-//  +------------------------------------------+  Y=725
+//  +==========================================+
+//  | [>] LiDAR              Point Cloud      |  header
+//  +------------------------------------------+
 //  |                   F (forward)             |
-//  |    CanvasWidget PPI  210 x 210           |  Y=725
+//  |    CanvasWidget PPI  210 x 210           |
 //  |  L      (+) player          R            |
 //  |                   B (back)               |
-//  +------------------------------------------+  Y=935
-//  | Hits  123 / 512    Range  30 m to 1.2 km |
+//  +------------------------------------------+
+//  | Hits  123 / 512    Range  ...            |
 //  | By density (g/cm³), alpha by distance      |
-//  +==========================================+  Y=957
+//  +==========================================+
 
 class RDF_LidarHUD : RDF_LidarScanCompleteHandler
 {
-    // ---- panel geometry (reference px) ----
-    static const int PX_LEFT    = 20;
-    static const int PX_TOP     = 700;
-    static const int PX_W       = 215;
-    static const int PX_HDR_H   = 25;
+    //! Registered layout resource (open once in Workbench if GUID not resolved).
+    static const ResourceName LAYOUT_PPI = "{B8D42F031A5C7E92}UI/layouts/RDF/LidarPPI.layout";
 
     // Canvas (PPI-style display)
     static const int PX_RADAR_H = 210;
     static const int PX_RADAR_W = 210;
-
-    // Data rows below canvas
-    static const int PX_DATA_Y  = PX_TOP + PX_HDR_H + PX_RADAR_H + 2;
-    static const int PX_ROW_H   = 21;
-    static const int PX_PAD_X   = 7;
-    static const int PX_PAD_Y   = 4;
-
-    // Total panel height (2 rows: Hits/Range, Legend)
-    static const int PX_H       = PX_HDR_H + PX_RADAR_H + 2 * PX_ROW_H + 6;
 
     // ---- PPI canvas internals (unit coords = pixel coords 1:1) ----
     static const float PPI_CX   = 105.0;
@@ -46,19 +34,19 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
     // Real-world range corresponding to PPI_R pixels.
     float m_DisplayRange = 1000.0;   // default 1 km for LiDAR
 
-    // ---- ARGB colours (blue/cyan theme to distinguish from radar green) ----
-    static const int COL_PANEL    = ARGB(210,  8,  12,  20);
-    static const int COL_HDR      = ARGB(255, 15,  25,  35);
-    static const int COL_TITLE    = ARGB(255, 100, 200, 255);
-    static const int COL_MODE     = ARGB(255, 80,  180, 220);
-    static const int COL_DATA     = ARGB(255, 100, 210, 230);
-    static const int COL_COMPASS  = ARGB(180, 80,  200, 220);
+    // ---- ARGB colours (ice CRT cyan) ----
+    static const int COL_TITLE    = ARGB(220, 100, 210, 255);
+    static const int COL_MODE     = ARGB(155,  80,  160, 200);
+    static const int COL_DATA     = ARGB(205, 110, 215, 240);
+    static const int COL_MUTED    = ARGB(100,  70,  130, 160);
 
     // PPI canvas colours
-    static const int COL_PPI_BG      = ARGB(240, 10,  20,  25);
-    static const int COL_PPI_RING    = ARGB( 70, 60,  180, 200);
+    static const int COL_PPI_BG      = ARGB(255,  2,   8,  14);
+    static const int COL_PPI_RING    = ARGB( 95, 50,  170, 210);
+    static const int COL_PPI_RING2   = ARGB( 45, 35,  110, 140);
+    static const int COL_PPI_CROSS   = ARGB( 55, 40,  130, 165);
     static const int COL_PPI_AXIS    = ARGB( 50, 50,  160, 180);
-    static const int COL_PPI_PLAYER  = ARGB(255, 0,   255, 200);
+    static const int COL_PPI_PLAYER  = ARGB(255, 80,  230, 255);
     // Distance gradient: near=green, mid=yellow, far=red (encodes 3D depth in 2D view)
     static const int COL_NEAR = ARGB(255,  0, 255, 100);   // green
     static const int COL_MID  = ARGB(255, 255, 220, 0);   // yellow
@@ -75,12 +63,13 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
     // ---- throttle ----
     protected float m_LastUpdateTime = 0.0;
 
-    // ---- static widget references ----
-    protected ref array<ref Widget> m_AllWidgets;
+    // ---- layout-bound widget references ----
+    protected Widget m_wRoot;
     protected CanvasWidget          m_Canvas;
     protected TextWidget            m_wMode;
     protected TextWidget            m_wHits;
     protected TextWidget            m_wLegend;
+    protected TextWidget            m_wRingLabel;
 
     // ---- CanvasWidget draw commands ----
     protected ref array<ref CanvasWidgetCommand> m_StaticCmds;
@@ -196,7 +185,7 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
     static bool IsVisible()
     {
         RDF_LidarHUD inst = GetInstance();
-        return inst && inst.m_AllWidgets != null;
+        return inst && inst.m_wRoot != null;
     }
 
     // Push a sample array into the HUD directly — works independently of AutoRunner.
@@ -228,7 +217,7 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
     // ---- scan callback ----
     override void OnScanComplete(array<ref RDF_LidarSample> samples)
     {
-        if (!m_AllWidgets || !samples)
+        if (!m_wRoot || !samples)
             return;
 
         // Only pull the range from AutoRunner when the demo is actually driving scans;
@@ -244,12 +233,14 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
 
         UpdateDataRows(samples);
         UpdatePPI(samples);
+        UpdateRingLabel();
     }
 
-    // ---- build all widgets once ----
+    //------------------------------------------------------------------------------------------------
+    //! Instantiate LidarPPI.layout and bind named widgets.
     protected void BuildWidgets()
     {
-        if (m_AllWidgets)
+        if (m_wRoot)
             return;
 
         WorkspaceWidget ws = GetGame().GetWorkspace();
@@ -259,81 +250,62 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
             return;
         }
 
-        m_AllWidgets = new array<ref Widget>();
+        m_wRoot = ws.CreateWidgets(LAYOUT_PPI, null);
+        if (!m_wRoot)
+        {
+            Print("[RDF_LidarHUD] ERROR: CreateWidgets failed for LidarPPI.layout — register UI/layouts/RDF in Workbench");
+            return;
+        }
 
-        // ---- outer panel background ----
-        MakeFrame(ws, PX_LEFT, PX_TOP, PX_W, PX_H, 90, COL_PANEL);
+        m_wRoot.SetVisible(true);
 
-        // ---- header bar ----
-        MakeFrame(ws, PX_LEFT, PX_TOP, PX_W, PX_HDR_H, 91, COL_HDR);
-
-        // Title
-        Widget wTitle = MakeText(ws, PX_LEFT + PX_PAD_X, PX_TOP + PX_PAD_Y,
-                                 110, PX_HDR_H - PX_PAD_Y, 95, COL_TITLE);
-        TextWidget.Cast(wTitle).SetText("[>] LiDAR");
-        TextWidget.Cast(wTitle).SetExactFontSize(17);
-
-        // Mode label
-        Widget wMode = MakeText(ws, PX_LEFT + 120, PX_TOP + PX_PAD_Y,
-                                PX_W - 126, PX_HDR_H - PX_PAD_Y, 95, COL_MODE);
-        m_wMode = TextWidget.Cast(wMode);
-        m_wMode.SetText("Point Cloud");
-        m_wMode.SetExactFontSize(15);
-
-        // ---- CanvasWidget for PPI ----
-        int canvasTop = PX_TOP + PX_HDR_H;
-        Widget wCanvas = ws.CreateWidgetInWorkspace(
-            WidgetType.CanvasWidgetTypeID,
-            PX_LEFT, canvasTop, PX_RADAR_W, PX_RADAR_H,
-            0, null, 92);
+        Widget wCanvas = m_wRoot.FindAnyWidget("PpiCanvas");
         if (wCanvas)
         {
             m_Canvas = CanvasWidget.Cast(wCanvas);
-            m_Canvas.SetVisible(true);
-            m_Canvas.SetSizeInUnits(Vector(PX_RADAR_W, PX_RADAR_H, 0));
-            m_AllWidgets.Insert(wCanvas);
-            BuildStaticDrawCommands();
+            if (m_Canvas)
+            {
+                m_Canvas.SetVisible(true);
+                m_Canvas.SetSizeInUnits(Vector(PX_RADAR_W, PX_RADAR_H, 0));
+                BuildStaticDrawCommands();
+            }
         }
         else
         {
-            Print("[RDF_LidarHUD] WARN: CanvasWidget creation failed");
+            Print("[RDF_LidarHUD] WARN: PpiCanvas not found in layout");
         }
 
-        // ---- compass labels (Python-verified, integer literals only) ----
-        // PPI_CX=105, PPI_CY=105, PPI_R=100  →  canvas unit == screen px.
-        // circle centre screen : (PX_LEFT+105, canvasTop+105) = (125, canvasTop+105)
-        // arc top    (screen)  : canvasTop + (PPI_CY - PPI_R) = canvasTop + 5
-        // arc bottom (screen)  : canvasTop + (PPI_CY + PPI_R) = canvasTop + 205
-        // arc left   (screen)  : PX_LEFT   + (PPI_CX - PPI_R) = 25
-        // arc right  (screen)  : PX_LEFT   + (PPI_CX + PPI_R) = 225
-        // Label w=14 h=14, gap=3px.
-        // F  x=118  y=canvasTop+8   (arc top  +3, label bottom at canvasTop+22)
-        // B  x=118  y=canvasTop+188 (arc bot -14-3, label bottom at canvasTop+202)
-        // L  x=8    y=canvasTop+98  (arc lft -14-3, vertically centred on circle)
-        // R  x=228  y=canvasTop+98  (arc rgt +3)
-        MakeCompassLabel(ws, 118,  canvasTop + 8,    "F");
-        MakeCompassLabel(ws, 118,  canvasTop + 188,  "B");
-        MakeCompassLabel(ws, 8,    canvasTop + 98,   "L");
-        MakeCompassLabel(ws, 228,  canvasTop + 98,   "R");
+        m_wMode = TextWidget.Cast(m_wRoot.FindAnyWidget("ModeText"));
+        m_wHits = TextWidget.Cast(m_wRoot.FindAnyWidget("StatsText"));
+        m_wLegend = TextWidget.Cast(m_wRoot.FindAnyWidget("LegendText"));
+        m_wRingLabel = TextWidget.Cast(m_wRoot.FindAnyWidget("RingLabel"));
 
-        // Range ring annotation
-        string ringLabel = F0(m_DisplayRange * 0.5 / 1000.0) + "km";
-        Widget wRingLbl = MakeText(ws,
-            PX_LEFT + (int)PPI_CX + 3,
-            canvasTop + (int)(PPI_CY - PPI_RING) - 1,
-            40, 14, 96, ARGB(130, 60, 180, 200));
-        TextWidget.Cast(wRingLbl).SetText(ringLabel);
-        TextWidget.Cast(wRingLbl).SetExactFontSize(12);
+        if (m_wMode)
+            m_wMode.SetColorInt(COL_MODE);
+        if (m_wHits)
+            m_wHits.SetColorInt(COL_DATA);
+        if (m_wLegend)
+            m_wLegend.SetColorInt(COL_MUTED);
 
-        // ---- data rows ----
-        m_wHits   = TextWidget.Cast(MakeDataRow(ws, 0, "Hits  --   Range --"));
-        m_wLegend = TextWidget.Cast(MakeDataRow(ws, 1, "By density (g/cm³), alpha by distance"));
-        TextWidget.Cast(m_wLegend).SetExactFontSize(11);
+        Widget wTitle = m_wRoot.FindAnyWidget("TitleText");
+        if (wTitle)
+            wTitle.SetColorInt(COL_TITLE);
+        if (m_wMode)
+            m_wMode.SetColorInt(COL_MODE);
 
-        Print("[RDF_LidarHUD] HUD built  widgets=" + m_AllWidgets.Count().ToString());
+        UpdateRingLabel();
+
+        Print("[RDF_LidarHUD] HUD built from LidarPPI.layout — look BOTTOM-LEFT");
     }
 
-    // ---- build PPI static draw commands ----
+    protected void UpdateRingLabel()
+    {
+        if (!m_wRingLabel)
+            return;
+        m_wRingLabel.SetText(F0(m_DisplayRange * 0.5 / 1000.0) + "km");
+    }
+
+    // ---- CRT face: black disc, range rings, view crosshair, origin pip ----
     protected void BuildStaticDrawCommands()
     {
         if (!m_Canvas)
@@ -344,37 +316,42 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
 
         vector center = Vector(PPI_CX, PPI_CY, 0);
 
-        // Background disc
         array<float> bgVerts = new array<float>();
-        m_Canvas.TessellateCircle(center, PPI_R, 48, bgVerts);
+        m_Canvas.TessellateCircle(center, PPI_R, 56, bgVerts);
         PolygonDrawCommand bgDisc = new PolygonDrawCommand();
         bgDisc.m_iColor   = COL_PPI_BG;
         bgDisc.m_Vertices = bgVerts;
         m_StaticCmds.Insert(bgDisc);
 
-        // Outer range ring
-        array<float> ring100Verts = new array<float>();
-        m_Canvas.TessellateCircle(center, PPI_R - 1.0, 48, ring100Verts);
-        LineDrawCommand ring100 = new LineDrawCommand();
-        ring100.m_iColor       = COL_PPI_RING;
-        ring100.m_fWidth       = 1.0;
-        ring100.m_bShouldEnclose = true;
-        ring100.m_Vertices     = ring100Verts;
-        m_StaticCmds.Insert(ring100);
+        AddPpiRing(center, PPI_R * 0.25, COL_PPI_RING2, 40);
+        AddPpiRing(center, PPI_RING, COL_PPI_RING2, 44);
+        AddPpiRing(center, PPI_R * 0.75, COL_PPI_RING2, 48);
+        AddPpiRing(center, PPI_R - 1.0, COL_PPI_RING, 56);
 
-        // Inner range ring (50 %)
-        array<float> ring50Verts = new array<float>();
-        m_Canvas.TessellateCircle(center, PPI_RING, 48, ring50Verts);
-        LineDrawCommand ring50 = new LineDrawCommand();
-        ring50.m_iColor        = COL_PPI_RING;
-        ring50.m_fWidth       = 1.0;
-        ring50.m_bShouldEnclose = true;
-        ring50.m_Vertices     = ring50Verts;
-        m_StaticCmds.Insert(ring50);
+        array<float> crossNS = new array<float>();
+        crossNS.Insert(PPI_CX);
+        crossNS.Insert(PPI_CY - PPI_R + 3.0);
+        crossNS.Insert(PPI_CX);
+        crossNS.Insert(PPI_CY + PPI_R - 3.0);
+        LineDrawCommand axisNS = new LineDrawCommand();
+        axisNS.m_iColor   = COL_PPI_CROSS;
+        axisNS.m_fWidth   = 1.0;
+        axisNS.m_Vertices = crossNS;
+        m_StaticCmds.Insert(axisNS);
 
-        // Player dot at center
+        array<float> crossEW = new array<float>();
+        crossEW.Insert(PPI_CX - PPI_R + 3.0);
+        crossEW.Insert(PPI_CY);
+        crossEW.Insert(PPI_CX + PPI_R - 3.0);
+        crossEW.Insert(PPI_CY);
+        LineDrawCommand axisEW = new LineDrawCommand();
+        axisEW.m_iColor   = COL_PPI_CROSS;
+        axisEW.m_fWidth   = 1.0;
+        axisEW.m_Vertices = crossEW;
+        m_StaticCmds.Insert(axisEW);
+
         array<float> playerVerts = new array<float>();
-        m_Canvas.TessellateCircle(center, 4.0, 12, playerVerts);
+        m_Canvas.TessellateCircle(center, 3.0, 12, playerVerts);
         PolygonDrawCommand playerDot = new PolygonDrawCommand();
         playerDot.m_iColor   = COL_PPI_PLAYER;
         playerDot.m_Vertices = playerVerts;
@@ -384,6 +361,20 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
             m_AllCmds.Insert(cmd);
 
         m_Canvas.SetDrawCommands(m_AllCmds);
+    }
+
+    protected void AddPpiRing(vector center, float radius, int color, int segments)
+    {
+        if (!m_Canvas || radius < 2.0)
+            return;
+        array<float> verts = new array<float>();
+        m_Canvas.TessellateCircle(center, radius, segments, verts);
+        LineDrawCommand ring = new LineDrawCommand();
+        ring.m_iColor         = color;
+        ring.m_fWidth         = 1.0;
+        ring.m_bShouldEnclose = true;
+        ring.m_Vertices       = verts;
+        m_StaticCmds.Insert(ring);
     }
 
     // ---- update PPI with new sample data ----
@@ -520,64 +511,32 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
         {
             string hitsStr;
             if (totalHits > 0)
-                hitsStr = "Hits " + totalHits.ToString() + "/" + totalRays.ToString() + "   Range " + F0(minRange) + " to " + F0(maxRange) + " m (max " + F0(m_DisplayRange) + " m)";
+            {
+                hitsStr = "HITS " + totalHits.ToString() + "/" + totalRays.ToString()
+                    + "  ·  " + F0(minRange) + "-" + F0(maxRange) + "m";
+            }
             else
-                hitsStr = "Hits 0/" + totalRays.ToString() + "   Range -- (max " + F0(m_DisplayRange) + " m)";
+            {
+                hitsStr = "HITS 0/" + totalRays.ToString() + "  ·  MAX " + F0(m_DisplayRange) + "m";
+            }
             m_wHits.SetText(hitsStr);
         }
+        if (m_wLegend)
+            m_wLegend.SetText("");
     }
 
-    // ---- widget helpers ----
-    protected Widget MakeFrame(WorkspaceWidget ws, int x, int y, int w, int h, int z, int color)
-    {
-        Widget fw = ws.CreateWidgetInWorkspace(WidgetType.FrameWidgetTypeID, x, y, w, h, 0, null, z);
-        if (fw) { fw.SetColorInt(color); fw.SetVisible(true); m_AllWidgets.Insert(fw); }
-        return fw;
-    }
-
-    protected Widget MakeText(WorkspaceWidget ws, int x, int y, int w, int h, int z, int color)
-    {
-        Widget tw = ws.CreateWidgetInWorkspace(WidgetType.TextWidgetTypeID, x, y, w, h, 0, null, z);
-        if (tw) { tw.SetColorInt(color); tw.SetVisible(true); m_AllWidgets.Insert(tw); }
-        return tw;
-    }
-
-    protected Widget MakeCompassLabel(WorkspaceWidget ws, int x, int y, string label)
-    {
-        Widget w = MakeText(ws, x, y, 14, 14, 96, COL_COMPASS);
-        if (w)
-        {
-            TextWidget tw = TextWidget.Cast(w);
-            tw.SetText(label);
-            tw.SetExactFontSize(13);
-        }
-        return w;
-    }
-
-    protected Widget MakeDataRow(WorkspaceWidget ws, int rowIdx, string defaultText)
-    {
-        int y = PX_DATA_Y + rowIdx * PX_ROW_H + PX_PAD_Y;
-        Widget w = MakeText(ws, PX_LEFT + PX_PAD_X, y, PX_W - PX_PAD_X * 2, PX_ROW_H - 2, 95, COL_DATA);
-        if (w)
-        {
-            TextWidget tw = TextWidget.Cast(w);
-            tw.SetText(defaultText);
-            tw.SetExactFontSize(15);
-        }
-        return w;
-    }
-
-    // ---- destroy all widgets ----
+    // ---- destroy layout root ----
     protected void DestroyWidgets()
     {
-        if (!m_AllWidgets) return;
-        foreach (Widget w : m_AllWidgets) { if (w) w.RemoveFromHierarchy(); }
-        m_AllWidgets  = null;
-        m_Canvas      = null;
-        m_wMode       = null;
-        m_wHits       = null;
-        m_wLegend     = null;
-        m_StaticCmds  = null;
-        m_AllCmds     = null;
+        if (m_wRoot)
+            m_wRoot.RemoveFromHierarchy();
+        m_wRoot      = null;
+        m_Canvas     = null;
+        m_wMode      = null;
+        m_wHits      = null;
+        m_wLegend    = null;
+        m_wRingLabel = null;
+        m_StaticCmds = null;
+        m_AllCmds    = null;
     }
 }
