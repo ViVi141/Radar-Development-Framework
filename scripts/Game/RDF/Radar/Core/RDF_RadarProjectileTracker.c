@@ -29,6 +29,12 @@ class RDF_RadarTrack
     float m_GroundYM = 0.0;
     bool m_GroundYValid;
     ref RDF_RadarWlrFix m_LastWlrFix;
+    // Copied from tracker settings for WLR quality gates / smoothing.
+    int m_WlrMinHits = 5;
+    float m_WlrMinSpanS = 1.0;
+    float m_WlrMaxFitRmsM = 80.0;
+    int m_WlrFitWindow = 20;
+    float m_WlrSmoothAlpha = 0.35;
 
     void Push(vector pos, vector vel, float time)
     {
@@ -107,58 +113,74 @@ class RDF_RadarTrack
         outRangeRateMs = m_FilteredRangeRateMs;
     }
 
-    // Back/forward-project onto DEM / live surface for weapon locating.
-    // Prefer the apex sample (max Y) when history is available.
+    // Real WLR-style: multi-point vacuum fit on track history, then AirDrag
+    // integrate to DEM/surface for launch + impact. Soft-fails keep prior fix.
     // groundYM is the flat-plane fallback when DEM/surface sampling is disabled.
     RDF_RadarWlrFix SolveWeaponLocate(float groundYM)
     {
         RDF_RadarWlrFix empty = new RDF_RadarWlrFix();
         if (!IsProjectileTrack())
             return empty;
-        if (m_HitCount < 3)
+        if (m_HitCount < m_WlrMinHits)
             return empty;
         if (m_AirDrag <= 0.0)
             return empty;
-
-        vector anchorPos = m_FilteredPosition;
-        vector anchorVel = m_FilteredVelocity;
-        float anchorTime = GetLastTime();
-        if (anchorTime < 0.0)
+        if (!m_Positions || !m_Times)
+            return empty;
+        if (m_Positions.Count() < m_WlrMinHits)
             return empty;
 
-        if (m_Positions && m_Positions.Count() > 0)
-        {
-            int apex = 0;
-            float bestY = m_Positions.Get(0)[1];
-            for (int i = 1; i < m_Positions.Count(); i++)
-            {
-                float y = m_Positions.Get(i)[1];
-                if (y > bestY)
-                {
-                    bestY = y;
-                    apex = i;
-                }
-            }
-            anchorPos = m_Positions.Get(apex);
-            if (m_Velocities && m_Velocities.Count() > apex)
-                anchorVel = m_Velocities.Get(apex);
-            if (m_Times && m_Times.Count() > apex)
-                anchorTime = m_Times.Get(apex);
-        }
-
         RDF_RadarGlobalWind wind = RDF_RadarBallistics.SampleGlobalWind();
-        RDF_RadarWlrFix fix = RDF_RadarBallistics.SolveLaunchAndImpact(
-            anchorPos,
-            anchorVel,
+        RDF_RadarWlrFix fresh = RDF_RadarBallistics.SolveLaunchAndImpactFromHistory(
+            m_Positions,
+            m_Times,
             groundYM,
-            anchorTime,
             m_AirDrag,
             wind,
-            RDF_RadarBallistics.GRAVITY_M_S2);
-        m_LastWlrFix = fix;
+            RDF_RadarBallistics.GRAVITY_M_S2,
+            m_WlrMinHits,
+            m_WlrMinSpanS,
+            m_WlrMaxFitRmsM,
+            m_WlrFitWindow);
+
+        if (!fresh || !fresh.m_FitValid || (!fresh.m_LaunchValid && !fresh.m_ImpactValid))
+        {
+            // Keep previous reported fix when the new arc fails quality gates.
+            if (m_LastWlrFix)
+                return m_LastWlrFix;
+            return empty;
+        }
+
+        if (m_LastWlrFix && m_WlrSmoothAlpha > 0.0 && m_WlrSmoothAlpha < 1.0)
+        {
+            float a = m_WlrSmoothAlpha;
+            float b = 1.0 - a;
+            if (fresh.m_LaunchValid && m_LastWlrFix.m_LaunchValid)
+            {
+                vector lp0 = m_LastWlrFix.m_LaunchPos;
+                vector lp1 = fresh.m_LaunchPos;
+                fresh.m_LaunchPos = Vector(
+                    lp0[0] * b + lp1[0] * a,
+                    lp0[1] * b + lp1[1] * a,
+                    lp0[2] * b + lp1[2] * a);
+                fresh.m_LaunchTimeS = (m_LastWlrFix.m_LaunchTimeS * b) + (fresh.m_LaunchTimeS * a);
+            }
+            if (fresh.m_ImpactValid && m_LastWlrFix.m_ImpactValid)
+            {
+                vector ip0 = m_LastWlrFix.m_ImpactPos;
+                vector ip1 = fresh.m_ImpactPos;
+                fresh.m_ImpactPos = Vector(
+                    ip0[0] * b + ip1[0] * a,
+                    ip0[1] * b + ip1[1] * a,
+                    ip0[2] * b + ip1[2] * a);
+                fresh.m_ImpactTimeS = (m_LastWlrFix.m_ImpactTimeS * b) + (fresh.m_ImpactTimeS * a);
+            }
+        }
+
+        m_LastWlrFix = fresh;
         m_GroundYM = groundYM;
         m_GroundYValid = true;
-        return fix;
+        return fresh;
     }
 
     void FilterUpdate(
@@ -241,7 +263,11 @@ class RDF_RadarProjectileTracker
     protected bool m_EnableBallisticPrediction = true;
     protected float m_ShellAirDrag = RDF_RadarBallistics.AIR_DRAG_SHELL_82MM_HE;
     protected bool m_EnableWeaponLocate = true;
-    protected int m_WeaponLocateMinHits = 3;
+    protected int m_WeaponLocateMinHits = 5;
+    protected float m_WeaponLocateMinSpanS = 1.0;
+    protected float m_WeaponLocateMaxFitRmsM = 80.0;
+    protected int m_WeaponLocateFitWindow = 20;
+    protected float m_WeaponLocateSmoothAlpha = 0.35;
 
     void ConfigureFromSettings(RDF_RadarSettings settings)
     {
@@ -255,6 +281,10 @@ class RDF_RadarProjectileTracker
         m_ShellAirDrag = settings.m_ShellAirDrag;
         m_EnableWeaponLocate = settings.m_EnableWeaponLocate;
         m_WeaponLocateMinHits = settings.m_WeaponLocateMinHits;
+        m_WeaponLocateMinSpanS = settings.m_WeaponLocateMinSpanS;
+        m_WeaponLocateMaxFitRmsM = settings.m_WeaponLocateMaxFitRmsM;
+        m_WeaponLocateFitWindow = settings.m_WeaponLocateFitWindow;
+        m_WeaponLocateSmoothAlpha = settings.m_WeaponLocateSmoothAlpha;
         RDF_RadarBallistics.SetUseDemGround(settings.m_EnableDemGroundForWlr);
     }
 
@@ -270,6 +300,11 @@ class RDF_RadarProjectileTracker
             return;
         track.m_UseBallisticPrediction = m_EnableBallisticPrediction;
         track.m_AirDrag = m_ShellAirDrag;
+        track.m_WlrMinHits = m_WeaponLocateMinHits;
+        track.m_WlrMinSpanS = m_WeaponLocateMinSpanS;
+        track.m_WlrMaxFitRmsM = m_WeaponLocateMaxFitRmsM;
+        track.m_WlrFitWindow = m_WeaponLocateFitWindow;
+        track.m_WlrSmoothAlpha = m_WeaponLocateSmoothAlpha;
     }
 
     // Recompute launch/impact for confirmed projectile tracks.

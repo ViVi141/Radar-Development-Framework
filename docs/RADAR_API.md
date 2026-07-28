@@ -342,6 +342,8 @@ AutoRunner defaults to world-space showcase (not LiDAR-style point clouds):
 - plot markers + phosphor **afterglow**
 - **lock beam** cone while ACQUIRING / TRACKING / COAST
 - projectile **track ribbon** + larger WLR launch/impact markers
+- WLR uses multi-point vacuum ballistic fit + AirDrag ground intersect
+  (min hits/span/RMS gates; EMA smooth); not apex-only anymore
 
 ```c
 RDF_RadarAutoRunner.SetShowcaseVisuals(true);  // default

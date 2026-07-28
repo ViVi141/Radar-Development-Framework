@@ -458,7 +458,8 @@ class RDF_RadarShellFireAutoTest
         cfg.m_EnableBallisticPrediction = true;
         cfg.m_ShellAirDrag = RDF_RadarBallistics.AIR_DRAG_SHELL_82MM_HE;
         cfg.m_EnableWeaponLocate = true;
-        cfg.m_WeaponLocateMinHits = 2;
+        cfg.m_WeaponLocateMinHits = 5;
+        cfg.m_WeaponLocateMinSpanS = 1.0;
 
         RDF_RadarHardware hw = RDF_RadarHardware.CreateShorad();
         hw.m_AzimuthBeamwidthDeg = 45.0;

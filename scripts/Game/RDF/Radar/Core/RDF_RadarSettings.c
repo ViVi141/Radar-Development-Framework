@@ -100,7 +100,13 @@ class RDF_RadarSettings
     bool m_EnableWeaponLocate = true;
     // Prefer DEM / live surface for WLR ground intersection (fallback = flat Y).
     bool m_EnableDemGroundForWlr = true;
-    int m_WeaponLocateMinHits = 3;
+    // Real-WLR style gates: enough hits + time span before reporting a fix.
+    int m_WeaponLocateMinHits = 5;
+    float m_WeaponLocateMinSpanS = 1.0;
+    float m_WeaponLocateMaxFitRmsM = 80.0;
+    int m_WeaponLocateFitWindow = 20;
+    // Blend new launch/impact into the previous fix (1 = jump, 0 = freeze).
+    float m_WeaponLocateSmoothAlpha = 0.35;
 
     // ---- Scan optimization thresholds (was hardcoded on Scanner / ReuseCache) ----
     float m_LosCacheMaxAgeS = 0.25;
@@ -167,6 +173,10 @@ class RDF_RadarSettings
         m_TrackMaxMisses = Math.Clamp(m_TrackMaxMisses, 1, 32);
         m_ShellAirDrag = Math.Clamp(m_ShellAirDrag, 0.0, 1.0);
         m_WeaponLocateMinHits = Math.Clamp(m_WeaponLocateMinHits, 2, 32);
+        m_WeaponLocateMinSpanS = Math.Clamp(m_WeaponLocateMinSpanS, 0.2, 30.0);
+        m_WeaponLocateMaxFitRmsM = Math.Clamp(m_WeaponLocateMaxFitRmsM, 5.0, 500.0);
+        m_WeaponLocateFitWindow = Math.Clamp(m_WeaponLocateFitWindow, 3, 64);
+        m_WeaponLocateSmoothAlpha = Math.Clamp(m_WeaponLocateSmoothAlpha, 0.0, 1.0);
         m_LosCacheMaxAgeS = Math.Clamp(m_LosCacheMaxAgeS, 0.05, 5.0);
         m_LosCacheMaxOriginShiftM = Math.Clamp(m_LosCacheMaxOriginShiftM, 0.1, 50.0);
         m_LosCacheMaxTargetShiftM = Math.Clamp(m_LosCacheMaxTargetShiftM, 0.1, 100.0);

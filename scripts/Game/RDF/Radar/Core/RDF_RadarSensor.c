@@ -257,7 +257,7 @@ class RDF_RadarSensor
         s.m_EnableBallisticPrediction = true;
         s.m_EnableWeaponLocate = true;
         s.m_EnableDemGroundForWlr = true;
-        s.m_WeaponLocateMinHits = 2;
+        s.m_WeaponLocateMinHits = 5;
         s.m_TrackConfirmHits = 2;
         s.m_KeepEntityTruth = false;
         if (s.m_Hardware)

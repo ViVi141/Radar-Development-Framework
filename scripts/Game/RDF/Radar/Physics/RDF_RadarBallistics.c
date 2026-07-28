@@ -81,6 +81,11 @@ class RDF_RadarWlrFix
     float m_AnchorTimeS;
     bool m_LaunchValid;
     bool m_ImpactValid;
+    // Multi-point vacuum fit diagnostics (real WLR-style gate).
+    bool m_FitValid;
+    float m_FitRmsM;
+    int m_FitPointCount;
+    float m_FitSpanS;
 
     void RDF_RadarWlrFix()
     {
@@ -91,6 +96,33 @@ class RDF_RadarWlrFix
         m_AnchorTimeS = 0.0;
         m_LaunchValid = false;
         m_ImpactValid = false;
+        m_FitValid = false;
+        m_FitRmsM = 0.0;
+        m_FitPointCount = 0;
+        m_FitSpanS = 0.0;
+    }
+}
+
+// Vacuum ballistic state at an absolute anchor time (least-squares fit).
+class RDF_RadarBallisticFitState
+{
+    float m_AnchorTimeS;
+    vector m_Position;
+    vector m_Velocity;
+    float m_RmsM;
+    int m_PointCount;
+    float m_SpanS;
+    bool m_Valid;
+
+    void RDF_RadarBallisticFitState()
+    {
+        m_AnchorTimeS = 0.0;
+        m_Position = "0 0 0";
+        m_Velocity = "0 0 0";
+        m_RmsM = 0.0;
+        m_PointCount = 0;
+        m_SpanS = 0.0;
+        m_Valid = false;
     }
 }
 
@@ -380,6 +412,168 @@ class RDF_RadarBallistics
             fix.m_ImpactPos = impact.m_Position;
             fix.m_ImpactTimeS = anchorTimeS + impact.m_TimeOffsetS;
         }
+        return fix;
+    }
+
+    // 2x2 normal equations for y = b0 + b1 * t.
+    protected static bool SolveLinearTrend(
+        int n,
+        float sumT,
+        float sumTT,
+        float sumY,
+        float sumTY,
+        out float outB0,
+        out float outB1)
+    {
+        outB0 = 0.0;
+        outB1 = 0.0;
+        if (n < 2)
+            return false;
+        float det = (n * sumTT) - (sumT * sumT);
+        if (Math.AbsFloat(det) < 0.0000001)
+            return false;
+        outB0 = ((sumY * sumTT) - (sumT * sumTY)) / det;
+        outB1 = ((n * sumTY) - (sumT * sumY)) / det;
+        return true;
+    }
+
+    // Real WLR-style multi-point vacuum fit on Cartesian history.
+    // Horizontal: constant velocity. Vertical: fixed gravity (g = gravityMs2).
+    // Anchor state is evaluated at the last sample time in the window.
+    static RDF_RadarBallisticFitState FitVacuumFromHistory(
+        array<vector> positions,
+        array<float> times,
+        float gravityMs2 = GRAVITY_M_S2,
+        int minPoints = 5,
+        float minSpanS = 1.0,
+        float maxFitRmsM = 80.0,
+        int windowPoints = 20)
+    {
+        RDF_RadarBallisticFitState state = new RDF_RadarBallisticFitState();
+        if (!positions || !times)
+            return state;
+        int count = positions.Count();
+        if (times.Count() < count)
+            count = times.Count();
+        if (count < minPoints)
+            return state;
+        if (windowPoints < minPoints)
+            windowPoints = minPoints;
+
+        int end = count - 1;
+        int start = end - windowPoints + 1;
+        if (start < 0)
+            start = 0;
+        int n = end - start + 1;
+        if (n < minPoints)
+            return state;
+
+        float tAnchor = times.Get(end);
+        float span = tAnchor - times.Get(start);
+        if (span < minSpanS)
+            return state;
+
+        float sumT = 0.0;
+        float sumTT = 0.0;
+        float sumX = 0.0;
+        float sumTX = 0.0;
+        float sumZ = 0.0;
+        float sumTZ = 0.0;
+        float sumYLin = 0.0;
+        float sumTYLin = 0.0;
+
+        for (int i = start; i <= end; i++)
+        {
+            float t = times.Get(i) - tAnchor;
+            vector p = positions.Get(i);
+            float yLin = p[1] - (0.5 * gravityMs2 * t * t);
+            sumT = sumT + t;
+            sumTT = sumTT + (t * t);
+            sumX = sumX + p[0];
+            sumTX = sumTX + (t * p[0]);
+            sumZ = sumZ + p[2];
+            sumTZ = sumTZ + (t * p[2]);
+            sumYLin = sumYLin + yLin;
+            sumTYLin = sumTYLin + (t * yLin);
+        }
+
+        float x0;
+        float vx;
+        float z0;
+        float vz;
+        float y0;
+        float vy;
+        if (!SolveLinearTrend(n, sumT, sumTT, sumX, sumTX, x0, vx))
+            return state;
+        if (!SolveLinearTrend(n, sumT, sumTT, sumZ, sumTZ, z0, vz))
+            return state;
+        if (!SolveLinearTrend(n, sumT, sumTT, sumYLin, sumTYLin, y0, vy))
+            return state;
+
+        float sumSq = 0.0;
+        for (int j = start; j <= end; j++)
+        {
+            float t = times.Get(j) - tAnchor;
+            vector p = positions.Get(j);
+            float hx = x0 + vx * t;
+            float hz = z0 + vz * t;
+            float hy = y0 + vy * t + (0.5 * gravityMs2 * t * t);
+            float dx = p[0] - hx;
+            float dy = p[1] - hy;
+            float dz = p[2] - hz;
+            sumSq = sumSq + (dx * dx) + (dy * dy) + (dz * dz);
+        }
+        float rms = Math.Sqrt(sumSq / n);
+        if (rms > maxFitRmsM)
+            return state;
+
+        state.m_Valid = true;
+        state.m_AnchorTimeS = tAnchor;
+        state.m_Position = Vector(x0, y0, z0);
+        state.m_Velocity = Vector(vx, vy, vz);
+        state.m_RmsM = rms;
+        state.m_PointCount = n;
+        state.m_SpanS = span;
+        return state;
+    }
+
+    // Fit history → AirDrag integrate to launch/impact (DEM/surface aware).
+    static RDF_RadarWlrFix SolveLaunchAndImpactFromHistory(
+        array<vector> positions,
+        array<float> times,
+        float groundYM,
+        float airDrag,
+        RDF_RadarGlobalWind wind,
+        float gravityMs2 = GRAVITY_M_S2,
+        int minPoints = 5,
+        float minSpanS = 1.0,
+        float maxFitRmsM = 80.0,
+        int windowPoints = 20)
+    {
+        RDF_RadarBallisticFitState fit = FitVacuumFromHistory(
+            positions,
+            times,
+            gravityMs2,
+            minPoints,
+            minSpanS,
+            maxFitRmsM,
+            windowPoints);
+        RDF_RadarWlrFix empty = new RDF_RadarWlrFix();
+        if (!fit || !fit.m_Valid)
+            return empty;
+
+        RDF_RadarWlrFix fix = SolveLaunchAndImpact(
+            fit.m_Position,
+            fit.m_Velocity,
+            groundYM,
+            fit.m_AnchorTimeS,
+            airDrag,
+            wind,
+            gravityMs2);
+        fix.m_FitValid = true;
+        fix.m_FitRmsM = fit.m_RmsM;
+        fix.m_FitPointCount = fit.m_PointCount;
+        fix.m_FitSpanS = fit.m_SpanS;
         return fix;
     }
 }

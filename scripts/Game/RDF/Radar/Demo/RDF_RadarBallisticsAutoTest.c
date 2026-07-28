@@ -228,28 +228,36 @@ class RDF_RadarBallisticsAutoTest
         ExpectTrue("solve_launch_near_origin", launchErrX < 20.0 && launchErrZ < 20.0);
     }
 
-    // Track apex history should feed WLR (uses SampleGlobalWind).
+    // Track history multi-point fit feeds WLR (uses SampleGlobalWind).
     protected static void TestTrackApexWeaponLocate()
     {
         RDF_RadarTrack track = new RDF_RadarTrack();
         track.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_PROJECTILE;
         track.m_AirDrag = RDF_RadarBallistics.AIR_DRAG_SHELL_82MM_HE;
         track.m_UseBallisticPrediction = true;
-        track.m_HitCount = 5;
+        track.m_HitCount = 6;
         track.m_Confirmed = true;
+        track.m_WlrMinHits = 5;
+        track.m_WlrMinSpanS = 1.0;
+        track.m_WlrMaxFitRmsM = 120.0;
+        track.m_WlrFitWindow = 20;
+        track.m_WlrSmoothAlpha = 1.0;
 
-        // Rising then falling samples; apex at index 2.
+        // Synthetic ascending→descending samples over 2.5 s (fit needs span).
         track.Push(Vector(0.0, 200.0, 0.0), Vector(180.0, 40.0, 0.0), 10.0);
+        track.Push(Vector(90.0, 250.0, 0.0), Vector(175.0, 30.0, 0.0), 10.5);
         track.Push(Vector(180.0, 280.0, 0.0), Vector(170.0, 20.0, 0.0), 11.0);
+        track.Push(Vector(270.0, 305.0, 0.0), Vector(165.0, 10.0, 0.0), 11.5);
         track.Push(Vector(360.0, 320.0, 0.0), Vector(160.0, 0.0, 0.0), 12.0);
-        track.Push(Vector(530.0, 280.0, 0.0), Vector(150.0, -25.0, 0.0), 13.0);
+        track.Push(Vector(530.0, 280.0, 0.0), Vector(150.0, -25.0, 0.0), 12.5);
         track.m_FilteredPosition = Vector(530.0, 280.0, 0.0);
         track.m_FilteredVelocity = Vector(150.0, -25.0, 0.0);
-        track.m_LastUpdateTime = 13.0;
+        track.m_LastUpdateTime = 12.5;
 
         RDF_RadarWlrFix fix = track.SolveWeaponLocate(0.0);
         ExpectTrue("track_wlr_launch_valid", fix && fix.m_LaunchValid);
         ExpectTrue("track_wlr_impact_valid", fix && fix.m_ImpactValid);
+        ExpectTrue("track_wlr_fit_valid", fix && fix.m_FitValid);
         if (!fix || !fix.m_LaunchValid)
             return;
         ExpectTrue("track_wlr_launch_behind_apex_x", fix.m_LaunchPos[0] < 360.0);
