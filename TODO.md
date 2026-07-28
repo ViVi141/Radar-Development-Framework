@@ -1,11 +1,15 @@
+> **Languages / 语言**: [English](#english) · [中文](#中文)
+
 # TODO — RDF
+
+## 中文
 
 按 **收益 ÷ 成本** 排期；标签只作分类，不决定顺序。  
 相关：[RADAR_API.md](docs/RADAR_API.md) · [RADAR_CAPABILITIES.md](docs/RADAR_CAPABILITIES.md) · [VEHICLE_RADAR_LOCK_GUIDE.md](docs/VEHICLE_RADAR_LOCK_GUIDE.md) · [CHANGELOG.md](docs/CHANGELOG.md)
 
 ---
 
-## 定位
+### 定位
 
 框架已复现功能链：**搜索 → 点迹 → 跟踪 → 锁定/火控 → WLR**。  
 物理噪声 / 大气 / 信号处理高度理想化——回归“过准”是在无噪声数学世界验证闭环，不是战场精度。
@@ -20,12 +24,12 @@
 
 ---
 
-## 实施顺序（按收益）
+### 实施顺序（按收益）
 
 收益：玩法体感 / 可信度 / 可维护性。成本：改动面、回归风险、联调量。  
 原则：**先让误差合常理，再加深模型；先可观测，再可调参；远程与组网最后。**
 
-### 1 — 立刻做（高收益 · 低成本）
+#### 1 — 立刻做（高收益 · 低成本）
 
 | 项 | 收益 | 成本 | 为何现在做 |
 |----|------|------|------------|
@@ -37,7 +41,7 @@
 - [x] 复用与预算命中统计写入状态行
 - [x] AutoTest：`ideal` vs `realistic`（或 settings 开关）；逼真档断言改为误差带
 
-### 2 — 下一波（高收益 · 中成本）← 已落地核心
+#### 2 — 下一波（高收益 · 中成本）← 已落地核心
 
 目标：玩法上出现“发现不稳定 / 虚警 / 测距晃动”，而不是永远 0.3 m。
 
@@ -55,7 +59,7 @@
 - [x] 天气驱动雨/雾衰：`SampleWorldWeather` + `m_EnableWeatherDrivenRainLoss`（逼真开 / 理想关）
 - [x] Showcase 可视化：扇面/锁定锥/余晖/距离环；PPI 压缩贴右下角
 
-### 3 — 再加深（中收益 · 中高成本）← 已落地
+#### 3 — 再加深（中收益 · 中高成本）← 已落地
 
 | 项 | 收益 | 成本 | 说明 |
 |----|------|------|------|
@@ -69,7 +73,7 @@
 - [x] 欺骗库扩展（拖距、角闪烁、间歇假点）
 - [x] 反炮兵专用 HUD（WLR 告警圈）
 
-### 4 — 延后（收益情景化 · 成本高）
+#### 4 — 延后（收益情景化 · 成本高）
 
 | 项 | 收益 | 成本 | 何时启动 |
 |----|------|------|----------|
@@ -94,7 +98,7 @@
 - [ ] 游戏内 AutoTest 批跑或最小 CI（`StartAll` 已有；此处指无 Debugger 手工触发的自动化/CI）
 - [ ] LiDAR：PPI 动画、DiagMenu、Sensor 门面对齐
 
-### 5 — 停车场（低收益或高风险，默认不做）
+#### 5 — 停车场（低收益或高风险，默认不做）
 
 - [ ] `LICENSE` / `LICENSE.txt` 合并（工具链兼容未确认前不动）
 - 全场 FDTD / 训练级 RD 图每帧 / 完整 DRFM
@@ -102,7 +106,7 @@
 
 ---
 
-## 建议冲刺切片
+### 建议冲刺切片
 
 **Sprint A+B（已完成）**：§1 + §2 — 观测、双档、测量噪声、热噪声填空、大气衰减。  
 **Sprint C（已完成）**：GO/SO-CFAR、Settings 阈值、欺骗扩展、WLR HUD。  
@@ -114,9 +118,9 @@ Realistic：`RDF_RadarAutoTestSuite.StartAllRealistic()`
 
 ---
 
-## 已落地（摘要）
+### 已落地（摘要）
 
-### 功能链
+#### 功能链
 
 - [x] 扫描 + Trace LOS / NLOS · 分类跟踪 · 雷达方程 / 多普勒 / MTI / SNR
 - [x] PPI · DEM 杂波 · CA/GO/SO-CFAR · EW / 欺骗 · 测量合成
@@ -127,33 +131,195 @@ Realistic：`RDF_RadarAutoTestSuite.StartAllRealistic()`
 - [x] Network 权威端挂 Sensor
 - [x] Network：关键配置 RplProp + 扫描结果 Broadcast（plots / tracks / WLR / lock）+ 发射态
 
-### 工程 / 性能
+#### 工程 / 性能
 
 - [x] 散射体 XZ 网格 · Scanner 编排拆分（Geometry + PhysicalDetect）· DEM `$profile`→`DemData/`
 - [x] LOS 缓存 · 多帧预算 · 优先级扫描 · 低速物理复用 · `m_FairScanCursor`
 - [x] SurfaceTable / Signature `.conf`（工坊）+ JSON/CSV 回退
 
-### 测试
+#### 测试
 
 - [x] `AutoTestSuite` 5/5（Ballistics / DEM / Lock / Airborne / ShellFire）；双档 ideal / realistic
 - [x] 独立回归：RWR / ESM-ARM / Rocket Lock-Fire；地图叠加 `RDF_RadarAutoTestMapOverlay`
 - [x] 测试不加辐射源 / 抬 RCS / 强制写表
 
-### DEM / 仓库
+#### DEM / 仓库
 
 - [x] V3 烘焙 · SURF JSON 发布包 · 运行时 GetSurfaceY + LRU · 杂波 + WLR 地面
 - [x] `.gitignore` · 空目录清理 · P1 CHANGELOG 摘要
 
-### LiDAR（维护）
+#### LiDAR（维护）
 
 - [x] 点云 / HUD（`LidarPPI.layout`）/ CSV / 网络 / Bootstrap  
 - 体验项见上方 §4
 
 ---
 
-## 明确不做（实时主路径）
+### 明确不做（实时主路径）
 
 - 全场电磁波 / FDTD · 训练级 RD 图每帧 · 完整 DRFM
 - 远程替代本地 Trace / 实体查询
 
 产品目标：**可信的军武传感器玩法**（发现 / 丢失 / 压制 / 欺骗 / 锁定），不是电磁仿真器，也不用理想世界冒充战场精度。
+
+---
+
+## English
+
+Prioritize by **benefit ÷ cost**; tags are categories only, not ranking.  
+Related: [RADAR_API.md](docs/RADAR_API.md) · [RADAR_CAPABILITIES.md](docs/RADAR_CAPABILITIES.md) · [VEHICLE_RADAR_LOCK_GUIDE.md](docs/VEHICLE_RADAR_LOCK_GUIDE.md) · [CHANGELOG.md](docs/CHANGELOG.md)
+
+---
+
+### Positioning
+
+The framework already reproduces the chain: **search → plots → track → lock/fire-control → WLR**.  
+Physical noise / atmosphere / signal processing are highly idealized — regressions that look “too accurate” are closed-loop checks in a noise-free math world, not battlefield precision.
+
+| Current strengths | Current weaknesses |
+|----------|----------|
+| Feature chain, Sensor facade, dual-tier regression | Fine multipath, diffraction |
+| Grid, LOS/physics reuse, shard budget + stats | GO/SO-CFAR, networking |
+| Measurement noise/bias, thermal fill, atmospheric attenuation | Remote compute, IFF |
+
+Entry: [README.md](README.md)
+
+---
+
+### Implementation order (by benefit)
+
+Benefit: gameplay feel / credibility / maintainability. Cost: change surface, regression risk, integration effort.  
+Principle: **make errors look sane first, then deepen models; observability before knobs; remote and networking last.**
+
+#### 1 — Do now (high benefit · low cost)
+
+| Item | Benefit | Cost | Why now |
+|----|------|------|------------|
+| CHANGELOG: backfill scan-optimization entries | Docs match reality | Very low | Debt; minutes |
+| `GetStatusShort` / stats: `reuseHits` `freshUpdates` `budgetSkips` | See whether opts actually fire | Low | No observability → cannot tune budget |
+| Dual-tier regression: ideal stays “accurate”; realistic uses error bands | Prevent P2 from locking the suite | Low | Guardrail before physics items |
+
+- [x] CHANGELOG：LOS 缓存 / 分片预算 / 物理复用 / 优先级扫描
+- [x] 复用与预算命中统计写入状态行
+- [x] AutoTest：`ideal` vs `realistic`（或 settings 开关）；逼真档断言改为误差带
+
+#### 2 — Next wave (high benefit · medium cost) ← core shipped
+
+Goal: gameplay shows “unstable discovery / false alarms / range jitter”, not forever 0.3 m.
+
+| Item | Benefit | Cost | Depends on |
+|----|------|------|------|
+| Measurement noise & bias (range / az / Doppler) | Track & WLR feel sane immediately | Medium | Dual-tier regression |
+| Thermal fill of empty range cells | CFAR has real false-alarm rate | Medium | None |
+| Simplified atmosphere / rain attenuation | Long-range detection gets harder; strong feel | Medium | More natural after measurement noise |
+
+- [x] 测量噪声与系统性偏差（合成测量路径）
+- [x] 热噪声填充空距离单元 → CA-CFAR 虚警可测
+- [x] 大气衰减 / 降雨损耗（简化模型，可关）
+- [x] 逼真档套件真正加压：CFAR+热填空保持开启；`MeasNoiseScale≈3.5`；WLR 误差带 800 m
+- [x] 测量误差扩展接口：`RDF_RadarMeasurementModel`（CFAR 后 / Tracker 前，下游可 override）
+- [x] 天气驱动雨/雾衰：`SampleWorldWeather` + `m_EnableWeatherDrivenRainLoss`（逼真开 / 理想关）
+- [x] Showcase 可视化：扇面/锁定锥/余晖/距离环；PPI 压缩贴右下角
+
+#### 3 — Deepen further (medium benefit · medium–high cost) ← shipped
+
+| Item | Benefit | Cost | Notes |
+|----|------|------|------|
+| GO-CFAR / SO-CFAR | Stabler clutter edges | Medium | `m_CfarMode` |
+| Scan thresholds into `RDF_RadarSettings` | Per-radar tuning | Low–medium | LOS/reuse/priority |
+| Deception extensions: range gate pull-off / angle scintillation / intermittent false plots | EW gameplay depth | Medium | Three Effect classes |
+| Counter-battery HUD (launch/impact rings) | Productize WLR | Medium | PPI + world rings |
+
+- [x] 可配置 GO-CFAR / SO-CFAR
+- [x] 扫描优化阈值下沉 `RDF_RadarSettings`
+- [x] 欺骗库扩展（拖距、角闪烁、间歇假点）
+- [x] 反炮兵专用 HUD（WLR 告警圈）
+
+#### 4 — Defer (situational benefit · high cost)
+
+| Item | Benefit | Cost | When to start |
+|----|------|------|----------|
+| Knife-edge diffraction / fine multipath | Mountain masking more real | High | After base noise is stable |
+| DEM columnar span occlusion / multipath | Urban / canopy | High | Clear scenario need |
+| Multi-radar networking / cross-fix | Campaign scale | Very high | After single-radar gameplay is polished |
+| Remote compute backend | Offload server CPU | Very high | When local compute is a real bottleneck |
+| Split `mass_battle_sim` | Offline maintainability | Medium | When offline sim needs a big rewrite |
+| Python CFAR/track golden | Drift guard | Medium | After realistic model is finalized |
+| IFF / datalink | Product layer | High | When gameplay needs friendly ID |
+| AutoTest batch run / minimal CI | Engineering hygiene | Medium | Multi-dev or frequent releases |
+| LiDAR PPI animation / DiagMenu / Sensor alignment | LiDAR UX | Medium | Gaps in the radar mainline |
+
+- [x] Network：权威结果（plots + K/W/L）+ 关键 Settings RplProp + 发射态（见 CHANGELOG Network Sprint）
+- [ ] 刀刃绕射 / 更精细多径
+- [ ] DEM span 遮挡 / 多径
+- [ ] 多雷达 plots 融合 / 交叉定位
+- [ ] 远程计算：设计文档 → Backend 接口 → Rest 异步 → 服务端对齐（失败回退 Local）
+- [ ] 拆分 `rdf_radar_mass_battle_sim.py`
+- [ ] Python CFAR / track 单测 + 可选 Enforce golden
+- [ ] IFF / 数据链抽象
+- [ ] 游戏内 AutoTest 批跑或最小 CI（`StartAll` 已有；此处指无 Debugger 手工触发的自动化/CI）
+- [ ] LiDAR：PPI 动画、DiagMenu、Sensor 门面对齐
+
+#### 5 — Parking lot (low benefit or high risk; default skip)
+
+- [ ] `LICENSE` / `LICENSE.txt` 合并（工具链兼容未确认前不动）
+- Full-field FDTD / training-grade RD map every frame / full DRFM
+- Remote replacing local Trace / entity queries
+
+---
+
+### Suggested sprint slices
+
+**Sprint A+B (done)**: §1 + §2 — observability, dual-tier, measurement noise, thermal fill, atmospheric attenuation.  
+**Sprint C (done)**: GO/SO-CFAR, Settings thresholds, deception extensions, WLR HUD.  
+**Network Sprint (done)**: key Settings RplProp, thicker plots, K/W/L authoritative summary, emit state.  
+**Later**: diffraction / DEM span / network fusion / remote compute.
+
+Ideal: `RDF_RadarAutoTestSuite.StartAll()`  
+Realistic: `RDF_RadarAutoTestSuite.StartAllRealistic()`
+
+---
+
+### Shipped (summary)
+
+#### Feature chain
+
+- [x] 扫描 + Trace LOS / NLOS · 分类跟踪 · 雷达方程 / 多普勒 / MTI / SNR
+- [x] PPI · DEM 杂波 · CA/GO/SO-CFAR · EW / 欺骗 · 测量合成
+- [x] 弹道 + WLR（多点真空拟合）· 散射体表 / Signature / Swerling
+- [x] `RDF_RadarSensor`（SEARCH / STARE / WLR / ESM）· `RDF_RadarLockManager` · `GetLockedTarget` / `GetArmAim`
+- [x] RWR（`RDF_RadarRwr`）· ESM 侦收 · 反辐射瞄点
+- [x] 火箭制导示例（`RDF_RadarRocketGuidance` + Lock-Fire 回归）
+- [x] Network 权威端挂 Sensor
+- [x] Network：关键配置 RplProp + 扫描结果 Broadcast（plots / tracks / WLR / lock）+ 发射态
+
+#### Engineering / performance
+
+- [x] 散射体 XZ 网格 · Scanner 编排拆分（Geometry + PhysicalDetect）· DEM `$profile`→`DemData/`
+- [x] LOS 缓存 · 多帧预算 · 优先级扫描 · 低速物理复用 · `m_FairScanCursor`
+- [x] SurfaceTable / Signature `.conf`（工坊）+ JSON/CSV 回退
+
+#### Tests
+
+- [x] `AutoTestSuite` 5/5（Ballistics / DEM / Lock / Airborne / ShellFire）；双档 ideal / realistic
+- [x] 独立回归：RWR / ESM-ARM / Rocket Lock-Fire；地图叠加 `RDF_RadarAutoTestMapOverlay`
+- [x] 测试不加辐射源 / 抬 RCS / 强制写表
+
+#### DEM / repo
+
+- [x] V3 烘焙 · SURF JSON 发布包 · 运行时 GetSurfaceY + LRU · 杂波 + WLR 地面
+- [x] `.gitignore` · 空目录清理 · P1 CHANGELOG 摘要
+
+#### LiDAR (maintaining)
+
+- [x] 点云 / HUD（`LidarPPI.layout`）/ CSV / 网络 / Bootstrap  
+- UX items: see §4 above
+
+---
+
+### Explicitly out of scope (realtime main path)
+
+- Full-field EM / FDTD · training-grade RD map every frame · full DRFM
+- Remote replacing local Trace / entity queries
+
+Product goal: **credible military sensor gameplay** (discover / lose / jam / deceive / lock) — not an EM simulator, and not pretending ideal-world accuracy is battlefield accuracy.

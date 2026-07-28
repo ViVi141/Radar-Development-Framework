@@ -1,3 +1,7 @@
+> **Languages / 语言**: [中文](#中文) · [English](#english)
+
+## 中文
+
 # RDF 雷达 — 能力边界与可做事项
 
 本文说明游戏内雷达**现在是什么**、相对现实电磁波雷达**缺什么**、在 Arma / Enforce 约束下**还能做什么**。  
@@ -5,7 +9,7 @@
 
 ---
 
-## 1. 架构定位（不是什么）
+### 1. 架构定位（不是什么）
 
 | 误解 | 实际情况 |
 |------|----------|
@@ -18,9 +22,9 @@
 
 ---
 
-## 2. 当前已能做到的效果
+### 2. 当前已能做到的效果
 
-### 检测与物理门限
+#### 检测与物理门限
 
 - 扇区 / 可选机械扫描内，发现**载具、炮弹、主动辐射源**（仅作散射体输入）
 - **ESM 模式**（`RDF_RADAR_MODE_ESM`）：仅辐射源；单向 Friis 侦收功率；平台静默不登记发射
@@ -40,7 +44,7 @@
 - **欺骗扩展**：静态假点 + 拖距 / 角闪烁 / 间歇假点 Effect
 - **反炮兵呈现**：PPI 发射/落点告警圈；世界空间地面环
 
-### 显示与测试
+#### 显示与测试
 
 - PPI HUD：默认为匿名量测点；假目标白色；NLOS 青色
 - 量测驱动 α-β 跟踪 + `PredictAt` 外推（最近邻波门；匿名/假目标可进跟踪）
@@ -50,7 +54,7 @@
 - 单项：DEM / Ballistics / ShellFire / Airborne / Lock
 - **公共门面** `RDF_RadarSensor`（SEARCH / STARE / WLR / ESM → Plots / Tracks / Lock / ARM / RWR），见 [RADAR_API.md](RADAR_API.md)
 
-### 观感上「像雷达」的部分
+#### 观感上「像雷达」的部分
 
 - 有扫到、漏检、弱检、杂波压目标、干扰抬噪声、测距晃动的感觉
 - 远距 / 低 SNR 时位置抖动、航迹漂、丢批
@@ -58,27 +62,27 @@
 
 ---
 
-## 3. 相对现实电磁波雷达还缺什么
+### 3. 相对现实电磁波雷达还缺什么
 
-### 传播与回波
+#### 传播与回波
 
 - 真多径 / 刀刃绕射 / **大气折射**（衰减与雨雾损耗已有简化模型，见 §2）
 - 距离门上的杂波谱（不只是 σ⁰ 功率进噪声）
 - 目标起伏（Swerling）已接简化版（0–4）；完整极化 / 闪烁谱仍缺
 
-### 信号与检测
+#### 信号与检测
 
 - 训练级 RD 图 / 全脉冲 CFAR（当前为粗栅格 CA/GO/SO + 热填空）
 - 完整方向图、副瓣、距离/速度模糊
 - STAP 等更认真的杂波抑制（现仅简化 MTI）
 
-### 跟踪与系统
+#### 跟踪与系统
 
 - 多假设关联 / JPDA（现为单假设最近邻）
 - 多雷达组网、IFF、数据链融合
 - 搜索 → 截获 → 跟踪的**资源管理**；武器制导有示例（`RDF_RadarRocketGuidance`），通用武器对接仍靠模组
 
-### 电子战
+#### 电子战
 
 | 类型 | 状态 |
 |------|------|
@@ -86,36 +90,36 @@
 | 欺骗 / DRFM / 拖距拖速 | **已接**：静态假点 + 拖距 / 角闪烁 / 间歇；非完整 DRFM |
 | 完整 ECCM | **无** |
 
-### 引擎与联机现实
+#### 引擎与联机现实
 
 - 候选为散射体表 + Sphere/Active；仍非体素体积搜索
 - 已有服务器权威同步路径；未覆盖复杂多雷达融合与带宽自适应
 
 ---
 
-## 4. 在现有约束下「能做到」的增强
+### 4. 在现有约束下「能做到」的增强
 
 与 [TODO.md](../TODO.md) 延后项对齐：
 
-### 游戏内（推荐）
+#### 游戏内（推荐）
 
 1. **锁定层对接武器**（见 [VEHICLE_RADAR_LOCK_GUIDE.md](VEHICLE_RADAR_LOCK_GUIDE.md)）
 2. 更细多径/绕射近似（有明确山地场景需求时）
 3. 联机：带宽自适应与多雷达融合（单雷达权威路径已有）
 
-### 离线（Python + DEM）
+#### 离线（Python + DEM）
 
 - 更认真的传播、杂波谱、CFAR 原型  
 - 标定表（功率因子、σ⁰、干扰耦合）再喂回游戏参数  
 
-### 不宜作为游戏内实时主路径
+#### 不宜作为游戏内实时主路径
 
 - FDTD / 全场电磁波  
 - 训练级信号处理整链每帧跑满  
 
 ---
 
-## 5. 建议优先级（只选三条时）
+### 5. 建议优先级（只选三条时）
 
 1. 锁定层对接武器（示例制导已有；产品武器仍需模组接入）  
 2. 更细多径/绕射近似（有明确山地场景需求时）  
@@ -125,10 +129,149 @@
 
 ---
 
-## 6. 相关入口
+### 6. 相关入口
 
 - 游戏内流水线：[RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md)  
 - 公共 API：[RADAR_API.md](RADAR_API.md)  
 - DEM：[DEM.md](DEM.md)  
 - 待办清单：[TODO.md](../TODO.md)  
 - 噪声干扰用法示例见 `RADAR_GAME_FRAMEWORK.md` 中 Optional EW noise 一节  
+
+---
+
+## English
+
+# RDF Radar — Capability Boundaries & What Is Feasible
+
+This document explains **what the in-game radar is now**, **what it lacks** versus real EM radar, and **what is still feasible** under Arma / Enforce constraints.  
+Implementation details: [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md); public contract: [RADAR_API.md](RADAR_API.md); schedule: [TODO.md](../TODO.md); offline prototype: [tools/dem/RADAR_FRAMEWORK.md](../tools/dem/RADAR_FRAMEWORK.md).
+
+---
+
+### 1. Architectural positioning (what it is not)
+
+| Misconception | Reality |
+|---------------|---------|
+| Offline digital twin computes then feeds results back into the game | **No**. In-game Enforce runs detection in real time; `tools/dem/` is an offline prototype / tuning tool under the same conventions and does not drive in-game detections. |
+| True EM wave propagation (field solvers / FDTD) | **No**. It is an engineering approximation of power and detection chains, not waves propagating in space. |
+| Full training-grade radar signal-processing pipeline | **No**. There is no complete real-time “waveform → RD map → CFAR → track” chain; there is measurement synthesis, measurement association, thermal-noise fill, and Swerling / aspect RCS. |
+| Entity world coordinates used directly as radar readings | **No (default)**. Entities are scatterers only; output is quantized, noisy measurement plots. |
+
+In short: suited for **playable sensor gameplay with physical thresholds and measurement uncertainty**; not suited as an EM simulator or training-grade radar twin.
+
+---
+
+### 2. What it can already do
+
+#### Detection & physical thresholds
+
+- Within a sector / optional mechanical scan, discover **vehicles, shells, and active emitters** (scatterer inputs only)
+- **ESM mode** (`RDF_RADAR_MODE_ESM`): emitters only; one-way Friis receive power; platform stays silent (no transmit registration)
+- **Anti-radiation aim API**: `GetArmAim` / `LockArmTrackId` (lock drops when emission stops); no missile prefab included
+- **RWR**: search / track / lock warnings (`RDF_RadarRwr`); no dedicated UI — mods read the API
+- LOS via `TraceMove`; optional **NLOS ground-bounce weak detection** when occluded
+- Hardware params → radar equation, Doppler, MTI, processing gain, SNR threshold (emitters use the ESM equation when `m_EnableEsmReceive` is on)
+- DEM σ⁰ **ground clutter** enters the noise denominator (skipped on the ESM path)
+- **Measurement synthesis**: range-gate center + beam-angle jitter + Doppler-derived radial velocity (more jitter at lower SNR)
+- **Tunable measurement noise / bias**: ideal vs realistic profiles (`MeasNoiseScale`, etc.); downstream can override `RDF_RadarMeasurementModel`
+- **Atmosphere / rain / weather-driven loss**: simplified model, can be disabled; realistic profile can enable weather rain/fog attenuation
+- **Scatterer-table fidelity inputs**: aspect azimuth + elevation RCS (AABB projection), Swerling fluctuation, AGL, DEM cache, emitter RF summary; baked tables prefer `Signatures/*.conf` (workshop), profile CSV fallback
+- DEM / surface: `GetSurfaceY` + SURF JSON; EM params prefer `RadarData/SurfaceTable.conf`
+- **EW effect stack**: noise jamming + deceptive false targets
+- **Simplified CFAR**: coarse-grid CA / GO / SO (`m_CfarMode`); empty cells can be filled with thermal noise
+- **MP authority path**: `RDF_RadarNetworkComponent` (RplProp antenna config + Reliable Broadcast of plots / tracks / WLR / lock + transmit state)
+- **Deception extensions**: static false plots + range-gate pull-off / angular scintillation / intermittent false-plot Effects
+- **Counter-battery presentation**: PPI launch / impact alert circles; world-space ground rings
+
+#### Display & testing
+
+- PPI HUD: anonymous measurement points by default; false targets white; NLOS cyan
+- Measurement-driven α-β tracking + `PredictAt` extrapolation (nearest-neighbor gate; anonymous / false targets can enter tracking)
+- **Lock layer** `RDF_RadarLockManager`: SEARCH → acquire → track → coast + `GetLockedTarget`
+- AutoTest dual profiles: `RDF_RadarAutoTestSuite.StartAll()` (ideal) /
+  `StartAllRealistic()` (realistic error band); suite of 5 items + standalone RWR / ESM-ARM / Rocket
+- Singles: DEM / Ballistics / ShellFire / Airborne / Lock
+- **Public façade** `RDF_RadarSensor` (SEARCH / STARE / WLR / ESM → Plots / Tracks / Lock / ARM / RWR); see [RADAR_API.md](RADAR_API.md)
+
+#### Parts that “feel like radar”
+
+- Sense of detection, miss, weak detect, clutter burying targets, jamming raising noise, ranging wobble
+- At long range / low SNR: position jitter, track drift, dropouts
+- **Not** a fully lit map; distance, occlusion, low SNR, and jamming cause losses
+
+---
+
+### 3. What is still missing vs real EM radar
+
+#### Propagation & returns
+
+- True multipath / knife-edge diffraction / **atmospheric refraction** (attenuation and rain/fog loss already have simplified models; see §2)
+- Clutter spectrum on range gates (not only σ⁰ power into noise)
+- Target fluctuation (Swerling) has a simplified hook (0–4); full polarization / scintillation spectra still missing
+
+#### Signal & detection
+
+- Training-grade RD maps / full-pulse CFAR (currently coarse-grid CA/GO/SO + thermal fill)
+- Full antenna pattern, sidelobes, range/velocity ambiguity
+- More serious clutter rejection such as STAP (currently only simplified MTI)
+
+#### Tracking & systems
+
+- Multi-hypothesis association / JPDA (currently single-hypothesis nearest neighbor)
+- Multi-radar networking, IFF, datalink fusion
+- **Resource management** for search → acquire → track; weapon guidance has an example (`RDF_RadarRocketGuidance`); general weapon integration still depends on the mod
+
+#### Electronic warfare
+
+| Type | Status |
+|------|--------|
+| Noise jamming | **Present** (raises receive noise → lowers SNR) |
+| Deception / DRFM / RGPO–VGPO | **Hooked**: static false plots + range pull-off / angular scintillation / intermittent; not a full DRFM |
+| Full ECCM | **None** |
+
+#### Engine & multiplayer reality
+
+- Candidates are scatterer tables + Sphere/Active; still not voxel volume search
+- Server-authoritative sync path exists; complex multi-radar fusion and bandwidth adaptation are not covered
+
+---
+
+### 4. Enhancements that are feasible under current constraints
+
+Aligned with deferred items in [TODO.md](../TODO.md):
+
+#### In-game (recommended)
+
+1. **Lock layer → weapon integration** (see [VEHICLE_RADAR_LOCK_GUIDE.md](VEHICLE_RADAR_LOCK_GUIDE.md))
+2. Finer multipath / diffraction approximations (when there is a clear mountain-terrain need)
+3. MP: bandwidth adaptation and multi-radar fusion (single-radar authority path already exists)
+
+#### Offline (Python + DEM)
+
+- More serious propagation, clutter-spectrum, and CFAR prototypes  
+- Calibration tables (power factors, σ⁰, jamming coupling) fed back into game parameters  
+
+#### Not suitable as the in-game real-time main path
+
+- FDTD / full-field EM waves  
+- Running a full training-grade signal-processing chain every frame  
+
+---
+
+### 5. Suggested priority (if picking only three)
+
+1. Lock layer → weapon integration (example guidance exists; product weapons still need mod wiring)  
+2. Finer multipath / diffraction approximations (when there is a clear mountain-terrain need)  
+3. DEM publish packs and multiplayer data consistency  
+
+Target product shape: **credible military-sensor gameplay** (detect / lose / jam / deceive / lock), not a real radar simulator.
+
+---
+
+### 6. Related entry points
+
+- In-game pipeline: [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md)  
+- Public API: [RADAR_API.md](RADAR_API.md)  
+- DEM: [DEM.md](DEM.md)  
+- Todo list: [TODO.md](../TODO.md)  
+- Noise-jamming usage examples: Optional EW noise section in `RADAR_GAME_FRAMEWORK.md`  

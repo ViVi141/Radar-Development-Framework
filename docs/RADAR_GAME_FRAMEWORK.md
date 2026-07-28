@@ -1,4 +1,8 @@
+> **Languages / 语言**: [English](#english) · [中文](#中文)
+
 # RDF In-Game Radar Framework
+
+## English
 
 The Enforce implementation now follows the same contracts as the offline
 prototype. Game entities are scatterers/emitters for the physics chain;
@@ -342,3 +346,312 @@ Output report:
   identity. Default plots clear `m_Entity` unless `m_KeepEntityTruth`.
 - Product target: playable sensor gameplay, not an EM simulator. See
   [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md) and [TODO.md](../TODO.md).
+
+---
+
+## 中文
+
+Enforce 实现现已遵循与离线原型相同的契约。游戏实体是物理链中的散射体/辐射源；
+对外 plots 为量化、带噪的量测（不是原始实体位姿）。
+
+相对真实电磁波雷达的能力（能做什么 / 缺什么 / 仍可做什么）：
+[RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md)。
+
+## 运行时链路
+
+1. 解析雷达原点与当前瞄准轴（boresight）。
+2. 推进全局散射体表（`RDF_RadarScattererRegistry`）：周期发现扫描、摊销分类、轮询运动学刷新。
+   类型与 RCS 按条目缓存，扫描不再重新分类实体。
+3. 从表中读取候选，再施加距离与方位驻留。
+4. `TraceMove` 通视检查。通畅 → 直接检测。
+   遮挡 → 可选 NLOS 地面反射（默认开）：镜像法路径长度 + `|Gamma|^2` + 前阻挡深度缩放；标记 `m_LosBlocked`。
+5. 读取炮弹或刚体速度（**真值，仅物理用**）。
+6. 估计实体 RCS；接收功率乘以 `m_MultipathFactor`。
+7. 选择配置中最强的俯仰波束。
+8. 计算单站接收功率、多普勒、MTI、处理增益、噪声、DEM 杂波功率、可选大气/雨/天气损耗与 SNR。
+9. 可选方位/距离功率粗栅 CA-CFAR；空单元可用热噪声填充（`m_EnableCfarThermalFill`），以便可测 Pfa。
+10. **测量合成**（`RDF_RadarMeasurement`）：距离量化到门中心，叠加 SNR 缩放的角度/多普勒噪声
+    （经 settings / 理想 vs 逼真档缩放），重建 plot 运动学；除非 `m_KeepEntityTruth`，否则清除 `m_Entity`。
+    可选 CFAR 后 override：`RDF_RadarMeasurementModel`。
+11. 将接受的 plots 送入量测驱动的 α-β 跟踪器（最近邻波门 + `PredictAt`）。匿名 / 假 plots 也可关联；并非仅显示。
+12. 可选锁定层（`RDF_RadarLockManager`）作用于航迹：SEARCH → ACQUIRING → TRACKING → COAST；
+    经 `RDF_RadarSensor.GetLockedTarget` 暴露。
+
+## 主要配置
+
+`RDF_RadarSettings`：
+
+- `m_Hardware`：`RDF_RadarHardware`
+- `m_EnablePhysicalDetection`
+- `m_EnableMechanicalScan`
+- `m_DetectionSnrDb`
+- `m_KeepUndetected`
+- `m_EnableDemClutter`
+- `m_DemCacheMaxTiles`
+- `m_DemTileLoadsPerScan`
+- `m_DemClutterScale`
+- `m_UseScattererRegistry`（默认 true）、`m_ScattererDiscoveryRangeScale`、
+  `m_ScattererDiscoveryIntervalS`、`m_ScattererClassifyPerTick`、
+  `m_ScattererRefreshPerTick`、`m_ScattererMaxEntries`
+- `m_UseSphereQuery`、`m_SphereQueryAlsoActive`（仅旧搜索路径）
+- `m_MaxLosTracesPerScan`（默认 48；限制 TraceMove 卡顿）
+- `m_EnableNlosMultipath`（默认 true）
+- `m_NlosReflectionAbs`、`m_NlosMinFactor`、`m_NlosMaxTargetAglM`
+- `m_AdditionalNoisePowerW`
+- `m_EwStack`
+- `m_EnableCfarGate`、`m_CfarGuardCells`、`m_CfarTrainingCells`、`m_CfarPfa`、
+  `m_RangeBinCount`、`m_EnableCfarThermalFill`、`m_CfarMode`（CA/GO/SO）
+- 扫描优化：`m_LosCacheMaxAgeS`、复用年龄/移位、优先级距离 /
+  速度 / 波段间隔、`m_FreshUpdateBudgetMin/Max`
+- `m_EnableWlrHudAlerts`、`m_WlrHudAlertRadiusM`
+- `m_EnableAtmosphericLoss` / 天气驱动雨雾损耗（见 RADAR_API）
+- `m_EnableMeasurementSynthesis`（默认 true）、`m_KeepEntityTruth`（调试）、
+  `m_MeasurementModel`、测量噪声缩放
+- `m_TrackGateRangeM`、`m_TrackGateAzimuthDeg`、`m_TrackConfirmHits`、`m_TrackMaxMisses`
+- `m_EnableEsmReceive`（辐射源走 Friis \(R^2\)；SEARCH 预设开启）
+- `m_EnableRwrReporting`（每次驻留后发布 SEARCH/TRACK/LOCK 威胁）
+- `m_FairScanCursor`（公平轮询驻留游标；默认 true）
+- Include* 标志（`m_IncludeVehicles` / projectiles / emitters 等）
+
+`RDF_RadarHardware`：
+
+- 频率、峰值功率、天线增益、系统损耗、噪声系数
+- 脉宽、带宽、PRF、脉冲积累、MTI
+- `GetRangeBinM()` ≈ `c/(2B)`，用于测量量化
+- 扫描 RPM 与 `RDF_RadarElevationBeam[]`
+
+## 预设
+
+```c
+RDF_RadarSettings shorad = RDF_RadarDemoConfig.CreateDefault(64);
+RDF_RadarSettings p18 = RDF_RadarDemoConfig.CreateP18Like(128);
+```
+
+预设仅为示例。游戏系统可自行构造硬件与波束列表。
+
+## 可选 EW 噪声
+
+```c
+RDF_RadarNoiseJammerEffect jammer = new RDF_RadarNoiseJammerEffect();
+jammer.m_Position = jammerWorldPosition;
+jammer.m_ErpW = 10000.0;
+jammer.m_BandwidthHz = 5000000.0;
+settings.m_EwStack.Add(jammer);
+```
+
+## 可选 EW 欺骗 / 假 plots
+
+```c
+RDF_RadarDeceptionJammerEffect deceive = new RDF_RadarDeceptionJammerEffect();
+deceive.AddFalsePlot(1600.0, -18.0, 0.0000000000012, 25.0, 0.0);
+settings.m_EwStack.Add(deceive);
+
+// Range walk-off / angle scintillation / intermittent false plot:
+RDF_RadarRangeWalkOffEffect walk = new RDF_RadarRangeWalkOffEffect();
+walk.m_BaseRangeM = 1200.0;
+walk.m_RangeRateMs = 80.0;
+settings.m_EwStack.Add(walk);
+
+RDF_RadarAngleScintillationEffect scint = new RDF_RadarAngleScintillationEffect();
+scint.m_RangeM = 1500.0;
+scint.m_AzimuthJitterDeg = 3.0;
+settings.m_EwStack.Add(scint);
+
+RDF_RadarIntermittentFalsePlotEffect burst = new RDF_RadarIntermittentFalsePlotEffect();
+burst.m_PeriodS = 2.0;
+burst.m_DutyCycle = 0.35;
+settings.m_EwStack.Add(burst);
+```
+
+假 plots 以匿名目标发出（`m_IsAnonymous=true`，`m_IsFalsePlot=true`），并走同一 CFAR 门。
+
+## 运行时 DEM 杂波源
+
+首选运行时路径（见 [DEM.md](DEM.md)）：
+
+- 高程：实时 `BaseWorld.GetSurfaceY`
+- 地表类别：`$profile` 或模组 `DemData/<world>/surf_manifest.json` + `surf_chunks/` 下的 `RDF_SURF_JSON_V1`
+- 电磁参数：`RadarData/SurfaceTable.conf`（工坊），JSON 回退
+
+遗留 / 开发回退：V3 CSV 瓦片（`manifest.csv` + `tiles/tile_*.csv`）、
+全量 DEM JSON / `.dem.data`。皆无 → `mode=LIVE`（仅高程，地表类 UNKNOWN）。
+
+扫描器初始化有界 LRU 缓存（`RDF_DemRuntimeCache`），并在采样目标附近按需加载瓦片/块。当前默认：
+
+- 最大缓存瓦片：`16`
+- 每扫同步瓦片加载预算：`2`
+
+当 DEM / SURF 数据不可用或损坏时，雷达处理回退为仅热噪声 + EW 噪声（LIVE 高程仍可用），旧地图可继续运行。
+
+## 检测输出
+
+每个 `RDF_RadarTarget` 现包含：
+
+- 方位/俯仰与扫描序号
+- 速度、径向速度与多普勒
+- RCS、接收/处理功率、MTI 增益
+- 采样的 DEM 地表类与杂波功率贡献
+- SNR、检测标志与所选波束名
+- `m_LosBlocked`、`m_LosHitFraction`、`m_MultipathFactor`（NLOS 反射缩放）
+- `m_IsAnonymous`、`m_IsFalsePlot`、`m_CfarPowerW`
+
+## PPI HUD
+
+`RDF_RadarHUD` 绘制北向上平面位置显示（绿磷光主题，右下角面板 **144×184**，PPI 画布 **128×128**），含距离环、瞄准轴扫描线与每目标一个光点。
+
+- 光点颜色：默认淡黄色匿名量测 plots；白色欺骗假点；青色表示检出的 NLOS 多径（`m_LosBlocked`）；
+  仅当 `m_KeepEntityTruth` 开启时用柔和类型色；`m_KeepUndetected` 开启时未检出回波为暗灰。
+- 光点大小随 SNR 缩放。
+- 数据行显示检出/总数、确认航迹数与最强目标（类型、距离、SNR）。
+- 航迹来自量测关联；用 `RDF_RadarTrack.PredictAt(t)` 做外推锁定 / 前置点。
+
+控制：
+
+```c
+RDF_RadarAutoRunner.SetHudEnabled(true);   // show + auto-feed every scan
+RDF_RadarHUD.SetMode("SHORAD");            // header label
+RDF_RadarHUD.SetDisplayRange(2000.0);      // overridden by scan range each feed
+```
+
+Runner 自动从 `RDF_RadarScanner.GetLastOrigin()`、`GetLastForward()`、`GetLastRange()` 喂 HUD。
+自定义系统可调用 `RDF_RadarHUD.FeedScan(targets, origin, forward, range, tracker)`。
+
+本地模式下 HUD 模式标签含 DEM 状态；同步模式下含 `NET`。
+
+## 网络权威路径
+
+在雷达所有者上同时使用 `RDF_RadarNetworkComponent` 与 `RplComponent`。
+`RDF_RadarAutoRunner` 与 `RDF_RadarComponent` 会在 subject 上自动检测 `RDF_RadarNetworkAPI`。
+玩法优先在权威端驱动 `RDF_RadarSensor`；网络组件同步扫描结果。
+
+1. 客户端调用 `RequestScan()`，
+2. 服务器跑权威扫描路径（Sensor / Scanner + Tracker / Lock / WLR），
+3. 服务器广播紧凑载荷（`M` 元数据 + `T` plots + `K` 航迹 + `W` WLR + `L` 锁定），
+4. 客户端更新同步缓存；`RDF_RadarSensor` 注入航迹/锁定并跳过该帧本地重算。
+5. 慢旋钮（range、sector、CFAR、Include*、emitting）用 `[RplProp]`；HUD/DEM 保持本地。
+
+### 最小搭建（实体挂载雷达）
+
+1. 在雷达实体 prefab 上添加：
+   - `RplComponent`
+   - `RDF_RadarComponent`
+   - `RDF_RadarNetworkComponent`
+2. 确保实体在场景/会话设置中可复制。
+3. 经现有入口启动雷达（`RDF_RadarComponent` tick 或 `RDF_RadarAutoRunner`），无需额外脚本接线。
+4. 可选：保持 `RDF_RadarAutoRunner.SetHudEnabled(true)` 以观察客户端 HUD。
+
+### 快速验证（服务器权威）
+
+1. 运行至少主机 + 一个客户端的多人会话。
+2. 在主机上照常启用雷达演示/配置。
+3. 在客户端确认 HUD 模式文本显示 `PPI | NET`。
+4. 移动目标/辐射源，确认主机/客户端看到一致的目标数量/类型趋势（允许正常时间抖动）。
+
+## 自动化实弹射击 + WLR 测试
+
+Script Debugger（Play 模式）。生成并发射真实 82 mm HE 炮弹：
+
+```c
+RDF_RadarShellFireAutoTest.Start();
+```
+
+约 42 s：每 6 s 在本地玩家前方发射 O832DU，宽扇区凝视弹道，然后检查检出 plots、确认航迹，以及相对真值的 WLR 发射误差（理想通道通过 ≤ **250 m**；逼真通道 ≤ **800 m**，经 `WLR_LAUNCH_PASS_REALISTIC_M`）。报告：
+`$profile:RDF/RadarTests/radar_shellfire_autotest_<tick>.txt`。
+
+## 自动化弹道 / WLR 数学测试
+
+Script Debugger（同步，无 tick 循环）：
+
+```c
+RDF_RadarBallisticsAutoTest.Start();
+```
+
+检查自由落体落点时间、AirDrag 距离缩短、侧风偏移、发射点反推，以及多点真空弹道拟合 + AirDrag 地面交点（WLR 风格门限；非仅顶点）。写入
+`$profile:RDF/RadarTests/radar_ballistics_autotest_<tick>.txt`。
+
+离线 Python 镜像：
+
+```
+cd tools/dem
+python -m unittest test_rdf_radar_ballistics.py -v
+```
+
+## 自动化 DEM 回归测试
+
+可在 Script Debugger 中运行完整自动化游戏内测试：
+
+```c
+RDF_RadarAutoTest.Start();
+```
+
+自动执行四个阶段：
+
+1. DEM 杂波关闭基线
+2. DEM 杂波开启（`scale=1.0`）
+3. DEM 杂波开启（`scale=5.0`）
+4. DEM 杂波开启且瓦片加载预算为 `0`（降级路径）
+
+测试沿瞄准轴生成真实无辅助 Mi-8 目标（无辐射源标记、无 RCS 加成、无预填散射体行）。目标必须由发现找到、并靠自身回波检出（`discovered_unaided` 守卫）。
+
+以理想 vs 逼真通道跑全套件（顺序：Ballistics → DEM → Lock → Airborne → ShellFire）：
+
+```c
+RDF_RadarAutoTestSuite.StartAll();
+RDF_RadarAutoTestSuite.StartAllRealistic();
+```
+
+独立回归（**不**进 `StartAll`；一次跑一个）：
+
+```c
+RDF_RadarRwrAutoTest.Start();            // RWR SEARCH/TRACK/LOCK on victim
+RDF_RadarEsmArmAutoTest.Start();         // ESM + GetArmAim / silence unlock
+RDF_RadarRocketLockFireAutoTest.Start(); // lock Mi-8 → Hydra70 guidance
+```
+
+测试运行时地图标记：`RDF_RadarAutoTestMapOverlay`（如 Lock / Airborne）。
+
+输出：
+
+- 控制台打印阶段指标与最终 `PASS/FAIL`
+- 报告写入 `$profile:RDF/RadarTests/radar_dem_autotest_<tick>.txt`
+
+控制：
+
+```c
+RDF_RadarAutoTest.IsRunning();
+RDF_RadarAutoTest.Stop();
+```
+
+## 自动化空中目标测试（Mi-8）
+
+Script Debugger：
+
+```c
+RDF_RadarAirborneScanTest.Start();
+RDF_RadarAirborneScanTest.StartKeepTarget();
+```
+
+该测试自动：
+
+1. 选择附近较平坦的雷达起点，
+2. 生成 `{6BDF7D3E72D31F29}Prefabs/Scenarios/SP01/SP01_Mi8MT_unarmed_transport.et`，
+3. 强制空中圆周运动并带垂直振荡，
+4. 跑雷达扫描并验证生成目标被看见/检出/分类。
+
+`StartKeepTarget()` 在测试结束后保留生成的空中目标，便于手动 PPI/世界视觉检查。
+
+输出报告：
+
+- `$profile:RDF/RadarTests/radar_airborne_scan_<tick>.txt`
+
+## 当前边界
+
+- 目标候选仍以实体优先（散射体表 + sphere/active 回退），通视仍依赖 `TraceMove`。
+- DEM / 地表：优先 SURF JSON + 实时 `GetSurfaceY`；CSV/BIN 为回退。
+  杂波多人一致仍需匹配的本地 SURF/DEM（或 LIVE）；
+  检测**结果**经 `RDF_RadarNetworkComponent` 同步（不能替代本地地形数据）。
+- EW 支持定向噪声与欺骗（静态假点、拖距、角闪烁、间歇假点）。非完整 DRFM /
+  相干距离门拖引。
+- 跟踪按量测波门关联（最近邻），不按实体身份。默认 plots 清除 `m_Entity`，除非 `m_KeepEntityTruth`。
+- 产品目标：可玩的传感器玩法，不是电磁仿真器。见
+  [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md) 与 [TODO.md](../TODO.md)。

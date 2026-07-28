@@ -1,4 +1,10 @@
+> **Languages / 语言**: [English](#english) · [中文](#中文)
+>
+> Bilingual conventions: [I18N.md](I18N.md).
+
 # API Reference — RDF
+
+## 中文
 
 此文档以 **LiDAR** 公开 API 为主；文末含雷达摘要。完整雷达约定见 [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md)，DEM 见 [DEM.md](DEM.md)。
 
@@ -371,7 +377,9 @@ if (closest)
 
 ---
 
-## English translation
+---
+
+## English
 
 # API Reference — RDF (LiDAR)
 
