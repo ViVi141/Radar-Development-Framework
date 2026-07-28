@@ -177,3 +177,90 @@ def clutter_sigma0_frequency_scale(f_base_hz: float, f_new_hz: float) -> float:
     if ratio > 2.0:
         ratio = 2.0
     return math.sqrt(ratio)
+
+
+def _wrap_delta_deg(delta_deg: float) -> float:
+    rel = float(delta_deg)
+    while rel > 180.0:
+        rel = rel - 360.0
+    while rel < -180.0:
+        rel = rel + 360.0
+    return rel
+
+
+def aspect_factor(yaw_deg: float, los_azimuth_deg: float) -> float:
+    """Horizontal aspect: nose/tail ~1.0, broadside ~0.35."""
+    rel = abs(_wrap_delta_deg(los_azimuth_deg - yaw_deg))
+    c = math.cos(math.radians(rel))
+    return 0.35 + 0.65 * abs(c)
+
+
+def elevation_factor(pitch_deg: float, los_elevation_deg: float) -> float:
+    """Elevation vs body pitch: 1.0 along body axis, 0.5 at 90° look."""
+    rel = abs(_wrap_delta_deg(los_elevation_deg - pitch_deg))
+    if rel > 90.0:
+        rel = 180.0 - rel
+    c = math.cos(math.radians(rel))
+    return 0.50 + 0.50 * abs(c)
+
+
+def aspect_factor_3d(
+    yaw_deg: float,
+    pitch_deg: float,
+    los_azimuth_deg: float,
+    los_elevation_deg: float,
+) -> float:
+    return aspect_factor(yaw_deg, los_azimuth_deg) * elevation_factor(
+        pitch_deg, los_elevation_deg
+    )
+
+
+def aspect_rcs_from_extents(
+    mean_rcs_m2: float,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    yaw_deg: float,
+    los_azimuth_deg: float,
+    pitch_deg: float = 0.0,
+    los_elevation_deg: float = 0.0,
+) -> float:
+    """Mirror of RDF_RadarRcsModel.AspectRcsFromExtents3D."""
+    fallback = float(mean_rcs_m2)
+    if fallback <= 0.0:
+        fallback = 1.0
+
+    if size_x <= 0.01 and size_y <= 0.01 and size_z <= 0.01:
+        return fallback * aspect_factor_3d(
+            yaw_deg, pitch_deg, los_azimuth_deg, los_elevation_deg
+        )
+
+    rel_az = math.radians(_wrap_delta_deg(los_azimuth_deg - yaw_deg))
+    rel_el = math.radians(_wrap_delta_deg(los_elevation_deg - pitch_deg))
+    ce = math.cos(rel_el)
+    se = math.sin(rel_el)
+    ca = math.cos(rel_az)
+    sa = math.sin(rel_az)
+    u_f = abs(ce * ca)
+    u_s = abs(ce * sa)
+    u_t = abs(se)
+
+    height = size_y
+    if height < 0.1:
+        height = 0.1
+    length = size_z
+    if length < 0.1:
+        length = 0.1
+    beam = size_x
+    if beam < 0.1:
+        beam = 0.1
+
+    projected = u_f * beam * height + u_s * length * height + u_t * beam * length
+    estimate = projected * 0.25
+    lo = fallback * 0.2
+    hi = fallback * 4.0
+    if estimate < lo:
+        estimate = lo
+    if estimate > hi:
+        estimate = hi
+    return estimate

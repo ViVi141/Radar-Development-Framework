@@ -64,26 +64,87 @@ class RDF_RadarRcsModel
     }
 
     //------------------------------------------------------------------------------------------------
-    // Nose-on brighter than broadside. yawDeg / losAzimuthDeg are world horizontal.
-    static float AspectFactor(float yawDeg, float losAzimuthDeg)
+    // Wrap delta degrees into [-180, 180].
+    static float WrapDeltaDeg(float deltaDeg)
     {
-        float rel = losAzimuthDeg - yawDeg;
+        float rel = deltaDeg;
         while (rel > 180.0)
             rel = rel - 360.0;
         while (rel < -180.0)
             rel = rel + 360.0;
+        return rel;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Horizontal only: nose/tail brighter than broadside (0.35 .. 1.0).
+    // yawDeg / losAzimuthDeg are world horizontal.
+    static float AspectFactor(float yawDeg, float losAzimuthDeg)
+    {
+        float rel = WrapDeltaDeg(losAzimuthDeg - yawDeg);
         if (rel < 0.0)
             rel = -rel;
 
         float rad = rel * 0.0174532925199;
         float c = Math.Cos(rad);
-        // 0.35 broadside .. 1.0 nose/tail.
-        float factor = 0.35 + 0.65 * Math.AbsFloat(c);
-        return factor;
+        return 0.35 + 0.65 * Math.AbsFloat(c);
     }
 
     //------------------------------------------------------------------------------------------------
-    // Extent-aware projected-area proxy when size is known.
+    // Elevation vs body pitch: horizon brighter along body axis, look-down mixes planform.
+    // Returns 0.50 .. 1.0.
+    static float ElevationFactor(float pitchDeg, float losElevationDeg)
+    {
+        float rel = WrapDeltaDeg(losElevationDeg - pitchDeg);
+        if (rel < 0.0)
+            rel = -rel;
+        if (rel > 90.0)
+            rel = 180.0 - rel;
+
+        float rad = rel * 0.0174532925199;
+        float c = Math.Cos(rad);
+        return 0.50 + 0.50 * Math.AbsFloat(c);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Combined azimuth×elevation scalar when extents are unknown.
+    static float AspectFactor3D(
+        float yawDeg,
+        float pitchDeg,
+        float losAzimuthDeg,
+        float losElevationDeg)
+    {
+        float az = AspectFactor(yawDeg, losAzimuthDeg);
+        float el = ElevationFactor(pitchDeg, losElevationDeg);
+        return az * el;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Body-relative unit weights for silhouette proxy (no roll).
+    // Forward uses entity yaw/pitch; sizeX≈beam, sizeY≈height, sizeZ≈length
+    // (matches existing 2D nose=X×Y / side=Z×Y convention).
+    static void BodyLosWeights(
+        float yawDeg,
+        float pitchDeg,
+        float losAzimuthDeg,
+        float losElevationDeg,
+        out float outForward,
+        out float outSide,
+        out float outTop)
+    {
+        float relAz = WrapDeltaDeg(losAzimuthDeg - yawDeg) * 0.0174532925199;
+        float relEl = WrapDeltaDeg(losElevationDeg - pitchDeg) * 0.0174532925199;
+        float ce = Math.Cos(relEl);
+        float se = Math.Sin(relEl);
+        float ca = Math.Cos(relAz);
+        float sa = Math.Sin(relAz);
+        outForward = Math.AbsFloat(ce * ca);
+        outSide = Math.AbsFloat(ce * sa);
+        outTop = Math.AbsFloat(se);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Extent-aware projected-area proxy (azimuth + elevation).
+    // Legacy 2D callers may pass losElevationDeg=0 and pitchDeg=0.
     static float AspectRcsFromExtents(
         float meanRcsM2,
         float sizeX,
@@ -92,27 +153,62 @@ class RDF_RadarRcsModel
         float yawDeg,
         float losAzimuthDeg)
     {
+        return AspectRcsFromExtents3D(
+            meanRcsM2,
+            sizeX,
+            sizeY,
+            sizeZ,
+            yawDeg,
+            0.0,
+            losAzimuthDeg,
+            0.0);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    static float AspectRcsFromExtents3D(
+        float meanRcsM2,
+        float sizeX,
+        float sizeY,
+        float sizeZ,
+        float yawDeg,
+        float pitchDeg,
+        float losAzimuthDeg,
+        float losElevationDeg)
+    {
         float fallback = meanRcsM2;
         if (fallback <= 0.0)
             fallback = 1.0;
 
-        float factor = AspectFactor(yawDeg, losAzimuthDeg);
         if (sizeX <= 0.01 && sizeY <= 0.01 && sizeZ <= 0.01)
-            return fallback * factor;
+        {
+            return fallback * AspectFactor3D(
+                yawDeg, pitchDeg, losAzimuthDeg, losElevationDeg);
+        }
 
-        float rel = losAzimuthDeg - yawDeg;
-        while (rel > 180.0)
-            rel = rel - 360.0;
-        while (rel < -180.0)
-            rel = rel + 360.0;
-        float rad = rel * 0.0174532925199;
-        float c = Math.AbsFloat(Math.Cos(rad));
-        float s = Math.AbsFloat(Math.Sin(rad));
-        // Local X aligns with entity forward in this project (see GetWorldTransform usage).
+        float uF;
+        float uS;
+        float uT;
+        BodyLosWeights(
+            yawDeg,
+            pitchDeg,
+            losAzimuthDeg,
+            losElevationDeg,
+            uF,
+            uS,
+            uT);
+
         float height = sizeY;
         if (height < 0.1)
             height = 0.1;
-        float projected = c * sizeX * height + s * sizeZ * height;
+        float length = sizeZ;
+        if (length < 0.1)
+            length = 0.1;
+        float beam = sizeX;
+        if (beam < 0.1)
+            beam = 0.1;
+
+        // Nose face beam×height, side length×height, planform beam×length.
+        float projected = uF * beam * height + uS * length * height + uT * beam * length;
         float estimate = projected * 0.25;
         float lo = fallback * 0.2;
         float hi = fallback * 4.0;

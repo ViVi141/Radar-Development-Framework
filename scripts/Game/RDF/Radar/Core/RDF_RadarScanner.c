@@ -389,6 +389,9 @@ class RDF_RadarScanner
                 continue;
 
             float losAzimuthDeg = Math.Atan2(toTargetNorm[2], toTargetNorm[0]) * RAD_TO_DEG;
+            float horiz = Math.Sqrt(
+                toTargetNorm[0] * toTargetNorm[0] + toTargetNorm[2] * toTargetNorm[2]);
+            float losElevationDeg = Math.Atan2(toTargetNorm[1], Math.Max(0.001, horiz)) * RAD_TO_DEG;
             int scanNumber = 0;
             if (m_Settings.m_Hardware)
             {
@@ -399,6 +402,7 @@ class RDF_RadarScanner
             float instantRcs = RDF_RadarScattererRegistry.EvaluateInstantRcsM2(
                 entry,
                 losAzimuthDeg,
+                losElevationDeg,
                 scanNumber);
 
             RDF_RadarTarget t = new RDF_RadarTarget();

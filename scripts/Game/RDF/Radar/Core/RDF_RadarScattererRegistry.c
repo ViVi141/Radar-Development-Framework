@@ -10,8 +10,9 @@ class RDF_RadarScatterer
     vector m_Velocity;
     vector m_PrevPosition;
     float m_PrevSampleTime = -1.0;
-    // Horizontal yaw (deg) and body forward — aspect RCS input.
+    // Horizontal yaw / pitch (deg) and body forward — aspect RCS input.
     float m_YawDeg;
+    float m_PitchDeg;
     vector m_Forward = "1 0 0";
     // Height above terrain (metres); negative means unknown.
     float m_AglM = -1.0;
@@ -580,6 +581,12 @@ class RDF_RadarScattererRegistry
             forward = forward / flen;
         entry.m_Forward = forward;
         entry.m_YawDeg = Math.Atan2(forward[2], forward[0]) * 57.2957795;
+        float fy = forward[1];
+        if (fy > 1.0)
+            fy = 1.0;
+        if (fy < -1.0)
+            fy = -1.0;
+        entry.m_PitchDeg = Math.Asin(fy) * 57.2957795;
     }
 
     //------------------------------------------------------------------------------------------------
@@ -720,22 +727,25 @@ class RDF_RadarScattererRegistry
         }
     }
 
-    // Instantaneous RCS for a look direction / scan (aspect × Swerling).
+    // Instantaneous RCS for a look direction / scan (3D aspect × Swerling).
     static float EvaluateInstantRcsM2(
         RDF_RadarScatterer entry,
         float losAzimuthDeg,
+        float losElevationDeg,
         int scanNumber)
     {
         if (!entry)
             return 0.0;
 
-        float aspectRcs = RDF_RadarRcsModel.AspectRcsFromExtents(
+        float aspectRcs = RDF_RadarRcsModel.AspectRcsFromExtents3D(
             entry.m_MeanRcsM2,
             entry.m_SizeX,
             entry.m_SizeY,
             entry.m_SizeZ,
             entry.m_YawDeg,
-            losAzimuthDeg);
+            entry.m_PitchDeg,
+            losAzimuthDeg,
+            losElevationDeg);
         float fluct = RDF_RadarRcsModel.SampleSwerling(
             aspectRcs,
             entry.m_SwerlingModel,

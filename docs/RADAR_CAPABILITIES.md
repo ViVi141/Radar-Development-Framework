@@ -32,7 +32,7 @@
 - **测量合成**：距离门中心 + 波束角抖动 + 多普勒反解径向速度（SNR 越低越抖）
 - **测量噪声/偏差可调**：理想档 vs 逼真档（`MeasNoiseScale` 等）；下游可 override `RDF_RadarMeasurementModel`
 - **大气 / 降雨 / 天气驱动损耗**：简化模型，可关；逼真档可开天气雨雾衰
-- **散射体表拟真输入**：姿态方位 RCS、Swerling 起伏、AGL、DEM 缓存、辐射源射频摘要；烘焙表优先读 `Signatures/*.conf`（工坊），profile CSV 回退
+- **散射体表拟真输入**：姿态方位+俯仰 RCS（AABB 投影）、Swerling 起伏、AGL、DEM 缓存、辐射源射频摘要；烘焙表优先读 `Signatures/*.conf`（工坊），profile CSV 回退
 - DEM / 地表：`GetSurfaceY` + SURF JSON；电磁参数优先 `RadarData/SurfaceTable.conf`
 - **EW 效果栈**：噪声压制 + 欺骗假目标
 - **简化 CFAR**：粗栅格 CA / GO / SO（`m_CfarMode`）；空单元可填热噪声

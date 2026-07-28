@@ -32,7 +32,7 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 from rdf_dem_io import choose_radar_site, default_tile_dir, load_dem, resolve_dem_source
-from rdf_radar_channel import MultipathModel, SwerlingModel
+from rdf_radar_channel import MultipathModel, SwerlingModel, aspect_factor_3d
 from rdf_radar_physics import (
     RadarHardware,
     doppler_hz,
@@ -497,7 +497,12 @@ def run_plot_level_radar(
             result.intercepts += 1
 
             sw = swerling_shell if tgt.kind == "shell" else swerling_air
-            rcs = sw.sample(tgt.rcs_m2, tgt.name, scan_number, 0)
+            yaw_deg = math.degrees(math.atan2(tgt.vz_m_s, tgt.vx_m_s))
+            speed_h = math.hypot(tgt.vx_m_s, tgt.vz_m_s)
+            pitch_deg = math.degrees(math.atan2(tgt.vy_m_s, max(speed_h, 0.001)))
+            aspect = aspect_factor_3d(yaw_deg, pitch_deg, az_deg, el_deg)
+            rcs_mean = tgt.rcs_m2 * aspect
+            rcs = sw.sample(rcs_mean, tgt.name, scan_number, 0)
             radial = radial_speed_toward_radar(
                 tgt, radar_ix, radar_iz, radar_y, cell_m
             )

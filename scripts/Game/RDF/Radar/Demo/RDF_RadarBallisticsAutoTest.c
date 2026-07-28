@@ -19,6 +19,7 @@ class RDF_RadarBallisticsAutoTest
         TestBackwardRecoversLaunch();
         TestSolveLaunchAndImpactPair();
         TestTrackApexWeaponLocate();
+        TestAspectRcsElevation();
 
         RDF_RadarBallistics.SetUseDemGround(true);
 
@@ -263,6 +264,27 @@ class RDF_RadarBallisticsAutoTest
         ExpectTrue("track_wlr_launch_behind_apex_x", fix.m_LaunchPos[0] < 360.0);
         if (fix.m_ImpactValid)
             ExpectTrue("track_wlr_impact_ahead_apex_x", fix.m_ImpactPos[0] > 360.0);
+    }
+
+    protected static void TestAspectRcsElevation()
+    {
+        // Flat horizon nose-on vs look-down planform for a long thin body.
+        float noseHoriz = RDF_RadarRcsModel.AspectRcsFromExtents3D(
+            1.0, 2.0, 2.0, 8.0, 0.0, 0.0, 0.0, 0.0);
+        float noseLookDown = RDF_RadarRcsModel.AspectRcsFromExtents3D(
+            1.0, 2.0, 2.0, 8.0, 0.0, 0.0, 0.0, 60.0);
+        float broadside = RDF_RadarRcsModel.AspectRcsFromExtents3D(
+            1.0, 2.0, 2.0, 8.0, 0.0, 0.0, 90.0, 0.0);
+
+        ExpectTrue("aspect3d_nose_horiz_gt_zero", noseHoriz > 0.0);
+        ExpectTrue("aspect3d_lookdown_differs_nose", Math.AbsFloat(noseLookDown - noseHoriz) > 0.05);
+        ExpectTrue("aspect3d_broadside_differs_nose", Math.AbsFloat(broadside - noseHoriz) > 0.05);
+
+        float elHoriz = RDF_RadarRcsModel.ElevationFactor(0.0, 0.0);
+        float elDown = RDF_RadarRcsModel.ElevationFactor(0.0, 90.0);
+        ExpectTrue("elev_factor_horizon_gt_nadir", elHoriz > elDown);
+        ExpectNear("elev_factor_horizon", elHoriz, 1.0, 0.01);
+        ExpectNear("elev_factor_nadir", elDown, 0.5, 0.01);
     }
 
     protected static void WriteReport()

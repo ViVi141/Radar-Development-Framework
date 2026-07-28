@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2026-07-29 — RCS 方位加入俯仰
+
+- `RDF_RadarRcsModel`：`ElevationFactor` / `AspectFactor3D` / `AspectRcsFromExtents3D`（鼻锥·侧向·俯视投影）
+- 散射体记录 `m_PitchDeg`；扫描传入 LOS 俯仰角
+- Python `rdf_radar_channel.aspect_rcs_from_extents` 对齐；Ballistics AutoTest 增加回归
+
 ## 2026-07-29 — 特征表改为 Enfusion .conf
 
 - `Signatures/rdf_radar_signatures.conf` + `.meta`（`{C8A3F15E902B47D1}`，759 条）
