@@ -1,42 +1,38 @@
-// Radar terminal HUD — PPI + A-Scope + Range-Doppler + SNR waterfall.
+// Radar PPI HUD — layout-driven panel + CanvasWidget north-up PPI.
 // Structure: UI/layouts/RDF/RadarPPI.layout (CreateWidgets); script binds Names and draws Canvas.
-// Green phosphor theme. Charts use plot measurements only (no entity truth).
+// Green phosphor theme to distinguish from the blue LiDAR HUD.
 //
-// Screen layout (bottom-right corner, ~480 x 500):
+// Screen layout (bottom-right corner):
 //
-//  +======================+============+
-//  | RADAR     TERMINAL                |
-//  | PPI 192x192          | A-SCOPE    |
-//  +----------------------+------------+
-//  | R-D MAP  456x120                  |
-//  | WATERFALL 456x96                  |
-//  | Det / Trk ...                     |
-//  +===================================+
+//  +================================+
+//  | (o) RADAR        <preset>     |  header
+//  +--------------------------------+
+//  |         N                      |
+//  |  CanvasWidget PPI  128 x 128   |
+//  | W    (+) radar           E     |
+//  |         S                      |
+//  +--------------------------------+
+//  | Det / Trk / Best ...           |
+//  | legend                         |
+//  +================================+
 
 class RDF_RadarHUD
 {
     //! Registered layout resource (open once in Workbench if GUID not resolved).
     static const ResourceName LAYOUT_PPI = "{A7C31E920F4B6D81}UI/layouts/RDF/RadarPPI.layout";
 
-    static const int PX_RADAR_H = 192;
-    static const int PX_RADAR_W = 192;
+    static const int PX_RADAR_H = 128;
+    static const int PX_RADAR_W = 128;
     //! Root panel size (must match RadarPPI.layout rootFrame).
-    static const int PANEL_W = 480;
-    static const int PANEL_H = 500;
+    static const int PANEL_W = 144;
+    static const int PANEL_H = 184;
     static const int PANEL_MARGIN = 16;
 
-    static const int ASCOPE_W = 160;
-    static const int ASCOPE_H = 178;
-    static const int RD_W = 456;
-    static const int RD_H = 120;
-    static const int WF_W = 456;
-    static const int WF_H = 96;
-
     // ---- PPI canvas internals (unit coords == pixel coords 1:1) ----
-    static const float PPI_CX   = 96.0;
-    static const float PPI_CY   = 96.0;
-    static const float PPI_R    = 90.0;
-    static const float PPI_RING = 45.0;
+    static const float PPI_CX   = 64.0;
+    static const float PPI_CY   = 64.0;
+    static const float PPI_R    = 60.0;
+    static const float PPI_RING = 30.0;
 
     // Real-world range corresponding to PPI_R pixels.
     float m_DisplayRange = 2000.0;
@@ -56,10 +52,6 @@ class RDF_RadarHUD
     static const int COL_PPI_CROSS  = ARGB( 55, 35,  160,  95);
     static const int COL_PPI_SWEEP  = ARGB(200, 100, 255, 150);
     static const int COL_PPI_RADAR  = ARGB(255, 40,  255, 140);
-
-    static const int COL_CHART_BG   = ARGB(255,  2,   8,   5);
-    static const int COL_CHART_GRID = ARGB( 70, 30, 120,  70);
-    static const int COL_ASCOPE_LINE = ARGB(230, 80, 255, 140);
 
     // Blip colours by target type.
     static const int COL_VEHICLE  = ARGB(255,  60, 255, 120);   // green
@@ -82,9 +74,6 @@ class RDF_RadarHUD
 
     protected Widget m_wRoot;
     protected CanvasWidget m_Canvas;
-    protected CanvasWidget m_AscopeCanvas;
-    protected CanvasWidget m_RdCanvas;
-    protected CanvasWidget m_WaterfallCanvas;
     protected TextWidget   m_wMode;
     protected TextWidget   m_wStats;
     protected TextWidget   m_wLegend;
@@ -92,16 +81,6 @@ class RDF_RadarHUD
 
     protected ref array<ref CanvasWidgetCommand> m_StaticCmds;
     protected ref array<ref CanvasWidgetCommand> m_AllCmds;
-    protected ref array<ref CanvasWidgetCommand> m_AscopeCmds;
-    protected ref array<ref CanvasWidgetCommand> m_RdCmds;
-    protected ref array<ref CanvasWidgetCommand> m_WfCmds;
-
-    protected ref array<float> m_AscopeBins;
-    protected ref array<float> m_RdGrid;
-    protected ref array<float> m_WfBuffer;
-    protected ref array<float> m_WfRowScratch;
-    protected ref array<float> m_HeatRowScratch;
-    protected int m_WfWriteHead;
 
     // ---- float helpers ----
     static string F0(float v)
@@ -222,47 +201,8 @@ class RDF_RadarHUD
         m_LastUpdateTime = now;
 
         UpdatePPI(targets, origin, forward, tracker);
-        UpdateSideCharts(targets);
         UpdateDataRows(targets, tracker);
         UpdateRingLabel();
-    }
-
-    protected void EnsureChartBuffers()
-    {
-        if (!m_AscopeBins)
-            m_AscopeBins = new array<float>();
-        if (!m_RdGrid)
-            m_RdGrid = new array<float>();
-        if (!m_WfBuffer)
-            m_WfBuffer = new array<float>();
-        if (!m_WfRowScratch)
-            m_WfRowScratch = new array<float>();
-        if (!m_HeatRowScratch)
-            m_HeatRowScratch = new array<float>();
-        if (!m_AscopeCmds)
-            m_AscopeCmds = new array<ref CanvasWidgetCommand>();
-        if (!m_RdCmds)
-            m_RdCmds = new array<ref CanvasWidgetCommand>();
-        if (!m_WfCmds)
-            m_WfCmds = new array<ref CanvasWidgetCommand>();
-    }
-
-    protected void BindChartCanvas(string name, out CanvasWidget canvas, int unitW, int unitH)
-    {
-        canvas = null;
-        if (!m_wRoot)
-            return;
-        Widget w = m_wRoot.FindAnyWidget(name);
-        if (!w)
-        {
-            Print("[RDF_RadarHUD] WARN: " + name + " not found in layout", LogLevel.WARNING);
-            return;
-        }
-        canvas = CanvasWidget.Cast(w);
-        if (!canvas)
-            return;
-        canvas.SetVisible(true);
-        canvas.SetSizeInUnits(Vector(unitW, unitH, 0));
     }
 
     //------------------------------------------------------------------------------------------------
@@ -305,11 +245,6 @@ class RDF_RadarHUD
             Print("[RDF_RadarHUD] WARN: PpiCanvas not found in layout", LogLevel.WARNING);
         }
 
-        EnsureChartBuffers();
-        BindChartCanvas("AscopeCanvas", m_AscopeCanvas, ASCOPE_W, ASCOPE_H);
-        BindChartCanvas("RdCanvas", m_RdCanvas, RD_W, RD_H);
-        BindChartCanvas("WaterfallCanvas", m_WaterfallCanvas, WF_W, WF_H);
-
         m_wMode = TextWidget.Cast(m_wRoot.FindAnyWidget("ModeText"));
         m_wStats = TextWidget.Cast(m_wRoot.FindAnyWidget("StatsText"));
         m_wLegend = TextWidget.Cast(m_wRoot.FindAnyWidget("LegendText"));
@@ -330,7 +265,7 @@ class RDF_RadarHUD
 
         UpdateRingLabel();
 
-        Print("[RDF_RadarHUD] terminal HUD built — PPI + A-Scope + R-D + waterfall (BOTTOM-RIGHT)");
+        Print("[RDF_RadarHUD] HUD built from RadarPPI.layout — look BOTTOM-RIGHT");
     }
 
     //------------------------------------------------------------------------------------------------
@@ -644,8 +579,8 @@ class RDF_RadarHUD
             r = 2.0 + t.m_SnrDb * 0.08;
             if (r < 2.0)
                 r = 2.0;
-            if (r > 6.5)
-                r = 6.5;
+            if (r > 5.0)
+                r = 5.0;
         }
         else
         {
@@ -714,187 +649,7 @@ class RDF_RadarHUD
             m_wStats.SetText(s);
         }
         if (m_wLegend)
-            m_wLegend.SetText("plots only · no entity truth");
-    }
-
-    // ---- A-Scope / R-D / waterfall (plot measurements) ----
-    protected void UpdateSideCharts(array<ref RDF_RadarTarget> targets)
-    {
-        EnsureChartBuffers();
-        RDF_RadarHudCharts.BuildAscopeBins(targets, m_DisplayRange, m_AscopeBins);
-        RDF_RadarHudCharts.BuildRangeDopplerGrid(targets, m_DisplayRange, m_RdGrid);
-
-        RDF_RadarHudCharts.DownsampleAscopeToWaterfallRow(m_AscopeBins, m_WfRowScratch);
-        m_WfWriteHead = RDF_RadarHudCharts.PushWaterfallRow(
-            m_WfBuffer, m_WfWriteHead, m_WfRowScratch);
-
-        DrawAscope();
-        DrawRangeDoppler();
-        DrawWaterfall();
-    }
-
-    protected void DrawChartBackground(
-        notnull array<ref CanvasWidgetCommand> cmds,
-        float width,
-        float height)
-    {
-        array<float> bg = new array<float>();
-        bg.Insert(0.0);
-        bg.Insert(0.0);
-        bg.Insert(width);
-        bg.Insert(0.0);
-        bg.Insert(width);
-        bg.Insert(height);
-        bg.Insert(0.0);
-        bg.Insert(height);
-        PolygonDrawCommand poly = new PolygonDrawCommand();
-        poly.m_iColor = COL_CHART_BG;
-        poly.m_Vertices = bg;
-        cmds.Insert(poly);
-    }
-
-    protected void DrawAscope()
-    {
-        if (!m_AscopeCanvas)
-            return;
-
-        m_AscopeCmds.Clear();
-        DrawChartBackground(m_AscopeCmds, ASCOPE_W, ASCOPE_H);
-
-        // Horizontal grid.
-        for (int g = 1; g < 4; g++)
-        {
-            float gy = (ASCOPE_H * g) / 4.0;
-            array<float> gv = new array<float>();
-            gv.Insert(0.0);
-            gv.Insert(gy);
-            gv.Insert(ASCOPE_W);
-            gv.Insert(gy);
-            LineDrawCommand grid = new LineDrawCommand();
-            grid.m_iColor = COL_CHART_GRID;
-            grid.m_fWidth = 1.0;
-            grid.m_Vertices = gv;
-            m_AscopeCmds.Insert(grid);
-        }
-
-        float peak = RDF_RadarHudCharts.FindPeak(m_AscopeBins);
-        int n = m_AscopeBins.Count();
-        if (n < 2)
-        {
-            m_AscopeCanvas.SetDrawCommands(m_AscopeCmds);
-            return;
-        }
-
-        array<float> curve = new array<float>();
-        float margin = 2.0;
-        float plotH = ASCOPE_H - margin * 2.0;
-        for (int i = 0; i < n; i++)
-        {
-            float x = (i * (ASCOPE_W - 1.0)) / (n - 1);
-            float amp = m_AscopeBins.Get(i) / peak;
-            if (amp < 0.0)
-                amp = 0.0;
-            if (amp > 1.0)
-                amp = 1.0;
-            float y = ASCOPE_H - margin - amp * plotH;
-            curve.Insert(x);
-            curve.Insert(y);
-        }
-
-        LineDrawCommand trace = new LineDrawCommand();
-        trace.m_iColor = COL_ASCOPE_LINE;
-        trace.m_fWidth = 1.5;
-        trace.m_Vertices = curve;
-        m_AscopeCmds.Insert(trace);
-
-        m_AscopeCanvas.SetDrawCommands(m_AscopeCmds);
-    }
-
-    protected void DrawRangeDoppler()
-    {
-        if (!m_RdCanvas)
-            return;
-
-        m_RdCmds.Clear();
-        DrawChartBackground(m_RdCmds, RD_W, RD_H);
-
-        float peak = RDF_RadarHudCharts.FindPeak(m_RdGrid);
-        float cellW = RD_W / RDF_RadarHudCharts.RD_RANGE_BINS;
-        float cellH = RD_H / RDF_RadarHudCharts.RD_DOP_BINS;
-        if (cellH < 1.0)
-            cellH = 1.0;
-
-        for (int d = 0; d < RDF_RadarHudCharts.RD_DOP_BINS; d++)
-        {
-            m_HeatRowScratch.Clear();
-            int base = d * RDF_RadarHudCharts.RD_RANGE_BINS;
-            for (int r = 0; r < RDF_RadarHudCharts.RD_RANGE_BINS; r++)
-            {
-                float v = 0.0;
-                int idx = base + r;
-                if (idx < m_RdGrid.Count())
-                    v = m_RdGrid.Get(idx);
-                m_HeatRowScratch.Insert(v);
-            }
-            // Doppler axis: top = +Hz, bottom = -Hz (d=0 at top).
-            float y = (d + 0.5) * cellH;
-            RDF_RadarHudCharts.AppendHeatRowRle(
-                m_RdCmds,
-                m_HeatRowScratch,
-                y,
-                0.0,
-                cellW,
-                cellH,
-                peak);
-        }
-
-        m_RdCanvas.SetDrawCommands(m_RdCmds);
-    }
-
-    protected void DrawWaterfall()
-    {
-        if (!m_WaterfallCanvas)
-            return;
-
-        m_WfCmds.Clear();
-        DrawChartBackground(m_WfCmds, WF_W, WF_H);
-
-        float peak = RDF_RadarHudCharts.FindPeak(m_WfBuffer);
-        float cellW = WF_W / RDF_RadarHudCharts.WF_COLS;
-        float cellH = WF_H / RDF_RadarHudCharts.WF_ROWS;
-        if (cellH < 1.0)
-            cellH = 1.0;
-
-        // Newest row just written is at writeHead-1; draw newest at top.
-        for (int row = 0; row < RDF_RadarHudCharts.WF_ROWS; row++)
-        {
-            int srcRow = m_WfWriteHead - 1 - row;
-            while (srcRow < 0)
-                srcRow = srcRow + RDF_RadarHudCharts.WF_ROWS;
-
-            m_HeatRowScratch.Clear();
-            int base = srcRow * RDF_RadarHudCharts.WF_COLS;
-            for (int c = 0; c < RDF_RadarHudCharts.WF_COLS; c++)
-            {
-                float v = 0.0;
-                int idx = base + c;
-                if (idx < m_WfBuffer.Count())
-                    v = m_WfBuffer.Get(idx);
-                m_HeatRowScratch.Insert(v);
-            }
-
-            float y = (row + 0.5) * cellH;
-            RDF_RadarHudCharts.AppendHeatRowRle(
-                m_WfCmds,
-                m_HeatRowScratch,
-                y,
-                0.0,
-                cellW,
-                cellH,
-                peak);
-        }
-
-        m_WaterfallCanvas.SetDrawCommands(m_WfCmds);
+            m_wLegend.SetText("");
     }
 
     protected string TypeTag(ERDF_RadarTargetType type)
@@ -913,19 +668,13 @@ class RDF_RadarHUD
     {
         if (m_wRoot)
             m_wRoot.RemoveFromHierarchy();
-        m_wRoot = null;
-        m_Canvas = null;
-        m_AscopeCanvas = null;
-        m_RdCanvas = null;
-        m_WaterfallCanvas = null;
-        m_wMode = null;
-        m_wStats = null;
-        m_wLegend = null;
+        m_wRoot      = null;
+        m_Canvas     = null;
+        m_wMode      = null;
+        m_wStats     = null;
+        m_wLegend    = null;
         m_wRingLabel = null;
         m_StaticCmds = null;
-        m_AllCmds = null;
-        m_AscopeCmds = null;
-        m_RdCmds = null;
-        m_WfCmds = null;
+        m_AllCmds    = null;
     }
 }
