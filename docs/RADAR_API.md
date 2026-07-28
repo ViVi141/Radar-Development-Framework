@@ -251,6 +251,10 @@ Entity component convenience: `RDF_RadarComponent.LockTrackId`, `Unlock`,
 
 Demo / regression: `RDF_RadarLockAutoTest.Start()` spawns a moving vehicle and
 verifies SEARCH → ACQUIRING → TRACKING with a usable aim point.
+Rocket lock-fire: `RDF_RadarRocketLockFireAutoTest.Start()` (Hydra70 + ARH-style
+boost / midcourse / terminal PN toward locked Mi-8; standalone, not in
+`StartAll`). Guidance: `RDF_RadarRocketGuidance.Update` +
+`RDF_RadarRocketGuidanceState`.
 ESM / ARM: `RDF_RadarEsmArmAutoTest.Start()` (standalone, not in `StartAll`).
 
 ---

@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## 2026-07-28 — 主动雷达弹制导（助推 / 中段 / 末段 PN）
+
+- `RDF_RadarRocketGuidance` 改为 ARH 三段：BOOST 推力+弱 loft → MIDCOURSE 数据链拦截点 PN → TERMINAL 导引头视场内真 PN
+- 状态机 `RDF_RadarRocketGuidanceState`；过载限幅、速度软封顶；偏锥丢失则 COAST
+- `RDF_RadarRocketLockFireAutoTest` 接入相位日志与目标速度
+- 近炸引信：进入 `PROXIMITY_FUZE_M`（15m）或触地时 `BaseTriggerComponent.SetLive` + `OnUserTrigger` 引爆 Hydra 战斗部
+- 调参：末段锥角 55° + 0.9s 宽限、可重捕；近炸 28m + 掠飞起爆；中段增益/过载加强
+
+## 2026-07-28 — 火箭锁射演示（Hydra70 + 脚本制导）
+
+- 新增 `RDF_RadarRocketLockFireAutoTest.Start()`：扫描 → 锁定 Mi-8 → 发射 Hydra70 模型
+- `RDF_RadarRocketGuidance`：官方制导不可用，脚本侧闭环制导（后改为 ARH PN）
+- 独立回归（不进 `StartAll`）
+
+---
+
 ## 2026-07-28 — Radar HUD 回退为单 PPI 圆盘
 
 - 撤掉 A-Scope / R-D / Waterfall / SNR 热力侧栏
