@@ -1,11 +1,10 @@
 # CHANGELOG
 
-## 2026-07-28 — Radar HUD 终端图表（A-Scope / R-D / Waterfall）
+## 2026-07-28 — Radar HUD 回退为单 PPI 圆盘
 
-- PPI 面板扩至约 **480×500**，PPI canvas **192×192**
-- 新增 plot 侧栏图（测量值，非实体真值）：`A-SCOPE`、`R-D MAP`（64×48）、`WATERFALL`（72×64）
-- 辅助：`RDF_RadarHudCharts`（binning / 伪彩 / 按行 RLE 绘制）
-- layout：`UI/layouts/RDF/RadarPPI.layout`
+- 撤掉 A-Scope / R-D / Waterfall / SNR 热力侧栏
+- 恢复 `RadarPPI.layout` + `RDF_RadarHUD` 为 **144×184 / 128×128** 单圈 PPI
+- 删除 `RDF_RadarHudCharts.c`
 
 ---
 

@@ -26,7 +26,7 @@ scripts/Game/RDF/
 ├── Radar/     实体扫描、物理检测、EW、CFAR、网络同步、PPI、自动化测试
 └── DEM/       Workbench 烘焙 + Runtime 加载
 UI/layouts/RDF/
-├── RadarPPI.layout   雷达终端 HUD（右下：PPI + A-Scope + R-D + Waterfall）
+├── RadarPPI.layout   雷达 PPI（右下角，绿磷光）
 └── LidarPPI.layout   LiDAR PPI（左下角，蓝主题）
 scripts/WorkbenchGame/RDF/
 ├── RDF_DemBakePlugin.c
@@ -113,7 +113,7 @@ scripts/Game/RDF/Radar/
 │   └── RDF_RadarNetworkComponent.c     服务器权威同步（挂 Sensor）
 ├── Visual/ / UI/
 │   ├── RDF_RadarVisualizer.c / RDF_RadarVisualSettings.c  （ShapeManager 托管）
-│   └── RDF_RadarHUD.c / RDF_RadarHudCharts.c   PPI+图表 ← RadarPPI.layout
+│   └── RDF_RadarHUD.c                  PPI ← UI/layouts/RDF/RadarPPI.layout
 ├── Util/
 │   └── RDF_RadarEntityClassifier.c
 └── Demo/
@@ -236,7 +236,7 @@ Radar / LiDAR PPI 面板结构由文本 `.layout` 定义（官方式），脚本
 
 | Layout | 脚本 | 锚点 |
 |--------|------|------|
-| `UI/layouts/RDF/RadarPPI.layout` | `RDF_RadarHUD` | 右下终端（PPI/A-Scope/R-D/Waterfall） |
+| `UI/layouts/RDF/RadarPPI.layout` | `RDF_RadarHUD` | 右下 |
 | `UI/layouts/RDF/LidarPPI.layout` | `RDF_LidarHUD` | 左下 |
 
 ```c
