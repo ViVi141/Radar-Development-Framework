@@ -115,6 +115,8 @@ class RDF_RadarSettings
     float m_PriorityBand2IntervalS = 0.30;
     int m_FreshUpdateBudgetMin = 8;
     int m_FreshUpdateBudgetMax = 96;
+    // Continue registry scan from last cutoff index for better fairness.
+    bool m_FairScanCursor = true;
 
     // CA = cell-averaging; GO = greater-of; SO = smaller-of (clutter-edge modes).
     ERDF_CfarMode m_CfarMode = ERDF_CfarMode.RDF_CFAR_CA;

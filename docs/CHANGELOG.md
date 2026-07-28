@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-07-28 — 扫描公平性增量优化（Fair Cursor）
+
+- `RDF_RadarScanner.ScanFromRegistry`：新增持久游标 `m_RegistryScanCursor`，Trace 预算触顶时下次从断点续扫，避免候选头部长期吃满预算
+- 新增“脏候选优先 fresh”规则：炮弹 / 发射源 / 近距 / 高速目标优先走 full update，其余走 round-robin + 复用兜底
+- 新增 `RDF_RadarSettings.m_FairScanCursor`（默认 `true`），可切回旧的从 0 号候选开始扫描行为
+- 预算耗尽不再直接丢弃：先尝试 `TryGetReusedTarget` 回填，再结束本轮 fresh Trace
+
+---
+
 ## 2026-07-28 — Showcase 可视化性能优化
 
 - **Shape 批量化**：距离环 / WLR 告警环 / 扇区外弧改为单条 `CreateLines` 折线；扇区填充一次 `CreateTris`

@@ -22,6 +22,8 @@ class RDF_RadarScanner
     protected int m_StatFreshUpdates;
     protected int m_StatBudgetSkips;
     protected int m_StatLosCacheHits;
+    // Registry pass fair cursor; carry budget cutoff to next scan.
+    protected int m_RegistryScanCursor;
     // Resolved once per Scan() when atmospheric loss is enabled.
     protected float m_ScanRainLossDbPerKm;
 
@@ -39,6 +41,7 @@ class RDF_RadarScanner
         m_LosCache = new RDF_RadarLosCache();
         m_ScanReuseCache = new RDF_RadarScanReuseCache();
         m_SettingsValidated = false;
+        m_RegistryScanCursor = 0;
         m_ScanRainLossDbPerKm = 0.0;
     }
 
@@ -242,8 +245,32 @@ class RDF_RadarScanner
             m_ScattererCandidates = new array<ref RDF_RadarScatterer>();
         RDF_RadarScattererRegistry.CollectInSphere(origin, Math.Sqrt(rangeSq), m_ScattererCandidates);
 
-        for (int i = 0; i < m_ScattererCandidates.Count() && outTargets.Count() < maxTargets; i++)
+        int candidateCount = m_ScattererCandidates.Count();
+        if (candidateCount <= 0)
         {
+            ctx.m_LosUsed = losUsed;
+            ctx.m_FreshBudget = freshBudget;
+            return;
+        }
+
+        int startIndex = 0;
+        if (m_Settings.m_FairScanCursor)
+        {
+            startIndex = m_RegistryScanCursor;
+            while (startIndex >= candidateCount)
+                startIndex = startIndex - candidateCount;
+            while (startIndex < 0)
+                startIndex = startIndex + candidateCount;
+        }
+
+        int processedCount = 0;
+        for (int step = 0; step < candidateCount && outTargets.Count() < maxTargets; step++)
+        {
+            int i = step + startIndex;
+            if (i >= candidateCount)
+                i = i - candidateCount;
+            processedCount = step + 1;
+
             RDF_RadarScatterer entry = m_ScattererCandidates.Get(i);
             if (!entry || !entry.m_Alive || !entry.m_Entity || entry.m_Entity == subject)
                 continue;
@@ -292,35 +319,19 @@ class RDF_RadarScanner
             bool runFullUpdate = true;
             if (m_ScanReuseCache)
                 runFullUpdate = m_ScanReuseCache.ShouldRunFullUpdate(entry.m_Entity, priorityBand, wallTime, m_Settings);
+            if (IsDirtyRegistryCandidate(priorityType, dist, speedMs, runFullUpdate))
+                highPriority = true;
             if (!runFullUpdate || (!highPriority && freshBudget <= 0))
             {
                 m_StatBudgetSkips = m_StatBudgetSkips + 1;
-                RDF_RadarTarget reusedTarget;
-                if (m_ScanReuseCache
-                    && m_ScanReuseCache.TryGetReusedTarget(
-                        entry.m_Entity,
-                        wallTime,
-                        m_Settings.m_TargetReuseMaxAgeS,
-                        reusedTarget))
-                {
-                    m_StatReuseHits = m_StatReuseHits + 1;
-                    reusedTarget.m_Entity = entry.m_Entity;
-                    reusedTarget.m_ScattererId = entry.m_ScattererId;
-                    reusedTarget.m_Position = losEnd;
-                    reusedTarget.m_Distance = dist;
-                    reusedTarget.m_Velocity = entry.m_Velocity;
-                    reusedTarget.m_Type = priorityType;
-                    reusedTarget.m_AglM = entry.m_AglM;
-                    reusedTarget.m_Time = worldTime;
-                    if (entry.m_DemSampleValid)
-                    {
-                        reusedTarget.m_DemSampleValid = true;
-                        reusedTarget.m_DemSurfaceClass = entry.m_DemSurfaceClass;
-                        reusedTarget.m_DemTerrainY = entry.m_DemTerrainY;
-                    }
-                    if (reusedTarget.m_Detected || m_Settings.m_KeepUndetected)
-                        outTargets.Insert(reusedTarget);
-                }
+                TryInsertReusedScattererTarget(
+                    outTargets,
+                    entry,
+                    losEnd,
+                    dist,
+                    priorityType,
+                    worldTime,
+                    wallTime);
                 continue;
             }
 
@@ -345,7 +356,18 @@ class RDF_RadarScanner
             if (!reusedLos)
             {
                 if (losUsed >= losBudget)
+                {
+                    m_StatBudgetSkips = m_StatBudgetSkips + 1;
+                    TryInsertReusedScattererTarget(
+                        outTargets,
+                        entry,
+                        losEnd,
+                        dist,
+                        priorityType,
+                        worldTime,
+                        wallTime);
                     break;
+                }
                 param.Start = origin;
                 param.End = losEnd;
                 param.TraceEnt = null;
@@ -446,6 +468,21 @@ class RDF_RadarScanner
             if (t.m_Detected || m_Settings.m_KeepUndetected)
                 outTargets.Insert(t);
         }
+
+        if (m_Settings.m_FairScanCursor)
+        {
+            int nextIndex = startIndex + processedCount;
+            while (nextIndex >= candidateCount)
+                nextIndex = nextIndex - candidateCount;
+            while (nextIndex < 0)
+                nextIndex = nextIndex + candidateCount;
+            m_RegistryScanCursor = nextIndex;
+        }
+        else
+        {
+            m_RegistryScanCursor = 0;
+        }
+
         ctx.m_LosUsed = losUsed;
         ctx.m_FreshBudget = freshBudget;
     }
@@ -854,6 +891,66 @@ class RDF_RadarScanner
         if (!m_CandidateCollect)
             m_CandidateCollect = new RDF_RadarCandidateCollect();
         m_CandidateCollect.SortEntitiesByDistance(entities, origin);
+    }
+
+    protected bool IsDirtyRegistryCandidate(
+        ERDF_RadarTargetType priorityType,
+        float distanceM,
+        float speedMs,
+        bool runFullUpdate)
+    {
+        if (!runFullUpdate)
+            return false;
+        if (priorityType == ERDF_RadarTargetType.RDF_RADAR_TARGET_PROJECTILE)
+            return true;
+        if (priorityType == ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER)
+            return true;
+        if (distanceM <= m_Settings.m_PriorityNearRangeM)
+            return true;
+        if (speedMs >= m_Settings.m_PriorityFastSpeedMs)
+            return true;
+        return false;
+    }
+
+    protected void TryInsertReusedScattererTarget(
+        notnull array<ref RDF_RadarTarget> outTargets,
+        RDF_RadarScatterer entry,
+        vector losEnd,
+        float dist,
+        ERDF_RadarTargetType priorityType,
+        float worldTime,
+        float wallTime)
+    {
+        if (!entry || !entry.m_Entity || !m_ScanReuseCache)
+            return;
+
+        RDF_RadarTarget reusedTarget;
+        if (!m_ScanReuseCache.TryGetReusedTarget(
+            entry.m_Entity,
+            wallTime,
+            m_Settings.m_TargetReuseMaxAgeS,
+            reusedTarget))
+        {
+            return;
+        }
+
+        m_StatReuseHits = m_StatReuseHits + 1;
+        reusedTarget.m_Entity = entry.m_Entity;
+        reusedTarget.m_ScattererId = entry.m_ScattererId;
+        reusedTarget.m_Position = losEnd;
+        reusedTarget.m_Distance = dist;
+        reusedTarget.m_Velocity = entry.m_Velocity;
+        reusedTarget.m_Type = priorityType;
+        reusedTarget.m_AglM = entry.m_AglM;
+        reusedTarget.m_Time = worldTime;
+        if (entry.m_DemSampleValid)
+        {
+            reusedTarget.m_DemSampleValid = true;
+            reusedTarget.m_DemSurfaceClass = entry.m_DemSurfaceClass;
+            reusedTarget.m_DemTerrainY = entry.m_DemTerrainY;
+        }
+        if (reusedTarget.m_Detected || m_Settings.m_KeepUndetected)
+            outTargets.Insert(reusedTarget);
     }
 
     protected bool ContainsTargetEntity(
