@@ -7,6 +7,14 @@ enum ERDF_RadarTargetType
     RDF_RADAR_TARGET_ANONYMOUS
 }
 
+// Coarse-bin CFAR estimator mode (range-window sides).
+enum ERDF_CfarMode
+{
+    RDF_CFAR_CA,
+    RDF_CFAR_GO,
+    RDF_CFAR_SO
+}
+
 // Single radar detection / plot. With measurement synthesis enabled, kinematics
 // are model-derived (quantized + noisy); m_Entity is debug-only when kept.
 class RDF_RadarTarget

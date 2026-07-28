@@ -98,6 +98,31 @@ class RDF_RadarSettings
     bool m_EnableDemGroundForWlr = true;
     int m_WeaponLocateMinHits = 3;
 
+    // ---- Scan optimization thresholds (was hardcoded on Scanner / ReuseCache) ----
+    float m_LosCacheMaxAgeS = 0.25;
+    float m_LosCacheMaxOriginShiftM = 1.5;
+    float m_LosCacheMaxTargetShiftM = 3.0;
+    float m_TargetReuseMaxAgeS = 0.60;
+    float m_PhysicalReuseMaxAgeS = 0.20;
+    float m_PhysicalReuseMaxOriginShiftM = 2.0;
+    float m_PhysicalReuseMaxTargetShiftM = 4.0;
+    float m_PhysicalReuseMaxSpeedMs = 6.0;
+    float m_PriorityNearRangeM = 800.0;
+    float m_PriorityMidRangeM = 2200.0;
+    float m_PriorityFastSpeedMs = 35.0;
+    float m_PrioritySlowSpeedMs = 8.0;
+    float m_PriorityBand1IntervalS = 0.10;
+    float m_PriorityBand2IntervalS = 0.30;
+    int m_FreshUpdateBudgetMin = 8;
+    int m_FreshUpdateBudgetMax = 96;
+
+    // CA = cell-averaging; GO = greater-of; SO = smaller-of (clutter-edge modes).
+    ERDF_CfarMode m_CfarMode = ERDF_CfarMode.RDF_CFAR_CA;
+
+    // PPI / showcase: draw WLR launch & impact alert rings.
+    bool m_EnableWlrHudAlerts = true;
+    float m_WlrHudAlertRadiusM = 80.0;
+
     void RDF_RadarSettings()
     {
         m_Hardware = RDF_RadarHardware.CreateShorad();
@@ -136,6 +161,27 @@ class RDF_RadarSettings
         m_TrackMaxMisses = Math.Clamp(m_TrackMaxMisses, 1, 32);
         m_ShellAirDrag = Math.Clamp(m_ShellAirDrag, 0.0, 1.0);
         m_WeaponLocateMinHits = Math.Clamp(m_WeaponLocateMinHits, 2, 32);
+        m_LosCacheMaxAgeS = Math.Clamp(m_LosCacheMaxAgeS, 0.05, 5.0);
+        m_LosCacheMaxOriginShiftM = Math.Clamp(m_LosCacheMaxOriginShiftM, 0.1, 50.0);
+        m_LosCacheMaxTargetShiftM = Math.Clamp(m_LosCacheMaxTargetShiftM, 0.1, 100.0);
+        m_TargetReuseMaxAgeS = Math.Clamp(m_TargetReuseMaxAgeS, 0.05, 10.0);
+        m_PhysicalReuseMaxAgeS = Math.Clamp(m_PhysicalReuseMaxAgeS, 0.05, 5.0);
+        m_PhysicalReuseMaxOriginShiftM = Math.Clamp(m_PhysicalReuseMaxOriginShiftM, 0.1, 50.0);
+        m_PhysicalReuseMaxTargetShiftM = Math.Clamp(m_PhysicalReuseMaxTargetShiftM, 0.1, 100.0);
+        m_PhysicalReuseMaxSpeedMs = Math.Clamp(m_PhysicalReuseMaxSpeedMs, 0.0, 100.0);
+        m_PriorityNearRangeM = Math.Clamp(m_PriorityNearRangeM, 50.0, 50000.0);
+        m_PriorityMidRangeM = Math.Clamp(m_PriorityMidRangeM, 100.0, 100000.0);
+        if (m_PriorityMidRangeM < m_PriorityNearRangeM)
+            m_PriorityMidRangeM = m_PriorityNearRangeM;
+        m_PriorityFastSpeedMs = Math.Clamp(m_PriorityFastSpeedMs, 1.0, 500.0);
+        m_PrioritySlowSpeedMs = Math.Clamp(m_PrioritySlowSpeedMs, 0.0, 200.0);
+        m_PriorityBand1IntervalS = Math.Clamp(m_PriorityBand1IntervalS, 0.0, 5.0);
+        m_PriorityBand2IntervalS = Math.Clamp(m_PriorityBand2IntervalS, 0.0, 10.0);
+        m_FreshUpdateBudgetMin = Math.Clamp(m_FreshUpdateBudgetMin, 1, 256);
+        m_FreshUpdateBudgetMax = Math.Clamp(m_FreshUpdateBudgetMax, 1, 512);
+        if (m_FreshUpdateBudgetMax < m_FreshUpdateBudgetMin)
+            m_FreshUpdateBudgetMax = m_FreshUpdateBudgetMin;
+        m_WlrHudAlertRadiusM = Math.Clamp(m_WlrHudAlertRadiusM, 5.0, 2000.0);
         m_MeasNoiseScale = Math.Clamp(m_MeasNoiseScale, 0.0, 10.0);
         m_MeasRangeBiasM = Math.Clamp(m_MeasRangeBiasM, -500.0, 500.0);
         m_MeasAzimuthBiasDeg = Math.Clamp(m_MeasAzimuthBiasDeg, -5.0, 5.0);

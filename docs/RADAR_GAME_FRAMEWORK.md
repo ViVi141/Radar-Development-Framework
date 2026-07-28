@@ -58,7 +58,10 @@ feasible): [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md).
 - `m_AdditionalNoisePowerW`
 - `m_EwStack`
 - `m_EnableCfarGate`, `m_CfarGuardCells`, `m_CfarTrainingCells`, `m_CfarPfa`,
-  `m_RangeBinCount`, `m_EnableCfarThermalFill`
+  `m_RangeBinCount`, `m_EnableCfarThermalFill`, `m_CfarMode` (CA/GO/SO)
+- Scan optimization: `m_LosCacheMaxAgeS`, reuse ages/shifts, priority ranges /
+  speeds / band intervals, `m_FreshUpdateBudgetMin/Max`
+- `m_EnableWlrHudAlerts`, `m_WlrHudAlertRadiusM`
 - `m_EnableAtmosphericLoss` / weather-driven rain-fog loss (see RADAR_API)
 - `m_EnableMeasurementSynthesis` (default true), `m_KeepEntityTruth` (debug),
   `m_MeasurementModel`, measurement noise scale
@@ -96,8 +99,23 @@ settings.m_EwStack.Add(jammer);
 ```c
 RDF_RadarDeceptionJammerEffect deceive = new RDF_RadarDeceptionJammerEffect();
 deceive.AddFalsePlot(1600.0, -18.0, 0.0000000000012, 25.0, 0.0);
-deceive.AddFalsePlot(2200.0, 12.0, 0.0000000000009, -10.0, 0.0);
 settings.m_EwStack.Add(deceive);
+
+// Range walk-off / angle scintillation / intermittent false plot:
+RDF_RadarRangeWalkOffEffect walk = new RDF_RadarRangeWalkOffEffect();
+walk.m_BaseRangeM = 1200.0;
+walk.m_RangeRateMs = 80.0;
+settings.m_EwStack.Add(walk);
+
+RDF_RadarAngleScintillationEffect scint = new RDF_RadarAngleScintillationEffect();
+scint.m_RangeM = 1500.0;
+scint.m_AzimuthJitterDeg = 3.0;
+settings.m_EwStack.Add(scint);
+
+RDF_RadarIntermittentFalsePlotEffect burst = new RDF_RadarIntermittentFalsePlotEffect();
+burst.m_PeriodS = 2.0;
+burst.m_DutyCycle = 0.35;
+settings.m_EwStack.Add(burst);
 ```
 
 False plots are emitted as anonymous targets (`m_IsAnonymous=true`,

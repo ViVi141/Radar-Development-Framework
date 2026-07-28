@@ -80,7 +80,8 @@ class RDF_RadarCfarProcessor
                     noiseFloor,
                     settings.m_CfarGuardCells,
                     settings.m_CfarTrainingCells,
-                    settings.m_CfarPfa);
+                    settings.m_CfarPfa,
+                    settings.m_CfarMode);
                 m_RowHits.Set(azHit * rangeBinCount + rb, hit);
             }
         }

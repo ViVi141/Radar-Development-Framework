@@ -35,6 +35,8 @@ class RDF_RadarVisualSettings
     // WLR launch / impact markers + optional track ribbon.
     bool m_DrawWeaponLocate = true;
     float m_WeaponLocateMarkerSize = 4.0;
+    // Ground alert ring radius around launch / impact (counter-battery cue).
+    float m_WeaponLocateAlertRadiusM = 80.0;
     bool m_DrawTrackRibbon = true;
 
     //------------------------------------------------------------------------------------------------
@@ -51,6 +53,7 @@ class RDF_RadarVisualSettings
         m_DrawRangeRings = true;
         m_DrawWeaponLocate = true;
         m_WeaponLocateMarkerSize = 4.0;
+        m_WeaponLocateAlertRadiusM = 80.0;
         m_DrawTrackRibbon = true;
     }
 

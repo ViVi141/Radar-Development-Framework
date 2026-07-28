@@ -33,22 +33,39 @@ class RDF_RadarScanReuseCache
     int ClassifyPriorityBand(
         ERDF_RadarTargetType type,
         float distanceM,
-        float speedMs)
+        float speedMs,
+        RDF_RadarSettings settings)
     {
+        float nearM = 800.0;
+        float midM = 2200.0;
+        float fastMs = 35.0;
+        float slowMs = 8.0;
+        if (settings)
+        {
+            nearM = settings.m_PriorityNearRangeM;
+            midM = settings.m_PriorityMidRangeM;
+            fastMs = settings.m_PriorityFastSpeedMs;
+            slowMs = settings.m_PrioritySlowSpeedMs;
+        }
+
         if (type == ERDF_RadarTargetType.RDF_RADAR_TARGET_PROJECTILE)
             return 0;
-        if (distanceM <= 800.0)
+        if (distanceM <= nearM)
             return 0;
-        if (speedMs >= 35.0)
+        if (speedMs >= fastMs)
             return 0;
-        if (distanceM <= 2200.0)
+        if (distanceM <= midM)
             return 1;
-        if (speedMs >= 8.0)
+        if (speedMs >= slowMs)
             return 1;
         return 2;
     }
 
-    bool ShouldRunFullUpdate(IEntity entity, int priorityBand, float wallS)
+    bool ShouldRunFullUpdate(
+        IEntity entity,
+        int priorityBand,
+        float wallS,
+        RDF_RadarSettings settings)
     {
         if (!entity || !m_ByEntity)
             return true;
@@ -59,7 +76,7 @@ class RDF_RadarScanReuseCache
             return true;
         if (e.m_LastFullUpdateWallS <= 0.0)
             return true;
-        float due = GetBandIntervalS(priorityBand);
+        float due = GetBandIntervalS(priorityBand, settings);
         if (wallS - e.m_LastFullUpdateWallS >= due)
             return true;
         return false;
@@ -94,12 +111,16 @@ class RDF_RadarScanReuseCache
         float maxAgeS,
         float maxOriginShiftM,
         float maxTargetShiftM,
+        float maxSpeedMs,
         out RDF_RadarTarget outPhysicalSource)
     {
         outPhysicalSource = null;
         if (!entity || !m_ByEntity)
             return false;
-        if (speedMs > 6.0)
+        float maxSpeed = 6.0;
+        if (maxSpeedMs > 0.0)
+            maxSpeed = maxSpeedMs;
+        if (speedMs > maxSpeed)
             return false;
         if (!m_ByEntity.Contains(entity))
             return false;
@@ -187,13 +208,20 @@ class RDF_RadarScanReuseCache
         m_ByEntity = rebuilt;
     }
 
-    protected float GetBandIntervalS(int band)
+    protected float GetBandIntervalS(int band, RDF_RadarSettings settings)
     {
+        float band1 = 0.10;
+        float band2 = 0.30;
+        if (settings)
+        {
+            band1 = settings.m_PriorityBand1IntervalS;
+            band2 = settings.m_PriorityBand2IntervalS;
+        }
         if (band <= 0)
             return 0.0;
         if (band == 1)
-            return 0.10;
-        return 0.30;
+            return band1;
+        return band2;
     }
 
     protected RDF_RadarTarget CopyTarget(RDF_RadarTarget src)

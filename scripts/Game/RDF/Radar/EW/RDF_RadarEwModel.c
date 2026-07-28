@@ -192,3 +192,135 @@ class RDF_RadarDeceptionJammerEffect : RDF_RadarEwEffect
         }
     }
 }
+
+// Range walk-off / RGPO-style deception: false range walks outbound (or inbound).
+class RDF_RadarRangeWalkOffEffect : RDF_RadarEwEffect
+{
+    bool m_Enabled = true;
+    float m_BaseRangeM = 1200.0;
+    float m_AzimuthDeg = 0.0;
+    float m_ElevationDeg = 0.0;
+    float m_PowerW = 0.000000000001;
+    float m_RangeRateMs = 80.0;
+    float m_StartTimeS = 0.0;
+    float m_MaxRangeM = 8000.0;
+    float m_MinRangeM = 50.0;
+
+    override void CollectFalsePlots(
+        vector radarOrigin,
+        vector scanForward,
+        RDF_RadarHardware hardware,
+        float worldTimeS,
+        notnull array<ref RDF_RadarFalsePlot> outPlots)
+    {
+        if (!m_Enabled || m_PowerW <= 0.0)
+            return;
+
+        float tRel = worldTimeS - m_StartTimeS;
+        if (tRel < 0.0)
+            tRel = 0.0;
+        float rangeM = m_BaseRangeM + m_RangeRateMs * tRel;
+        if (rangeM < m_MinRangeM)
+            return;
+        if (rangeM > m_MaxRangeM)
+            return;
+
+        RDF_RadarFalsePlot p = new RDF_RadarFalsePlot();
+        p.m_RangeM = rangeM;
+        p.m_AzimuthDeg = m_AzimuthDeg;
+        p.m_ElevationDeg = m_ElevationDeg;
+        p.m_PowerW = m_PowerW;
+        p.m_RangeRateMs = m_RangeRateMs;
+        outPlots.Insert(p);
+    }
+}
+
+// Angle scintillation: azimuth jitters around a base bearing each dwell.
+class RDF_RadarAngleScintillationEffect : RDF_RadarEwEffect
+{
+    bool m_Enabled = true;
+    float m_RangeM = 1500.0;
+    float m_BaseAzimuthDeg = 0.0;
+    float m_ElevationDeg = 0.0;
+    float m_PowerW = 0.000000000001;
+    float m_AzimuthJitterDeg = 3.0;
+    float m_RangeRateMs = 0.0;
+    float m_PhaseRad = 0.0;
+    float m_JitterRateRadPerS = 4.5;
+
+    override void CollectFalsePlots(
+        vector radarOrigin,
+        vector scanForward,
+        RDF_RadarHardware hardware,
+        float worldTimeS,
+        notnull array<ref RDF_RadarFalsePlot> outPlots)
+    {
+        if (!m_Enabled || m_PowerW <= 0.0)
+            return;
+        if (m_RangeM < 1.0)
+            return;
+
+        float phase = m_PhaseRad + worldTimeS * m_JitterRateRadPerS;
+        float jitter = Math.Sin(phase) * m_AzimuthJitterDeg;
+
+        RDF_RadarFalsePlot p = new RDF_RadarFalsePlot();
+        p.m_RangeM = m_RangeM;
+        p.m_AzimuthDeg = m_BaseAzimuthDeg + jitter;
+        p.m_ElevationDeg = m_ElevationDeg;
+        p.m_PowerW = m_PowerW;
+        p.m_RangeRateMs = m_RangeRateMs;
+        outPlots.Insert(p);
+    }
+}
+
+// Intermittent false plot: only present for a duty-cycle fraction of each period.
+class RDF_RadarIntermittentFalsePlotEffect : RDF_RadarEwEffect
+{
+    bool m_Enabled = true;
+    float m_RangeM = 1800.0;
+    float m_AzimuthDeg = 10.0;
+    float m_ElevationDeg = 0.0;
+    float m_PowerW = 0.000000000001;
+    float m_RangeRateMs = 0.0;
+    float m_PeriodS = 2.0;
+    float m_DutyCycle = 0.35;
+    float m_PhaseS = 0.0;
+
+    override void CollectFalsePlots(
+        vector radarOrigin,
+        vector scanForward,
+        RDF_RadarHardware hardware,
+        float worldTimeS,
+        notnull array<ref RDF_RadarFalsePlot> outPlots)
+    {
+        if (!m_Enabled || m_PowerW <= 0.0)
+            return;
+        if (m_RangeM < 1.0)
+            return;
+
+        float period = m_PeriodS;
+        if (period < 0.05)
+            period = 0.05;
+        float duty = m_DutyCycle;
+        if (duty < 0.0)
+            duty = 0.0;
+        if (duty > 1.0)
+            duty = 1.0;
+
+        float phase = worldTimeS + m_PhaseS;
+        float frac = phase / period;
+        frac = frac - Math.Floor(frac);
+        if (frac < 0.0)
+            frac = frac + 1.0;
+        if (frac > duty)
+            return;
+
+        RDF_RadarFalsePlot p = new RDF_RadarFalsePlot();
+        p.m_RangeM = m_RangeM;
+        p.m_AzimuthDeg = m_AzimuthDeg;
+        p.m_ElevationDeg = m_ElevationDeg;
+        p.m_PowerW = m_PowerW;
+        p.m_RangeRateMs = m_RangeRateMs;
+        outPlots.Insert(p);
+    }
+}

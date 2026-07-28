@@ -55,19 +55,19 @@
 - [x] 天气驱动雨/雾衰：`SampleWorldWeather` + `m_EnableWeatherDrivenRainLoss`（逼真开 / 理想关）
 - [x] Showcase 可视化：扇面/锁定锥/余晖/距离环；PPI 压缩贴右下角
 
-### 3 — 再加深（中收益 · 中高成本）← 下一步
+### 3 — 再加深（中收益 · 中高成本）← 已落地
 
 | 项 | 收益 | 成本 | 说明 |
 |----|------|------|------|
-| GO-CFAR / SO-CFAR | 杂波边缘更稳 | 中 | 热噪声落地后再做才有意义 |
-| 扫描阈值进 `RDF_RadarSettings` | 不同雷达可调 | 低中 | 有 stats 后再调参 |
-| 欺骗扩展：拖距 / 角闪烁 / 间歇假点 | EW 玩法厚度 | 中 | 不挡物理主线 |
-| 反炮兵 HUD（发射/落点圈） | WLR 产品化 | 中 | 功能已有，缺呈现 |
+| GO-CFAR / SO-CFAR | 杂波边缘更稳 | 中 | `m_CfarMode` |
+| 扫描阈值进 `RDF_RadarSettings` | 不同雷达可调 | 低中 | LOS/复用/优先级 |
+| 欺骗扩展：拖距 / 角闪烁 / 间歇假点 | EW 玩法厚度 | 中 | 三个 Effect 类 |
+| 反炮兵 HUD（发射/落点圈） | WLR 产品化 | 中 | PPI + 世界环 |
 
-- [ ] 可配置 GO-CFAR / SO-CFAR
-- [ ] 扫描优化阈值下沉 `RDF_RadarSettings`
-- [ ] 欺骗库扩展（拖距、角闪烁、间歇假点）
-- [ ] 反炮兵专用 HUD（WLR 告警圈）
+- [x] 可配置 GO-CFAR / SO-CFAR
+- [x] 扫描优化阈值下沉 `RDF_RadarSettings`
+- [x] 欺骗库扩展（拖距、角闪烁、间歇假点）
+- [x] 反炮兵专用 HUD（WLR 告警圈）
 
 ### 4 — 延后（收益情景化 · 成本高）
 
@@ -104,7 +104,7 @@
 ## 建议冲刺切片
 
 **Sprint A+B（已完成）**：§1 + §2 — 观测、双档、测量噪声、热噪声填空、大气衰减。  
-**Sprint C（按需）**：GO/SO-CFAR、Settings 阈值、欺骗扩展、WLR HUD。  
+**Sprint C（已完成）**：GO/SO-CFAR、Settings 阈值、欺骗扩展、WLR HUD。  
 **以后**：绕射 / DEM span / 组网 / 远程算力。
 
 Ideal：`RDF_RadarAutoTestSuite.StartAll()`  

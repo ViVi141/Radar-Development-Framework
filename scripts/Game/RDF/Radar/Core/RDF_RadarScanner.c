@@ -5,14 +5,6 @@ class RDF_RadarScanner
 {
     protected static const float DEG_TO_RAD = 0.0174532925199;
     protected static const float RAD_TO_DEG = 57.2957795;
-    protected static const float LOS_CACHE_MAX_AGE_S = 0.25;
-    protected static const float LOS_CACHE_MAX_ORIGIN_SHIFT_M = 1.5;
-    protected static const float LOS_CACHE_MAX_TARGET_SHIFT_M = 3.0;
-    protected static const float TARGET_REUSE_MAX_AGE_S = 0.60;
-    protected static const float PHYSICAL_REUSE_MAX_AGE_S = 0.20;
-    protected static const float PHYSICAL_REUSE_MAX_ORIGIN_SHIFT_M = 2.0;
-    protected static const float PHYSICAL_REUSE_MAX_TARGET_SHIFT_M = 4.0;
-
     protected ref RDF_RadarSettings m_Settings;
     protected ref RDF_DemRuntimeCache m_DemCache;
 
@@ -293,12 +285,13 @@ class RDF_RadarScanner
                 priorityBand = m_ScanReuseCache.ClassifyPriorityBand(
                     priorityType,
                     dist,
-                    speedMs);
+                    speedMs,
+                    m_Settings);
             }
             bool highPriority = priorityBand <= 0;
             bool runFullUpdate = true;
             if (m_ScanReuseCache)
-                runFullUpdate = m_ScanReuseCache.ShouldRunFullUpdate(entry.m_Entity, priorityBand, wallTime);
+                runFullUpdate = m_ScanReuseCache.ShouldRunFullUpdate(entry.m_Entity, priorityBand, wallTime, m_Settings);
             if (!runFullUpdate || (!highPriority && freshBudget <= 0))
             {
                 m_StatBudgetSkips = m_StatBudgetSkips + 1;
@@ -307,7 +300,7 @@ class RDF_RadarScanner
                     && m_ScanReuseCache.TryGetReusedTarget(
                         entry.m_Entity,
                         wallTime,
-                        TARGET_REUSE_MAX_AGE_S,
+                        m_Settings.m_TargetReuseMaxAgeS,
                         reusedTarget))
                 {
                     m_StatReuseHits = m_StatReuseHits + 1;
@@ -341,9 +334,9 @@ class RDF_RadarScanner
                     origin,
                     losEnd,
                     wallTime,
-                    LOS_CACHE_MAX_AGE_S,
-                    LOS_CACHE_MAX_ORIGIN_SHIFT_M,
-                    LOS_CACHE_MAX_TARGET_SHIFT_M,
+                    m_Settings.m_LosCacheMaxAgeS,
+                    m_Settings.m_LosCacheMaxOriginShiftM,
+                    m_Settings.m_LosCacheMaxTargetShiftM,
                     hitFraction,
                     losClear);
             }
@@ -422,9 +415,10 @@ class RDF_RadarScanner
                     losEnd,
                     speedMs,
                     wallTime,
-                    PHYSICAL_REUSE_MAX_AGE_S,
-                    PHYSICAL_REUSE_MAX_ORIGIN_SHIFT_M,
-                    PHYSICAL_REUSE_MAX_TARGET_SHIFT_M,
+                    m_Settings.m_PhysicalReuseMaxAgeS,
+                    m_Settings.m_PhysicalReuseMaxOriginShiftM,
+                    m_Settings.m_PhysicalReuseMaxTargetShiftM,
+                    m_Settings.m_PhysicalReuseMaxSpeedMs,
                     physicalSource);
             }
             if (reusedPhysical)
@@ -524,12 +518,13 @@ class RDF_RadarScanner
                 priorityBand = m_ScanReuseCache.ClassifyPriorityBand(
                     priorityType,
                     dist,
-                    speedMs);
+                    speedMs,
+                    m_Settings);
             }
             bool highPriority = priorityBand <= 0;
             bool runFullUpdate = true;
             if (m_ScanReuseCache)
-                runFullUpdate = m_ScanReuseCache.ShouldRunFullUpdate(ent, priorityBand, wallTime);
+                runFullUpdate = m_ScanReuseCache.ShouldRunFullUpdate(ent, priorityBand, wallTime, m_Settings);
             if (!runFullUpdate || (!highPriority && freshBudget <= 0))
             {
                 m_StatBudgetSkips = m_StatBudgetSkips + 1;
@@ -538,7 +533,7 @@ class RDF_RadarScanner
                     && m_ScanReuseCache.TryGetReusedTarget(
                         ent,
                         wallTime,
-                        TARGET_REUSE_MAX_AGE_S,
+                        m_Settings.m_TargetReuseMaxAgeS,
                         reusedTarget))
                 {
                     m_StatReuseHits = m_StatReuseHits + 1;
@@ -564,9 +559,9 @@ class RDF_RadarScanner
                     origin,
                     pos,
                     wallTime,
-                    LOS_CACHE_MAX_AGE_S,
-                    LOS_CACHE_MAX_ORIGIN_SHIFT_M,
-                    LOS_CACHE_MAX_TARGET_SHIFT_M,
+                    m_Settings.m_LosCacheMaxAgeS,
+                    m_Settings.m_LosCacheMaxOriginShiftM,
+                    m_Settings.m_LosCacheMaxTargetShiftM,
                     hitFraction,
                     losClear);
             }
@@ -618,9 +613,10 @@ class RDF_RadarScanner
                     pos,
                     speedMs,
                     wallTime,
-                    PHYSICAL_REUSE_MAX_AGE_S,
-                    PHYSICAL_REUSE_MAX_ORIGIN_SHIFT_M,
-                    PHYSICAL_REUSE_MAX_TARGET_SHIFT_M,
+                    m_Settings.m_PhysicalReuseMaxAgeS,
+                    m_Settings.m_PhysicalReuseMaxOriginShiftM,
+                    m_Settings.m_PhysicalReuseMaxTargetShiftM,
+                    m_Settings.m_PhysicalReuseMaxSpeedMs,
                     physicalSource);
             }
             if (reusedPhysical)
@@ -676,16 +672,15 @@ class RDF_RadarScanner
                 emitterPriorityBand = m_ScanReuseCache.ClassifyPriorityBand(
                     ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER,
                     distE,
-                    emitterSpeedMs);
+                    emitterSpeedMs,
+                    m_Settings);
             }
             bool emitterHighPriority = emitterPriorityBand <= 0;
             bool emitterRunFull = true;
             if (m_ScanReuseCache)
             {
                 emitterRunFull = m_ScanReuseCache.ShouldRunFullUpdate(
-                    et.m_Entity,
-                    emitterPriorityBand,
-                    wallTime);
+                    et.m_Entity, emitterPriorityBand, wallTime, m_Settings);
             }
             if (!emitterRunFull || (!emitterHighPriority && freshBudget <= 0))
             {
@@ -695,7 +690,7 @@ class RDF_RadarScanner
                     && m_ScanReuseCache.TryGetReusedTarget(
                         et.m_Entity,
                         wallTime,
-                        TARGET_REUSE_MAX_AGE_S,
+                        m_Settings.m_TargetReuseMaxAgeS,
                         reusedEmitter))
                 {
                     m_StatReuseHits = m_StatReuseHits + 1;
@@ -724,9 +719,9 @@ class RDF_RadarScanner
                     origin,
                     et.m_Position,
                     wallTime,
-                    LOS_CACHE_MAX_AGE_S,
-                    LOS_CACHE_MAX_ORIGIN_SHIFT_M,
-                    LOS_CACHE_MAX_TARGET_SHIFT_M,
+                    m_Settings.m_LosCacheMaxAgeS,
+                    m_Settings.m_LosCacheMaxOriginShiftM,
+                    m_Settings.m_LosCacheMaxTargetShiftM,
                     hitFractionE,
                     losClearE);
             }
@@ -772,9 +767,10 @@ class RDF_RadarScanner
                     et.m_Position,
                     emitterSpeedMs,
                     wallTime,
-                    PHYSICAL_REUSE_MAX_AGE_S,
-                    PHYSICAL_REUSE_MAX_ORIGIN_SHIFT_M,
-                    PHYSICAL_REUSE_MAX_TARGET_SHIFT_M,
+                    m_Settings.m_PhysicalReuseMaxAgeS,
+                    m_Settings.m_PhysicalReuseMaxOriginShiftM,
+                    m_Settings.m_PhysicalReuseMaxTargetShiftM,
+                    m_Settings.m_PhysicalReuseMaxSpeedMs,
                     emitterPhysicalSource);
             }
             if (reusedEmitterPhysical)
@@ -976,10 +972,12 @@ class RDF_RadarScanner
     {
         int budget = m_Settings.m_MaxLosTracesPerScan / 2;
         budget = budget + m_Settings.m_MaxTargets / 6;
-        if (budget < 8)
-            budget = 8;
-        if (budget > 96)
-            budget = 96;
+        int budgetMin = m_Settings.m_FreshUpdateBudgetMin;
+        int budgetMax = m_Settings.m_FreshUpdateBudgetMax;
+        if (budget < budgetMin)
+            budget = budgetMin;
+        if (budget > budgetMax)
+            budget = budgetMax;
         return budget;
     }
 

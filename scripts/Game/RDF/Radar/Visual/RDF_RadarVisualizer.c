@@ -154,6 +154,9 @@ class RDF_RadarVisualizer
         float markerSize = m_Settings.m_WeaponLocateMarkerSize;
         if (markerSize < 0.2)
             markerSize = 0.2;
+        float alertRadiusM = m_Settings.m_WeaponLocateAlertRadiusM;
+        if (alertRadiusM < 1.0)
+            alertRadiusM = 1.0;
         int launchColor = ARGBF(0.95, 1.0, 0.55, 0.1);
         int impactColor = ARGBF(0.95, 0.15, 0.9, 1.0);
         int linkColor = ARGBF(0.65, 0.85, 0.85, 0.85);
@@ -182,6 +185,7 @@ class RDF_RadarVisualizer
                     launchColor, shapeFlags, fix.m_LaunchPos, markerSize));
                 m_DebugShapes.Insert(Shape.CreateSphere(
                     ARGBF(0.35, 1.0, 0.55, 0.1), shapeFlags, fix.m_LaunchPos, markerSize * 2.2));
+                DrawGroundAlertRing(fix.m_LaunchPos, alertRadiusM, launchColor, shapeFlags);
             }
             if (fix.m_ImpactValid)
             {
@@ -189,7 +193,39 @@ class RDF_RadarVisualizer
                     impactColor, shapeFlags, fix.m_ImpactPos, markerSize));
                 m_DebugShapes.Insert(Shape.CreateSphere(
                     ARGBF(0.35, 0.15, 0.9, 1.0), shapeFlags, fix.m_ImpactPos, markerSize * 2.2));
+                DrawGroundAlertRing(fix.m_ImpactPos, alertRadiusM, impactColor, shapeFlags);
             }
+        }
+    }
+
+    protected void DrawGroundAlertRing(
+        vector center,
+        float radiusM,
+        int color,
+        int shapeFlags)
+    {
+        if (radiusM < 1.0)
+            return;
+        int segs = 24;
+        if (m_Settings && m_Settings.m_RangeRingSegments > 8)
+            segs = m_Settings.m_RangeRingSegments;
+        if (segs > 48)
+            segs = 48;
+
+        for (int s = 0; s < segs; s++)
+        {
+            float a0 = (Math.PI * 2.0 * s) / segs;
+            float a1 = (Math.PI * 2.0 * (s + 1)) / segs;
+            vector p0 = center;
+            vector p1 = center;
+            p0[0] = center[0] + Math.Cos(a0) * radiusM;
+            p0[2] = center[2] + Math.Sin(a0) * radiusM;
+            p1[0] = center[0] + Math.Cos(a1) * radiusM;
+            p1[2] = center[2] + Math.Sin(a1) * radiusM;
+            vector seg[2];
+            seg[0] = p0;
+            seg[1] = p1;
+            m_DebugShapes.Insert(Shape.CreateLines(color, shapeFlags, seg, 2));
         }
     }
 

@@ -42,6 +42,9 @@ class RDF_RadarHUD
 
     // Real-world range corresponding to PPI_R pixels.
     float m_DisplayRange = 2000.0;
+    // Counter-battery alert ring radius in world meters (maps into PPI).
+    float m_WlrAlertRadiusM = 80.0;
+    bool m_DrawWlrAlerts = true;
 
     // Resolved at BuildWidgets() from WorkspaceWidget size (bottom-right).
     protected int m_PxLeft = 20;
@@ -69,6 +72,9 @@ class RDF_RadarHUD
     static const int COL_ANON      = ARGB(255, 255, 230, 130); // pale yellow
     static const int COL_FALSEPLOT = ARGB(255, 245, 245, 245); // near white
     static const int COL_UNDET    = ARGB(120, 110, 130, 110);   // dim grey-green
+    static const int COL_WLR_LAUNCH = ARGB(220, 255, 160, 40);  // orange launch
+    static const int COL_WLR_IMPACT = ARGB(220, 80, 180, 255);  // blue impact
+    static const int COL_WLR_LINK   = ARGB(140, 200, 200, 200);
 
     static const float UPDATE_INTERVAL = 0.15;
     static const int PPI_MAX_BLIPS = 256;
@@ -168,6 +174,26 @@ class RDF_RadarHUD
         inst.Update(targets, origin, forward, range, tracker);
     }
 
+    static void SetWlrAlertRadiusM(float radiusM)
+    {
+        RDF_RadarHUD inst = GetInstance();
+        if (!inst)
+            return;
+        if (radiusM < 5.0)
+            radiusM = 5.0;
+        if (radiusM > 2000.0)
+            radiusM = 2000.0;
+        inst.m_WlrAlertRadiusM = radiusM;
+    }
+
+    static void SetWlrAlertsEnabled(bool enabled)
+    {
+        RDF_RadarHUD inst = GetInstance();
+        if (!inst)
+            return;
+        inst.m_DrawWlrAlerts = enabled;
+    }
+
     // ---- update ----
     protected void Update(
         array<ref RDF_RadarTarget> targets,
@@ -184,7 +210,7 @@ class RDF_RadarHUD
             return;
         m_LastUpdateTime = now;
 
-        UpdatePPI(targets, origin, forward);
+        UpdatePPI(targets, origin, forward, tracker);
         UpdateDataRows(targets, tracker);
     }
 
@@ -252,7 +278,7 @@ class RDF_RadarHUD
         TextWidget.Cast(wRingLbl).SetExactFontSize(10);
 
         m_wStats  = TextWidget.Cast(MakeDataRow(ws, 0, "Det --   Trk --"));
-        m_wLegend = TextWidget.Cast(MakeDataRow(ws, 1, "veh/proj/emit/anon + white false"));
+        m_wLegend = TextWidget.Cast(MakeDataRow(ws, 1, "orange=launch  blue=impact  white=false"));
         TextWidget.Cast(m_wLegend).SetExactFontSize(11);
 
         Print(string.Format(
@@ -342,7 +368,8 @@ class RDF_RadarHUD
     protected void UpdatePPI(
         array<ref RDF_RadarTarget> targets,
         vector origin,
-        vector forward)
+        vector forward,
+        RDF_RadarProjectileTracker tracker)
     {
         if (!m_Canvas || !m_StaticCmds)
             return;
@@ -413,7 +440,108 @@ class RDF_RadarHUD
             }
         }
 
+        DrawWlrAlerts(origin, tracker);
         m_Canvas.SetDrawCommands(m_AllCmds);
+    }
+
+    // Counter-battery alert rings: launch (orange) and impact (blue) on the PPI.
+    protected void DrawWlrAlerts(vector origin, RDF_RadarProjectileTracker tracker)
+    {
+        if (!tracker || !m_Canvas || m_DisplayRange <= 0.0)
+            return;
+        if (!m_DrawWlrAlerts)
+            return;
+
+        array<ref RDF_RadarTrack> tracks = tracker.GetAllTracks();
+        if (!tracks)
+            return;
+
+        float alertNorm = m_WlrAlertRadiusM / m_DisplayRange;
+        float alertPx = alertNorm * PPI_R;
+        if (alertPx < 4.0)
+            alertPx = 4.0;
+        if (alertPx > 18.0)
+            alertPx = 18.0;
+
+        for (int i = 0; i < tracks.Count(); i++)
+        {
+            RDF_RadarTrack tr = tracks.Get(i);
+            if (!tr || !tr.m_Confirmed)
+                continue;
+            RDF_RadarWlrFix fix = tr.m_LastWlrFix;
+            if (!fix)
+                continue;
+
+            if (fix.m_LaunchValid && fix.m_ImpactValid)
+            {
+                float lx0;
+                float ly0;
+                float lx1;
+                float ly1;
+                if (WorldToPpi(origin, fix.m_LaunchPos, lx0, ly0)
+                    && WorldToPpi(origin, fix.m_ImpactPos, lx1, ly1))
+                {
+                    array<float> linkVerts = new array<float>();
+                    linkVerts.Insert(lx0);
+                    linkVerts.Insert(ly0);
+                    linkVerts.Insert(lx1);
+                    linkVerts.Insert(ly1);
+                    LineDrawCommand link = new LineDrawCommand();
+                    link.m_iColor = COL_WLR_LINK;
+                    link.m_fWidth = 1.0;
+                    link.m_Vertices = linkVerts;
+                    m_AllCmds.Insert(link);
+                }
+            }
+
+            if (fix.m_LaunchValid)
+                DrawPpiAlertRing(origin, fix.m_LaunchPos, alertPx, COL_WLR_LAUNCH);
+            if (fix.m_ImpactValid)
+                DrawPpiAlertRing(origin, fix.m_ImpactPos, alertPx, COL_WLR_IMPACT);
+        }
+    }
+
+    protected bool WorldToPpi(vector origin, vector worldPos, out float outX, out float outY)
+    {
+        outX = PPI_CX;
+        outY = PPI_CY;
+        vector delta = worldPos - origin;
+        float normX = delta[0] / m_DisplayRange;
+        float normZ = delta[2] / m_DisplayRange;
+        float d2 = normX * normX + normZ * normZ;
+        if (d2 > 1.0)
+        {
+            float d = Math.Sqrt(d2);
+            normX = normX / d;
+            normZ = normZ / d;
+        }
+        outX = PPI_CX + normX * PPI_R;
+        outY = PPI_CY - normZ * PPI_R;
+        return true;
+    }
+
+    protected void DrawPpiAlertRing(vector origin, vector worldPos, float radiusPx, int color)
+    {
+        float bx;
+        float by;
+        if (!WorldToPpi(origin, worldPos, bx, by))
+            return;
+
+        array<float> ringVerts = new array<float>();
+        m_Canvas.TessellateCircle(Vector(bx, by, 0), radiusPx, 20, ringVerts);
+        LineDrawCommand ring = new LineDrawCommand();
+        ring.m_iColor = color;
+        ring.m_fWidth = 1.5;
+        ring.m_bShouldEnclose = true;
+        ring.m_Vertices = ringVerts;
+        m_AllCmds.Insert(ring);
+
+        array<float> coreVerts = new array<float>();
+        m_Canvas.TessellateCircle(Vector(bx, by, 0), 2.5, 8, coreVerts);
+        PolygonDrawCommand core = new PolygonDrawCommand();
+        core.m_iColor = color;
+        core.m_Vertices = coreVerts;
+        m_AllCmds.Insert(core);
     }
 
     protected int BlipColor(RDF_RadarTarget t)

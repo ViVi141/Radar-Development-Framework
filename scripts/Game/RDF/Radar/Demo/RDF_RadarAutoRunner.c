@@ -256,6 +256,15 @@ class RDF_RadarAutoRunner
                 if (ctx.m_RangeM > 0.0)
                     hudRange = ctx.m_RangeM;
             }
+            RDF_RadarSettings radarCfg = m_Sensor.GetSettings();
+            if (radarCfg)
+            {
+                RDF_RadarHUD.SetWlrAlertsEnabled(radarCfg.m_EnableWlrHudAlerts);
+                if (radarCfg.m_EnableWlrHudAlerts)
+                    RDF_RadarHUD.SetWlrAlertRadiusM(radarCfg.m_WlrHudAlertRadiusM);
+                if (m_VisualSettings)
+                    m_VisualSettings.m_WeaponLocateAlertRadiusM = radarCfg.m_WlrHudAlertRadiusM;
+            }
             RDF_RadarHUD.FeedScan(
                 m_Sensor.GetPlots(),
                 hudOrigin,

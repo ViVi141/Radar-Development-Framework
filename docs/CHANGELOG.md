@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-07-28 — Sprint C：阈值 / GO-SO-CFAR / 欺骗扩展 / WLR HUD
+
+- **扫描阈值**下沉 `RDF_RadarSettings`：LOS 缓存、目标/物理复用、优先级距离与速度、频带间隔、fresh budget
+- **CFAR**：`ERDF_CfarMode`（CA / GO / SO）；`m_CfarMode` 默认 CA
+- **欺骗库**：`RDF_RadarRangeWalkOffEffect`、`RDF_RadarAngleScintillationEffect`、`RDF_RadarIntermittentFalsePlotEffect`
+- **反炮兵 HUD**：PPI 发射/落点告警圈 + 连线；世界空间地面告警环（`m_WeaponLocateAlertRadiusM` / `m_WlrHudAlertRadiusM`）
+
+---
+
 ## 2026-07-28 — RDF_RadarScanner 拆分
 
 - 新增 `RDF_RadarScanGeometry`：LOS / 实体中心 / 速度辅助
