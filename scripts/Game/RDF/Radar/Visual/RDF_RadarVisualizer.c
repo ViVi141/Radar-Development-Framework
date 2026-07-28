@@ -1,15 +1,31 @@
 // Radar world-space visualizer: showcase sector fan, lock beam, afterglow,
 // range rings, plot markers, WLR fixes. Debug rays remain optional.
+// Perf: static geometry cached; rings/arcs/fans use line-strip / tris batches.
 class RDF_RadarVisualizer
 {
     protected ref RDF_RadarVisualSettings m_Settings;
-    protected ref array<ref Shape> m_DebugShapes;
+    // Persistent until origin / range / yaw / half-angle change.
+    protected ref array<ref Shape> m_StaticShapes;
+    // Plots, lock, ribbon — rebuilt on full dynamic refresh.
+    protected ref array<ref Shape> m_DynamicShapes;
+    // Afterglow alone so light ticks can fade without wiping plots.
+    protected ref array<ref Shape> m_AfterglowShapes;
+    // WLR markers — separate so light ticks can refresh without wiping plots.
+    protected ref array<ref Shape> m_WlrShapes;
     protected ref array<ref RDF_RadarAfterglowBlip> m_Afterglow;
     protected int m_LastAfterglowScanSerial;
+    protected int m_AfterglowWrite;
+    protected bool m_StaticValid;
+    protected vector m_CachedOrigin;
+    protected float m_CachedRange;
+    protected float m_CachedYaw;
+    protected float m_CachedHalfAngleDeg;
     protected static const float FALLBACK_RAY_LENGTH = 100.0;
     protected static const float DEG_TO_RAD = 0.0174532925199;
     protected static const int MAX_SECTOR_SEGMENTS = 24;
     protected static const int MAX_RING_SEGMENTS = 48;
+    protected static const int MAX_ALERT_SEGMENTS = 16;
+    protected static const int MAX_RIBBON_POINTS = 32;
 
     void RDF_RadarVisualizer(RDF_RadarVisualSettings settings = null)
     {
@@ -20,9 +36,18 @@ class RDF_RadarVisualizer
             m_Settings = new RDF_RadarVisualSettings();
             m_Settings.ApplyShowcaseDefaults();
         }
-        m_DebugShapes = new array<ref Shape>();
+        m_StaticShapes = new array<ref Shape>();
+        m_DynamicShapes = new array<ref Shape>();
+        m_AfterglowShapes = new array<ref Shape>();
+        m_WlrShapes = new array<ref Shape>();
         m_Afterglow = new array<ref RDF_RadarAfterglowBlip>();
         m_LastAfterglowScanSerial = -1;
+        m_AfterglowWrite = 0;
+        m_StaticValid = false;
+        m_CachedOrigin = "0 0 0";
+        m_CachedRange = -1.0;
+        m_CachedYaw = 0.0;
+        m_CachedHalfAngleDeg = -1.0;
     }
 
     RDF_RadarVisualSettings GetSettings()
@@ -32,21 +57,29 @@ class RDF_RadarVisualizer
 
     void Reset()
     {
-        if (m_DebugShapes)
-            m_DebugShapes.Clear();
+        if (m_StaticShapes)
+            m_StaticShapes.Clear();
+        if (m_DynamicShapes)
+            m_DynamicShapes.Clear();
+        if (m_AfterglowShapes)
+            m_AfterglowShapes.Clear();
+        if (m_WlrShapes)
+            m_WlrShapes.Clear();
         ClearAfterglow();
         m_LastAfterglowScanSerial = -1;
+        m_StaticValid = false;
     }
 
     void ClearAfterglow()
     {
         if (m_Afterglow)
             m_Afterglow.Clear();
+        m_AfterglowWrite = 0;
     }
 
     //------------------------------------------------------------------------------------------------
-    // Full showcase / debug draw. Call every presentation tick (shapes persist
-    // until the next call — do not use ONCE or CallLater gaps will flicker).
+    // fullDynamic=true: rebuild plots/lock/ribbon/afterglow.
+    // fullDynamic=false: only refresh afterglow fade (keeps last plot markers).
     void Render(
         IEntity subject,
         array<ref RDF_RadarTarget> targets,
@@ -56,23 +89,28 @@ class RDF_RadarVisualizer
         float sectorHalfAngleDeg,
         RDF_RadarLockManager lockMgr,
         RDF_RadarProjectileTracker tracker,
-        int scanSerial)
+        int scanSerial,
+        bool fullDynamic)
     {
-        if (!m_Settings || !m_DebugShapes)
+        if (!m_Settings)
             return;
+        if (!m_StaticShapes)
+            m_StaticShapes = new array<ref Shape>();
+        if (!m_DynamicShapes)
+            m_DynamicShapes = new array<ref Shape>();
+        if (!m_AfterglowShapes)
+            m_AfterglowShapes = new array<ref Shape>();
 
-        bool any = m_Settings.m_DrawRays
-            || m_Settings.m_DrawPoints
-            || m_Settings.m_DrawOriginAxis
+        bool anyStatic = m_Settings.m_DrawOriginAxis
             || m_Settings.m_DrawSectorSweep
+            || m_Settings.m_DrawRangeRings;
+        bool anyDynamic = m_Settings.m_DrawRays
+            || m_Settings.m_DrawPoints
             || m_Settings.m_DrawLockBeam
             || m_Settings.m_DrawAfterglow
-            || m_Settings.m_DrawRangeRings
             || m_Settings.m_DrawTrackRibbon;
-        if (!any)
+        if (!anyStatic && !anyDynamic)
             return;
-
-        m_DebugShapes.Clear();
 
         if (origin.LengthSq() < 0.0001 && subject)
             origin = GetSubjectOrigin(subject);
@@ -87,43 +125,61 @@ class RDF_RadarVisualizer
             rangeM = 10.0;
 
         float nowS = System.GetTickCount() * 0.001;
-        // Persist until the next Render(): CallLater is ~5 Hz, ONCE would flicker.
         int shapeFlags = ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER
             | ShapeFlags.TRANSP | ShapeFlags.DOUBLESIDE;
 
-        if (m_Settings.m_DrawOriginAxis && subject)
-            DrawOriginAxis(subject, origin);
+        if (anyStatic && IsStaticDirty(origin, forward, rangeM, sectorHalfAngleDeg))
+            RebuildStaticShapes(subject, origin, forward, rangeM, sectorHalfAngleDeg, shapeFlags);
 
-        if (m_Settings.m_DrawRangeRings)
-            DrawRangeRings(origin, rangeM, shapeFlags);
+        if (!anyDynamic)
+            return;
 
-        if (m_Settings.m_DrawSectorSweep)
-            DrawSectorSweep(origin, forward, rangeM, sectorHalfAngleDeg, shapeFlags);
+        if (m_Settings.m_DrawAfterglow && scanSerial != m_LastAfterglowScanSerial)
+        {
+            IngestPlotsForAfterglow(targets, nowS);
+            m_LastAfterglowScanSerial = scanSerial;
+        }
+
+        if (fullDynamic)
+        {
+            m_DynamicShapes.Clear();
+
+            if (targets && m_Settings.m_DrawPoints)
+                DrawPlotMarkers(targets, shapeFlags);
+
+            if (targets && m_Settings.m_DrawRays)
+                DrawPlotRays(origin, forward, targets, shapeFlags);
+
+            if (m_Settings.m_DrawLockBeam && lockMgr)
+                DrawLockBeam(origin, lockMgr, shapeFlags);
+
+            if (m_Settings.m_DrawTrackRibbon && tracker)
+                DrawTrackRibbons(tracker, shapeFlags);
+        }
 
         if (m_Settings.m_DrawAfterglow)
         {
-            if (scanSerial != m_LastAfterglowScanSerial)
-            {
-                IngestPlotsForAfterglow(targets, nowS);
-                m_LastAfterglowScanSerial = scanSerial;
-            }
+            m_AfterglowShapes.Clear();
             DrawAfterglow(nowS, shapeFlags);
         }
-
-        if (targets && m_Settings.m_DrawPoints)
-            DrawPlotMarkers(origin, targets, shapeFlags);
-
-        if (targets && m_Settings.m_DrawRays)
-            DrawPlotRays(origin, forward, targets, shapeFlags);
-
-        if (m_Settings.m_DrawLockBeam && lockMgr)
-            DrawLockBeam(origin, lockMgr, shapeFlags);
-
-        if (m_Settings.m_DrawTrackRibbon && tracker)
-            DrawTrackRibbons(tracker, shapeFlags);
     }
 
-    // Backward-compatible overload used by older call sites.
+    void Render(
+        IEntity subject,
+        array<ref RDF_RadarTarget> targets,
+        vector origin,
+        vector forward,
+        float rangeM,
+        float sectorHalfAngleDeg,
+        RDF_RadarLockManager lockMgr,
+        RDF_RadarProjectileTracker tracker,
+        int scanSerial)
+    {
+        Render(
+            subject, targets, origin, forward, rangeM, sectorHalfAngleDeg,
+            lockMgr, tracker, scanSerial, true);
+    }
+
     void Render(IEntity subject, array<ref RDF_RadarTarget> targets)
     {
         vector origin = GetSubjectOrigin(subject);
@@ -134,18 +190,19 @@ class RDF_RadarVisualizer
             subject.GetWorldTransform(worldMat);
             forward = worldMat[2];
         }
-        Render(subject, targets, origin, forward, 2000.0, 45.0, null, null, -1);
+        Render(subject, targets, origin, forward, 2000.0, 45.0, null, null, -1, true);
     }
 
-    // Draw cached weapon-locating launch / impact points for projectile tracks.
     void RenderWeaponLocates(RDF_RadarProjectileTracker tracker)
     {
         if (!tracker || !m_Settings)
             return;
         if (!m_Settings.m_DrawWeaponLocate)
             return;
-        if (!m_DebugShapes)
-            m_DebugShapes = new array<ref Shape>();
+        if (!m_WlrShapes)
+            m_WlrShapes = new array<ref Shape>();
+
+        m_WlrShapes.Clear();
 
         array<ref RDF_RadarTrack> tracks = tracker.GetAllTracks();
         if (!tracks)
@@ -157,6 +214,12 @@ class RDF_RadarVisualizer
         float alertRadiusM = m_Settings.m_WeaponLocateAlertRadiusM;
         if (alertRadiusM < 1.0)
             alertRadiusM = 1.0;
+        int alertSegs = m_Settings.m_WeaponLocateAlertSegments;
+        if (alertSegs < 8)
+            alertSegs = 8;
+        if (alertSegs > MAX_ALERT_SEGMENTS)
+            alertSegs = MAX_ALERT_SEGMENTS;
+
         int launchColor = ARGBF(0.95, 1.0, 0.55, 0.1);
         int impactColor = ARGBF(0.95, 0.15, 0.9, 1.0);
         int linkColor = ARGBF(0.65, 0.85, 0.85, 0.85);
@@ -177,56 +240,103 @@ class RDF_RadarVisualizer
                 vector link[2];
                 link[0] = fix.m_LaunchPos;
                 link[1] = fix.m_ImpactPos;
-                m_DebugShapes.Insert(Shape.CreateLines(linkColor, shapeFlags, link, 2));
+                m_WlrShapes.Insert(Shape.CreateLines(linkColor, shapeFlags, link, 2));
             }
             if (fix.m_LaunchValid)
             {
-                m_DebugShapes.Insert(Shape.CreateSphere(
+                m_WlrShapes.Insert(Shape.CreateSphere(
                     launchColor, shapeFlags, fix.m_LaunchPos, markerSize));
-                m_DebugShapes.Insert(Shape.CreateSphere(
+                m_WlrShapes.Insert(Shape.CreateSphere(
                     ARGBF(0.35, 1.0, 0.55, 0.1), shapeFlags, fix.m_LaunchPos, markerSize * 2.2));
-                DrawGroundAlertRing(fix.m_LaunchPos, alertRadiusM, launchColor, shapeFlags);
+                DrawGroundAlertRing(fix.m_LaunchPos, alertRadiusM, alertSegs, launchColor, shapeFlags);
             }
             if (fix.m_ImpactValid)
             {
-                m_DebugShapes.Insert(Shape.CreateSphere(
+                m_WlrShapes.Insert(Shape.CreateSphere(
                     impactColor, shapeFlags, fix.m_ImpactPos, markerSize));
-                m_DebugShapes.Insert(Shape.CreateSphere(
+                m_WlrShapes.Insert(Shape.CreateSphere(
                     ARGBF(0.35, 0.15, 0.9, 1.0), shapeFlags, fix.m_ImpactPos, markerSize * 2.2));
-                DrawGroundAlertRing(fix.m_ImpactPos, alertRadiusM, impactColor, shapeFlags);
+                DrawGroundAlertRing(fix.m_ImpactPos, alertRadiusM, alertSegs, impactColor, shapeFlags);
             }
         }
     }
 
+    protected bool IsStaticDirty(
+        vector origin,
+        vector forward,
+        float rangeM,
+        float halfAngleDeg)
+    {
+        if (!m_StaticValid)
+            return true;
+        vector d = origin - m_CachedOrigin;
+        if (d.LengthSq() > 0.25)
+            return true;
+        if (Math.AbsFloat(rangeM - m_CachedRange) > 0.5)
+            return true;
+        float yaw = Math.Atan2(forward[2], forward[0]);
+        float dyaw = RDF_RadarScanGeometry.NormalizeAngleRad(yaw - m_CachedYaw);
+        if (Math.AbsFloat(dyaw) > 0.02)
+            return true;
+        if (Math.AbsFloat(halfAngleDeg - m_CachedHalfAngleDeg) > 0.1)
+            return true;
+        return false;
+    }
+
+    protected void RebuildStaticShapes(
+        IEntity subject,
+        vector origin,
+        vector forward,
+        float rangeM,
+        float halfAngleDeg,
+        int shapeFlags)
+    {
+        m_StaticShapes.Clear();
+
+        if (m_Settings.m_DrawOriginAxis && subject)
+            DrawOriginAxis(subject, origin);
+
+        if (m_Settings.m_DrawRangeRings)
+            DrawRangeRings(origin, rangeM, shapeFlags);
+
+        if (m_Settings.m_DrawSectorSweep)
+            DrawSectorSweep(origin, forward, rangeM, halfAngleDeg, shapeFlags);
+
+        m_CachedOrigin = origin;
+        m_CachedRange = rangeM;
+        m_CachedYaw = Math.Atan2(forward[2], forward[0]);
+        m_CachedHalfAngleDeg = halfAngleDeg;
+        m_StaticValid = true;
+    }
+
+    // One closed line-strip Shape (vanilla CreateLines = polyline).
     protected void DrawGroundAlertRing(
         vector center,
         float radiusM,
+        int segs,
         int color,
         int shapeFlags)
     {
         if (radiusM < 1.0)
             return;
-        int segs = 24;
-        if (m_Settings && m_Settings.m_RangeRingSegments > 8)
-            segs = m_Settings.m_RangeRingSegments;
-        if (segs > 48)
-            segs = 48;
+        if (segs < 8)
+            segs = 8;
+        if (segs > MAX_ALERT_SEGMENTS)
+            segs = MAX_ALERT_SEGMENTS;
 
-        for (int s = 0; s < segs; s++)
+        vector pts[17];
+        int count = segs + 1;
+        float step = 6.2831853 / segs;
+        for (int i = 0; i < segs; i++)
         {
-            float a0 = (Math.PI * 2.0 * s) / segs;
-            float a1 = (Math.PI * 2.0 * (s + 1)) / segs;
-            vector p0 = center;
-            vector p1 = center;
-            p0[0] = center[0] + Math.Cos(a0) * radiusM;
-            p0[2] = center[2] + Math.Sin(a0) * radiusM;
-            p1[0] = center[0] + Math.Cos(a1) * radiusM;
-            p1[2] = center[2] + Math.Sin(a1) * radiusM;
-            vector seg[2];
-            seg[0] = p0;
-            seg[1] = p1;
-            m_DebugShapes.Insert(Shape.CreateLines(color, shapeFlags, seg, 2));
+            float a = step * i;
+            pts[i] = Vector(
+                center[0] + Math.Cos(a) * radiusM,
+                center[1],
+                center[2] + Math.Sin(a) * radiusM);
         }
+        pts[segs] = pts[0];
+        m_WlrShapes.Insert(Shape.CreateLines(color, shapeFlags, pts, count));
     }
 
     protected void DrawOriginAxis(IEntity subject, vector origin)
@@ -239,17 +349,17 @@ class RDF_RadarVisualizer
         vector endX[2];
         endX[0] = origin;
         endX[1] = origin + worldMat[0] * len;
-        m_DebugShapes.Insert(Shape.CreateLines(ARGBF(1, 1, 0, 0), flags, endX, 2));
+        m_StaticShapes.Insert(Shape.CreateLines(ARGBF(1, 1, 0, 0), flags, endX, 2));
 
         vector endY[2];
         endY[0] = origin;
         endY[1] = origin + worldMat[1] * len;
-        m_DebugShapes.Insert(Shape.CreateLines(ARGBF(1, 0, 1, 0), flags, endY, 2));
+        m_StaticShapes.Insert(Shape.CreateLines(ARGBF(1, 0, 1, 0), flags, endY, 2));
 
         vector endZ[2];
         endZ[0] = origin;
         endZ[1] = origin + worldMat[2] * len;
-        m_DebugShapes.Insert(Shape.CreateLines(ARGBF(1, 0, 0, 1), flags, endZ, 2));
+        m_StaticShapes.Insert(Shape.CreateLines(ARGBF(1, 0, 0, 1), flags, endZ, 2));
     }
 
     protected void DrawRangeRings(vector origin, float rangeM, int shapeFlags)
@@ -273,16 +383,17 @@ class RDF_RadarVisualizer
     {
         if (radiusM < 1.0)
             return;
+
+        vector pts[49];
+        int count = segs + 1;
         float step = 6.2831853 / segs;
         for (int i = 0; i < segs; i++)
         {
-            float a0 = step * i;
-            float a1 = step * (i + 1);
-            vector p[2];
-            p[0] = origin + Vector(Math.Cos(a0) * radiusM, 0.5, Math.Sin(a0) * radiusM);
-            p[1] = origin + Vector(Math.Cos(a1) * radiusM, 0.5, Math.Sin(a1) * radiusM);
-            m_DebugShapes.Insert(Shape.CreateLines(color, shapeFlags, p, 2));
+            float a = step * i;
+            pts[i] = origin + Vector(Math.Cos(a) * radiusM, 0.5, Math.Sin(a) * radiusM);
         }
+        pts[segs] = pts[0];
+        m_StaticShapes.Insert(Shape.CreateLines(color, shapeFlags, pts, count));
     }
 
     protected void DrawSectorSweep(
@@ -317,11 +428,10 @@ class RDF_RadarVisualizer
         int fillColor = ARGBF(fillA, 0.15, 0.85, 0.4);
         int sweepColor = ARGBF(0.85, 0.55, 1.0, 0.75);
 
-        // Leading sweep ray (boresight).
         vector sweep[2];
         sweep[0] = originHi;
         sweep[1] = originHi + Vector(Math.Cos(yaw), 0.0, Math.Sin(yaw)) * rangeM + upLift * 0.15;
-        m_DebugShapes.Insert(Shape.CreateLines(sweepColor, shapeFlags, sweep, 2));
+        m_StaticShapes.Insert(Shape.CreateLines(sweepColor, shapeFlags, sweep, 2));
 
         float leftYaw = yaw - halfRad;
         float rightYaw = yaw + halfRad;
@@ -331,14 +441,16 @@ class RDF_RadarVisualizer
         vector leftEdge[2];
         leftEdge[0] = originHi;
         leftEdge[1] = originHi + leftDir * rangeM;
-        m_DebugShapes.Insert(Shape.CreateLines(edgeColor, shapeFlags, leftEdge, 2));
+        m_StaticShapes.Insert(Shape.CreateLines(edgeColor, shapeFlags, leftEdge, 2));
 
         vector rightEdge[2];
         rightEdge[0] = originHi;
         rightEdge[1] = originHi + rightDir * rangeM;
-        m_DebugShapes.Insert(Shape.CreateLines(edgeColor, shapeFlags, rightEdge, 2));
+        m_StaticShapes.Insert(Shape.CreateLines(edgeColor, shapeFlags, rightEdge, 2));
 
-        // Filled wedges (flat fan) + arc.
+        // Batched fan: one CreateTris for all wedges + one arc line-strip.
+        vector tris[72];
+        vector arc[25];
         float step = (2.0 * halfRad) / segs;
         for (int i = 0; i < segs; i++)
         {
@@ -346,29 +458,24 @@ class RDF_RadarVisualizer
             float a1 = leftYaw + step * (i + 1);
             vector d0 = Vector(Math.Cos(a0), 0.0, Math.Sin(a0));
             vector d1 = Vector(Math.Cos(a1), 0.0, Math.Sin(a1));
-            vector p0 = originHi;
             vector p1 = originHi + d0 * rangeM;
             vector p2 = originHi + d1 * rangeM;
-
-            vector tris[3];
-            tris[0] = p0;
-            tris[1] = p1;
-            tris[2] = p2;
-            Shape fan = Shape.CreateTris(fillColor, shapeFlags, tris, 1);
-            if (fan)
-                m_DebugShapes.Insert(fan);
-
-            vector arc[2];
-            arc[0] = p1;
-            arc[1] = p2;
-            m_DebugShapes.Insert(Shape.CreateLines(edgeColor, shapeFlags, arc, 2));
+            int base = i * 3;
+            tris[base] = originHi;
+            tris[base + 1] = p1;
+            tris[base + 2] = p2;
+            arc[i] = p1;
         }
+        float aEnd = leftYaw + step * segs;
+        arc[segs] = originHi + Vector(Math.Cos(aEnd), 0.0, Math.Sin(aEnd)) * rangeM;
+
+        Shape fan = Shape.CreateTris(fillColor, shapeFlags, tris, segs);
+        if (fan)
+            m_StaticShapes.Insert(fan);
+        m_StaticShapes.Insert(Shape.CreateLines(edgeColor, shapeFlags, arc, segs + 1));
     }
 
-    protected void DrawPlotMarkers(
-        vector origin,
-        array<ref RDF_RadarTarget> targets,
-        int shapeFlags)
+    protected void DrawPlotMarkers(array<ref RDF_RadarTarget> targets, int shapeFlags)
     {
         float pointSize = m_Settings.m_PointSize;
         if (pointSize < 0.2)
@@ -382,7 +489,7 @@ class RDF_RadarVisualizer
             if (!t.m_Detected)
                 continue;
             int color = GetColorForType(t.m_Type);
-            m_DebugShapes.Insert(Shape.CreateSphere(color, shapeFlags, t.m_Position, pointSize));
+            m_DynamicShapes.Insert(Shape.CreateSphere(color, shapeFlags, t.m_Position, pointSize));
         }
     }
 
@@ -397,7 +504,7 @@ class RDF_RadarVisualizer
             vector p[2];
             p[0] = origin;
             p[1] = origin + forward * FALLBACK_RAY_LENGTH;
-            m_DebugShapes.Insert(Shape.CreateLines(
+            m_DynamicShapes.Insert(Shape.CreateLines(
                 ARGBF(0.5, 0.5, 0.5, 1.0), shapeFlags, p, 2));
             return;
         }
@@ -410,7 +517,7 @@ class RDF_RadarVisualizer
             vector p[2];
             p[0] = origin;
             p[1] = t.m_Position;
-            m_DebugShapes.Insert(Shape.CreateLines(
+            m_DynamicShapes.Insert(Shape.CreateLines(
                 GetRayColorForType(t.m_Type), shapeFlags, p, 2));
         }
     }
@@ -440,7 +547,7 @@ class RDF_RadarVisualizer
         vector core[2];
         core[0] = origin;
         core[1] = aimPos;
-        m_DebugShapes.Insert(Shape.CreateLines(coreColor, shapeFlags, core, 2));
+        m_DynamicShapes.Insert(Shape.CreateLines(coreColor, shapeFlags, core, 2));
 
         float endR = m_Settings.m_LockBeamEndRadiusM;
         if (endR < 1.0)
@@ -472,10 +579,10 @@ class RDF_RadarVisualizer
             vector spoke[2];
             spoke[0] = origin;
             spoke[1] = aimPos + offset;
-            m_DebugShapes.Insert(Shape.CreateLines(beamColor, shapeFlags, spoke, 2));
+            m_DynamicShapes.Insert(Shape.CreateLines(beamColor, shapeFlags, spoke, 2));
         }
 
-        m_DebugShapes.Insert(Shape.CreateSphere(
+        m_DynamicShapes.Insert(Shape.CreateSphere(
             ARGBF(0.9, 1.0, 0.35, 0.15), shapeFlags, aimPos, endR * 0.35));
     }
 
@@ -499,17 +606,32 @@ class RDF_RadarVisualizer
             float b;
             GetRgbForType(t.m_Type, r, g, b);
 
-            RDF_RadarAfterglowBlip blip = new RDF_RadarAfterglowBlip();
+            RDF_RadarAfterglowBlip blip;
+            if (m_Afterglow.Count() < maxBlips)
+            {
+                blip = new RDF_RadarAfterglowBlip();
+                m_Afterglow.Insert(blip);
+            }
+            else
+            {
+                // Ring overwrite — avoid Remove(0) O(n) shifts.
+                if (m_AfterglowWrite >= m_Afterglow.Count())
+                    m_AfterglowWrite = 0;
+                blip = m_Afterglow.Get(m_AfterglowWrite);
+                if (!blip)
+                {
+                    blip = new RDF_RadarAfterglowBlip();
+                    m_Afterglow.Set(m_AfterglowWrite, blip);
+                }
+                m_AfterglowWrite = m_AfterglowWrite + 1;
+            }
+
             blip.m_Pos = t.m_Position;
             blip.m_BirthS = nowS;
             blip.m_R = r;
             blip.m_G = g;
             blip.m_B = b;
-            m_Afterglow.Insert(blip);
         }
-
-        while (m_Afterglow.Count() > maxBlips)
-            m_Afterglow.Remove(0);
     }
 
     protected void DrawAfterglow(float nowS, int shapeFlags)
@@ -523,27 +645,21 @@ class RDF_RadarVisualizer
         if (size < 0.15)
             size = 0.15;
 
-        for (int i = m_Afterglow.Count() - 1; i >= 0; i--)
+        for (int i = 0; i < m_Afterglow.Count(); i++)
         {
             RDF_RadarAfterglowBlip blip = m_Afterglow.Get(i);
             if (!blip)
-            {
-                m_Afterglow.Remove(i);
                 continue;
-            }
             float age = nowS - blip.m_BirthS;
             if (age < 0.0)
                 age = 0.0;
             if (age > life)
-            {
-                m_Afterglow.Remove(i);
                 continue;
-            }
             float t = 1.0 - (age / life);
             float alpha = 0.15 + 0.55 * t;
             float rad = size * (0.45 + 0.55 * t);
             int color = ARGBF(alpha, blip.m_R, blip.m_G, blip.m_B);
-            m_DebugShapes.Insert(Shape.CreateSphere(color, shapeFlags, blip.m_Pos, rad));
+            m_AfterglowShapes.Insert(Shape.CreateSphere(color, shapeFlags, blip.m_Pos, rad));
         }
     }
 
@@ -554,6 +670,10 @@ class RDF_RadarVisualizer
             return;
 
         int ribbonColor = ARGBF(0.7, 1.0, 0.55, 0.15);
+        int stride = m_Settings.m_TrackRibbonStride;
+        if (stride < 1)
+            stride = 1;
+
         for (int i = 0; i < tracks.Count(); i++)
         {
             RDF_RadarTrack track = tracks.Get(i);
@@ -562,13 +682,25 @@ class RDF_RadarVisualizer
             if (!track.m_Positions || track.m_Positions.Count() < 2)
                 continue;
 
-            for (int p = 1; p < track.m_Positions.Count(); p++)
+            vector pts[32];
+            int outCount = 0;
+            int n = track.m_Positions.Count();
+            for (int p = 0; p < n && outCount < MAX_RIBBON_POINTS; p = p + stride)
             {
-                vector seg[2];
-                seg[0] = track.m_Positions.Get(p - 1);
-                seg[1] = track.m_Positions.Get(p);
-                m_DebugShapes.Insert(Shape.CreateLines(ribbonColor, shapeFlags, seg, 2));
+                pts[outCount] = track.m_Positions.Get(p);
+                outCount = outCount + 1;
             }
+            if (outCount < 2)
+                continue;
+            // Always include the latest sample.
+            vector last = track.m_Positions.Get(n - 1);
+            if (vector.DistanceSq(pts[outCount - 1], last) > 0.01
+                && outCount < MAX_RIBBON_POINTS)
+            {
+                pts[outCount] = last;
+                outCount = outCount + 1;
+            }
+            m_DynamicShapes.Insert(Shape.CreateLines(ribbonColor, shapeFlags, pts, outCount));
         }
     }
 

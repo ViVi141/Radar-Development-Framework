@@ -224,9 +224,11 @@ class RDF_RadarAutoRunner
         }
 
         m_Sensor.SetForceLocalScan(s_ForceLocalScan);
-        if (!m_Sensor.Tick(subject, s_NetworkAPI))
+        bool scanned = m_Sensor.Tick(subject, s_NetworkAPI);
+        if (!scanned)
         {
-            RenderPresentation(subject);
+            // No new scan: keep plot/lock shapes; only fade afterglow + WLR.
+            RenderPresentation(subject, false);
             return;
         }
 
@@ -273,10 +275,10 @@ class RDF_RadarAutoRunner
                 m_Sensor.GetTracker());
         }
 
-        RenderPresentation(subject);
+        RenderPresentation(subject, true);
     }
 
-    protected void RenderPresentation(IEntity subject)
+    protected void RenderPresentation(IEntity subject, bool fullDynamic)
     {
         if (!m_Visualizer || !m_VisualSettings || !m_Sensor)
             return;
@@ -321,7 +323,8 @@ class RDF_RadarAutoRunner
                 halfAngle,
                 m_Sensor.GetLockManager(),
                 m_Sensor.GetTracker(),
-                m_Sensor.GetScanSerial());
+                m_Sensor.GetScanSerial(),
+                fullDynamic);
         }
         else
         {

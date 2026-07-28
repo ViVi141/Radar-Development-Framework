@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 2026-07-28 — Showcase 可视化性能优化
+
+- **Shape 批量化**：距离环 / WLR 告警环 / 扇区外弧改为单条 `CreateLines` 折线；扇区填充一次 `CreateTris`
+- **静态几何缓存**：origin / range / yaw / half-angle 未变时不重建扇区与环
+- **分层 Shape**：static / dynamic / afterglow / WLR；无新扫描时仅刷新余辉与 WLR
+- **告警环段数解耦**：`m_WeaponLocateAlertSegments`（默认 12），不再跟 `m_RangeRingSegments`
+- **Showcase 默认**：余辉上限 80、缎带默认关、环段 24、扇区段 12；余辉环形覆写避免 `Remove(0)`
+
+---
+
 ## 2026-07-28 — Sprint C：阈值 / GO-SO-CFAR / 欺骗扩展 / WLR HUD
 
 - **扫描阈值**下沉 `RDF_RadarSettings`：LOS 缓存、目标/物理复用、优先级距离与速度、频带间隔、fresh budget
