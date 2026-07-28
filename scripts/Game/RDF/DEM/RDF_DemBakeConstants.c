@@ -7,6 +7,15 @@ class RDF_DemBakeConstants
     static const string DEM_DATA_DIR = "$profile:RDF/DemData/";
     static const string PACKAGED_DEM_DATA_DIR = "DemData/";
 
+    // Workshop-packable binary DEM (RDF_DEM_BIN_V1). File: DemData/<world>/<world>.dem.data
+    static const string DEM_BIN_MAGIC = "RDFDEM1";
+    static const int DEM_BIN_VERSION = 1;
+    static const int DEM_BIN_HEADER_BYTES = 120;
+    static const int DEM_BIN_WORLD_KEY_BYTES = 64;
+    static const int DEM_BIN_TABLE_ENTRY_BYTES = 16;
+    static const int DEM_BIN_CELL_BYTES = 6;
+    static const float DEM_BIN_Y_SCALE = 0.1;
+
     // Grid: change these then delete tiles/ and re-bake for finer DEM.
     // 4 m / 32 = ANNA standard; Fine: CELL_M=2, TILE_CELLS=64; Target: CELL_M=1, TILE_CELLS=128.
     static const float CELL_M = 4.0;

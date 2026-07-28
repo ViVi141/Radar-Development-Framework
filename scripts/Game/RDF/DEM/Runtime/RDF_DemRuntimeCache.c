@@ -100,14 +100,18 @@ class RDF_DemRuntimeCache
         m_Manifest = manifest;
         m_Ready = true;
         m_LastInitFailed = false;
+        string mode = "CSV";
+        if (manifest.m_IsBinaryPack)
+            mode = "BIN";
         Print(string.Format(
-            "[RDF DEM Runtime] ready world=%1 cell=%2 tile=%3 count=%4x%5 cache=%6",
+            "[RDF DEM Runtime] ready world=%1 cell=%2 tile=%3 count=%4x%5 cache=%6 mode=%7",
             worldKey,
             manifest.m_CellM.ToString(),
             manifest.m_TileCells.ToString(),
             manifest.m_TileCountX.ToString(),
             manifest.m_TileCountZ.ToString(),
-            m_MaxTiles.ToString()), LogLevel.NORMAL);
+            m_MaxTiles.ToString(),
+            mode), LogLevel.NORMAL);
         return true;
     }
 

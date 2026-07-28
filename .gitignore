@@ -30,3 +30,8 @@ tools/dem/out/
 tools/dem/**/__pycache__/
 *.npz
 TrainData/
+
+# Packaged runtime DEM tiles (large; keep on disk, do not commit)
+DemData/
+
+# Signature binary is small and workshop-packable — tracked in git under Signatures/

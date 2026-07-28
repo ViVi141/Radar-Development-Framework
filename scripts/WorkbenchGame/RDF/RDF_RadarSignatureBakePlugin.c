@@ -26,7 +26,8 @@ class RDF_RadarSignatureBakePlugin : WorkbenchPlugin
             msg = msg + " (+ projectiles)";
         msg = msg + " from the resource database.\n";
         msg = msg + "Each prefab is spawned once off-map, measured, then deleted.\n";
-        msg = msg + "Output: $profile:RDF/Signatures/rdf_radar_signatures.csv\n\n";
+        msg = msg + "Output: $profile:RDF/Signatures/rdf_radar_signatures.csv\n";
+        msg = msg + "Then: python tools/dem/rdf_sig_pack_bin.py → Signatures/*.sig.data for Workshop.\n\n";
         msg = msg + "Open a world in World Editor first (do NOT run via Play ScriptDebugger).\n";
         msg = msg + "This does not scan live world entities.";
 

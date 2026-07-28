@@ -24,7 +24,11 @@ class RDF_RadarSignatureLibrary
 {
     static const string SIG_DIR = "$profile:RDF/Signatures";
     static const string SIG_FILE = "$profile:RDF/Signatures/rdf_radar_signatures.csv";
+    static const string SIG_BIN_FILE = "$profile:RDF/Signatures/rdf_radar_signatures.sig.data";
+    static const string SIG_BIN_PACKAGED = "Signatures/rdf_radar_signatures.sig.data";
     static const string SIG_MAGIC = "RDF_RADAR_SIG_V2";
+    static const string SIG_BIN_MAGIC = "RDFSIG1";
+    static const int SIG_BIN_VERSION = 1;
     static const string SIG_HEADER = "key,size_x_m,size_y_m,size_z_m,char_length_m,mean_rcs_m2,swerling,type_hint";
     static const string FIELD_SEP = ",";
 
@@ -273,20 +277,125 @@ class RDF_RadarSignatureLibrary
     {
         if (!s_ByKey)
             s_ByKey = new map<string, ref RDF_RadarSignature>();
-        if (!FileIO.FileExists(SIG_FILE))
+
+        if (LoadBakedBinary(SIG_BIN_FILE))
+            return true;
+        if (LoadBakedBinary(SIG_BIN_PACKAGED))
+            return true;
+        return LoadBakedCsv(SIG_FILE);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    protected static bool LoadBakedBinary(string path)
+    {
+        if (!FileIO.FileExists(path))
             return false;
 
-        array<string> lines = SCR_FileIOHelper.ReadFileContent(SIG_FILE, false);
+        FileHandle file = FileIO.OpenFile(path, FileMode.READ);
+        if (!file)
+            return false;
+
+        string magic;
+        file.Read(magic, 7);
+        int nul;
+        file.Read(nul, 1);
+        if (magic != SIG_BIN_MAGIC)
+        {
+            file.Close();
+            Print("[RDF Radar Sig] bin magic mismatch: " + path, LogLevel.WARNING);
+            return false;
+        }
+
+        int version;
+        file.Read(version, 4);
+        if (version != SIG_BIN_VERSION)
+        {
+            file.Close();
+            Print("[RDF Radar Sig] bin version mismatch: " + path, LogLevel.WARNING);
+            return false;
+        }
+
+        int count;
+        file.Read(count, 4);
+        if (count < 0 || count > 100000)
+        {
+            file.Close();
+            return false;
+        }
+
+        int loaded = 0;
+        for (int i = 0; i < count; i++)
+        {
+            int keyLen;
+            file.Read(keyLen, 2);
+            if (keyLen <= 0 || keyLen > 4096)
+            {
+                file.Close();
+                Print("[RDF Radar Sig] bad key length in " + path, LogLevel.WARNING);
+                return false;
+            }
+
+            string key;
+            file.Read(key, keyLen);
+
+            float sizeX;
+            float sizeY;
+            float sizeZ;
+            float charLen;
+            float meanRcs;
+            int swerling;
+            int typeHint;
+            file.Read(sizeX, 4);
+            file.Read(sizeY, 4);
+            file.Read(sizeZ, 4);
+            file.Read(charLen, 4);
+            file.Read(meanRcs, 4);
+            file.Read(swerling, 4);
+            file.Read(typeHint, 4);
+
+            if (key == "")
+                continue;
+
+            RDF_RadarSignature sig = new RDF_RadarSignature();
+            sig.m_Key = key;
+            sig.m_SizeX = sizeX;
+            sig.m_SizeY = sizeY;
+            sig.m_SizeZ = sizeZ;
+            sig.m_CharacteristicLengthM = charLen;
+            sig.m_MeanRcsM2 = meanRcs;
+            sig.m_SwerlingModel = swerling;
+            sig.m_TypeHint = typeHint;
+            sig.m_Baked = true;
+            if (sig.m_CharacteristicLengthM < 0.1)
+                sig.m_CharacteristicLengthM = 0.1;
+
+            s_ByKey.Set(sig.m_Key, sig);
+            loaded = loaded + 1;
+        }
+
+        file.Close();
+        s_StatBakedLoaded = loaded;
+        Print("[RDF Radar Sig] baked binary loaded: " + loaded.ToString() + " from " + path, LogLevel.NORMAL);
+        return loaded > 0;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    protected static bool LoadBakedCsv(string path)
+    {
+        if (!FileIO.FileExists(path))
+            return false;
+
+        array<string> lines = SCR_FileIOHelper.ReadFileContent(path, false);
         if (!lines || lines.Count() < 3)
             return false;
         if (lines.Get(0) != SIG_MAGIC)
         {
-            Print("[RDF Radar Sig] magic mismatch: " + SIG_FILE, LogLevel.WARNING);
+            Print("[RDF Radar Sig] magic mismatch: " + path, LogLevel.WARNING);
             return false;
         }
         if (lines.Get(1) != SIG_HEADER)
         {
-            Print("[RDF Radar Sig] header mismatch: " + SIG_FILE, LogLevel.WARNING);
+            Print("[RDF Radar Sig] header mismatch: " + path, LogLevel.WARNING);
             return false;
         }
 

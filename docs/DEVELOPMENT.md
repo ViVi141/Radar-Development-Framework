@@ -31,7 +31,7 @@ UI/layouts/RDF/
 └── LidarPPI.layout   LiDAR PPI（左下角，蓝主题）
 scripts/WorkbenchGame/RDF/
 ├── RDF_DemBakePlugin.c
-└── RDF_RadarSignatureBakePlugin.c   离线扫可放置 prefab → 特征 CSV
+└── RDF_RadarSignatureBakePlugin.c   离线扫可放置 prefab → 特征 CSV / 可再 pack 为 .sig.data
 tools/dem/     离线打包、雷达物理原型、批量战场仿真与回归测试
 ```
 

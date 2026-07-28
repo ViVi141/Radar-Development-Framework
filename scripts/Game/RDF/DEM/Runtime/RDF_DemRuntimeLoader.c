@@ -28,30 +28,56 @@ class RDF_DemRuntimeLoader
             return false;
         }
 
-        array<string> roots = new array<string>();
-        roots.Insert(RDF_DemBakeConstants.DEM_DATA_DIR + worldKey + "/");
-        roots.Insert(RDF_DemBakeConstants.PACKAGED_DEM_DATA_DIR + worldKey + "/");
-
-        string rootDir = string.Empty;
-        string manifestPath = string.Empty;
-        for (int rootIdx = 0; rootIdx < roots.Count(); rootIdx++)
+        // 1) Profile V3 CSV (dev bake)
+        string profileRoot = RDF_DemBakeConstants.DEM_DATA_DIR + worldKey + "/";
+        string profileManifest = profileRoot + "manifest.csv";
+        if (FileIO.FileExists(profileManifest))
         {
-            string candidateRoot = roots.Get(rootIdx);
-            string candidateManifest = candidateRoot + "manifest.csv";
-            if (!FileIO.FileExists(candidateManifest))
-                continue;
-
-            rootDir = candidateRoot;
-            manifestPath = candidateManifest;
-            break;
+            if (LoadManifestCsv(profileRoot, worldKey, outManifest))
+                return true;
         }
 
-        if (manifestPath.IsEmpty())
+        // 2) Profile binary pack
+        string profileBin = RDF_DemBinPack.BuildPackPath(profileRoot, worldKey);
+        if (RDF_DemBinPack.TryLoadManifest(profileBin, worldKey, outManifest))
         {
-            Warn("Manifest missing: profile=" + roots.Get(0) + "manifest.csv packaged=" + roots.Get(1) + "manifest.csv");
-            return false;
+            Print("[RDF DEM Runtime] using profile binary DEM: " + profileBin, LogLevel.NORMAL);
+            return true;
         }
 
+        // 3) Packaged binary (workshop)
+        string packagedRoot = RDF_DemBakeConstants.PACKAGED_DEM_DATA_DIR + worldKey + "/";
+        string packagedBin = RDF_DemBinPack.BuildPackPath(packagedRoot, worldKey);
+        if (RDF_DemBinPack.TryLoadManifest(packagedBin, worldKey, outManifest))
+        {
+            Print("[RDF DEM Runtime] using packaged binary DEM: " + packagedBin, LogLevel.NORMAL);
+            return true;
+        }
+
+        // 4) Packaged V3 CSV fallback
+        string packagedManifest = packagedRoot + "manifest.csv";
+        if (FileIO.FileExists(packagedManifest))
+        {
+            if (LoadManifestCsv(packagedRoot, worldKey, outManifest))
+            {
+                Print("[RDF DEM Runtime] using packaged DEM root: " + packagedRoot, LogLevel.NORMAL);
+                return true;
+            }
+        }
+
+        Warn("DEM missing for " + worldKey
+            + " (profile CSV/bin + packaged bin/CSV)");
+        return false;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected static bool LoadManifestCsv(
+        string rootDir,
+        string worldKey,
+        out RDF_DemRuntimeManifest outManifest)
+    {
+        outManifest = null;
+        string manifestPath = rootDir + "manifest.csv";
         array<string> lines = SCR_FileIOHelper.ReadFileContent(manifestPath, false);
         if (!lines || lines.Count() < 2)
         {
@@ -144,9 +170,7 @@ class RDF_DemRuntimeLoader
             return false;
         }
 
-        if (!rootDir.StartsWith(RDF_DemBakeConstants.DEM_DATA_DIR))
-            Print("[RDF DEM Runtime] using packaged DEM root: " + rootDir, LogLevel.NORMAL);
-
+        manifest.m_IsBinaryPack = false;
         manifest.m_RootDir = rootDir;
         manifest.m_TilesDir = rootDir + "tiles/";
         outManifest = manifest;
@@ -169,6 +193,20 @@ class RDF_DemRuntimeLoader
             return false;
         }
 
+        if (manifest.m_IsBinaryPack)
+            return RDF_DemBinPack.LoadTile(manifest, tileIx, tileIz, outTile);
+
+        return LoadTileCsv(manifest, tileIx, tileIz, outTile);
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected static bool LoadTileCsv(
+        notnull RDF_DemRuntimeManifest manifest,
+        int tileIx,
+        int tileIz,
+        out RDF_DemRuntimeTile outTile)
+    {
+        outTile = null;
         string tilePath = manifest.m_TilesDir
             + "tile_" + tileIx.ToString()
             + "_" + tileIz.ToString() + ".csv";

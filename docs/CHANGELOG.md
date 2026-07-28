@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 2026-07-28 — DEM / 特征表二进制可打包格式
+
+- `RDF_DEM_BIN_V1`：每世界一个 `DemData/<world>/<world>.dem.data`（Seek 按 tile；无 span；高程 0.1 m）
+- 运行时查找：profile CSV → profile/bin → 模组 bin → 模组 CSV
+- `tools/dem/rdf_dem_pack_bin.py`；已生成 Arland/Eden/Cain 包
+- `RDF_SIG_BIN_V1`：`Signatures/rdf_radar_signatures.sig.data`；Library 优先二进制，CSV 回退
+- `tools/dem/rdf_sig_pack_bin.py`；工坊需对 `.data` Register `.meta`
+
+## 2026-07-28 — 打包官方图 DEM 到模组
+
+- 自 `$profile:RDF/DemData` 拷入模组根 `DemData/`：`GM_Eden`、`GM_Arland`、`GM_Cain`
+- 未包含实验目录 `GM_Eden_noentity_*`
+
 ## 2026-07-28 — 开局静默：移除 LiDAR 网络预绑定
 
 - `OnGameStart` 不再调用 `BindAutoRunnerToLocalSubject`

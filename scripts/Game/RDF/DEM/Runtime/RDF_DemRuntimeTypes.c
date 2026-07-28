@@ -1,4 +1,4 @@
-// Runtime DEM data contracts for V3 CSV tiles.
+// Runtime DEM data contracts for V3 CSV tiles and RDF_DEM_BIN_V1 packs.
 class RDF_DemRuntimeManifest
 {
     string m_WorldKey;
@@ -14,6 +14,13 @@ class RDF_DemRuntimeManifest
 
     string m_RootDir;
     string m_TilesDir;
+
+    // Binary pack (workshop). When set, LoadTile seeks this file instead of CSV.
+    bool m_IsBinaryPack;
+    string m_BinPackPath;
+    float m_BinYScale;
+    ref map<string, int> m_BinTileByteOffset;
+    ref map<string, int> m_BinTileByteLength;
 }
 
 class RDF_DemRuntimeCellSample
