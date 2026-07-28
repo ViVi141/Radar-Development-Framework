@@ -481,6 +481,23 @@ class RDF_RadarProjectileTracker
         m_Tracks.Clear();
     }
 
+    // Replace local tracks with authoritative network summaries (no re-association).
+    void ApplySyncedTracks(array<ref RDF_RadarTrack> synced)
+    {
+        if (!m_Tracks)
+            m_Tracks = new array<ref RDF_RadarTrack>();
+        m_Tracks.Clear();
+        if (!synced)
+            return;
+        for (int i = 0; i < synced.Count(); i++)
+        {
+            RDF_RadarTrack src = synced.Get(i);
+            if (!src)
+                continue;
+            m_Tracks.Insert(src);
+        }
+    }
+
     vector GetLastRadarOrigin()
     {
         return m_LastRadarOrigin;

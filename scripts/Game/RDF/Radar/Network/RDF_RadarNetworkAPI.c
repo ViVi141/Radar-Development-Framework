@@ -23,6 +23,16 @@ class RDF_RadarNetworkAPI : ScriptComponent
     {
     }
 
+    //! Sync radar emitting / silent state for other radars (intentional no-op).
+    void SetEmitting(bool emitting)
+    {
+    }
+
+    bool IsEmitting()
+    {
+        return false;
+    }
+
     //! Legacy alias used by AutoRunner demos; prefer SetEnabled.
     void SetDemoEnabled(bool enabled)
     {
@@ -39,6 +49,7 @@ class RDF_RadarNetworkAPI : ScriptComponent
     {
     }
 
+    //! True when a recent authoritative scan payload was received (plots may be empty).
     bool HasSyncedTargets()
     {
         return false;
@@ -47,6 +58,21 @@ class RDF_RadarNetworkAPI : ScriptComponent
     array<ref RDF_RadarTarget> GetLastTargets()
     {
         return null;
+    }
+
+    //! Synced track summaries from the same scan payload (may be empty).
+    array<ref RDF_RadarTrack> GetLastTracks()
+    {
+        return null;
+    }
+
+    //! Synced lock summary from the same scan payload.
+    bool GetLastLockState(out int lockState, out int trackId, out vector aimPos)
+    {
+        lockState = 0;
+        trackId = -1;
+        aimPos = "0 0 0";
+        return false;
     }
 
     vector GetLastScanOrigin()

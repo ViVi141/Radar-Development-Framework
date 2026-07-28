@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 2026-07-28 — Network Sprint：官方模式同步补强
+
+- **RplProp**：关键 Settings 原子字段（扇区 / maxTargets / WLR / CFAR / SNR / Include*）+ `onRpl` 写回权威 Sensor；空回调已实现
+- **Ask 配置**：`RpcAsk_SetDemoConfig` 同步上述子集并 `ApplyNetworkScalarsToSensor`（与权威 `SetConfig` 对齐）
+- **载荷加厚**：`T|` 增加 velocity / az / el / radialSpeed / scattererId；新增 `K` 航迹、`W` WLR、`L` 锁摘要
+- **Sensor 网络路径**：注入同步航迹/锁，跳过该帧本地 Tracker/Lock 重算
+- **发射态**：`m_IsEmitting` RplProp + `EmitterRegistry`；`RDF_RadarComponent` 经 Network API 同步
+- 文档：`RADAR_API` Network 节更新载荷 tag 与方法选型
+
+---
+
 ## 2026-07-28 — 扫描公平性增量优化（Fair Cursor）
 
 - `RDF_RadarScanner.ScanFromRegistry`：新增持久游标 `m_RegistryScanCursor`，Trace 预算触顶时下次从断点续扫，避免候选头部长期吃满预算

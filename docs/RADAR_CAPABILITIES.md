@@ -32,7 +32,7 @@
 - **散射体表拟真输入**：姿态方位 RCS、Swerling 起伏、AGL、DEM 缓存、辐射源射频摘要
 - **EW 效果栈**：噪声压制 + 欺骗假目标
 - **简化 CFAR**：粗栅格 CA / GO / SO（`m_CfarMode`）；空单元可填热噪声
-- **联机权威路径**：`RDF_RadarNetworkComponent`（权威端挂 Sensor）
+- **联机权威路径**：`RDF_RadarNetworkComponent`（RplProp 关键配置 + Reliable Broadcast plots/航迹/WLR/锁 + 发射态）
 - **欺骗扩展**：静态假点 + 拖距 / 角闪烁 / 间歇假点 Effect
 - **反炮兵呈现**：PPI 发射/落点告警圈；世界空间地面环
 

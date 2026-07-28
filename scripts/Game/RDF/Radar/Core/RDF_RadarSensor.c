@@ -476,17 +476,36 @@ class RDF_RadarSensor
         }
 
         m_Tracker.ConfigureFromSettings(m_Settings);
-        m_Tracker.UpdateWithOrigin(m_Plots, worldTimeS, trackOrigin);
-        m_Tracker.RefreshWeaponLocates(trackOrigin[1]);
-
-        if (m_LockManager)
+        if (usedNetwork && networkAPI && networkAPI.HasSyncedTargets())
         {
-            m_LockManager.Update(
-                m_Tracker.GetAllTracks(),
-                trackOrigin,
-                forward,
-                rangeM,
-                worldTimeS);
+            array<ref RDF_RadarTrack> syncedTracks = networkAPI.GetLastTracks();
+            m_Tracker.ApplySyncedTracks(syncedTracks);
+
+            if (m_LockManager)
+            {
+                int lockState = 0;
+                int lockTrackId = -1;
+                vector lockAim = "0 0 0";
+                if (networkAPI.GetLastLockState(lockState, lockTrackId, lockAim))
+                    m_LockManager.ApplySyncedStateInt(lockState, lockTrackId, lockAim);
+                else
+                    m_LockManager.Unlock();
+            }
+        }
+        else
+        {
+            m_Tracker.UpdateWithOrigin(m_Plots, worldTimeS, trackOrigin);
+            m_Tracker.RefreshWeaponLocates(trackOrigin[1]);
+
+            if (m_LockManager)
+            {
+                m_LockManager.Update(
+                    m_Tracker.GetAllTracks(),
+                    trackOrigin,
+                    forward,
+                    rangeM,
+                    worldTimeS);
+            }
         }
 
         m_Context.m_Origin = trackOrigin;

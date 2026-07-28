@@ -83,6 +83,7 @@
 | AutoTest 批跑 / 最小 CI | 工程卫生 | 中 | 多人协作或发版频繁时 |
 | LiDAR PPI 动画 / DiagMenu / Sensor 对齐 | LiDAR 体验 | 中 | 雷达主线空窗 |
 
+- [x] Network：权威结果（plots + K/W/L）+ 关键 Settings RplProp + 发射态（见 CHANGELOG Network Sprint）
 - [ ] 刀刃绕射 / 更精细多径
 - [ ] DEM span 遮挡 / 多径
 - [ ] 多雷达 plots 融合 / 交叉定位
@@ -105,7 +106,8 @@
 
 **Sprint A+B（已完成）**：§1 + §2 — 观测、双档、测量噪声、热噪声填空、大气衰减。  
 **Sprint C（已完成）**：GO/SO-CFAR、Settings 阈值、欺骗扩展、WLR HUD。  
-**以后**：绕射 / DEM span / 组网 / 远程算力。
+**Network Sprint（已完成）**：关键 Settings RplProp、plots 加厚、K/W/L 权威摘要、发射态。  
+**以后**：绕射 / DEM span / 组网融合 / 远程算力。
 
 Ideal：`RDF_RadarAutoTestSuite.StartAll()`  
 Realistic：`RDF_RadarAutoTestSuite.StartAllRealistic()`
@@ -121,6 +123,7 @@ Realistic：`RDF_RadarAutoTestSuite.StartAllRealistic()`
 - [x] 弹道 + WLR · 散射体表 / Signature / Swerling
 - [x] `RDF_RadarSensor` · `RDF_RadarLockManager` · `GetLockedTarget`
 - [x] Network 权威端挂 Sensor
+- [x] Network：关键配置 RplProp + 扫描结果 Broadcast（plots / tracks / WLR / lock）+ 发射态
 
 ### 工程 / 性能
 

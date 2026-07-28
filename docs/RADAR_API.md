@@ -227,8 +227,38 @@ RDF_RadarAutoRunner.GetSensor().GetStatusShort();
 ## Network
 
 Pass `RDF_RadarNetworkAPI` into `Tick` / `ScanOnce` when present.  
-权威端 `RDF_RadarNetworkComponent` 现在直接挂 `RDF_RadarSensor`，不再维护第二套 Scanner 配置。
+权威端 `RDF_RadarNetworkComponent` 直接挂 `RDF_RadarSensor`。Prefab 需同挂 `RplComponent`。
+
 `SetForceLocalScan(true)` forces the local channel (used by scripted regression tests so Workbench `RplComponent` does not divert into the network path).
+
+### Method split (official-style)
+
+| Data | Mechanism |
+|------|-----------|
+| Slow config (enabled, range, interval, sector, maxTargets, WLR flags, CFAR mode, SNR, Include*) | `[RplProp]` + `Replication.BumpMe()`; Proxy `onRpl` → apply to local Sensor |
+| Emitting / silent | `[RplProp] m_IsEmitting`; Proxy updates local `EmitterRegistry` only |
+| Client requests (config / scan / emitting) | `RplRpc` Reliable → `Server`（配置用单字符串 `C|...`，避开 Rpc 参数上限） |
+
+| Scan results | `RplRpc` Reliable → `Broadcast` payload |
+| HUD / Visualizer / DEM tiles | Local only |
+
+### Broadcast payload tags
+
+Single CSV string, rows joined by `;`:
+
+| Tag | Meaning |
+|-----|---------|
+| `C\|range\|interval\|enabled\|verbose\|sector\|maxTargets\|wlr\|wlrHud\|cfar\|snr\|veh\|proj\|emit` | Proxy→Server config ask (not broadcast) |
+| `M\|origin\|forward\|range` | Scan geometry |
+
+| `T\|type\|flags\|dist\|snr\|power\|pos\|vel\|az\|el\|rr\|scattererId` | Plot (vel+az+el+rr+id optional for older peers) |
+| `K\|trackId\|type\|confirmed\|pos\|vel\|range\|az\|el\|rr\|snr\|hits` | Confirmed track summary |
+| `W\|trackId\|launchValid\|launchPos\|impactValid\|impactPos` | WLR fix on that track |
+| `L\|lockState\|trackId\|aimPos` | Lock summary |
+
+Proxy `RDF_RadarSensor` path: ingest plots + **inject tracks/lock**, skip local Tracker/Lock recompute for that frame. Authority still runs the full local chain then broadcasts.
+
+Not synced this sprint: full `Hardware` / `EwStack` / `MeasurementModel` objects, DEM tiles, multi-radar fusion.
 
 ---
 

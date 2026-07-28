@@ -19,6 +19,7 @@ class RDF_RadarComponent : ScriptComponent
 
         vector pos = GetOwnerOrigin(owner);
         RegisterEmitter(owner, pos, true);
+        SyncEmitting(true);
     }
 
     override void EOnFrame(IEntity owner, float timeSlice)
@@ -28,11 +29,13 @@ class RDF_RadarComponent : ScriptComponent
 
         vector pos = GetOwnerOrigin(owner);
         RegisterEmitter(owner, pos, true);
+        SyncEmitting(true);
 
         if (!m_Sensor.Tick(owner, m_NetworkAPI))
             return;
 
         RegisterEmitter(owner, pos, true);
+        SyncEmitting(true);
     }
 
     void SetEnabled(bool enabled)
@@ -40,8 +43,11 @@ class RDF_RadarComponent : ScriptComponent
         if (!m_Sensor)
             m_Sensor = new RDF_RadarSensor();
         m_Sensor.SetEnabled(enabled);
+        if (m_NetworkAPI && m_NetworkAPI.IsNetworkAvailable())
+            m_NetworkAPI.SetEnabled(enabled);
         if (!enabled && GetOwner())
         {
+            SyncEmitting(false);
             RDF_RadarEmitterRegistry.SetEmitting(GetOwner(), false);
             RDF_RadarEmitterRegistry.Unregister(GetOwner());
         }
@@ -103,6 +109,15 @@ class RDF_RadarComponent : ScriptComponent
     bool GetLockedTarget(out IEntity entity, out vector worldPos)
     {
         return GetSensor().GetLockedTarget(entity, worldPos);
+    }
+
+    protected void SyncEmitting(bool emitting)
+    {
+        if (!m_NetworkAPI)
+            return;
+        if (!m_NetworkAPI.IsNetworkAvailable())
+            return;
+        m_NetworkAPI.SetEmitting(emitting);
     }
 
     protected void RegisterEmitter(IEntity owner, vector pos, bool emitting)

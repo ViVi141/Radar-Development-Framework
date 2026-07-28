@@ -191,6 +191,34 @@ class RDF_RadarLockManager
         return true;
     }
 
+    // Apply authoritative lock summary from network (entity link stays null).
+    void ApplySyncedState(ERDF_RadarLockState state, int trackId, vector aimPos)
+    {
+        m_State = state;
+        m_LockedTrackId = trackId;
+        m_LockedPosition = aimPos;
+        m_LockedEntity = null;
+        m_CoastElapsedSec = 0.0;
+        if (trackId < 0 && state == ERDF_RadarLockState.RDF_RADAR_LOCK_SEARCH)
+        {
+            m_LockedVelocity = "0 0 0";
+            m_LockedRangeM = 0.0;
+            m_LockedAzimuthDeg = 0.0;
+        }
+    }
+
+    void ApplySyncedStateInt(int lockState, int trackId, vector aimPos)
+    {
+        ERDF_RadarLockState state = ERDF_RadarLockState.RDF_RADAR_LOCK_SEARCH;
+        if (lockState == 1)
+            state = ERDF_RadarLockState.RDF_RADAR_LOCK_ACQUIRING;
+        else if (lockState == 2)
+            state = ERDF_RadarLockState.RDF_RADAR_LOCK_TRACKING;
+        else if (lockState == 3)
+            state = ERDF_RadarLockState.RDF_RADAR_LOCK_COAST;
+        ApplySyncedState(state, trackId, aimPos);
+    }
+
     // ---- Main update: call once per completed scan ----
 
     void Update(

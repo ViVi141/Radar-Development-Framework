@@ -186,9 +186,10 @@ Use `RDF_RadarNetworkComponent` on the radar owner together with `RplComponent`.
 `RDF_RadarSensor` on the authority; the network component syncs scan results.
 
 1. client calls `RequestScan()`,
-2. server runs the authoritative scan path (Sensor / Scanner),
-3. server broadcasts compact payload (scan meta + target rows),
-4. clients update local synced target cache and feed HUD/tracker from cache.
+2. server runs the authoritative scan path (Sensor / Scanner + Tracker / Lock / WLR),
+3. server broadcasts compact payload (`M` meta + `T` plots + `K` tracks + `W` WLR + `L` lock),
+4. clients update synced caches; `RDF_RadarSensor` injects tracks/lock and skips local recompute for that frame.
+5. Slow knobs (range, sector, CFAR, Include*, emitting) use `[RplProp]`; HUD/DEM stay local.
 
 ### Minimal setup (entity-mounted radar)
 

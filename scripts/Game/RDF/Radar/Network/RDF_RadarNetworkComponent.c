@@ -3,15 +3,23 @@ class RDF_RadarNetworkComponentClass : RDF_RadarNetworkAPIClass
 {
 }
 
+// Server-authority radar sync: RplProp for slow config, Reliable Rpc for scan
+// results (plots + track/WLR/lock summaries). Presentation stays local.
 class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
 {
     protected RplComponent m_RplComponent;
     protected ref RDF_RadarSensor m_Sensor;
     protected ref array<ref RDF_RadarTarget> m_LastTargets;
+    protected ref array<ref RDF_RadarTrack> m_LastTracks;
     protected float m_LastScanTime = 0.0;
     protected vector m_LastScanOrigin = "0 0 0";
     protected vector m_LastScanForward = "1 0 0";
     protected float m_LastScanRange = 0.0;
+    protected bool m_HasSyncedScan;
+    protected int m_LastLockState;
+    protected int m_LastLockTrackId;
+    protected vector m_LastLockAimPos;
+    protected bool m_HasSyncedLock;
 
     [RplProp(condition: RplCondition.NoOwner, onRplName: "OnDemoEnabledChanged")]
     protected bool m_DemoEnabled = true;
@@ -25,14 +33,52 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
     [RplProp(condition: RplCondition.NoOwner, onRplName: "OnVerboseChanged")]
     protected bool m_Verbose = false;
 
+    [RplProp(condition: RplCondition.NoOwner, onRplName: "OnSectorHalfAngleChanged")]
+    protected float m_SectorHalfAngleDeg = 45.0;
+
+    [RplProp(condition: RplCondition.NoOwner, onRplName: "OnMaxTargetsChanged")]
+    protected int m_MaxTargets = 64;
+
+    [RplProp(condition: RplCondition.NoOwner, onRplName: "OnEnableWeaponLocateChanged")]
+    protected bool m_EnableWeaponLocate = true;
+
+    [RplProp(condition: RplCondition.NoOwner, onRplName: "OnEnableWlrHudAlertsChanged")]
+    protected bool m_EnableWlrHudAlerts = true;
+
+    [RplProp(condition: RplCondition.NoOwner, onRplName: "OnCfarModeChanged")]
+    protected int m_CfarMode = 0;
+
+    [RplProp(condition: RplCondition.NoOwner, onRplName: "OnDetectionSnrDbChanged")]
+    protected float m_DetectionSnrDb = 8.0;
+
+    [RplProp(condition: RplCondition.NoOwner, onRplName: "OnIncludeVehiclesChanged")]
+    protected bool m_IncludeVehicles = true;
+
+    [RplProp(condition: RplCondition.NoOwner, onRplName: "OnIncludeProjectilesChanged")]
+    protected bool m_IncludeProjectiles = true;
+
+    [RplProp(condition: RplCondition.NoOwner, onRplName: "OnIncludeRadarEmittersChanged")]
+    protected bool m_IncludeRadarEmitters = true;
+
+    [RplProp(condition: RplCondition.NoOwner, onRplName: "OnEmittingChanged")]
+    protected bool m_IsEmitting = true;
+
     override void EOnInit(IEntity owner)
     {
         super.EOnInit(owner);
         m_RplComponent = RplComponent.Cast(owner.FindComponent(RplComponent));
         if (!m_LastTargets)
             m_LastTargets = new array<ref RDF_RadarTarget>();
+        if (!m_LastTracks)
+            m_LastTracks = new array<ref RDF_RadarTrack>();
         if (!m_Sensor)
             m_Sensor = new RDF_RadarSensor();
+        m_HasSyncedScan = false;
+        m_HasSyncedLock = false;
+        m_LastLockState = 0;
+        m_LastLockTrackId = -1;
+        m_LastLockAimPos = "0 0 0";
+        ApplyNetworkScalarsToSensor();
     }
 
     override bool IsNetworkAvailable()
@@ -52,6 +98,7 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         }
 
         m_DemoEnabled = enabled;
+        ApplyNetworkScalarsToSensor();
         Replication.BumpMe();
     }
 
@@ -61,6 +108,44 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         SetEnabled(enabled);
     }
 
+    override void SetEmitting(bool emitting)
+    {
+        if (!IsNetworkAvailable())
+        {
+            ApplyLocalEmitting(emitting);
+            return;
+        }
+
+        if (m_RplComponent.IsProxy())
+        {
+            if (m_IsEmitting == emitting)
+                return;
+            Rpc(RpcAsk_SetEmitting, emitting);
+            return;
+        }
+
+        if (m_IsEmitting == emitting)
+        {
+            ApplyLocalEmitting(emitting);
+            return;
+        }
+
+        m_IsEmitting = emitting;
+        ApplyLocalEmitting(emitting);
+        Replication.BumpMe();
+    }
+
+    [RplRpc(RplChannel.Reliable, RplRcver.Server)]
+    protected void RpcAsk_SetEmitting(bool emitting)
+    {
+        SetEmitting(emitting);
+    }
+
+    override bool IsEmitting()
+    {
+        return m_IsEmitting;
+    }
+
     override void SetConfig(RDF_RadarSettings config)
     {
         if (!config || !IsNetworkAvailable())
@@ -68,40 +153,90 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
 
         if (m_RplComponent.IsProxy())
         {
-            Rpc(
-                RpcAsk_SetDemoConfig,
-                config.m_Range,
-                config.m_UpdateInterval,
-                config.m_Enabled,
-                config.m_KeepUndetected);
+            // Enforce Rpc() has a low arity cap — pack scalars into one string.
+            Rpc(RpcAsk_SetDemoConfig, SerializeConfigScalars(config));
             return;
         }
 
-        m_Range = Math.Clamp(config.m_Range, 1.0, 100000.0);
-        m_UpdateInterval = Math.Max(0.05, config.m_UpdateInterval);
-        m_DemoEnabled = config.m_Enabled;
-        m_Verbose = config.m_KeepUndetected;
-        // Keep a full settings object on the authority scanner (not just the
-        // handful of replicated scalars), so projectile / WLR test configs apply.
+        ApplyConfigScalarsFromSettings(config);
         if (!m_Sensor)
             m_Sensor = new RDF_RadarSensor();
         m_Sensor.Configure(config);
         m_Sensor.SetForceLocalScan(true);
+        ApplyNetworkScalarsToSensor();
         Replication.BumpMe();
     }
 
     [RplRpc(RplChannel.Reliable, RplRcver.Server)]
-    protected void RpcAsk_SetDemoConfig(
-        float rangeM,
-        float updateInterval,
-        bool enabled,
-        bool verbose)
+    protected void RpcAsk_SetDemoConfig(string configCsv)
     {
-        m_Range = Math.Clamp(rangeM, 1.0, 100000.0);
-        m_UpdateInterval = Math.Max(0.05, updateInterval);
-        m_DemoEnabled = enabled;
-        m_Verbose = verbose;
+        if (!ParseConfigScalars(configCsv))
+            return;
+        ApplyNetworkScalarsToSensor();
         Replication.BumpMe();
+    }
+
+    // C|range|interval|enabled|verbose|sector|maxTargets|wlr|wlrHud|cfar|snr|veh|proj|emit
+    protected string SerializeConfigScalars(RDF_RadarSettings config)
+    {
+        if (!config)
+            return string.Empty;
+
+        string csv = "C|";
+        csv = csv + config.m_Range.ToString();
+        csv = csv + "|";
+        csv = csv + config.m_UpdateInterval.ToString();
+        csv = csv + "|";
+        csv = csv + BoolToFlag(config.m_Enabled);
+        csv = csv + "|";
+        csv = csv + BoolToFlag(config.m_KeepUndetected);
+        csv = csv + "|";
+        csv = csv + config.m_SectorHalfAngleDeg.ToString();
+        csv = csv + "|";
+        csv = csv + config.m_MaxTargets.ToString();
+        csv = csv + "|";
+        csv = csv + BoolToFlag(config.m_EnableWeaponLocate);
+        csv = csv + "|";
+        csv = csv + BoolToFlag(config.m_EnableWlrHudAlerts);
+        csv = csv + "|";
+        csv = csv + CfarModeToInt(config.m_CfarMode).ToString();
+        csv = csv + "|";
+        csv = csv + config.m_DetectionSnrDb.ToString();
+        csv = csv + "|";
+        csv = csv + BoolToFlag(config.m_IncludeVehicles);
+        csv = csv + "|";
+        csv = csv + BoolToFlag(config.m_IncludeProjectiles);
+        csv = csv + "|";
+        csv = csv + BoolToFlag(config.m_IncludeRadarEmitters);
+        return csv;
+    }
+
+    protected bool ParseConfigScalars(string configCsv)
+    {
+        if (!configCsv || configCsv == string.Empty)
+            return false;
+
+        array<string> fields = new array<string>();
+        configCsv.Split("|", fields, false);
+        if (fields.Count() < 14)
+            return false;
+        if (fields.Get(0) != "C")
+            return false;
+
+        m_Range = Math.Clamp(fields.Get(1).ToFloat(), 1.0, 100000.0);
+        m_UpdateInterval = Math.Max(0.05, fields.Get(2).ToFloat());
+        m_DemoEnabled = FlagToBool(fields.Get(3));
+        m_Verbose = FlagToBool(fields.Get(4));
+        m_SectorHalfAngleDeg = Math.Clamp(fields.Get(5).ToFloat(), 0.0, 180.0);
+        m_MaxTargets = Math.Max(1, fields.Get(6).ToInt());
+        m_EnableWeaponLocate = FlagToBool(fields.Get(7));
+        m_EnableWlrHudAlerts = FlagToBool(fields.Get(8));
+        m_CfarMode = Math.Clamp(fields.Get(9).ToInt(), 0, 2);
+        m_DetectionSnrDb = Math.Clamp(fields.Get(10).ToFloat(), -100.0, 200.0);
+        m_IncludeVehicles = FlagToBool(fields.Get(11));
+        m_IncludeProjectiles = FlagToBool(fields.Get(12));
+        m_IncludeRadarEmitters = FlagToBool(fields.Get(13));
+        return true;
     }
 
     override void RequestScan()
@@ -134,13 +269,7 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
 
         if (!m_Sensor)
             m_Sensor = new RDF_RadarSensor();
-        RDF_RadarSettings settings = m_Sensor.GetSettings();
-        if (!settings)
-            return;
-        settings.m_Enabled = m_DemoEnabled;
-        settings.m_Range = m_Range;
-        settings.m_UpdateInterval = m_UpdateInterval;
-        settings.m_KeepUndetected = m_Verbose;
+        ApplyNetworkScalarsToSensor();
 
         BaseWorld world = GetGame().GetWorld();
         float worldTimeS = 0.0;
@@ -150,6 +279,7 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         m_Sensor.SetForceLocalScan(true);
         m_Sensor.ScanOnce(subject, null, worldTimeS);
         UpdateLocalResults(m_Sensor.GetPlots());
+        CaptureLocalTracksAndLock();
 
         string payload = SerializePayload(m_LastTargets);
         if (!payload || payload == string.Empty)
@@ -183,7 +313,44 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         }
         if (GetGame().GetWorld())
             m_LastScanTime = GetGame().GetWorld().GetWorldTime();
-        Replication.BumpMe();
+        m_HasSyncedScan = true;
+    }
+
+    protected void CaptureLocalTracksAndLock()
+    {
+        if (!m_LastTracks)
+            m_LastTracks = new array<ref RDF_RadarTrack>();
+        m_LastTracks.Clear();
+        m_HasSyncedLock = false;
+        m_LastLockState = 0;
+        m_LastLockTrackId = -1;
+        m_LastLockAimPos = "0 0 0";
+
+        if (!m_Sensor)
+            return;
+
+        array<ref RDF_RadarTrack> tracks = m_Sensor.GetTracks();
+        if (tracks)
+        {
+            for (int i = 0; i < tracks.Count(); i++)
+            {
+                RDF_RadarTrack src = tracks.Get(i);
+                if (!src || !src.m_Confirmed)
+                    continue;
+                RDF_RadarTrack copy = CloneTrackSummary(src);
+                if (copy)
+                    m_LastTracks.Insert(copy);
+            }
+        }
+
+        RDF_RadarLockManager lockMgr = m_Sensor.GetLockManager();
+        if (lockMgr)
+        {
+            m_LastLockState = LockStateToInt(lockMgr.GetState());
+            m_LastLockTrackId = lockMgr.GetLockedTrackId();
+            m_LastLockAimPos = lockMgr.GetLockedPosition();
+            m_HasSyncedLock = true;
+        }
     }
 
     [RplRpc(RplChannel.Reliable, RplRcver.Broadcast)]
@@ -206,44 +373,102 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         outCsv = outCsv + "|";
         outCsv = outCsv + rangeText;
 
-        if (!targets || targets.Count() <= 0)
-            return outCsv;
-
-        for (int i = 0; i < targets.Count(); i++)
+        if (targets)
         {
-            RDF_RadarTarget t = targets.Get(i);
-            if (!t)
-                continue;
+            for (int i = 0; i < targets.Count(); i++)
+            {
+                RDF_RadarTarget t = targets.Get(i);
+                if (!t)
+                    continue;
 
-            string typeText = TargetTypeToIntString(t.m_Type);
-            string detectedFlag = BoolToFlag(t.m_Detected);
-            string anonFlag = BoolToFlag(t.m_IsAnonymous);
-            string falseFlag = BoolToFlag(t.m_IsFalsePlot);
-            string losFlag = BoolToFlag(t.m_LosBlocked);
-            string distanceText = t.m_Distance.ToString();
-            string snrText = t.m_SnrDb.ToString();
-            string powerText = t.m_CfarPowerW.ToString();
-            string positionCsv = VectorToCsv(t.m_Position);
-
-            outCsv = outCsv + ";T|";
-            outCsv = outCsv + typeText;
-            outCsv = outCsv + "|";
-            outCsv = outCsv + detectedFlag;
-            outCsv = outCsv + "|";
-            outCsv = outCsv + anonFlag;
-            outCsv = outCsv + "|";
-            outCsv = outCsv + falseFlag;
-            outCsv = outCsv + "|";
-            outCsv = outCsv + losFlag;
-            outCsv = outCsv + "|";
-            outCsv = outCsv + distanceText;
-            outCsv = outCsv + "|";
-            outCsv = outCsv + snrText;
-            outCsv = outCsv + "|";
-            outCsv = outCsv + powerText;
-            outCsv = outCsv + "|";
-            outCsv = outCsv + positionCsv;
+                outCsv = outCsv + ";T|";
+                outCsv = outCsv + TargetTypeToIntString(t.m_Type);
+                outCsv = outCsv + "|";
+                outCsv = outCsv + BoolToFlag(t.m_Detected);
+                outCsv = outCsv + "|";
+                outCsv = outCsv + BoolToFlag(t.m_IsAnonymous);
+                outCsv = outCsv + "|";
+                outCsv = outCsv + BoolToFlag(t.m_IsFalsePlot);
+                outCsv = outCsv + "|";
+                outCsv = outCsv + BoolToFlag(t.m_LosBlocked);
+                outCsv = outCsv + "|";
+                outCsv = outCsv + t.m_Distance.ToString();
+                outCsv = outCsv + "|";
+                outCsv = outCsv + t.m_SnrDb.ToString();
+                outCsv = outCsv + "|";
+                outCsv = outCsv + t.m_CfarPowerW.ToString();
+                outCsv = outCsv + "|";
+                outCsv = outCsv + VectorToCsv(t.m_Position);
+                outCsv = outCsv + "|";
+                outCsv = outCsv + VectorToCsv(t.m_Velocity);
+                outCsv = outCsv + "|";
+                outCsv = outCsv + t.m_AzimuthDeg.ToString();
+                outCsv = outCsv + "|";
+                outCsv = outCsv + t.m_ElevationDeg.ToString();
+                outCsv = outCsv + "|";
+                outCsv = outCsv + t.m_RadialSpeedMs.ToString();
+                outCsv = outCsv + "|";
+                outCsv = outCsv + t.m_ScattererId.ToString();
+            }
         }
+
+        if (m_LastTracks)
+        {
+            for (int k = 0; k < m_LastTracks.Count(); k++)
+            {
+                RDF_RadarTrack tr = m_LastTracks.Get(k);
+                if (!tr)
+                    continue;
+                outCsv = outCsv + ";K|";
+                outCsv = outCsv + tr.m_TrackId.ToString();
+                outCsv = outCsv + "|";
+                outCsv = outCsv + TargetTypeToIntString(tr.m_Type);
+                outCsv = outCsv + "|";
+                outCsv = outCsv + BoolToFlag(tr.m_Confirmed);
+                outCsv = outCsv + "|";
+                outCsv = outCsv + VectorToCsv(tr.m_FilteredPosition);
+                outCsv = outCsv + "|";
+                outCsv = outCsv + VectorToCsv(tr.m_FilteredVelocity);
+                outCsv = outCsv + "|";
+                outCsv = outCsv + tr.m_FilteredRangeM.ToString();
+                outCsv = outCsv + "|";
+                outCsv = outCsv + tr.m_FilteredAzimuthDeg.ToString();
+                outCsv = outCsv + "|";
+                outCsv = outCsv + tr.m_FilteredElevationDeg.ToString();
+                outCsv = outCsv + "|";
+                outCsv = outCsv + tr.m_FilteredRangeRateMs.ToString();
+                outCsv = outCsv + "|";
+                outCsv = outCsv + tr.m_LastSnrDb.ToString();
+                outCsv = outCsv + "|";
+                outCsv = outCsv + tr.m_HitCount.ToString();
+
+                RDF_RadarWlrFix fix = tr.m_LastWlrFix;
+                if (fix && (fix.m_LaunchValid || fix.m_ImpactValid))
+                {
+                    outCsv = outCsv + ";W|";
+                    outCsv = outCsv + tr.m_TrackId.ToString();
+                    outCsv = outCsv + "|";
+                    outCsv = outCsv + BoolToFlag(fix.m_LaunchValid);
+                    outCsv = outCsv + "|";
+                    outCsv = outCsv + VectorToCsv(fix.m_LaunchPos);
+                    outCsv = outCsv + "|";
+                    outCsv = outCsv + BoolToFlag(fix.m_ImpactValid);
+                    outCsv = outCsv + "|";
+                    outCsv = outCsv + VectorToCsv(fix.m_ImpactPos);
+                }
+            }
+        }
+
+        if (m_HasSyncedLock)
+        {
+            outCsv = outCsv + ";L|";
+            outCsv = outCsv + m_LastLockState.ToString();
+            outCsv = outCsv + "|";
+            outCsv = outCsv + m_LastLockTrackId.ToString();
+            outCsv = outCsv + "|";
+            outCsv = outCsv + VectorToCsv(m_LastLockAimPos);
+        }
+
         return outCsv;
     }
 
@@ -251,7 +476,14 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
     {
         if (!m_LastTargets)
             m_LastTargets = new array<ref RDF_RadarTarget>();
+        if (!m_LastTracks)
+            m_LastTracks = new array<ref RDF_RadarTrack>();
         m_LastTargets.Clear();
+        m_LastTracks.Clear();
+        m_HasSyncedLock = false;
+        m_LastLockState = 0;
+        m_LastLockTrackId = -1;
+        m_LastLockAimPos = "0 0 0";
 
         array<string> parts = new array<string>();
         payload.Split(";", parts, false);
@@ -275,39 +507,178 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
                 }
                 continue;
             }
-            if (tag != "T")
+            if (tag == "T")
+            {
+                ParsePlotRow(fields);
                 continue;
-            if (fields.Count() < 10)
+            }
+            if (tag == "K")
+            {
+                ParseTrackRow(fields);
                 continue;
-
-            RDF_RadarTarget t = new RDF_RadarTarget();
-            int typeValue = fields.Get(1).ToInt();
-            t.m_Type = IntToTargetType(typeValue);
-            t.m_Detected = FlagToBool(fields.Get(2));
-            t.m_IsAnonymous = FlagToBool(fields.Get(3));
-            t.m_IsFalsePlot = FlagToBool(fields.Get(4));
-            t.m_LosBlocked = FlagToBool(fields.Get(5));
-            t.m_Distance = fields.Get(6).ToFloat();
-            t.m_SnrDb = fields.Get(7).ToFloat();
-            t.m_CfarPowerW = fields.Get(8).ToFloat();
-            t.m_Position = CsvToVector(fields.Get(9));
-            t.m_Entity = null;
-            t.m_LosHitFraction = 1.0;
-            t.m_MultipathFactor = 1.0;
-            m_LastTargets.Insert(t);
+            }
+            if (tag == "W")
+            {
+                ParseWlrRow(fields);
+                continue;
+            }
+            if (tag == "L")
+            {
+                ParseLockRow(fields);
+                continue;
+            }
         }
 
         if (GetGame().GetWorld())
             m_LastScanTime = GetGame().GetWorld().GetWorldTime();
+        m_HasSyncedScan = true;
+    }
+
+    protected void ParsePlotRow(array<string> fields)
+    {
+        if (fields.Count() < 10)
+            return;
+
+        RDF_RadarTarget t = new RDF_RadarTarget();
+        t.m_Type = IntToTargetType(fields.Get(1).ToInt());
+        t.m_Detected = FlagToBool(fields.Get(2));
+        t.m_IsAnonymous = FlagToBool(fields.Get(3));
+        t.m_IsFalsePlot = FlagToBool(fields.Get(4));
+        t.m_LosBlocked = FlagToBool(fields.Get(5));
+        t.m_Distance = fields.Get(6).ToFloat();
+        t.m_SnrDb = fields.Get(7).ToFloat();
+        t.m_CfarPowerW = fields.Get(8).ToFloat();
+        t.m_Position = CsvToVector(fields.Get(9));
+        t.m_Entity = null;
+        t.m_Velocity = "0 0 0";
+        t.m_AzimuthDeg = 0.0;
+        t.m_ElevationDeg = 0.0;
+        t.m_RadialSpeedMs = 0.0;
+        t.m_ScattererId = 0;
+        t.m_LosHitFraction = 1.0;
+        t.m_MultipathFactor = 1.0;
+
+        if (fields.Count() >= 11)
+            t.m_Velocity = CsvToVector(fields.Get(10));
+        if (fields.Count() >= 12)
+            t.m_AzimuthDeg = fields.Get(11).ToFloat();
+        if (fields.Count() >= 13)
+            t.m_ElevationDeg = fields.Get(12).ToFloat();
+        if (fields.Count() >= 14)
+            t.m_RadialSpeedMs = fields.Get(13).ToFloat();
+        if (fields.Count() >= 15)
+            t.m_ScattererId = fields.Get(14).ToInt();
+
+        m_LastTargets.Insert(t);
+    }
+
+    protected void ParseTrackRow(array<string> fields)
+    {
+        if (fields.Count() < 11)
+            return;
+
+        RDF_RadarTrack tr = new RDF_RadarTrack();
+        tr.m_TrackId = fields.Get(1).ToInt();
+        tr.m_Type = IntToTargetType(fields.Get(2).ToInt());
+        tr.m_Confirmed = FlagToBool(fields.Get(3));
+        tr.m_FilteredPosition = CsvToVector(fields.Get(4));
+        tr.m_FilteredVelocity = CsvToVector(fields.Get(5));
+        tr.m_FilteredRangeM = fields.Get(6).ToFloat();
+        tr.m_FilteredAzimuthDeg = fields.Get(7).ToFloat();
+        tr.m_FilteredElevationDeg = fields.Get(8).ToFloat();
+        tr.m_FilteredRangeRateMs = fields.Get(9).ToFloat();
+        tr.m_LastSnrDb = fields.Get(10).ToFloat();
+        if (fields.Count() >= 12)
+            tr.m_HitCount = fields.Get(11).ToInt();
+        else
+            tr.m_HitCount = 1;
+        tr.m_MissCount = 0;
+        tr.m_Entity = null;
+        tr.m_LastUpdateTime = 0.0;
+        tr.Push(tr.m_FilteredPosition, tr.m_FilteredVelocity, 0.0);
+        m_LastTracks.Insert(tr);
+    }
+
+    protected void ParseWlrRow(array<string> fields)
+    {
+        if (fields.Count() < 6)
+            return;
+        int trackId = fields.Get(1).ToInt();
+        RDF_RadarTrack tr = FindTrackById(trackId);
+        if (!tr)
+            return;
+
+        RDF_RadarWlrFix fix = new RDF_RadarWlrFix();
+        fix.m_LaunchValid = FlagToBool(fields.Get(2));
+        fix.m_LaunchPos = CsvToVector(fields.Get(3));
+        fix.m_ImpactValid = FlagToBool(fields.Get(4));
+        fix.m_ImpactPos = CsvToVector(fields.Get(5));
+        tr.m_LastWlrFix = fix;
+    }
+
+    protected void ParseLockRow(array<string> fields)
+    {
+        if (fields.Count() < 4)
+            return;
+        m_LastLockState = fields.Get(1).ToInt();
+        m_LastLockTrackId = fields.Get(2).ToInt();
+        m_LastLockAimPos = CsvToVector(fields.Get(3));
+        m_HasSyncedLock = true;
+    }
+
+    protected RDF_RadarTrack FindTrackById(int trackId)
+    {
+        if (!m_LastTracks)
+            return null;
+        for (int i = 0; i < m_LastTracks.Count(); i++)
+        {
+            RDF_RadarTrack tr = m_LastTracks.Get(i);
+            if (tr && tr.m_TrackId == trackId)
+                return tr;
+        }
+        return null;
+    }
+
+    protected RDF_RadarTrack CloneTrackSummary(RDF_RadarTrack src)
+    {
+        if (!src)
+            return null;
+        RDF_RadarTrack tr = new RDF_RadarTrack();
+        tr.m_TrackId = src.m_TrackId;
+        tr.m_Type = src.m_Type;
+        tr.m_Confirmed = src.m_Confirmed;
+        tr.m_FilteredPosition = src.m_FilteredPosition;
+        tr.m_FilteredVelocity = src.m_FilteredVelocity;
+        tr.m_FilteredRangeM = src.m_FilteredRangeM;
+        tr.m_FilteredAzimuthDeg = src.m_FilteredAzimuthDeg;
+        tr.m_FilteredElevationDeg = src.m_FilteredElevationDeg;
+        tr.m_FilteredRangeRateMs = src.m_FilteredRangeRateMs;
+        tr.m_LastSnrDb = src.m_LastSnrDb;
+        tr.m_HitCount = src.m_HitCount;
+        tr.m_MissCount = src.m_MissCount;
+        tr.m_Entity = null;
+        tr.m_LastUpdateTime = src.m_LastUpdateTime;
+        tr.m_AirDrag = src.m_AirDrag;
+        tr.m_UseBallisticPrediction = src.m_UseBallisticPrediction;
+        if (src.m_LastWlrFix)
+        {
+            RDF_RadarWlrFix fix = new RDF_RadarWlrFix();
+            fix.m_LaunchValid = src.m_LastWlrFix.m_LaunchValid;
+            fix.m_LaunchPos = src.m_LastWlrFix.m_LaunchPos;
+            fix.m_ImpactValid = src.m_LastWlrFix.m_ImpactValid;
+            fix.m_ImpactPos = src.m_LastWlrFix.m_ImpactPos;
+            fix.m_LaunchTimeS = src.m_LastWlrFix.m_LaunchTimeS;
+            fix.m_ImpactTimeS = src.m_LastWlrFix.m_ImpactTimeS;
+            fix.m_AnchorTimeS = src.m_LastWlrFix.m_AnchorTimeS;
+            tr.m_LastWlrFix = fix;
+        }
+        return tr;
     }
 
     override bool HasSyncedTargets()
     {
-        if (!m_LastTargets)
+        if (!m_HasSyncedScan)
             return false;
-        if (m_LastTargets.Count() <= 0)
-            return false;
-
         float now = 0.0;
         if (GetGame().GetWorld())
             now = GetGame().GetWorld().GetWorldTime();
@@ -319,6 +690,26 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
     override array<ref RDF_RadarTarget> GetLastTargets()
     {
         return m_LastTargets;
+    }
+
+    override array<ref RDF_RadarTrack> GetLastTracks()
+    {
+        return m_LastTracks;
+    }
+
+    override bool GetLastLockState(out int lockState, out int trackId, out vector aimPos)
+    {
+        if (!m_HasSyncedLock)
+        {
+            lockState = 0;
+            trackId = -1;
+            aimPos = "0 0 0";
+            return false;
+        }
+        lockState = m_LastLockState;
+        trackId = m_LastLockTrackId;
+        aimPos = m_LastLockAimPos;
+        return true;
     }
 
     override vector GetLastScanOrigin()
@@ -336,6 +727,61 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         return m_LastScanRange;
     }
 
+    protected void ApplyConfigScalarsFromSettings(RDF_RadarSettings config)
+    {
+        if (!config)
+            return;
+        m_Range = Math.Clamp(config.m_Range, 1.0, 100000.0);
+        m_UpdateInterval = Math.Max(0.05, config.m_UpdateInterval);
+        m_DemoEnabled = config.m_Enabled;
+        m_Verbose = config.m_KeepUndetected;
+        m_SectorHalfAngleDeg = Math.Clamp(config.m_SectorHalfAngleDeg, 0.0, 180.0);
+        m_MaxTargets = Math.Max(1, config.m_MaxTargets);
+        m_EnableWeaponLocate = config.m_EnableWeaponLocate;
+        m_EnableWlrHudAlerts = config.m_EnableWlrHudAlerts;
+        m_CfarMode = CfarModeToInt(config.m_CfarMode);
+        m_DetectionSnrDb = Math.Clamp(config.m_DetectionSnrDb, -100.0, 200.0);
+        m_IncludeVehicles = config.m_IncludeVehicles;
+        m_IncludeProjectiles = config.m_IncludeProjectiles;
+        m_IncludeRadarEmitters = config.m_IncludeRadarEmitters;
+    }
+
+    protected void ApplyNetworkScalarsToSensor()
+    {
+        if (!m_Sensor)
+            m_Sensor = new RDF_RadarSensor();
+        RDF_RadarSettings settings = m_Sensor.GetSettings();
+        if (!settings)
+            return;
+
+        settings.m_Enabled = m_DemoEnabled;
+        settings.m_Range = m_Range;
+        settings.m_UpdateInterval = m_UpdateInterval;
+        settings.m_KeepUndetected = m_Verbose;
+        settings.m_SectorHalfAngleDeg = m_SectorHalfAngleDeg;
+        settings.m_MaxTargets = m_MaxTargets;
+        settings.m_EnableWeaponLocate = m_EnableWeaponLocate;
+        settings.m_EnableWlrHudAlerts = m_EnableWlrHudAlerts;
+        settings.m_CfarMode = IntToCfarMode(m_CfarMode);
+        settings.m_DetectionSnrDb = m_DetectionSnrDb;
+        settings.m_IncludeVehicles = m_IncludeVehicles;
+        settings.m_IncludeProjectiles = m_IncludeProjectiles;
+        settings.m_IncludeRadarEmitters = m_IncludeRadarEmitters;
+        settings.Validate();
+        m_Sensor.SetEnabled(m_DemoEnabled);
+        m_Sensor.SetForceLocalScan(true);
+    }
+
+    protected void ApplyLocalEmitting(bool emitting)
+    {
+        IEntity owner = GetOwner();
+        if (!owner)
+            return;
+        RDF_RadarEmitterRegistry.SetEmitting(owner, emitting);
+        if (!emitting)
+            RDF_RadarEmitterRegistry.Unregister(owner);
+    }
+
     protected string BoolToFlag(bool value)
     {
         if (value)
@@ -346,6 +792,35 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
     protected bool FlagToBool(string flag)
     {
         return flag == "1";
+    }
+
+    protected int CfarModeToInt(ERDF_CfarMode mode)
+    {
+        if (mode == ERDF_CfarMode.RDF_CFAR_GO)
+            return 1;
+        if (mode == ERDF_CfarMode.RDF_CFAR_SO)
+            return 2;
+        return 0;
+    }
+
+    protected ERDF_CfarMode IntToCfarMode(int mode)
+    {
+        if (mode == 1)
+            return ERDF_CfarMode.RDF_CFAR_GO;
+        if (mode == 2)
+            return ERDF_CfarMode.RDF_CFAR_SO;
+        return ERDF_CfarMode.RDF_CFAR_CA;
+    }
+
+    protected int LockStateToInt(ERDF_RadarLockState state)
+    {
+        if (state == ERDF_RadarLockState.RDF_RADAR_LOCK_ACQUIRING)
+            return 1;
+        if (state == ERDF_RadarLockState.RDF_RADAR_LOCK_TRACKING)
+            return 2;
+        if (state == ERDF_RadarLockState.RDF_RADAR_LOCK_COAST)
+            return 3;
+        return 0;
     }
 
     protected string TargetTypeToIntString(ERDF_RadarTargetType type)
@@ -372,14 +847,11 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
 
     protected string VectorToCsv(vector v)
     {
-        string x = v[0].ToString();
-        string y = v[1].ToString();
-        string z = v[2].ToString();
-        string csv = x;
+        string csv = v[0].ToString();
         csv = csv + ",";
-        csv = csv + y;
+        csv = csv + v[1].ToString();
         csv = csv + ",";
-        csv = csv + z;
+        csv = csv + v[2].ToString();
         return csv;
     }
 
@@ -389,25 +861,76 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         csv.Split(",", vals, false);
         if (vals.Count() < 3)
             return "0 0 0";
-        float x = vals.Get(0).ToFloat();
-        float y = vals.Get(1).ToFloat();
-        float z = vals.Get(2).ToFloat();
-        return Vector(x, y, z);
+        return Vector(vals.Get(0).ToFloat(), vals.Get(1).ToFloat(), vals.Get(2).ToFloat());
     }
 
     void OnDemoEnabledChanged()
     {
+        ApplyNetworkScalarsToSensor();
     }
 
     void OnRangeChanged()
     {
+        ApplyNetworkScalarsToSensor();
     }
 
     void OnUpdateIntervalChanged()
     {
+        ApplyNetworkScalarsToSensor();
     }
 
     void OnVerboseChanged()
     {
+        ApplyNetworkScalarsToSensor();
+    }
+
+    void OnSectorHalfAngleChanged()
+    {
+        ApplyNetworkScalarsToSensor();
+    }
+
+    void OnMaxTargetsChanged()
+    {
+        ApplyNetworkScalarsToSensor();
+    }
+
+    void OnEnableWeaponLocateChanged()
+    {
+        ApplyNetworkScalarsToSensor();
+    }
+
+    void OnEnableWlrHudAlertsChanged()
+    {
+        ApplyNetworkScalarsToSensor();
+    }
+
+    void OnCfarModeChanged()
+    {
+        ApplyNetworkScalarsToSensor();
+    }
+
+    void OnDetectionSnrDbChanged()
+    {
+        ApplyNetworkScalarsToSensor();
+    }
+
+    void OnIncludeVehiclesChanged()
+    {
+        ApplyNetworkScalarsToSensor();
+    }
+
+    void OnIncludeProjectilesChanged()
+    {
+        ApplyNetworkScalarsToSensor();
+    }
+
+    void OnIncludeRadarEmittersChanged()
+    {
+        ApplyNetworkScalarsToSensor();
+    }
+
+    void OnEmittingChanged()
+    {
+        ApplyLocalEmitting(m_IsEmitting);
     }
 }
