@@ -231,6 +231,9 @@ class BallisticState:
     ay_m_s2: float = -9.81
     # Reforger ShellMoveComponent.AirDrag; 0 = vacuum propagation.
     air_drag: float = 0.0
+    fit_rms_m: float = 0.0
+    fit_span_s: float = 0.0
+    fit_points: int = 0
 
 
 def fit_ballistic_vacuum(
@@ -309,6 +312,9 @@ def fit_ballistic_vacuum(
         vz_m_s=float(bz[1]),
         ay_m_s2=gravity_m_s2,
         air_drag=air_drag,
+        fit_rms_m=rms,
+        fit_span_s=span,
+        fit_points=len(window),
     )
 
 

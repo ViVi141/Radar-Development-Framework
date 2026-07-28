@@ -424,6 +424,8 @@ def run_plot_level_radar(
     kind_filter: set[str] | None = None,
     az_sector_center_deg: float | None = None,
     az_sector_half_deg: float = 180.0,
+    detect_snr_db: float = 13.0,
+    tracker_config: TrackerConfig | None = None,
 ) -> RadarRunResult:
     rng = np.random.default_rng(seed)
     result = RadarRunResult(radar_name=name, hardware_name=hardware.display_name)
@@ -444,8 +446,6 @@ def run_plot_level_radar(
     noise_w = hardware.noise_power_w()
     clutter_floor_w = noise_w * (10.0 ** (clutter_cnr_db / 10.0))
     # CFAR-ish: require processed SNR above threshold relative to noise+clutter.
-    detect_snr_db = 13.0
-
     for time_s in times:
         if hardware.scan_rpm > 0.0:
             boresight_deg = (
@@ -561,13 +561,15 @@ def run_plot_level_radar(
     else:
         tcfg = TrackerConfig(
             gate_range_m=350.0,
-            gate_azimuth_deg=2.5,
+            gate_azimuth_deg=max(hardware.az_beamwidth_deg * 1.5, 2.5),
             alpha=0.55,
             beta=0.25,
             max_misses=10,
             confirm_hits=3,
             keep_confirmed_dead=True,
         )
+    if tracker_config is not None:
+        tcfg = tracker_config
     tracker = associate_and_filter(result.plots, tcfg)
     result.tracker_tracks = tracker.tracks
     result.track_count = len(tracker.tracks)
@@ -922,6 +924,9 @@ class WlrFixSample:
     impact_err_m: float
     launch_time_err_s: float
     impact_time_err_s: float
+    fit_rms_m: float = 0.0
+    fit_span_s: float = 0.0
+    fit_points: int = 0
 
 
 def _true_shell_endpoints(
@@ -974,9 +979,23 @@ def evaluate_wlr_fixes(
     radar_y: float,
     wind: GlobalWind = NO_WIND,
     min_hits: int = 5,
+    min_span_s: float = 1.0,
+    max_fit_rms_m: float = 80.0,
+    window_points: int = 20,
+    smooth_alpha: float = 0.35,
     ground_y_fn: GroundYFn | None = None,
+    select_mode: str = "last",
 ) -> list[WlrFixSample]:
-    """Fit shell tracks and back/forward-project to launch & impact."""
+    """Match Enforce WLR: vacuum LS fit on recent history → AirDrag ground hits.
+
+    Fit window ends at the latest plot (not apex-only). Soft quality gates mirror
+    RDF_RadarSettings WeaponLocate* defaults; optional EMA across mid-track
+    anchors approximates in-game smooth alpha.
+
+    select_mode:
+      "last" — final EMA'd fix (map marker / RefreshWeaponLocates)
+      "best_launch" — lowest launch_err during the walk (ShellFire AutoTest metric)
+    """
     if ground_y_fn is None:
         ground_y_fn = flat_ground_y_fn(radar_y)
     truth_by_name = {t.initial.name: t for t in trajectories}
@@ -996,30 +1015,29 @@ def evaluate_wlr_fixes(
             continue
         true_launch, true_impact, true_flight_s = endpoints
 
-        # Prefer apex (max elevation) then last point — short window keeps
-        # the vacuum fit valid under AirDrag curvature.
-        el_peak_i = max(
-            range(len(track.history)), key=lambda i: track.history[i][3]
-        )
-        candidate_idx = []
-        for idx in (el_peak_i, len(track.history) - 1):
-            if idx not in candidate_idx and idx >= min_hits - 1:
-                candidate_idx.append(idx)
-
-        best: WlrFixSample | None = None
         drag = traj.air_drag
         if drag <= 0.0:
             drag = AIR_DRAG_SHELL_82MM_HE
 
-        for anchor_i in candidate_idx:
+        # Walk anchors like successive scans; always end on the latest plot.
+        hist = track.history
+        last_sample: WlrFixSample | None = None
+        best_sample: WlrFixSample | None = None
+        step = max(1, len(hist) // 12)
+        anchors: list[int] = list(range(min_hits - 1, len(hist), step))
+        final_i = len(hist) - 1
+        if final_i not in anchors:
+            anchors.append(final_i)
+
+        for anchor_i in anchors:
             ballistic = fit_ballistic_vacuum(
-                track.history,
+                hist,
                 anchor_i,
                 gravity_m_s2=GRAVITY_M_S2,
-                min_points=5,
-                min_span_s=0.8,
-                max_fit_rms_m=180.0,
-                window_points=12,
+                min_points=min_hits,
+                min_span_s=min_span_s,
+                max_fit_rms_m=max_fit_rms_m,
+                window_points=window_points,
             )
             if ballistic is None:
                 continue
@@ -1039,17 +1057,25 @@ def evaluate_wlr_fixes(
             if launch is None or impact is None:
                 continue
 
+            est_lx = launch.x_m
+            est_lz = launch.z_m
+            est_ix = impact.x_m
+            est_iz = impact.z_m
+            if last_sample is not None and 0.0 < smooth_alpha < 1.0:
+                a = smooth_alpha
+                b = 1.0 - a
+                est_lx = last_sample.est_launch_x_m * b + est_lx * a
+                est_lz = last_sample.est_launch_z_m * b + est_lz * a
+                est_ix = last_sample.est_impact_x_m * b + est_ix * a
+                est_iz = last_sample.est_impact_z_m * b + est_iz * a
+
             launch_err = math.hypot(
-                launch.x_m - true_launch[0], launch.z_m - true_launch[2]
+                est_lx - true_launch[0], est_lz - true_launch[2]
             )
             impact_err = math.hypot(
-                impact.x_m - true_impact[0], impact.z_m - true_impact[2]
+                est_ix - true_impact[0], est_iz - true_impact[2]
             )
-            true_launch_abs = traj.start_time_s
-            est_launch_abs = ballistic.t_anchor_s + launch.time_offset_s
-            est_impact_abs = ballistic.t_anchor_s + impact.time_offset_s
-            true_impact_abs = traj.start_time_s + true_flight_s
-            sample = WlrFixSample(
+            last_sample = WlrFixSample(
                 radar=run.radar_name,
                 track_id=track.track_id,
                 target=track.last_target_name,
@@ -1059,20 +1085,32 @@ def evaluate_wlr_fixes(
                 true_launch_z_m=true_launch[2],
                 true_impact_x_m=true_impact[0],
                 true_impact_z_m=true_impact[2],
-                est_launch_x_m=launch.x_m,
-                est_launch_z_m=launch.z_m,
-                est_impact_x_m=impact.x_m,
-                est_impact_z_m=impact.z_m,
+                est_launch_x_m=est_lx,
+                est_launch_z_m=est_lz,
+                est_impact_x_m=est_ix,
+                est_impact_z_m=est_iz,
                 launch_err_m=launch_err,
                 impact_err_m=impact_err,
-                launch_time_err_s=est_launch_abs - true_launch_abs,
-                impact_time_err_s=est_impact_abs - true_impact_abs,
+                launch_time_err_s=(
+                    ballistic.t_anchor_s + launch.time_offset_s - traj.start_time_s
+                ),
+                impact_time_err_s=(
+                    ballistic.t_anchor_s
+                    + impact.time_offset_s
+                    - (traj.start_time_s + true_flight_s)
+                ),
+                fit_rms_m=ballistic.fit_rms_m,
+                fit_span_s=ballistic.fit_span_s,
+                fit_points=ballistic.fit_points,
             )
-            # Apex first in candidate_idx; take the first successful fix.
-            best = sample
-            break
-        if best is not None:
-            samples.append(best)
+            if best_sample is None or last_sample.launch_err_m < best_sample.launch_err_m:
+                best_sample = last_sample
+
+        chosen = last_sample
+        if select_mode == "best_launch":
+            chosen = best_sample
+        if chosen is not None:
+            samples.append(chosen)
     return samples
 
 
@@ -1679,6 +1717,9 @@ def main() -> None:
                 "impact_err_m",
                 "launch_time_err_s",
                 "impact_time_err_s",
+                "fit_rms_m",
+                "fit_span_s",
+                "fit_points",
             ]
         )
         for s in wlr_fixes:
@@ -1701,6 +1742,9 @@ def main() -> None:
                     f"{s.impact_err_m:.1f}",
                     f"{s.launch_time_err_s:.2f}",
                     f"{s.impact_time_err_s:.2f}",
+                    f"{s.fit_rms_m:.2f}",
+                    f"{s.fit_span_s:.2f}",
+                    s.fit_points,
                 ]
             )
     print(f"wrote: {wlr_fix_csv}")
