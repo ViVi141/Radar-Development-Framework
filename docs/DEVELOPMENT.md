@@ -127,7 +127,8 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarDatalinkTypes.c        IFF 枚举 / 航迹摘要 / IffResolver
 │   ├── RDF_RadarDatalinkAPI.c          数据链 API 基类
 │   ├── RDF_RadarDatalinkHub.c          站间航迹库 + 融合结果
-│   └── RDF_RadarDatalinkComponent.c    可选 D|/F| Broadcast
+│   ├── RDF_RadarDatalinkComponent.c    可选类型化 Broadcast + RplSave
+│   └── RDF_RadarNetCodec.c             array/bit 打包（扫描 + 数据链）
 ├── Fusion/
 │   └── RDF_RadarFusionService.c        多雷达关联 + 双站交会
 ├── Visual/ / UI/
@@ -453,7 +454,8 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarDatalinkTypes.c        IFF 枚举 / 航迹摘要 / IffResolver
 │   ├── RDF_RadarDatalinkAPI.c          数据链 API 基类
 │   ├── RDF_RadarDatalinkHub.c          站间航迹库 + 融合结果
-│   └── RDF_RadarDatalinkComponent.c    可选 D|/F| Broadcast
+│   ├── RDF_RadarDatalinkComponent.c    可选类型化 Broadcast + RplSave
+│   └── RDF_RadarNetCodec.c             array/bit 打包（扫描 + 数据链）
 ├── Fusion/
 │   └── RDF_RadarFusionService.c        多雷达关联 + 双站交会
 ├── Visual/ / UI/

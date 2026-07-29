@@ -1,5 +1,5 @@
 // In-memory station-to-station track hub (authority-side). Optional component
-// RDF_RadarDatalinkComponent can broadcast D|/F| rows to proxies.
+// RDF_RadarDatalinkComponent can broadcast typed arrays / RplSave to proxies.
 class RDF_RadarDatalinkHub
 {
     protected static ref RDF_RadarDatalinkHub s_Instance;

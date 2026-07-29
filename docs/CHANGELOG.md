@@ -1,9 +1,15 @@
 # CHANGELOG
 
+## 2026-07-30 — Network / Datalink 官方复制路径
+
+- 扫描结果：CSV `string` Rpc → 类型化 `array<int>` / `array<float>`（`RDF_RadarNetCodec`）+ `RplSave`/`RplLoad`（JIP）
+- Proxy→Server 配置：`C|…` 字符串 → 定型 Rpc 参数
+- Datalink：`D|`/`F|` CSV → 同 codec 类型化 Broadcast + bit 流 JIP
+
 ## 2026-07-30 — 数据链 + 多雷达融合
 
 - `RDF_RadarDatalinkHub`：站间确认航迹摘要库（TTL）；轻量 `ERDF_RadarIff` + `RDF_RadarIffResolver`
-- `RDF_RadarNetworkComponent` 权威扫描后 `PublishTracksToDatalink`；可选 `RDF_RadarDatalinkComponent` Broadcast `D|` / `F|`
+- `RDF_RadarNetworkComponent` 权威扫描后 `PublishTracksToDatalink`；可选 `RDF_RadarDatalinkComponent` Broadcast
 - `RDF_RadarFusionService`：跨站关联 + SNR 加权融合 + 水平双站交会（夹角门限）
 - 回归：`RDF_RadarFusionAutoTest.Start()`（独立）；Python `test_rdf_radar_fusion.py`
 - 与武器中制导 `WeaponBridge.TryGetMidcourseAim`「datalink」语义分离
