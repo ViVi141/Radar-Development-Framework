@@ -25,11 +25,16 @@ Desktop.ini
 # Logs
 *.log
 
+# Python / test caches
+__pycache__/
+.pytest_cache/
+*.py[cod]
+
 # DEM / offline radar generated outputs
 tools/dem/out/
-tools/dem/**/__pycache__/
 *.npz
 TrainData/
+tools/dem/TrainData/
 
 # Packaged runtime DEM tiles (large; keep on disk, do not commit)
 DemData/
