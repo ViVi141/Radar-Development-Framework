@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-07-29 — 地面 SAM 扫描/识别/打击演示
+
+- 新增 `RDF_RadarSamEngageAutoTest.Start()`（独立，不进 StartAll）
+- BTR70 作 SAM 站（`SetScanSubjectOverride`）；6 架绕轨 Mi-8
+- 流程：SHORAD 搜索 → 航迹识别（载具类确认航迹）→ 自动锁 + Hydra PN 逐次交战
+- 近炸命中后解锁并**解除该机脚本轨道控制**（实体留在场景里交给物理坠落），再交战下一架
+
 ## 2026-07-29 — HeliDuel 拦截不再脚本删威胁弹
 
 - 近炸只引爆拦截弹；威胁弹交给引擎破片/爆炸销毁

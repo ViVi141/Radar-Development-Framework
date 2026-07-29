@@ -740,7 +740,7 @@ PPI Canvas: 210 × 210 (see LidarPPI.layout)
 - `RDF_RadarHUD`：PPI（面板 144×184 / 画布 128×128；默认匿名量测色；假目标白；NLOS 青；`m_KeepEntityTruth` 时才用类型色）。
 - `RDF_RadarAutoTestSuite.StartAll()` / `StartAllRealistic()`（Ballistics → DEM → Lock → Airborne → ShellFire → Perf → Play）。
 - 套件单项：`RDF_RadarAutoTest`、`Ballistics`、`ShellFire`、`AirborneScanTest`、`LockAutoTest`、`PerfAutoTest`、`PlayAutoTest`、`ManualDemo`。
-- 独立回归（不进 StartAll）：`RDF_RadarStressAutoTest`、`RDF_RadarRwrAutoTest`、`RDF_RadarEsmArmAutoTest`、`RDF_RadarRocketLockFireAutoTest`、`RDF_RadarHeliDuelAutoTest`；地图标记 `RDF_RadarAutoTestMapOverlay`。
+- 独立回归（不进 StartAll）：`RDF_RadarStressAutoTest`、`RDF_RadarRwrAutoTest`、`RDF_RadarEsmArmAutoTest`、`RDF_RadarRocketLockFireAutoTest`、`RDF_RadarHeliDuelAutoTest`、`RDF_RadarSamEngageAutoTest`；地图标记 `RDF_RadarAutoTestMapOverlay`。
 
 ### DEM 运行时（雷达杂波）
 

@@ -148,7 +148,8 @@ RDF_RadarWeaponBridge.TryGetFireSolutionFromOwner(vehicle, sol, true);
 3. **引信/命中**：用目标实体 / AABB / 距离半径判定。
 
 独立回归：`RDF_RadarRocketLockFireAutoTest.Start()`；完整机战脚本：
-`RDF_RadarHeliDuelAutoTest.Start()`（蓝/红 Mi-8 → 开火 → 拦截来袭 Hydra；不进 `StartAll`）。
+`RDF_RadarHeliDuelAutoTest.Start()`（蓝/红 Mi-8 → 开火 → 拦截来袭 Hydra；不进 `StartAll`）；
+地面 SAM 演示：`RDF_RadarSamEngageAutoTest.Start()`（BTR 作 SAM 站 → 扫描/识别 → 逐次打击 6 架绕轨 Mi-8；不进 `StartAll`）。
 
 ---
 
@@ -366,7 +367,8 @@ RDF_RadarWeaponBridge.TryGetFireSolutionFromOwner(vehicle, sol, true);
 3. **Fuze / hit**: decide by target entity / AABB / range radius.
 
 Standalone regression: `RDF_RadarRocketLockFireAutoTest.Start()`; full heli duel:
-`RDF_RadarHeliDuelAutoTest.Start()` (blue/red Mi-8 → fire → intercept inbound Hydra; not in `StartAll`).
+`RDF_RadarHeliDuelAutoTest.Start()` (blue/red Mi-8 → fire → intercept inbound Hydra; not in `StartAll`);
+ground SAM demo: `RDF_RadarSamEngageAutoTest.Start()` (BTR as SAM stand-in → scan/identify → engage 6 orbiting Mi-8s; not in `StartAll`).
 
 ---
 
