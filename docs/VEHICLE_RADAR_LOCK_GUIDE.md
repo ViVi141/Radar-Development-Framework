@@ -1,17 +1,23 @@
+> **Languages / 语言**: [中文](#中文) · [English](#english)
+
 # 载具雷达扫描、锁定与武器打击 — 实现指南
+
+---
+
+## 中文
 
 本文档面向目标：**让载具和武器具备扫描/锁定能力 — 扫描载具、锁定载具、武器锁定并打击**。
 
 RDF 现已提供：
 
-- **雷达**：公共门面 `RDF_RadarSensor`（SEARCH / STARE / WLR），输出
+- **雷达**：公共门面 `RDF_RadarSensor`（SEARCH / STARE / WLR / ESM），输出
   `RDF_RadarTarget` plot 与 `RDF_RadarTrack` 航迹；实体入口为
   `RDF_RadarComponent`。见 [RADAR_API.md](RADAR_API.md)。
 - **LiDAR**：`RDF_LidarScanner` 射线点云，仍可用于近距感知或备用扫描。
 - **锁定层**：`RDF_RadarLockManager`（内置于 Sensor）已提供
   `SEARCH → ACQUIRING → TRACKING → COAST` 状态机、自动/手动选锁、断锁与瞄点续航。
-
-现在只剩**武器制导对接**需模组侧实现；本文给出最小路径与分工。
+- **制导示例**：`RDF_RadarRocketGuidance` + `RDF_RadarRocketLockFireAutoTest`
+  （Hydra70 BOOST/MIDCOURSE/TERMINAL）可作为武器对接参考；正式武器仍需模组侧接入。
 
 ---
 
@@ -21,7 +27,7 @@ RDF 现已提供：
 |------|----------|------------|
 | 载具能扫描载具 | ✅ `RDF_RadarSensor` / `RDF_RadarComponent`；或 `RDF_LidarScanner.Scan()` | 将扫描挂到载具，配置模式/量程/硬件 |
 | 锁定载具 | ✅ `RDF_RadarLockManager`：自动/手动选锁、断锁、coast、`GetLockedTarget` | 按需调过滤/门限，或改手动选锁 |
-| 武器锁定并打击 | ⚠️ RDF 有轨迹预测/WLR + 锁定目标，但不含武器制导 | **武器/导弹脚本**：每帧读 `GetLockedTarget` 驱动制导 |
+| 武器锁定并打击 | ⚠️ 有 `GetLockedTarget` + 火箭制导示例（`RDF_RadarRocketGuidance`）；不含通用武器 prefab | **武器/导弹脚本**：每帧读瞄点驱动制导（可参考 Lock-Fire 回归） |
 
 ---
 
@@ -111,14 +117,17 @@ else if (RDF_RadarRwr.HasSearchWarning(owner))
 
 ### 2.3 武器打击：与 Reforger 武器系统对接
 
-RDF 的弹道模块用于轨迹预测和 WLR，不负责武器制导。武器“锁定并打击”
-仍需要在你的**武器/发射物脚本**中：
+RDF 提供锁定瞄点与**示例制导**（`RDF_RadarRocketGuidance` /
+`RDF_RadarRocketLockFireAutoTest`：Hydra70 BOOST → MIDCOURSE → TERMINAL PN），
+但不含通用武器 prefab。正式武器仍要在你的**武器/发射物脚本**中：
 
-1. **获取目标**：从上述锁定管理器取 `GetLockedTarget()` → `IEntity` 或世界坐标。
-2. **制导**：若为制导弹，每帧用当前弹位与目标位置/速度计算朝向或加速度，驱动弹体转向目标；若为非制导武器，可用锁定目标做瞄准辅助（准星偏移或火控解算）。
-3. **引信/命中**：若引擎支持“命中检测”，用目标实体或目标 AABB 判断是否命中；否则用距离/半径判定。
+1. **获取目标**：从锁定管理器取 `GetLockedTarget()` → `IEntity` 或世界坐标；
+   ESM/ARM 用 `GetArmAim()`。
+2. **制导**：可参考 `RDF_RadarRocketGuidance.Update`；或每帧用弹位与目标
+   位置/速度自行算朝向。非制导武器可用锁定目标做瞄准辅助。
+3. **引信/命中**：用目标实体 / AABB / 距离半径判定。
 
-Reforger 的 BaseGame 中若有现成的制导导弹 API（如设置“目标实体”），只需把锁定管理器返回的 `IEntity` 传给它即可；若无，则需自己在弹体组件里每帧朝 `GetLockedTarget()` 的位置或预测位置推进。
+独立回归：`RDF_RadarRocketLockFireAutoTest.Start()`（不进 `StartAll`）。
 
 ---
 
@@ -187,3 +196,200 @@ Reforger 的 BaseGame 中若有现成的制导导弹 API（如设置“目标实
 - 若希望复用 RDF 的 HUD 与锁定逻辑，只需让该模块输出与 `RDF_LidarSample` 兼容的列表（每条：`m_Entity`、`m_Hit`=true、`m_Distance`、`m_HitPos`、`m_Dir` 等），即可接入 `RDF_LidarHUD.FeedSamples()` 与同一套锁定管线。
 
 总结：**“扫描半径内引擎筛实体 + 按实体做射线判可见”** 即简化版检测：先知道“可能有什么”，再判断“谁真的被看到”，适合载具/武器锁定场景。
+
+---
+
+## English
+
+# Vehicle radar scan, lock & weapon engagement — implementation guide
+
+This guide targets: **give vehicles and weapons scan/lock capability — scan vehicles, lock vehicles, weapon lock and engage**.
+
+RDF already provides:
+
+- **Radar**: public facade `RDF_RadarSensor` (SEARCH / STARE / WLR / ESM), outputting
+  `RDF_RadarTarget` plots and `RDF_RadarTrack` tracks; entity entry point is
+  `RDF_RadarComponent`. See [RADAR_API.md](RADAR_API.md).
+- **LiDAR**: `RDF_LidarScanner` ray point clouds, still useful for short-range sensing or backup scan.
+- **Lock layer**: `RDF_RadarLockManager` (built into Sensor) already provides the
+  `SEARCH → ACQUIRING → TRACKING → COAST` state machine, auto/manual lock selection, break-lock, and aim-point coast.
+- **Guidance example**: `RDF_RadarRocketGuidance` + `RDF_RadarRocketLockFireAutoTest`
+  (Hydra70 BOOST/MIDCOURSE/TERMINAL) as a weapon-integration reference; production weapons still need mod-side wiring.
+
+---
+
+## 1. Goals vs ownership
+
+| Goal | RDF already has | You still supply |
+|------|-----------------|------------------|
+| Vehicle can scan vehicles | ✅ `RDF_RadarSensor` / `RDF_RadarComponent`; or `RDF_LidarScanner.Scan()` | Mount scan on the vehicle; configure mode/range/hardware |
+| Lock vehicles | ✅ `RDF_RadarLockManager`: auto/manual lock, unlock, coast, `GetLockedTarget` | Tune filters/thresholds as needed, or switch to manual lock |
+| Weapon lock & engage | ⚠️ `GetLockedTarget` + rocket guidance sample (`RDF_RadarRocketGuidance`); no generic weapon prefab | **Weapon/missile scripts**: read aim point each frame to drive guidance (see Lock-Fire regression) |
+
+---
+
+## 2. Recommended minimal path
+
+### 2.1 Scan: vehicles only
+
+- **Option A (recommended, radar)**: attach `RDF_RadarComponent`, read
+  `GetSensor().GetPlots()` or `GetTracks()`, filter vehicle types, then pick lock by
+  range, SNR, or track quality.
+- **Option B (LiDAR ray-first)**: use `RDF_LidarScanner`, entities-only, conical/sweep sector; auto-lock by `m_Distance`.
+- **Option C (low-level)**: extend `RDF_RadarScanner` or section 5 Query +
+  Trace; only when the public Sensor cannot meet the need.
+
+### 2.2 Lock layer (built-in `RDF_RadarLockManager`)
+
+The lock layer ships with Sensor; no need to reinvent it. It keeps a single “current lock” and runs
+`SEARCH → ACQUIRING → TRACKING → COAST` (on miss, extrapolates aim by velocity).
+
+Configure and read:
+
+```c
+RDF_RadarLockManager lockMgr = radarComponent.GetLockManager();
+lockMgr.SetAutoAcquire(true);              // 自动锁最近合规目标
+lockMgr.SetTypeFilter(true, false, false); // 仅载具
+lockMgr.SetMaxLockRange(4000.0);           // 0 = 用扫描量程
+lockMgr.SetLockSector(0.0);                // 0 = 不做扇区门
+lockMgr.SetAcquireHits(2);                 // 进入 TRACKING 所需帧数
+lockMgr.SetCoastMaxSec(2.0);               // 丢批后保持时间
+
+// 手动选锁（HUD blip）：lockMgr.LockTrackId(id); lockMgr.Unlock();
+
+// 武器每帧读取：
+IEntity target;
+vector aimPos;
+if (radarComponent.GetLockedTarget(target, aimPos))
+{
+    // 用 aimPos 驱动制导；COAST 期间为外推瞄点
+}
+```
+
+Auto break-lock: track gone longer than `CoastMaxSec`, beyond max lock range, or outside the sector gate.
+
+Default selection is the **nearest** confirmed eligible track; for other policies, read
+`GetEligibleTrackIds(...)` and call `LockTrackId`.
+
+Regression: `RDF_RadarLockAutoTest.Start()`.
+
+### 2.2.1 ESM / anti-radiation aim
+
+Passive receive mode and ARM aim (API only; no weapon prefab):
+
+```c
+sensor.ConfigureMode(ERDF_RadarSensorMode.RDF_RADAR_MODE_ESM, 64);
+
+IEntity ent;
+vector aim;
+bool radiating;
+if (sensor.GetArmAim(ent, aim, radiating) && radiating)
+{
+    // 制导读 aim；辐射源 SetEmitting(false) 后自动丢锁
+}
+
+sensor.LockArmTrackId(trackId); // 仅辐射源航迹
+// RDF_RadarEmitterRegistry.IsEmitting(ent);
+```
+
+Standalone regression: `RDF_RadarEsmArmAutoTest.Start()`.
+
+### 2.2.2 RWR (illuminated / locked)
+
+Active radar scans write threats into `RDF_RadarRwr`. Query each frame on the vehicle:
+
+```c
+if (RDF_RadarRwr.HasLockWarning(owner))
+{
+    // 锁定告警音 / HUD
+}
+else if (RDF_RadarRwr.HasSearchWarning(owner))
+{
+    // 搜索照射提示
+}
+```
+
+`RDF_RadarComponent.HasRwrLockWarning()` is equivalent for the owner entity.  
+Regression: `RDF_RadarRwrAutoTest.Start()`.
+
+### 2.3 Weapon engagement: Reforger weapon system
+
+RDF provides lock aim points and a **sample guidance** path (`RDF_RadarRocketGuidance` /
+`RDF_RadarRocketLockFireAutoTest`: Hydra70 BOOST → MIDCOURSE → TERMINAL PN),
+but no generic weapon prefab. Production weapons still live in your **weapon/projectile scripts**:
+
+1. **Acquire target**: `GetLockedTarget()` → `IEntity` or world position from the lock manager;
+   ESM/ARM use `GetArmAim()`.
+2. **Guide**: follow `RDF_RadarRocketGuidance.Update`, or compute heading each frame from
+   missile pose vs target position/velocity. Unguided weapons can use the lock as aim assist.
+3. **Fuze / hit**: decide by target entity / AABB / range radius.
+
+Standalone regression: `RDF_RadarRocketLockFireAutoTest.Start()` (not in `StartAll`).
+
+---
+
+## 3. RDF classes you need (summary)
+
+- **Scan**: `RDF_RadarSensor`; use `ConfigureMode` or custom
+  `RDF_RadarSettings`; on entities use `RDF_RadarComponent`.
+- **Filter / track**: filter `GetPlots()` by `ERDF_RadarTargetType`, or read
+  smoothed tracks from `GetTracks()`.
+- **Display (optional)**: `RDF_RadarAutoRunner` / `RDF_RadarHUD` are demo-only;
+  product code can hold Sensor alone.
+
+---
+
+## 4. Optional simplifications
+
+- For “nearest vehicle in a cone” auto-lock, cut rays (e.g. 64–128), use a 30° cone, and 0.1–0.2 s scan interval is usually enough.
+- Without Doppler/SNR needs, LiDAR scanner + entity filter is simpler.
+- Start the lock manager as single-target lock; add multi-track or A/B switch later.
+
+Along this path you close the loop “vehicle scan → lock vehicle → weapon lock & engage”; RDF LiDAR or a custom entity-first module answers “who is visible, range, entity”, and you answer “whom to lock, how the weapon follows”.
+
+---
+
+## 5. Simplified approach: query entities first, then ray for visibility (“entity-first” radar)
+
+This is the **inverse** of the current LiDAR/radar detection order — better when you only care about vehicles, and often cheaper.
+
+### 5.1 Comparison
+
+| Approach | Order | Cost scale | Fit |
+|----------|-------|------------|-----|
+| **Existing LiDAR** | **Rays first, then results**: fire many directional rays; whoever is hit is detected — “detect to discover”. | O(ray count) TraceMove | Point clouds / angular resolution, terrain returns, multi-target with no prior |
+| **Simplified radar (your idea)** | **Entities first, then visibility**: engine query for entities in scan radius, then **one ray per candidate** for visibility. | O(entities in range) TraceMove | Discrete targets (vehicles, etc.); cheaper when entity count ≪ ray count |
+
+In short: **LiDAR discovers by shooting rays; simplified radar already knows candidates in range, then rays decide who is visible.**
+
+### 5.2 Implementation sketch (Reforger/Enfusion)
+
+1. **Entities in range**: query via `BaseWorld` (`GetGame().GetWorld()`), e.g.:
+   - `QueryEntitiesBySphere(origin, range)`: all entities in scan radius;
+   - `QueryEntitiesByAABB(boxMin, boxMax)`: axis-aligned box;
+   - `QueryEntitiesByOBB(...)`: oriented box for sector/cone (heading-limited scan);
+   - if only sphere/AABB exist, further filter by azimuth/elevation to keep sector candidates.
+2. **Filter**: drop self and unwanted types (keep vehicles/aircraft only) → candidate list.
+3. **Visibility**: ray-test occlusion per candidate (below); if visible, add to detections.
+4. **Output**: “visible entity + range + hit point”, shape-compatible with RDF samples (`m_Entity`, `m_Distance`, `m_HitPos`); lock/HUD/weapon wiring matches section 2.
+
+Then **ray count = candidates in range × rays per entity** (below); at modest vehicle density this is usually still below a full multi-ray sector scan.
+
+### 5.2.1 Partial exposure (“still detectable if only part shows”)
+
+A **single ray** to the target **center** fails when only part of the target faces the radar (most of the hull behind wall/terrain) — the center ray hits wall/terrain first → **false miss**. Real radar detects any useful reflecting facet.
+
+Do **multiple rays per candidate**, not one:
+
+- **Sample points**: several AABB points — 8 corners, or 6 face centers, or “center + faces toward the radar”. One ray from radar origin to each.
+- **Decision**: if **any** ray hits **that entity** first (`TraceMove` hit entity == candidate) and the hit is on its geometry (or range is sensible), mark visible; use the **nearest** hit’s `hitPos`/`distance` (or center ray if visible, else nearest visible point).
+- **Cost**: 3–8 rays/entity is a common tradeoff (e.g. 4: center + 3 faces, or 8 AABB corners). Total Trace = candidates × rays/entity; e.g. 20 × 5 ≈ 100, still far below a 512-ray sector scan, while covering partial exposure.
+
+To save more rays: try **one center ray** first; if visible, stop; if blocked, fire extra AABB corner/face rays (“single ray first, multi-ray on demand”).
+
+### 5.3 Relation to RDF
+
+- This path **does not require** RDF multi-ray scanning; implement as a **lightweight scan module** (entity-first util/component).
+- To reuse RDF HUD and lock logic, emit lists compatible with `RDF_LidarSample` (`m_Entity`, `m_Hit`=true, `m_Distance`, `m_HitPos`, `m_Dir`, …) and feed `RDF_LidarHUD.FeedSamples()` plus the same lock pipeline.
+
+Summary: **engine entity query in scan radius + per-entity visibility rays** is simplified detection — know “what might be there”, then “who is actually seen” — a good fit for vehicle/weapon lock.

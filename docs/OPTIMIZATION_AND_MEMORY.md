@@ -1,10 +1,14 @@
+> **Languages / 语言**: [中文](#中文) · [English](#english)
+
+## 中文
+
 # LiDAR 优化与内存防溢出方案
 
 本文档针对 **LiDAR** 模块的优化与**内存溢出防护**。雷达 / DEM 性能要点见 [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md) 与 [DEM.md](DEM.md)。
 
 ---
 
-## 一、内存风险点概览
+### 一、内存风险点概览
 
 | 风险点 | 位置 | 现象 | 优先级 |
 |--------|------|------|--------|
@@ -18,9 +22,9 @@
 
 ---
 
-## 二、已实施与建议的防护与优化
+### 二、已实施与建议的防护与优化
 
-### 2.1 网络层：防止无界增长（高优先级）
+#### 2.1 网络层：防止无界增长（高优先级）
 
 - **m_PayloadBuffers 上限**  
   - 已有 10 秒超时清理，建议增加**数量上限**（如 16）：超过时丢弃最旧 buffer，避免异常情况下无限堆积导致内存溢出。  
@@ -30,7 +34,7 @@
   - 对 `RDF_LidarNetworkScanner` 的静态列表 `s_Pollers` 设**上限**（如 8）：达到上限时拒绝新 `ScanAsync` 或丢弃最旧 poller，防止因频繁发起异步扫描导致列表与回调堆积。  
   - 实施：在 `ScanAsync` 入口检查 `s_Pollers.Count()`，若已达上限则直接 fallback 本地扫描并回调，不加入新 poller。
 
-### 2.2 可视化：每帧分配与规模上限（中优先级）
+#### 2.2 可视化：每帧分配与规模上限（中优先级）
 
 - **RDF_LidarVisualizer**  
   - **Shape 数量**：`estShapes = 16 + rays * (segs + extraPoint)` 在 `rays` 很大时（如 10 万）会申请大量 Shape，易导致峰值内存与帧率崩溃。  
@@ -42,7 +46,7 @@
   - **Blip 数量上限**：已有 `maxBlips = 512` 的步长降采样，建议同时**硬性限制**单帧插入的 blip 命令数量（如 1024），防止异常大样本导致 HUD 分配过多 `PolygonDrawCommand` 与 `array<float>`。  
   - 可选：对 blip 用**对象池**复用 `PolygonDrawCommand` 与顶点数组，减少 GC 压力。
 
-### 2.3 扫描与导出：降低分配频率（中/低优先级）
+#### 2.3 扫描与导出：降低分配频率（中/低优先级）
 
 - **RDF_LidarScanner.Scan**  
   - 当前每射线一个 `new RDF_LidarSample()`，由引擎/GC 回收。若未来在极高射线数（如 50 万+）下出现峰值内存或卡顿，可考虑**样本对象池**：预分配或复用固定大小的 `RDF_LidarSample` 数组，Scan 时只填字段不 new，用完后归还池。  
@@ -51,7 +55,7 @@
 - **RDF_LidarExport.ParseCSVToSamples**  
   - 在 `foreach (string part : parts)` 内复用临时数组：**单例 `array<string> vals`** 在循环内每轮 `vals.Clear()` 后重复使用；**单例 `array<string> f`** 同样在每 part 前 `Clear()` 再 `part.Split("|", f, false)`，避免每 part 两次 `new array<string>`，显著减少大 CSV 解析时的分配次数。
 
-### 2.4 GetLastSamples 与调用方（低优先级）
+#### 2.4 GetLastSamples 与调用方（低优先级）
 
 - **GetLastSamples** 每次返回**防御性拷贝**，会 `new array` 并遍历插入。若调用方（如导出、HUD）在每帧或高频率调用，建议：  
   - 导出/HUD 改为使用**回调或单次拉取**，避免每帧调用；或  
@@ -60,17 +64,17 @@
 
 ---
 
-## 三、配置与运行时可调上限建议
+### 三、配置与运行时可调上限建议
 
 在 `RDF_LidarSettings` 或全局配置中可增加（或文档化）以下**安全上限**，防止误配或异常数据导致 OOM：
 
-- **m_RayCount**：运行时 clamp 到例如 `[1, 100000]`（当前仅最小值 1，无上限）。  
+- **m_RayCount**：`Validate()` 保证 ≥1；默认由 `m_MaxRayCount=4096` 软封顶（`0` = 不额外限制）。  
 - **单次扫描样本数**：若从网络或文件加载的 CSV 单帧样本数超过阈值（如 100000），可拒绝或截断并打日志。  
 - **HUD PPI blip 数**：单帧绘制 blip 数不超过 1024（或可配置）。
 
 ---
 
-## 四、实施检查清单
+### 四、实施检查清单
 
 - [x] 文档：本优化与内存防溢出方案（本文档）
 - [x] 代码：`m_PayloadBuffers` 数量上限（16）+ 超限丢弃最旧
@@ -78,11 +82,104 @@
 - [x] 代码：`RDF_LidarHUD.UpdatePPI` 复用 `m_AllCmds` + blip 数硬上限（1024）
 - [x] 代码：`ParseCSVToSamples` 复用 `vals`/`f` 临时数组
 - [x] 代码：Visualizer `MAX_DRAW_RAYS = 50000`，绘制与 Reserve 均受上限约束
-- [ ] 文档：在 API.md 或 DEVELOPMENT.md 中说明“射线数建议上限”与“避免每帧 GetLastSamples”（可选）
+- [x] 文档：在 API.md / OPTIMIZATION 中说明 `m_MaxRayCount` 软封顶与射线数建议
 
 ---
 
-## 五、与 C++/引擎差异提醒
+### 五、与 C++/引擎差异提醒
 
 - Enforce 无手动 `delete`，依赖引用计数与 GC。**减少分配与对象数量**是减轻内存与溢出风险的主要手段。  
 - 大数组（如数万条样本）的复制与传递应尽量避免在热路径重复进行；复用 buffer、设上限、降采样比“先全部分配再依赖 GC”更安全。
+
+---
+
+## English
+
+# LiDAR Optimization & Memory Overflow Prevention
+
+This document covers **LiDAR** module optimization and **memory overflow prevention**. Radar / DEM performance notes: [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md) and [DEM.md](DEM.md).
+
+---
+
+### 1. Memory risk overview
+
+| Risk | Location | Symptom | Priority |
+|------|----------|---------|----------|
+| Unbounded array growth | `RDF_LidarNetworkComponent.m_PayloadBuffers` | Buffers accumulate when shards are incomplete or cleanup lags | High |
+| Unbounded poller list | `RDF_LidarNetworkScanner.s_Pollers` | Piles up when `ScanAsync` is called frequently without completing | High |
+| Heavy per-frame allocation | `RDF_LidarVisualizer.Render` | Per-frame `Clear` + many `Shape`s + multiple `trisHits/trisMisses` arrays when batching | Medium |
+| New array every frame | `RDF_LidarHUD.UpdatePPI` | Each time `m_AllCmds = new array`, plus per-blip `array<float>` and `PolygonDrawCommand` | Medium |
+| Scan hot path | `RDF_LidarScanner.Scan` | `new RDF_LidarSample()` per ray; object count grows linearly with ray count | Medium |
+| Temp arrays during parse | `RDF_LidarExport.ParseCSVToSamples` | New `array<string> f` and `vals` per part; many allocations with large samples | Low |
+| GetLastSamples copy | `RDF_LidarVisualizer.GetLastSamples` | Each call `new array` and full copy; frequent calls stress GC | Low |
+
+---
+
+### 2. Implemented & recommended protections / optimizations
+
+#### 2.1 Network layer: prevent unbounded growth (high priority)
+
+- **m_PayloadBuffers cap**  
+  - 10-second timeout cleanup already exists; recommend adding a **count cap** (e.g. 16): drop the oldest buffer when exceeded, to avoid unbounded growth and OOM in abnormal cases.  
+  - Implementation: define `RDF_MAX_PAYLOAD_BUFFERS = 16` in `RDF_LidarNetworkComponent`; before inserting a new buffer, if `m_PayloadBuffers.Count() >= RDF_MAX_PAYLOAD_BUFFERS`, remove the oldest item then insert.
+
+- **s_Pollers cap**  
+  - Cap the static list `s_Pollers` on `RDF_LidarNetworkScanner` (e.g. 8): when at the limit, reject new `ScanAsync` or drop the oldest poller, preventing list/callback pile-up from frequent async scans.  
+  - Implementation: at the `ScanAsync` entry, check `s_Pollers.Count()`; if at the limit, fall back to local scan and callback without adding a new poller.
+
+#### 2.2 Visualization: per-frame allocation & scale caps (medium priority)
+
+- **RDF_LidarVisualizer**  
+  - **Shape count**: `estShapes = 16 + rays * (segs + extraPoint)` can allocate huge numbers of Shapes when `rays` is large (e.g. 100k), risking peak memory and frame-rate collapse.  
+  - Recommendation: cap **rays that participate in drawing** or **Shape count** (e.g. 50,000 rays or 200,000 Shapes); beyond that, scan without drawing, or downsample then draw.  
+  - **DrawBatchedMeshes**: each frame `new array<ref array<vector>> trisHits/trisMisses` plus one `array<vector>` per bucket; total vertices ≈ rays × segs × 6. Cap `rays` or total vertices; skip batching or downsample when exceeded.
+
+- **RDF_LidarHUD.UpdatePPI**  
+  - **Reuse m_AllCmds**: do not do `m_AllCmds = new array` every frame; `m_AllCmds.Clear()` and reuse, then refill static commands + this frame’s blip commands, avoiding a large allocation about every 0.5s.  
+  - **Blip count cap**: step downsampling with `maxBlips = 512` already exists; also **hard-limit** blip commands inserted per frame (e.g. 1024) so abnormally large samples do not allocate too many `PolygonDrawCommand` and `array<float>` in the HUD.  
+  - Optional: **object pool** for blips reusing `PolygonDrawCommand` and vertex arrays to reduce GC pressure.
+
+#### 2.3 Scan & export: reduce allocation frequency (medium / low priority)
+
+- **RDF_LidarScanner.Scan**  
+  - Currently one `new RDF_LidarSample()` per ray, reclaimed by engine/GC. If peak memory or hitching appears at extreme ray counts (e.g. 500k+), consider a **sample object pool**: preallocate or reuse a fixed-size `RDF_LidarSample` array, fill fields without `new` during Scan, return to the pool when done.  
+  - Short term: document and configure a **recommended ray-count cap** (e.g. 100,000) to avoid misconfiguration OOM.
+
+- **RDF_LidarExport.ParseCSVToSamples**  
+  - Reuse temp arrays inside `foreach (string part : parts)`: a **singleton `array<string> vals`** cleared each iteration and reused; a **singleton `array<string> f`** likewise `Clear()` before each part then `part.Split("|", f, false)`, avoiding two `new array<string>` per part and cutting allocations on large CSV parses.
+
+#### 2.4 GetLastSamples and callers (low priority)
+
+- **GetLastSamples** returns a **defensive copy** each time (`new array` + insert loop). If callers (export, HUD) invoke it every frame or at high frequency:  
+  - Prefer **callback or one-shot pull** for export/HUD instead of per-frame calls; or  
+  - Provide `GetLastSamplesView()` (if the engine supports a read-only view) to avoid copies; or  
+  - Document clearly: “avoid calling GetLastSamples every frame.”
+
+---
+
+### 3. Suggested configurable / runtime safety caps
+
+In `RDF_LidarSettings` or global config, add (or document) these **safety caps** so misconfiguration or bad data does not cause OOM:
+
+- **m_RayCount**: `Validate()` ensures ≥1; soft-capped by default via `m_MaxRayCount=4096` (`0` = no extra limit).  
+- **Samples per scan**: if CSV samples loaded from network or file for a single frame exceed a threshold (e.g. 100,000), reject or truncate and log.  
+- **HUD PPI blip count**: blips drawn per frame ≤ 1024 (or configurable).
+
+---
+
+### 4. Implementation checklist
+
+- [x] Docs: this optimization & memory-overflow prevention plan (this document)
+- [x] Code: `m_PayloadBuffers` count cap (16) + drop oldest when over limit
+- [x] Code: `s_Pollers` count cap (8) + fallback to local scan when over limit
+- [x] Code: `RDF_LidarHUD.UpdatePPI` reuses `m_AllCmds` + hard blip cap (1024)
+- [x] Code: `ParseCSVToSamples` reuses `vals`/`f` temp arrays
+- [x] Code: Visualizer `MAX_DRAW_RAYS = 50000`; draw and Reserve both respect the cap
+- [x] Docs: note `m_MaxRayCount` soft cap and ray-count guidance in API.md / OPTIMIZATION
+
+---
+
+### 5. Notes vs C++ / engine differences
+
+- Enforce has no manual `delete`; it relies on refcounting and GC. **Reducing allocations and object count** is the main way to cut memory and overflow risk.  
+- Avoid repeatedly copying/passing large arrays (e.g. tens of thousands of samples) on hot paths; reusing buffers, setting caps, and downsampling is safer than “allocate everything then rely on GC.”

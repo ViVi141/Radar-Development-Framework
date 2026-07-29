@@ -58,6 +58,22 @@
 - 新增 `RDF_RadarPerfAutoTest`：弹道微基准 + 轻载/重载（UAZ×8）扫描 avg/P95
 - `StartAll` / `StartAllRealistic` 接入 Perf；报告 `$profile:RDF/RadarTests/radar_perf_autotest_*.txt`
 
+> **Languages / 语言**: Historical entries are primarily **中文**. New entries should include **English summary bullets**. Full policy: [I18N.md](I18N.md).  
+> 历史条目以中文为主；新条目应附英文摘要要点。完整约定见 [I18N.md](I18N.md)。
+
+## 2026-07-28 — Docs bilingual (EN + 中文)
+
+- EN: Document language policy (`docs/I18N.md`); major docs now ship English + 中文 sections
+- 中文：文档语言约定见 `docs/I18N.md`；入口与核心文档改为中英双语对照
+
+## 2026-07-28 — 文档与代码对齐
+
+- EN: README / TODO / DEVELOPMENT / API / RADAR_* / OPTIMIZATION / VEHICLE_LOCK / tools DEM aligned to code — ESM·RWR·Rocket·MapOverlay, SURF JSON publish path, CA/GO/SO-CFAR, dual ShellFire error bands, PPI panel size, LiDAR layout HUD, `m_MaxRayCount` soft cap, Sensor RWR wrapper APIs, Python pack/signature script inventory
+- 中文：README / TODO / DEVELOPMENT / API / RADAR_* / OPTIMIZATION / VEHICLE_LOCK / tools DEM：
+  按当前代码补齐 ESM·RWR·Rocket·MapOverlay、SURF JSON 发布路径、CA/GO/SO-CFAR、
+  双档 ShellFire 误差带、PPI 面板尺寸、LiDAR layout HUD、`m_MaxRayCount` 软封顶、
+  Sensor RWR 包装 API、Python 打包/特征脚本清单
+
 ## 2026-07-29 — RCS 方位加入俯仰
 
 - `RDF_RadarRcsModel`：`ElevationFactor` / `AspectFactor3D` / `AspectRcsFromExtents3D`（鼻锥·侧向·俯视投影）
