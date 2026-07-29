@@ -132,7 +132,7 @@ Realistic：`RDF_RadarAutoTestSuite.StartAllRealistic()`
 
 ### 测试
 
-- [x] `AutoTestSuite` 5/5（Ballistics / DEM / Lock / Airborne / ShellFire）
+- [x] `AutoTestSuite` 6/6（Ballistics / DEM / Lock / Airborne / ShellFire / Perf）
 - [x] 测试不加辐射源 / 抬 RCS / 强制写表
 
 ### DEM / 仓库

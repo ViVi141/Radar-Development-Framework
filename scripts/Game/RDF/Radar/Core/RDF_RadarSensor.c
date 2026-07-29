@@ -62,6 +62,8 @@ class RDF_RadarSensor
     protected float m_LastScanWallS;
     protected float m_LastScanTimeS;
     protected int m_ScanSerial;
+    // Wall-clock cost of the last ScanOnce (local or network path).
+    protected float m_LastScanDurationMs;
 
     void RDF_RadarSensor()
     {
@@ -78,6 +80,7 @@ class RDF_RadarSensor
         m_LastScanWallS = -1000.0;
         m_LastScanTimeS = -1000.0;
         m_ScanSerial = 0;
+        m_LastScanDurationMs = 0.0;
     }
 
     void SetEnabled(bool enabled)
@@ -354,6 +357,15 @@ class RDF_RadarSensor
         RDF_RadarScattererRegistry.InvalidateDemSamples();
     }
 
+    // Load whole SURF/DEM into RAM (not counted in GetLastScanDurationMs when
+    // called before ScanOnce; ScanOnce also preloads before its wall clock).
+    // No-op on pure clients (RplMode.Client / !Replication.IsServer).
+    void EnsureDemPreloaded()
+    {
+        if (m_Scanner)
+            m_Scanner.EnsureDemPreloaded();
+    }
+
     string GetDemStatusShort()
     {
         if (!m_Scanner)
@@ -440,6 +452,12 @@ class RDF_RadarSensor
     int GetScanSerial()
     {
         return m_ScanSerial;
+    }
+
+    // Milliseconds for the most recent ScanOnce (wall clock).
+    float GetLastScanDurationMs()
+    {
+        return m_LastScanDurationMs;
     }
 
     int CountDetectedPlots()
@@ -532,6 +550,10 @@ class RDF_RadarSensor
         m_ScanSerial = m_ScanSerial + 1;
         m_Plots.Clear();
 
+        // Preload before the wall clock so a 10–20s SURF decode is not "scanMs".
+        EnsureDemPreloaded();
+
+        int wallStartMs = System.GetTickCount();
         bool usedNetwork = false;
         vector trackOrigin = "0 0 0";
         vector forward = "1 0 0";
@@ -617,6 +639,11 @@ class RDF_RadarSensor
         m_Context.m_UsedNetwork = usedNetwork;
 
         PublishRwrThreats(subject, trackOrigin, worldTimeS);
+
+        int wallEndMs = System.GetTickCount();
+        m_LastScanDurationMs = wallEndMs - wallStartMs;
+        if (m_LastScanDurationMs < 0.0)
+            m_LastScanDurationMs = 0.0;
 
         if (m_Handler)
             m_Handler.OnScanComplete(this, m_Plots, m_Tracker, m_Context);
@@ -737,6 +764,7 @@ class RDF_RadarSensor
             + " | plots=" + CountDetectedPlots().ToString()
             + " tracks=" + CountConfirmedTracks().ToString()
             + " wlr=" + CountWlrFixes().ToString()
+            + " scanMs=" + (Math.Round(m_LastScanDurationMs * 10.0) * 0.1).ToString()
             + reuse
             + lock;
     }

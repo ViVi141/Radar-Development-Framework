@@ -123,6 +123,9 @@ scripts/Game/RDF/Radar/
     ├── RDF_RadarAutoTest.c             DEM 杂波回归
     ├── RDF_RadarBallisticsAutoTest.c   弹道/WLR 数学回归
     ├── RDF_RadarShellFireAutoTest.c    实弹 Spawn+Launch + WLR
+    ├── RDF_RadarPerfAutoTest.c         扫描/弹道墙钟开销（同步 ScanOnce）
+    ├── RDF_RadarPlayAutoTest.c         游玩路径：HUD+发现+DEM+漫步负载
+    ├── RDF_RadarStressAutoTest.c       性能压测：重负载 soak（不进 StartAll）
     ├── RDF_RadarAirborneScanTest.c     空中目标扫描
     └── RDF_RadarLockAutoTest.c         载具锁定状态机演示/回归
 ```

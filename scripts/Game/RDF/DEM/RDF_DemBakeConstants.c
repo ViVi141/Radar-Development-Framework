@@ -21,6 +21,18 @@ class RDF_DemBakeConstants
     static const string DEM_SURF_CHUNKS_DIR = "surf_chunks/";
     static const string DEM_SURF_MAGIC = "RDF_SURF_JSON_V1";
 
+    // When true, runtime loads the whole world surface/DEM into RAM
+    // (SURF uses a compact flat class map; other packs fill the tile cache).
+    static const bool RUNTIME_DEM_PRELOAD_ALL = true;
+    // Authority peers warm-preload at game start (before radar is used).
+    static const bool RUNTIME_DEM_PRELOAD_AT_GAME_START = true;
+    // Spread SURF decode across frames (avoids a 10s+ hitch).
+    static const bool RUNTIME_DEM_PRELOAD_ASYNC = true;
+    // Max wall time spent decoding SURF per pump slice (ms).
+    static const int RUNTIME_DEM_PRELOAD_FRAME_BUDGET_MS = 6;
+    // Delay so world file / replication mode are ready (ms).
+    static const int RUNTIME_DEM_PRELOAD_START_DELAY_MS = 2000;
+
     // Grid: change these then delete tiles/ and re-bake for finer DEM.
     // 4 m / 32 = ANNA standard; Fine: CELL_M=2, TILE_CELLS=64; Target: CELL_M=1, TILE_CELLS=128.
     static const float CELL_M = 4.0;

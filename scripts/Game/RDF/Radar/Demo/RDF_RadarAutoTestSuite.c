@@ -54,6 +54,12 @@ class RDF_RadarAutoTestSuite
             RDF_RadarAirborneScanTest.Stop();
         if (RDF_RadarShellFireAutoTest.IsRunning())
             RDF_RadarShellFireAutoTest.Stop();
+        if (RDF_RadarPerfAutoTest.IsRunning())
+            RDF_RadarPerfAutoTest.Stop();
+        if (RDF_RadarPlayAutoTest.IsRunning())
+            RDF_RadarPlayAutoTest.Stop();
+        if (RDF_RadarStressAutoTest.IsRunning())
+            RDF_RadarStressAutoTest.Stop();
     }
 
     protected static void BeginSuite(bool realistic)
@@ -118,8 +124,12 @@ class RDF_RadarAutoTestSuite
                 s_Step.ToString(),
                 s_StepTimeoutS.ToString()), LogLevel.ERROR);
             StopChildTests();
+            RDF_RadarAutoRunner.SetDemoEnabled(false);
+            RDF_RadarAutoRunner.SetHudEnabled(false);
+            RDF_RadarAutoRunner.StopAutoRun();
             s_Running = false;
             s_Step = -1;
+            Print("[RDF Radar AutoTestSuite] aborted by timeout.", LogLevel.ERROR);
             return;
         }
 
@@ -127,15 +137,25 @@ class RDF_RadarAutoTestSuite
             return;
 
         int next = s_Step + 1;
-        if (next > 4)
+        if (next > 6)
         {
-            Print("[RDF Radar AutoTestSuite] done");
-            s_Running = false;
-            s_Step = -1;
+            FinishSuite();
             return;
         }
 
         RunStep(next);
+    }
+
+    protected static void FinishSuite()
+    {
+        // Leave scanner idle: prior steps often restore DemoEnabled, and the
+        // first post-suite DEM/SURF dwell can look like a hang in Workbench.
+        RDF_RadarAutoRunner.SetDemoEnabled(false);
+        RDF_RadarAutoRunner.SetHudEnabled(false);
+        RDF_RadarAutoRunner.StopAutoRun();
+        s_Running = false;
+        s_Step = -1;
+        Print("[RDF Radar AutoTestSuite] done (demo/HUD OFF)");
     }
 
     protected static bool IsStepRunning(int step)
@@ -150,6 +170,10 @@ class RDF_RadarAutoTestSuite
             return RDF_RadarAirborneScanTest.IsRunning();
         if (step == 4)
             return RDF_RadarShellFireAutoTest.IsRunning();
+        if (step == 5)
+            return RDF_RadarPerfAutoTest.IsRunning();
+        if (step == 6)
+            return RDF_RadarPlayAutoTest.IsRunning();
         return false;
     }
 
@@ -160,7 +184,7 @@ class RDF_RadarAutoTestSuite
 
         if (step == 0)
         {
-            Print("[RDF Radar AutoTestSuite] step 1/5 Ballistics");
+            Print("[RDF Radar AutoTestSuite] step 1/7 Ballistics");
             RDF_RadarBallisticsAutoTest.Start();
             RunStep(1);
             return;
@@ -168,29 +192,45 @@ class RDF_RadarAutoTestSuite
 
         if (step == 1)
         {
-            Print("[RDF Radar AutoTestSuite] step 2/5 DEM AutoTest");
+            Print("[RDF Radar AutoTestSuite] step 2/7 DEM AutoTest");
             RDF_RadarAutoTest.Start();
             return;
         }
 
         if (step == 2)
         {
-            Print("[RDF Radar AutoTestSuite] step 3/5 Lock");
+            Print("[RDF Radar AutoTestSuite] step 3/7 Lock");
             RDF_RadarLockAutoTest.Start();
             return;
         }
 
         if (step == 3)
         {
-            Print("[RDF Radar AutoTestSuite] step 4/5 Airborne");
+            Print("[RDF Radar AutoTestSuite] step 4/7 Airborne");
             RDF_RadarAirborneScanTest.Start();
             return;
         }
 
         if (step == 4)
         {
-            Print("[RDF Radar AutoTestSuite] step 5/5 ShellFire");
+            Print("[RDF Radar AutoTestSuite] step 5/7 ShellFire");
             RDF_RadarShellFireAutoTest.Start();
+            return;
+        }
+
+        if (step == 5)
+        {
+            Print("[RDF Radar AutoTestSuite] step 6/7 Perf");
+            // Perf is fully synchronous; continue to Play without waiting CallLater.
+            RDF_RadarPerfAutoTest.Start();
+            RunStep(6);
+            return;
+        }
+
+        if (step == 6)
+        {
+            Print("[RDF Radar AutoTestSuite] step 7/7 Play");
+            RDF_RadarPlayAutoTest.Start();
             return;
         }
     }

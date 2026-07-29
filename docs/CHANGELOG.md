@@ -1,5 +1,63 @@
 # CHANGELOG
 
+## 2026-07-29 — DEM 异步分帧预载
+
+- `RUNTIME_DEM_PRELOAD_ASYNC`：按约 6ms/帧解码 SURF，避免开局卡死 10s+
+- 扫图路径不再同步整图解码；未完成时走原 LRU，完成后切共享 RAM
+- Stress/Play 若需立刻 resident，可 `FlushAsyncWarmPreload`
+
+## 2026-07-29 — DEM 开局预热
+
+- 权威端 `OnGameStart` +2s 调用 `RDF_DemRuntimeCache.WarmPreloadCurrentWorld`
+- SURF 写入进程级共享 RAM；之后任意 Scanner `EnsurePreloaded` 直接复用（无需等首次开雷达）
+
+## 2026-07-29 — DEM 预载仅权威端
+
+- `RDF_DemRuntimeCache.EnsurePreloaded`：`RplMode.Client` / `!Replication.IsServer()` 跳过
+- 单机 / Listen / Dedicated 仍预载；纯客户端收网络 plots，不占 SURF RAM
+
+## 2026-07-29 — DEM 预载不计扫时
+
+- `EnsureDemPreloaded()` 在 `ScanOnce` 墙钟之前执行；Stress 启动时显式预载后再开 soak
+- 压测采样丢弃 >1000ms 的单次异常，避免预载污染 tickAvg
+
+## 2026-07-29 — DEM/SURF 全图预载入 RAM
+
+- `m_DemPreloadAll`（默认开）：首次扫描把整图载入内存
+- SURF：扁平地表类网格（避免上万 tile 对象）；状态 `SURF RAM`
+- 其它包：整图填入 tile cache；扫描中不再因换 tile 读盘/解析 JSON
+
+## 2026-07-29 — Stress AutoTest（性能压测）
+
+- 新增 `RDF_RadarStressAutoTest`（独立，不进 `StartAll`）：UAZ×24 + Mi-8×3、杂波×1.0、180° 搜索、Origin 强漫步
+- Registry 预注入负载；度量 scan/tick avg·P95·max + hitch≥16/33ms
+- 报告 `$profile:RDF/RadarTests/radar_stress_autotest_*.txt`
+
+## 2026-07-29 — Play AutoTest：地面可检
+
+- `DemClutterScale=0.25`（全量 1.0 会把地面蒙皮压到 SNR≪0）
+- 地面俯仰瓣 + 更近 UAZ 布置；warmup 后再 Origin 漫步
+- 日志增加 `groundSeen` / discovery 计数
+
+## 2026-07-29 — Play AutoTest（贴近游玩路径）
+
+- 新增 `RDF_RadarPlayAutoTest`：AutoRunner Tick + HUD + showcase + DEM 杂波 + 正常发现（不 Registry 注入）
+- 负载：UAZ×6 + 绕飞 Mi-8；`OriginOffset` 漫步逼 DEM 换 tile
+- 度量：`scanMs` + `RadarTick` 墙钟（含 HUD/可视化）；报告 `$profile:RDF/RadarTests/radar_play_autotest_*.txt`
+- `StartAll` / `StartAllRealistic` 末步改为 **7/7 Play**（Perf 仍为 6/7）
+
+## 2026-07-29 — Perf：结束后强制空闲（防 DEM 假死）
+
+- Perf / Suite 结束后不再恢复 Demo/HUD；避免第一次 SURF/DEM dwell 像卡住
+- Suite 在同步 Perf 后立刻进入下一步 / `done`（不依赖 Debugger 下可能暂停的 CallLater）
+- HEAVY：Registry 注入 UAZ、单独 DEM warm scan；报告增加 batchAvgMs
+
+## 2026-07-29 — AutoTest：性能开销
+
+- `RDF_RadarSensor.GetLastScanDurationMs()`：每 dwell 墙钟耗时
+- 新增 `RDF_RadarPerfAutoTest`：弹道微基准 + 轻载/重载（UAZ×8）扫描 avg/P95
+- `StartAll` / `StartAllRealistic` 接入 Perf；报告 `$profile:RDF/RadarTests/radar_perf_autotest_*.txt`
+
 ## 2026-07-29 — RCS 方位加入俯仰
 
 - `RDF_RadarRcsModel`：`ElevationFactor` / `AspectFactor3D` / `AspectRcsFromExtents3D`（鼻锥·侧向·俯视投影）

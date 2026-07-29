@@ -1,7 +1,29 @@
-// Runtime DEM / surface-class tile cache with bounded LRU + world-space sampling.
+// Runtime DEM / surface-class tile cache with optional whole-world RAM preload.
+// SURF packs use a compact flat surface-class grid; other packs fill the tile map.
 // Prefer live BaseWorld.GetSurfaceY for terrain height when available.
 class RDF_DemRuntimeCache
 {
+    protected static bool s_LoggedClientPreloadSkip;
+    // Shared SURF RAM so game-start warm preload is reused by every scanner.
+    protected static string s_SharedWorldKey;
+    protected static bool s_SharedSurfReady;
+    protected static ref array<int> s_SharedSurfClass;
+    protected static int s_SharedCellsX;
+    protected static int s_SharedCellsZ;
+    // Async warm-preload job (authority-only, frame-budgeted).
+    protected static bool s_AsyncRunning;
+    protected static bool s_AsyncPumpScheduled;
+    protected static string s_AsyncWorldKey;
+    protected static ref RDF_DemRuntimeManifest s_AsyncManifest;
+    protected static ref array<int> s_AsyncWorldSurf;
+    protected static int s_AsyncCellsX;
+    protected static int s_AsyncCellsZ;
+    protected static int s_AsyncTileIz;
+    protected static int s_AsyncEntryIdx;
+    protected static int s_AsyncLoaded;
+    protected static int s_AsyncFailed;
+    protected static int s_AsyncWall0;
+
     protected ref RDF_DemRuntimeManifest m_Manifest;
     protected string m_WorldKey;
     protected bool m_Ready;
@@ -14,6 +36,12 @@ class RDF_DemRuntimeCache
 
     protected int m_MaxTiles = 16;
     protected int m_LoadBudgetRemaining = 2;
+    protected bool m_PreloadAll = RDF_DemBakeConstants.RUNTIME_DEM_PRELOAD_ALL;
+    protected bool m_FullyResident;
+    protected bool m_WorldSurfReady;
+    protected ref array<int> m_WorldSurfClass;
+    protected int m_WorldCellsX;
+    protected int m_WorldCellsZ;
 
     protected int m_StatHits;
     protected int m_StatMisses;
@@ -30,6 +58,7 @@ class RDF_DemRuntimeCache
     }
 
     //--------------------------------------------------------------------------------------------
+    // Drop instance state only. Shared SURF RAM survives so later scanners reuse it.
     void Clear()
     {
         m_Manifest = null;
@@ -37,6 +66,11 @@ class RDF_DemRuntimeCache
         m_Ready = false;
         m_LastInitFailed = false;
         m_LiveHeightOnly = false;
+        m_FullyResident = false;
+        m_WorldSurfReady = false;
+        m_WorldSurfClass = null;
+        m_WorldCellsX = 0;
+        m_WorldCellsZ = 0;
         m_TilesByKey.Clear();
         m_TileTouchOrder.Clear();
         m_TouchCounter = 0;
@@ -44,8 +78,308 @@ class RDF_DemRuntimeCache
     }
 
     //--------------------------------------------------------------------------------------------
+    static void ClearSharedPreload()
+    {
+        CancelAsyncWarmPreload();
+        s_SharedWorldKey = string.Empty;
+        s_SharedSurfReady = false;
+        s_SharedSurfClass = null;
+        s_SharedCellsX = 0;
+        s_SharedCellsZ = 0;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    static bool IsSharedSurfReady()
+    {
+        return s_SharedSurfReady;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    static bool IsAsyncWarmPreloadRunning()
+    {
+        return s_AsyncRunning;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    // Authority-only warm load at game start. Prefers async frame slices (no 10s hitch).
+    static bool WarmPreloadCurrentWorld()
+    {
+        if (!RDF_DemBakeConstants.RUNTIME_DEM_PRELOAD_ALL)
+            return false;
+        if (!IsAuthorityPeer())
+        {
+            if (!s_LoggedClientPreloadSkip)
+            {
+                s_LoggedClientPreloadSkip = true;
+                Print("[RDF DEM Runtime] SURF/DEM RAM preload skipped on client (authority-only)");
+            }
+            return false;
+        }
+        if (s_SharedSurfReady)
+            return true;
+        if (RDF_DemBakeConstants.RUNTIME_DEM_PRELOAD_ASYNC)
+            return StartAsyncWarmPreload();
+
+        RDF_DemRuntimeCache warm = new RDF_DemRuntimeCache();
+        warm.SetPreloadAll(true);
+        if (!warm.InitializeForCurrentWorld())
+        {
+            Print("[RDF DEM Runtime] warm preload deferred: world not ready", LogLevel.WARNING);
+            return false;
+        }
+        return warm.EnsurePreloaded();
+    }
+
+    //--------------------------------------------------------------------------------------------
+    static bool StartAsyncWarmPreload()
+    {
+        if (s_SharedSurfReady)
+            return true;
+        if (s_AsyncRunning)
+            return true;
+        if (!IsAuthorityPeer())
+            return false;
+
+        RDF_DemRuntimeCache warm = new RDF_DemRuntimeCache();
+        warm.SetPreloadAll(true);
+        if (!warm.InitializeForCurrentWorld())
+        {
+            Print("[RDF DEM Runtime] async warm preload deferred: world not ready", LogLevel.WARNING);
+            return false;
+        }
+        if (!warm.m_Manifest || !warm.m_Manifest.m_IsSurfacePack)
+        {
+            // Non-SURF packs: fall back to one-shot tile preload on first Ensure.
+            Print("[RDF DEM Runtime] async warm skipped (not SURF pack); will preload on first use");
+            return false;
+        }
+
+        array<int> worldSurf;
+        int cellsX;
+        int cellsZ;
+        if (!RDF_DemSurfaceJsonPack.BeginWorldSurfaceGrid(
+            warm.m_Manifest, worldSurf, cellsX, cellsZ))
+        {
+            Print("[RDF DEM Runtime] async warm failed to allocate SURF grid", LogLevel.WARNING);
+            return false;
+        }
+
+        s_AsyncManifest = warm.m_Manifest;
+        s_AsyncWorldKey = warm.m_WorldKey;
+        s_AsyncWorldSurf = worldSurf;
+        s_AsyncCellsX = cellsX;
+        s_AsyncCellsZ = cellsZ;
+        s_AsyncTileIz = 0;
+        s_AsyncEntryIdx = 0;
+        s_AsyncLoaded = 0;
+        s_AsyncFailed = 0;
+        s_AsyncWall0 = System.GetTickCount();
+        s_AsyncRunning = true;
+        Print(string.Format(
+            "[RDF DEM Runtime] async SURF warm start world=%1 rows=%2 budgetMs=%3",
+            s_AsyncWorldKey,
+            s_AsyncManifest.m_TileCountZ.ToString(),
+            RDF_DemBakeConstants.RUNTIME_DEM_PRELOAD_FRAME_BUDGET_MS.ToString()));
+        ScheduleAsyncPump();
+        return true;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    static void ScheduleAsyncPump()
+    {
+        if (s_AsyncPumpScheduled)
+            return;
+        if (!GetGame() || !GetGame().GetCallqueue())
+            return;
+        s_AsyncPumpScheduled = true;
+        GetGame().GetCallqueue().CallLater(StaticPumpAsyncWarmPreload, 0, false);
+    }
+
+    //--------------------------------------------------------------------------------------------
+    static void StaticPumpAsyncWarmPreload()
+    {
+        s_AsyncPumpScheduled = false;
+        if (!PumpAsyncWarmPreloadSlice())
+            return;
+        ScheduleAsyncPump();
+    }
+
+    //--------------------------------------------------------------------------------------------
+    // Returns true if more work remains.
+    static bool PumpAsyncWarmPreloadSlice()
+    {
+        if (!s_AsyncRunning || !s_AsyncManifest || !s_AsyncWorldSurf)
+            return false;
+
+        int budgetMs = RDF_DemBakeConstants.RUNTIME_DEM_PRELOAD_FRAME_BUDGET_MS;
+        if (budgetMs < 1)
+            budgetMs = 1;
+        int wall0 = System.GetTickCount();
+        int rowCount = s_AsyncManifest.m_TileCountZ;
+
+        while (s_AsyncTileIz < rowCount)
+        {
+            int entryCount = RDF_DemSurfaceJsonPack.GetSurfRowEntryCount(
+                s_AsyncManifest, s_AsyncTileIz);
+            if (entryCount <= 0)
+            {
+                s_AsyncFailed = s_AsyncFailed + s_AsyncManifest.m_TileCountX;
+                s_AsyncTileIz = s_AsyncTileIz + 1;
+                s_AsyncEntryIdx = 0;
+            }
+            else
+            {
+                while (s_AsyncEntryIdx < entryCount)
+                {
+                    int oneLoaded;
+                    int oneFailed;
+                    RDF_DemSurfaceJsonPack.AppendSurfTileEntry(
+                        s_AsyncManifest,
+                        s_AsyncWorldSurf,
+                        s_AsyncCellsX,
+                        s_AsyncTileIz,
+                        s_AsyncEntryIdx,
+                        oneLoaded,
+                        oneFailed);
+                    s_AsyncLoaded = s_AsyncLoaded + oneLoaded;
+                    s_AsyncFailed = s_AsyncFailed + oneFailed;
+                    s_AsyncEntryIdx = s_AsyncEntryIdx + 1;
+
+                    int elapsed = System.GetTickCount() - wall0;
+                    if (elapsed >= budgetMs)
+                        return true;
+                }
+                s_AsyncTileIz = s_AsyncTileIz + 1;
+                s_AsyncEntryIdx = 0;
+            }
+
+            int rowElapsed = System.GetTickCount() - wall0;
+            if (rowElapsed >= budgetMs)
+                return true;
+        }
+
+        RDF_DemSurfaceJsonPack.ClearRowCache();
+        PublishSharedSurf(s_AsyncWorldKey, s_AsyncWorldSurf, s_AsyncCellsX, s_AsyncCellsZ);
+
+        float totalMs = System.GetTickCount() - s_AsyncWall0;
+        if (totalMs < 0.0)
+            totalMs = 0.0;
+        Print(string.Format(
+            "[RDF DEM Runtime] async SURF warm done world=%1 cells=%2x%3 tilesOk=%4 fail=%5 ms=%6",
+            s_AsyncWorldKey,
+            s_AsyncCellsX.ToString(),
+            s_AsyncCellsZ.ToString(),
+            s_AsyncLoaded.ToString(),
+            s_AsyncFailed.ToString(),
+            (Math.Round(totalMs * 10.0) * 0.1).ToString()), LogLevel.NORMAL);
+
+        s_AsyncRunning = false;
+        s_AsyncManifest = null;
+        s_AsyncWorldSurf = null;
+        s_AsyncWorldKey = string.Empty;
+        s_AsyncEntryIdx = 0;
+        return false;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    static void CancelAsyncWarmPreload()
+    {
+        s_AsyncRunning = false;
+        s_AsyncPumpScheduled = false;
+        s_AsyncManifest = null;
+        s_AsyncWorldSurf = null;
+        s_AsyncWorldKey = string.Empty;
+        s_AsyncTileIz = 0;
+        s_AsyncEntryIdx = 0;
+        s_AsyncLoaded = 0;
+        s_AsyncFailed = 0;
+        RDF_DemSurfaceJsonPack.ClearRowCache();
+    }
+
+    //--------------------------------------------------------------------------------------------
+    // Finish remaining async work synchronously (tests that need resident SURF now).
+    static bool FlushAsyncWarmPreload()
+    {
+        if (s_SharedSurfReady)
+            return true;
+        if (!s_AsyncRunning || !s_AsyncManifest || !s_AsyncWorldSurf)
+            return false;
+
+        int rowCount = s_AsyncManifest.m_TileCountZ;
+        while (s_AsyncTileIz < rowCount)
+        {
+            int entryCount = RDF_DemSurfaceJsonPack.GetSurfRowEntryCount(
+                s_AsyncManifest, s_AsyncTileIz);
+            if (entryCount <= 0)
+            {
+                s_AsyncFailed = s_AsyncFailed + s_AsyncManifest.m_TileCountX;
+                s_AsyncTileIz = s_AsyncTileIz + 1;
+                s_AsyncEntryIdx = 0;
+                continue;
+            }
+
+            while (s_AsyncEntryIdx < entryCount)
+            {
+                int oneLoaded;
+                int oneFailed;
+                RDF_DemSurfaceJsonPack.AppendSurfTileEntry(
+                    s_AsyncManifest,
+                    s_AsyncWorldSurf,
+                    s_AsyncCellsX,
+                    s_AsyncTileIz,
+                    s_AsyncEntryIdx,
+                    oneLoaded,
+                    oneFailed);
+                s_AsyncLoaded = s_AsyncLoaded + oneLoaded;
+                s_AsyncFailed = s_AsyncFailed + oneFailed;
+                s_AsyncEntryIdx = s_AsyncEntryIdx + 1;
+            }
+            s_AsyncTileIz = s_AsyncTileIz + 1;
+            s_AsyncEntryIdx = 0;
+        }
+
+        RDF_DemSurfaceJsonPack.ClearRowCache();
+        PublishSharedSurf(s_AsyncWorldKey, s_AsyncWorldSurf, s_AsyncCellsX, s_AsyncCellsZ);
+
+        float totalMs = System.GetTickCount() - s_AsyncWall0;
+        if (totalMs < 0.0)
+            totalMs = 0.0;
+        Print(string.Format(
+            "[RDF DEM Runtime] async SURF warm flushed world=%1 tilesOk=%2 fail=%3 ms=%4",
+            s_AsyncWorldKey,
+            s_AsyncLoaded.ToString(),
+            s_AsyncFailed.ToString(),
+            (Math.Round(totalMs * 10.0) * 0.1).ToString()), LogLevel.NORMAL);
+
+        s_AsyncRunning = false;
+        s_AsyncManifest = null;
+        s_AsyncWorldSurf = null;
+        s_AsyncWorldKey = string.Empty;
+        s_AsyncEntryIdx = 0;
+        return s_SharedSurfReady;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    void SetPreloadAll(bool preloadAll)
+    {
+        m_PreloadAll = preloadAll;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    bool IsFullyResident()
+    {
+        if (m_WorldSurfReady)
+            return true;
+        return m_FullyResident;
+    }
+
+    //--------------------------------------------------------------------------------------------
     void SetMaxTiles(int maxTiles)
     {
+        // Do not shrink a resident world preload (scanner may still pass LRU=16).
+        if (m_FullyResident || m_WorldSurfReady)
+            return;
+
         m_MaxTiles = Math.Max(1, maxTiles);
         while (m_TilesByKey.Count() > m_MaxTiles)
             EvictOldestTile();
@@ -54,6 +388,11 @@ class RDF_DemRuntimeCache
     //--------------------------------------------------------------------------------------------
     void BeginScan(int loadBudget)
     {
+        if (m_FullyResident || m_WorldSurfReady)
+        {
+            m_LoadBudgetRemaining = 2147483647;
+            return;
+        }
         m_LoadBudgetRemaining = Math.Max(0, loadBudget);
     }
 
@@ -90,6 +429,11 @@ class RDF_DemRuntimeCache
             m_Ready = false;
             m_LiveHeightOnly = false;
             m_Manifest = null;
+            m_FullyResident = false;
+            m_WorldSurfReady = false;
+            m_WorldSurfClass = null;
+            m_WorldCellsX = 0;
+            m_WorldCellsZ = 0;
         }
 
         RDF_DemRuntimeManifest manifest;
@@ -116,6 +460,7 @@ class RDF_DemRuntimeCache
                 m_MaxTiles.ToString(),
                 mode,
                 BoolToLiveFlag(manifest.m_PreferLiveTerrainY)), LogLevel.NORMAL);
+            AdoptSharedSurfIfMatching();
             return true;
         }
 
@@ -140,6 +485,60 @@ class RDF_DemRuntimeCache
     }
 
     //--------------------------------------------------------------------------------------------
+    // True on dedicated / listen host / single-player. Clients must not preload SURF/DEM.
+    static bool IsAuthorityPeer()
+    {
+        if (RplSession.Mode() == RplMode.Client)
+            return false;
+        if (!Replication.IsServer())
+            return false;
+        return true;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    // Load the whole pack into RAM once. Safe to call every scan; no-ops when resident.
+    // Authority-only: pure clients skip (network path does not sample DEM locally).
+    bool EnsurePreloaded()
+    {
+        if (!m_PreloadAll)
+            return false;
+        if (!IsAuthorityPeer())
+        {
+            if (!s_LoggedClientPreloadSkip)
+            {
+                s_LoggedClientPreloadSkip = true;
+                Print("[RDF DEM Runtime] SURF/DEM RAM preload skipped on client (authority-only)");
+            }
+            return false;
+        }
+        if (!InitializeForCurrentWorld())
+            return false;
+        if (m_LiveHeightOnly)
+            return false;
+        if (!m_Manifest)
+            return false;
+        if (m_WorldSurfReady || m_FullyResident)
+            return true;
+        if (AdoptSharedSurfIfMatching())
+            return true;
+        if (s_AsyncRunning)
+            return false;
+
+        if (m_Manifest.m_IsSurfacePack)
+        {
+            // Prefer async: never hitch a scan for a full-world decode.
+            if (RDF_DemBakeConstants.RUNTIME_DEM_PRELOAD_ASYNC)
+            {
+                StartAsyncWarmPreload();
+                return false;
+            }
+            return PreloadSurfaceWorld();
+        }
+
+        return PreloadAllTiles();
+    }
+
+    //--------------------------------------------------------------------------------------------
     bool IsReady()
     {
         return m_Ready && (m_Manifest != null || m_LiveHeightOnly);
@@ -160,6 +559,10 @@ class RDF_DemRuntimeCache
             return "DEM OFF";
         if (m_LiveHeightOnly)
             return "LIVE";
+        if (m_WorldSurfReady)
+            return "SURF RAM";
+        if (m_FullyResident)
+            return "DEM RAM";
         if (m_Manifest && m_Manifest.m_IsSurfacePack)
             return "SURF";
         return "DEM OK";
@@ -169,14 +572,15 @@ class RDF_DemRuntimeCache
     string GetStatsLine()
     {
         return string.Format(
-            "hit=%1 miss=%2 load=%3 fail=%4 evict=%5 budget=%6 liveY=%7",
+            "hit=%1 miss=%2 load=%3 fail=%4 evict=%5 budget=%6 liveY=%7 ram=%8",
             m_StatHits.ToString(),
             m_StatMisses.ToString(),
             m_StatLoads.ToString(),
             m_StatLoadFails.ToString(),
             m_StatEvictions.ToString(),
             m_StatBudgetBlocks.ToString(),
-            m_StatLiveHeight.ToString());
+            m_StatLiveHeight.ToString(),
+            BoolToLiveFlag(IsFullyResident()));
     }
 
     //--------------------------------------------------------------------------------------------
@@ -213,6 +617,9 @@ class RDF_DemRuntimeCache
             m_StatMisses = m_StatMisses + 1;
             return false;
         }
+
+        if (m_WorldSurfReady)
+            return TrySampleWorldSurf(globalIx, globalIz, worldX, worldZ, outSample);
 
         int tileIx = globalIx / m_Manifest.m_TileCells;
         int tileIz = globalIz / m_Manifest.m_TileCells;
@@ -289,6 +696,165 @@ class RDF_DemRuntimeCache
     }
 
     //--------------------------------------------------------------------------------------------
+    protected bool PreloadSurfaceWorld()
+    {
+        if (!m_Manifest || !m_Manifest.m_IsSurfacePack)
+            return false;
+
+        int wall0 = System.GetTickCount();
+        array<int> worldSurf;
+        int cellsX;
+        int cellsZ;
+        int loaded;
+        int failed;
+        if (!RDF_DemSurfaceJsonPack.PreloadWorldSurfaceClasses(
+            m_Manifest, worldSurf, cellsX, cellsZ, loaded, failed))
+        {
+            Print("[RDF DEM Runtime] SURF RAM preload failed", LogLevel.WARNING);
+            return false;
+        }
+
+        m_WorldSurfClass = worldSurf;
+        m_WorldCellsX = cellsX;
+        m_WorldCellsZ = cellsZ;
+        m_WorldSurfReady = true;
+        m_FullyResident = true;
+        m_TilesByKey.Clear();
+        m_TileTouchOrder.Clear();
+
+        PublishSharedSurf(m_WorldKey, worldSurf, cellsX, cellsZ);
+
+        float ms = System.GetTickCount() - wall0;
+        if (ms < 0.0)
+            ms = 0.0;
+        Print(string.Format(
+            "[RDF DEM Runtime] SURF RAM preload world=%1 cells=%2x%3 tilesOk=%4 fail=%5 ms=%6",
+            m_WorldKey,
+            cellsX.ToString(),
+            cellsZ.ToString(),
+            loaded.ToString(),
+            failed.ToString(),
+            (Math.Round(ms * 10.0) * 0.1).ToString()), LogLevel.NORMAL);
+        return true;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected bool AdoptSharedSurfIfMatching()
+    {
+        if (!s_SharedSurfReady || !s_SharedSurfClass)
+            return false;
+        if (m_WorldKey.IsEmpty() || s_SharedWorldKey != m_WorldKey)
+            return false;
+        if (!m_Manifest || !m_Manifest.m_IsSurfacePack)
+            return false;
+
+        m_WorldSurfClass = s_SharedSurfClass;
+        m_WorldCellsX = s_SharedCellsX;
+        m_WorldCellsZ = s_SharedCellsZ;
+        m_WorldSurfReady = true;
+        m_FullyResident = true;
+        m_TilesByKey.Clear();
+        m_TileTouchOrder.Clear();
+        return true;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected static void PublishSharedSurf(
+        string worldKey,
+        notnull array<int> worldSurf,
+        int cellsX,
+        int cellsZ)
+    {
+        s_SharedWorldKey = worldKey;
+        s_SharedSurfClass = worldSurf;
+        s_SharedCellsX = cellsX;
+        s_SharedCellsZ = cellsZ;
+        s_SharedSurfReady = true;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected bool PreloadAllTiles()
+    {
+        if (!m_Manifest)
+            return false;
+
+        int total = m_Manifest.m_TileCountX * m_Manifest.m_TileCountZ;
+        if (total <= 0)
+            return false;
+
+        int wall0 = System.GetTickCount();
+        m_MaxTiles = Math.Max(m_MaxTiles, total);
+        m_LoadBudgetRemaining = 2147483647;
+
+        int loaded = 0;
+        int failed = 0;
+        for (int tileIz = 0; tileIz < m_Manifest.m_TileCountZ; tileIz++)
+        {
+            for (int tileIx = 0; tileIx < m_Manifest.m_TileCountX; tileIx++)
+            {
+                RDF_DemRuntimeTile tile;
+                if (TryGetTile(tileIx, tileIz, tile))
+                    loaded = loaded + 1;
+                else
+                    failed = failed + 1;
+            }
+        }
+
+        m_FullyResident = loaded > 0;
+        float ms = System.GetTickCount() - wall0;
+        if (ms < 0.0)
+            ms = 0.0;
+        Print(string.Format(
+            "[RDF DEM Runtime] DEM RAM preload world=%1 tilesOk=%2 fail=%3 resident=%4 ms=%5",
+            m_WorldKey,
+            loaded.ToString(),
+            failed.ToString(),
+            m_TilesByKey.Count().ToString(),
+            (Math.Round(ms * 10.0) * 0.1).ToString()), LogLevel.NORMAL);
+        return m_FullyResident;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected bool TrySampleWorldSurf(
+        int globalIx,
+        int globalIz,
+        float worldX,
+        float worldZ,
+        out RDF_DemRuntimeCellSample outSample)
+    {
+        outSample = null;
+        if (!m_WorldSurfClass)
+            return false;
+        if (globalIx < 0 || globalIz < 0
+            || globalIx >= m_WorldCellsX
+            || globalIz >= m_WorldCellsZ)
+        {
+            m_StatMisses = m_StatMisses + 1;
+            return false;
+        }
+
+        int idx = globalIz * m_WorldCellsX + globalIx;
+        if (idx < 0 || idx >= m_WorldSurfClass.Count())
+        {
+            m_StatMisses = m_StatMisses + 1;
+            return false;
+        }
+
+        RDF_DemRuntimeCellSample sample = new RDF_DemRuntimeCellSample();
+        sample.m_Valid = true;
+        sample.m_TerrainY = 0.0;
+        sample.m_SurfaceClass = m_WorldSurfClass.Get(idx);
+        sample.m_DensityGcm3 = 0.5;
+        sample.m_NSpans = 1;
+        sample.m_SpanLo.Insert(0.0);
+        sample.m_SpanHi.Insert(0.0);
+        ApplyLiveTerrainY(worldX, worldZ, sample);
+        outSample = sample;
+        m_StatHits = m_StatHits + 1;
+        return true;
+    }
+
+    //--------------------------------------------------------------------------------------------
     protected bool TrySampleLiveOnly(
         float worldX,
         float worldZ,
@@ -361,6 +927,8 @@ class RDF_DemRuntimeCache
     //--------------------------------------------------------------------------------------------
     protected void EnsureCapacityForInsert()
     {
+        if (m_FullyResident)
+            return;
         while (m_TilesByKey.Count() >= m_MaxTiles)
             EvictOldestTile();
     }
@@ -368,6 +936,9 @@ class RDF_DemRuntimeCache
     //--------------------------------------------------------------------------------------------
     protected void EvictOldestTile()
     {
+        if (m_FullyResident)
+            return;
+
         string oldestKey = string.Empty;
         int oldestTouch = 2147483647;
         bool found = false;

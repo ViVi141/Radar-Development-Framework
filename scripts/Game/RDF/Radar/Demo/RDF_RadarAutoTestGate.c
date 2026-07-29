@@ -1,5 +1,5 @@
 // Mutual exclusion for AutoTests that share RDF_RadarAutoRunner.
-// Running DEM / Lock / Air / ShellFire together overwrites the singleton
+// Running DEM / Lock / Air / ShellFire / Play / Stress together overwrites the singleton
 // config and produces false FAIL (clutter=0, acquire=0, tracks=0, etc.).
 class RDF_RadarAutoTestGate
 {

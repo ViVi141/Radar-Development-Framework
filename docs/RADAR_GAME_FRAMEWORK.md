@@ -268,6 +268,13 @@ RDF_RadarAutoTestSuite.StartAll();
 RDF_RadarAutoTestSuite.StartAllRealistic();
 ```
 
+Suite order: Ballistics → DEM → Lock → Air → ShellFire → Perf → **Play**.
+
+Play soak (`RDF_RadarPlayAutoTest.Start()`): AutoRunner + PPI HUD + DEM clutter +
+normal discovery (UAZ×6, orbiting Mi-8, wandering `OriginOffset`). Measures
+`scanMs` and full `RadarTick` wall time. Report:
+`$profile:RDF/RadarTests/radar_play_autotest_<tick>.txt`.
+
 Output:
 
 - console prints phase metrics and final `PASS/FAIL`

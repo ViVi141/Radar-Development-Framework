@@ -9,6 +9,8 @@ class RDF_RadarAutoRunner
     protected static RDF_RadarNetworkAPI s_NetworkAPI;
     // When true, always run the local sensor scanner (ignore network API).
     protected static bool s_ForceLocalScan;
+    // Wall time of the last RadarTick (scan path + HUD/presentation when active).
+    protected static float s_LastTickDurationMs;
 
     protected ref RDF_RadarSensor m_Sensor;
     protected ref RDF_RadarVisualizer m_Visualizer;
@@ -132,6 +134,11 @@ class RDF_RadarAutoRunner
         return GetInstance().m_Running;
     }
 
+    static float GetLastTickDurationMs()
+    {
+        return s_LastTickDurationMs;
+    }
+
     static void SetHudEnabled(bool enabled)
     {
         s_HudEnabled = enabled;
@@ -199,9 +206,14 @@ class RDF_RadarAutoRunner
         if (!m_Sensor)
             m_Sensor = new RDF_RadarSensor();
 
+        int wall0 = System.GetTickCount();
+
         BaseWorld world = GetGame().GetWorld();
         if (!world)
+        {
+            FinishTickTiming(wall0);
             return;
+        }
 
         IEntity subject = RDF_LidarSubjectResolver.ResolveLocalSubject(true);
         if (subject)
@@ -209,7 +221,10 @@ class RDF_RadarAutoRunner
         else
             subject = m_LastSubject;
         if (!subject)
+        {
+            FinishTickTiming(wall0);
             return;
+        }
 
         RDF_RadarNetworkAPI net = RDF_RadarNetworkAPI.Cast(
             subject.FindComponent(RDF_RadarNetworkAPI));
@@ -229,6 +244,7 @@ class RDF_RadarAutoRunner
         {
             // No new scan: keep plot/lock shapes; only fade afterglow + WLR.
             RenderPresentation(subject, false);
+            FinishTickTiming(wall0);
             return;
         }
 
@@ -276,6 +292,15 @@ class RDF_RadarAutoRunner
         }
 
         RenderPresentation(subject, true);
+        FinishTickTiming(wall0);
+    }
+
+    protected void FinishTickTiming(int wall0)
+    {
+        float ms = System.GetTickCount() - wall0;
+        if (ms < 0.0)
+            ms = 0.0;
+        s_LastTickDurationMs = ms;
     }
 
     protected void RenderPresentation(IEntity subject, bool fullDynamic)

@@ -659,7 +659,8 @@ Size: 215 × (header 25 px + PPI 210 px + 2 data rows × 21 px)
 - `RDF_RadarAutoRunner`：持有 Sensor；`StartWithConfig`、`SetMode`、`SetDemoEnabled`、`SetHudEnabled`。
 - `RDF_RadarHUD`：PPI（默认匿名量测色；假目标白；NLOS 青；`m_KeepEntityTruth` 时才用类型色）。
 - `RDF_RadarAutoTestSuite.StartAll()` / `StartAllRealistic()`。
-- 单项：`RDF_RadarAutoTest`、`Ballistics`、`ShellFire`、`AirborneScanTest`、`LockAutoTest`、`ManualDemo`。
+- 单项：`RDF_RadarAutoTest`、`Ballistics`、`ShellFire`、`AirborneScanTest`、`LockAutoTest`、`PerfAutoTest`、`PlayAutoTest`、`StressAutoTest`、`ManualDemo`。
+- 压测（独立）：`RDF_RadarStressAutoTest.Start()`。
 
 ### DEM 运行时（雷达杂波）
 

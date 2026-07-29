@@ -92,6 +92,7 @@ RDF_RadarBallisticsAutoTest.Start();       // 弹道/WLR 数学
 RDF_RadarShellFireAutoTest.Start();        // 实弹放炮 + WLR
 RDF_RadarAirborneScanTest.StartKeepTarget(); // 空中目标 + PPI
 RDF_RadarLockAutoTest.Start();             // 空中目标锁定状态机
+RDF_RadarPerfAutoTest.Start();             // 扫描/弹道性能开销
 ```
 
 各测试的场景与雷达配置：
@@ -103,6 +104,7 @@ RDF_RadarLockAutoTest.Start();             // 空中目标锁定状态机
 | Lock | 1 架 Mi-8 沿视轴 800 m 处飞半径 120 m 跑道（方位摆动 ±8.5°） | `CreateStareSettings` + 20° 火控窄波束 | SEARCH→ACQUIRING→TRACKING→COAST 状态机 |
 | Airborne | 1 架 Mi-8 绕场约 345 m 盘旋 | `CreateSearchSettings` + 40° 波束 | 物理检测 + 按载具分类（emitter 计数必须为 0） |
 | ShellFire | 实发 82 mm 迫击炮弹（RCS 0.01 m²） | `CreateWlrSettings` | 弹丸发现/检测/跟踪 + 反推炮位 |
+| Perf | 轻载 vs 8 辆 UAZ 重载扫描 | light/heavy `CreateSearchSettings` | 弹道微基准 + 平均/P95 扫描墙钟 ms |
 
 测试约定：**不得给被探测物体添加任何探测助攻** —— 不加辐射源标记、不改 RCS、不预先写进散射体表。
 目标必须由发现扫掠自行找到，并靠自身回波被检测。各测试的 `discovered_unaided` 检查即用于守住这条线。

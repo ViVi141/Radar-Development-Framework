@@ -55,7 +55,10 @@ Workbench 中可直接编辑 `.conf`；改完后确保 Resource Browser 仍已 R
 采样时：只要世界已加载，**一律优先用 `GetSurfaceY` 覆盖**烘焙高度（含全量 DEM 回退路径）。
 
 日志：`mode=SURF|LIVE|CSV|JSON|BIN`，`liveY=1`。  
-HUD：`SURF` / `LIVE` / `DEM OK` / `DEM OFF`。
+HUD：`SURF` / `SURF RAM` / `LIVE` / `DEM OK` / `DEM RAM` / `DEM OFF`。  
+默认 `m_DemPreloadAll=true`：权威端把整图 SURF 解码进扁平 RAM（约数十 MB）。  
+开局约 2s 后自动异步预热（约 6ms/帧，不卡死）；纯客户端跳过。  
+扫图时若尚未完成则暂用 LRU。关：`RUNTIME_DEM_PRELOAD_AT_GAME_START` / `RUNTIME_DEM_PRELOAD_ASYNC`。
 
 ## 数据流（开发烘焙）
 

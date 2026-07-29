@@ -326,6 +326,8 @@ class RDF_RadarAutoTest
         cfg.m_ScattererDiscoveryIntervalS = 0.5;
         cfg.m_DemCacheMaxTiles = RDF_DemBakeConstants.RUNTIME_DEM_CACHE_MAX_TILES;
         cfg.m_DemTileLoadsPerScan = RDF_DemBakeConstants.RUNTIME_DEM_LOADS_PER_SCAN;
+        // Keep lazy LRU so budget0 / cache-size phases remain meaningful.
+        cfg.m_DemPreloadAll = false;
         cfg.m_DemClutterScale = 1.0;
         // Default Shorad pencil (2.5°) puts the staggered targets outside the main
         // lobe → patternGain≈0 → SNR=-300 and clutter=0. DEM regression needs

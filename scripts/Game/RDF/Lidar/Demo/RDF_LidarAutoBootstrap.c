@@ -34,6 +34,15 @@ modded class SCR_BaseGameMode
             GetGame().GetCallqueue().CallLater(
                 RdfTryStartDemBake, RDF_DemBakeConstants.START_DELAY_MS, false);
         }
+
+        if (RDF_DemBakeConstants.RUNTIME_DEM_PRELOAD_AT_GAME_START
+            && RDF_DemBakeConstants.RUNTIME_DEM_PRELOAD_ALL)
+        {
+            GetGame().GetCallqueue().CallLater(
+                RdfTryWarmDemPreload,
+                RDF_DemBakeConstants.RUNTIME_DEM_PRELOAD_START_DELAY_MS,
+                false);
+        }
     }
 
     override void EOnFrame(IEntity owner, float timeSlice)
@@ -45,6 +54,12 @@ modded class SCR_BaseGameMode
     protected void RdfTryStartDemBake()
     {
         RDF_DemTileBake.TryStartBake();
+    }
+
+    protected void RdfTryWarmDemPreload()
+    {
+        Print("[RDF DEM Runtime] warm preload at game start (async, ~6ms/frame)...");
+        RDF_DemRuntimeCache.WarmPreloadCurrentWorld();
     }
 
     static void SetBootstrapEnabled(bool enabled)

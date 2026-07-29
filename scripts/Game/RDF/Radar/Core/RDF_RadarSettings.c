@@ -41,6 +41,8 @@ class RDF_RadarSettings
     bool m_EnableDemClutter = true;
     int m_DemCacheMaxTiles = RDF_DemBakeConstants.RUNTIME_DEM_CACHE_MAX_TILES;
     int m_DemTileLoadsPerScan = RDF_DemBakeConstants.RUNTIME_DEM_LOADS_PER_SCAN;
+    // Load whole SURF/DEM pack into RAM on first scan (avoids mid-play tile hitch).
+    bool m_DemPreloadAll = RDF_DemBakeConstants.RUNTIME_DEM_PRELOAD_ALL;
     float m_DemClutterScale = 1.0;
     // When Trace is blocked, still attempt a weakened ground-bounce path.
     bool m_EnableNlosMultipath = true;

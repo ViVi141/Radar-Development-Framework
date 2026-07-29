@@ -92,6 +92,19 @@ class RDF_RadarScanner
             m_DemCache.Clear();
     }
 
+    // Whole-world SURF/DEM RAM load. Prefer calling from Sensor before ScanOnce
+    // wall-clock timing; Scan() also no-ops when already resident.
+    void EnsureDemPreloaded()
+    {
+        if (!m_DemCache || !m_Settings)
+            return;
+        m_DemCache.SetPreloadAll(m_Settings.m_DemPreloadAll);
+        m_DemCache.SetMaxTiles(m_Settings.m_DemCacheMaxTiles);
+        m_DemCache.InitializeForCurrentWorld();
+        if (m_Settings.m_DemPreloadAll)
+            m_DemCache.EnsurePreloaded();
+    }
+
     string GetScattererStatsLine()
     {
         return RDF_RadarScattererRegistry.GetStatsLine();
@@ -148,10 +161,15 @@ class RDF_RadarScanner
         m_LastRange = range;
         if (m_DemCache)
         {
+            m_DemCache.SetPreloadAll(m_Settings.m_DemPreloadAll);
             m_DemCache.SetMaxTiles(m_Settings.m_DemCacheMaxTiles);
             m_DemCache.BeginScan(m_Settings.m_DemTileLoadsPerScan);
             // WLR ground sampling needs DEM even when clutter is off.
             m_DemCache.InitializeForCurrentWorld();
+            // Prefer Sensor.EnsureDemPreloaded() before ScanOnce timing; keep as
+            // safety net if a caller skipped the explicit preload.
+            if (m_Settings.m_DemPreloadAll)
+                m_DemCache.EnsurePreloaded();
             RDF_RadarBallistics.SetDemCache(m_DemCache);
             if (m_Settings.m_UseScattererRegistry)
                 RDF_RadarScattererRegistry.SetDemCache(m_DemCache);

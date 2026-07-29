@@ -217,6 +217,208 @@ class RDF_DemSurfaceJsonPack
         return true;
     }
 
+    // Decode every surf chunk into a flat world-sized surface-class grid (1 int/cell).
+    // Prefer this over caching thousands of RDF_DemRuntimeTile objects.
+    static bool PreloadWorldSurfaceClasses(
+        notnull RDF_DemRuntimeManifest manifest,
+        out array<int> outWorldSurf,
+        out int outCellsX,
+        out int outCellsZ,
+        out int outTilesLoaded,
+        out int outTilesFailed)
+    {
+        outWorldSurf = null;
+        outCellsX = 0;
+        outCellsZ = 0;
+        outTilesLoaded = 0;
+        outTilesFailed = 0;
+
+        array<int> worldSurf;
+        int cellsX;
+        int cellsZ;
+        if (!BeginWorldSurfaceGrid(manifest, worldSurf, cellsX, cellsZ))
+            return false;
+
+        int loaded = 0;
+        int failed = 0;
+        for (int tileIz = 0; tileIz < manifest.m_TileCountZ; tileIz++)
+        {
+            int rowLoaded;
+            int rowFailed;
+            AppendSurfRow(manifest, worldSurf, cellsX, tileIz, rowLoaded, rowFailed);
+            loaded = loaded + rowLoaded;
+            failed = failed + rowFailed;
+        }
+
+        ClearRowCache();
+
+        outWorldSurf = worldSurf;
+        outCellsX = cellsX;
+        outCellsZ = cellsZ;
+        outTilesLoaded = loaded;
+        outTilesFailed = failed;
+        return loaded > 0;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    static bool BeginWorldSurfaceGrid(
+        notnull RDF_DemRuntimeManifest manifest,
+        out array<int> outWorldSurf,
+        out int outCellsX,
+        out int outCellsZ)
+    {
+        outWorldSurf = null;
+        outCellsX = 0;
+        outCellsZ = 0;
+        if (!manifest.m_IsSurfacePack)
+            return false;
+        if (manifest.m_TileCountX <= 0 || manifest.m_TileCountZ <= 0)
+            return false;
+        if (manifest.m_TileCells <= 0)
+            return false;
+
+        int cellsX = manifest.m_TileCountX * manifest.m_TileCells;
+        int cellsZ = manifest.m_TileCountZ * manifest.m_TileCells;
+        int cellCount = cellsX * cellsZ;
+        if (cellCount <= 0)
+            return false;
+
+        array<int> worldSurf = new array<int>();
+        worldSurf.Resize(cellCount);
+        int unknown = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
+        for (int i = 0; i < cellCount; i++)
+            worldSurf.Set(i, unknown);
+
+        outWorldSurf = worldSurf;
+        outCellsX = cellsX;
+        outCellsZ = cellsZ;
+        return true;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    // Decode one surf_chunks row into the flat grid. Used by sync preload.
+    static void AppendSurfRow(
+        notnull RDF_DemRuntimeManifest manifest,
+        notnull array<int> worldSurf,
+        int cellsX,
+        int tileIz,
+        out int outTilesLoaded,
+        out int outTilesFailed)
+    {
+        outTilesLoaded = 0;
+        outTilesFailed = 0;
+        if (tileIz < 0 || tileIz >= manifest.m_TileCountZ)
+            return;
+
+        RDF_DemSurfRowDoc row = LoadRowCached(manifest, tileIz);
+        if (!row || !row.tiles)
+        {
+            outTilesFailed = manifest.m_TileCountX;
+            return;
+        }
+
+        int loaded = 0;
+        int failed = 0;
+        for (int t = 0; t < row.tiles.Count(); t++)
+        {
+            int oneLoaded;
+            int oneFailed;
+            AppendSurfTileEntry(manifest, worldSurf, cellsX, tileIz, t, oneLoaded, oneFailed);
+            loaded = loaded + oneLoaded;
+            failed = failed + oneFailed;
+        }
+
+        outTilesLoaded = loaded;
+        outTilesFailed = failed;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    // Decode a single tile entry inside an already-cached row (async frame slices).
+    static void AppendSurfTileEntry(
+        notnull RDF_DemRuntimeManifest manifest,
+        notnull array<int> worldSurf,
+        int cellsX,
+        int tileIz,
+        int entryIndex,
+        out int outTilesLoaded,
+        out int outTilesFailed)
+    {
+        outTilesLoaded = 0;
+        outTilesFailed = 0;
+        RDF_DemSurfRowDoc row = LoadRowCached(manifest, tileIz);
+        if (!row || !row.tiles)
+        {
+            outTilesFailed = 1;
+            return;
+        }
+        if (entryIndex < 0 || entryIndex >= row.tiles.Count())
+            return;
+
+        RDF_DemSurfTileEntry entry = row.tiles.Get(entryIndex);
+        if (!entry)
+        {
+            outTilesFailed = 1;
+            return;
+        }
+
+        int size = manifest.m_TileCells;
+        int expectedHex = size * size * 2;
+        int tileIx = entry.ix;
+        if (tileIx < 0 || tileIx >= manifest.m_TileCountX)
+        {
+            outTilesFailed = 1;
+            return;
+        }
+
+        string hex = entry.hex;
+        if (hex.Length() != expectedHex)
+        {
+            outTilesFailed = 1;
+            return;
+        }
+
+        array<int> bytes = new array<int>();
+        if (!HexDecode(hex, bytes))
+        {
+            outTilesFailed = 1;
+            return;
+        }
+        if (bytes.Count() < size * size)
+        {
+            outTilesFailed = 1;
+            return;
+        }
+
+        int originIx = tileIx * size;
+        int originIz = tileIz * size;
+        for (int localIz = 0; localIz < size; localIz++)
+        {
+            int globalIz = originIz + localIz;
+            int rowBase = globalIz * cellsX + originIx;
+            int localBase = localIz * size;
+            for (int localIx = 0; localIx < size; localIx++)
+                worldSurf.Set(rowBase + localIx, bytes.Get(localBase + localIx));
+        }
+        outTilesLoaded = 1;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    static int GetSurfRowEntryCount(notnull RDF_DemRuntimeManifest manifest, int tileIz)
+    {
+        RDF_DemSurfRowDoc row = LoadRowCached(manifest, tileIz);
+        if (!row || !row.tiles)
+            return 0;
+        return row.tiles.Count();
+    }
+
+    //--------------------------------------------------------------------------------------------
+    static void ClearRowCache()
+    {
+        s_CachedRoot = string.Empty;
+        s_CachedIz = -1;
+        s_CachedRow = null;
+    }
+
     //--------------------------------------------------------------------------------------------
     protected static RDF_DemSurfRowDoc LoadRowCached(
         notnull RDF_DemRuntimeManifest manifest,

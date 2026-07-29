@@ -47,7 +47,9 @@
 - **锁定层** `RDF_RadarLockManager`：SEARCH → 截获 → 跟踪 → coast + `GetLockedTarget`
 - AutoTest 双档：`RDF_RadarAutoTestSuite.StartAll()`（ideal）/
   `StartAllRealistic()`（逼真误差带）
-- 单项：DEM / Ballistics / ShellFire / Airborne / Lock
+- 单项：DEM / Ballistics / ShellFire / Airborne / Lock / Perf / Play
+- 压测（独立）：`RDF_RadarStressAutoTest`（重负载 soak）
+- DEM/SURF 默认可全图预载入 RAM（`m_DemPreloadAll`，HUD 显示 `SURF RAM`）
 - **公共门面** `RDF_RadarSensor`（SEARCH / STARE / WLR → Plots / Tracks / Lock），见 [RADAR_API.md](RADAR_API.md)
 
 ### 观感上「像雷达」的部分
