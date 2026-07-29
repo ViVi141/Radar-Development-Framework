@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-07-29 — 锁定层火控桥（武器对接）
+
+- 新增 `RDF_RadarFireSolution` + `RDF_RadarWeaponBridge`：Sensor 锁定 → 发射门控 / 中段瞄点 / ARM
+- 新增 `RDF_RadarWeaponComponent`：挂载于载具；`TryGetFireSolution` / `GuideRocket` / `FindOn`
+- LiDAR 近距回退：`TryGetLidarAim(RDF_LidarSensor, ...)`
+- 文档：`VEHICLE_RADAR_LOCK_GUIDE` §2.3 改为火控桥最小路径；产品缺口勾选完成（prefab 仍属模组侧）
+
 ## 2026-07-29 — LiDAR Sensor 门面 + DiagMenu + 矩形 FOV
 
 - 新增 `RDF_LidarSensor`：对齐 `RDF_RadarSensor` 的玩法门面（`ConfigureMode` / `Tick` / `ScanOnce` / `GetSamples` / `GetClosestHit`）

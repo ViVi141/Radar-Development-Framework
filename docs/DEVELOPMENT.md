@@ -108,6 +108,8 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarCfarProcessor.c        扫描侧 CFAR 编排（热填空等）
 │   ├── RDF_RadarProjectileTracker.c    量测关联 / α-β / 弹道 PredictAt / WLR fix
 │   ├── RDF_RadarLockManager.c          锁定层 SEARCH/ACQUIRING/TRACKING/COAST + ARM
+│   ├── RDF_RadarWeaponBridge.c         火控桥 FireSolution / 发射门控 / 中段上行
+│   ├── RDF_RadarWeaponComponent.c      载具挂载入口 GuideRocket
 │   ├── RDF_RadarRwr.c                  被搜索/跟踪/锁定告警
 │   └── RDF_RadarSensor.c               公共门面 SEARCH/STARE/WLR/ESM → Plots/Tracks/Lock/ARM/RWR
 ├── Physics/
@@ -423,6 +425,8 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarCfarProcessor.c        扫描侧 CFAR 编排（热填空等）
 │   ├── RDF_RadarProjectileTracker.c    量测关联 / α-β / 弹道 PredictAt / WLR fix
 │   ├── RDF_RadarLockManager.c          锁定层 SEARCH/ACQUIRING/TRACKING/COAST + ARM
+│   ├── RDF_RadarWeaponBridge.c         火控桥 FireSolution / 发射门控 / 中段上行
+│   ├── RDF_RadarWeaponComponent.c      载具挂载入口 GuideRocket
 │   ├── RDF_RadarRwr.c                  被搜索/跟踪/锁定告警
 │   └── RDF_RadarSensor.c               公共门面 SEARCH/STARE/WLR/ESM → Plots/Tracks/Lock/ARM/RWR
 ├── Physics/

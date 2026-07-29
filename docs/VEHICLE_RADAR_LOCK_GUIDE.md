@@ -13,11 +13,13 @@ RDF 现已提供：
 - **雷达**：公共门面 `RDF_RadarSensor`（SEARCH / STARE / WLR / ESM），输出
   `RDF_RadarTarget` plot 与 `RDF_RadarTrack` 航迹；实体入口为
   `RDF_RadarComponent`。见 [RADAR_API.md](RADAR_API.md)。
-- **LiDAR**：`RDF_LidarScanner` 射线点云，仍可用于近距感知或备用扫描。
+- **LiDAR**：`RDF_LidarSensor` / `RDF_LidarScanner` 射线点云，近距感知或备用扫描。
 - **锁定层**：`RDF_RadarLockManager`（内置于 Sensor）已提供
   `SEARCH → ACQUIRING → TRACKING → COAST` 状态机、自动/手动选锁、断锁与瞄点续航。
+- **火控桥**：`RDF_RadarWeaponBridge` / `RDF_RadarWeaponComponent` 把锁定变成
+  `RDF_RadarFireSolution`（发射门控 + 中段上行）。
 - **制导示例**：`RDF_RadarRocketGuidance` + `RDF_RadarRocketLockFireAutoTest`
-  （Hydra70 BOOST/MIDCOURSE/TERMINAL）可作为武器对接参考；正式武器仍需模组侧接入。
+  （Hydra70 BOOST/MIDCOURSE/TERMINAL）可作为武器对接参考；正式武器仍需模组侧接入 prefab。
 
 ---
 
@@ -27,7 +29,7 @@ RDF 现已提供：
 |------|----------|------------|
 | 载具能扫描载具 | ✅ `RDF_RadarSensor` / `RDF_RadarComponent`；或 `RDF_LidarScanner.Scan()` | 将扫描挂到载具，配置模式/量程/硬件 |
 | 锁定载具 | ✅ `RDF_RadarLockManager`：自动/手动选锁、断锁、coast、`GetLockedTarget` | 按需调过滤/门限，或改手动选锁 |
-| 武器锁定并打击 | ⚠️ 有 `GetLockedTarget` + 火箭制导示例（`RDF_RadarRocketGuidance`）；不含通用武器 prefab | **武器/导弹脚本**：每帧读瞄点驱动制导（可参考 Lock-Fire 回归） |
+| 武器锁定并打击 | ✅ `RDF_RadarWeaponBridge` / `WeaponComponent` + 火箭制导示例；不含通用武器 prefab | **武器/导弹脚本**：读 `FireSolution` 或 `GuideRocket`（可参考 Lock-Fire 回归） |
 
 ---
 
@@ -117,14 +119,32 @@ else if (RDF_RadarRwr.HasSearchWarning(owner))
 
 ### 2.3 武器打击：与 Reforger 武器系统对接
 
-RDF 提供锁定瞄点与**示例制导**（`RDF_RadarRocketGuidance` /
-`RDF_RadarRocketLockFireAutoTest`：Hydra70 BOOST → MIDCOURSE → TERMINAL PN），
-但不含通用武器 prefab。正式武器仍要在你的**武器/发射物脚本**中：
+RDF 提供**火控桥**与**示例制导**：
 
-1. **获取目标**：从锁定管理器取 `GetLockedTarget()` → `IEntity` 或世界坐标；
-   ESM/ARM 用 `GetArmAim()`。
-2. **制导**：可参考 `RDF_RadarRocketGuidance.Update`；或每帧用弹位与目标
-   位置/速度自行算朝向。非制导武器可用锁定目标做瞄准辅助。
+- **`RDF_RadarWeaponBridge` / `RDF_RadarWeaponComponent`**：从 Sensor 锁定读出
+  `RDF_RadarFireSolution`（瞄点、速度、航迹 ID、是否允许发射、ARM 标志）。
+- **`RDF_RadarRocketGuidance`**：Hydra70 风格 BOOST → MIDCOURSE → TERMINAL PN
+  （`RDF_RadarRocketLockFireAutoTest` 回归）。
+
+不含通用武器 prefab。正式武器在你的**武器/发射物脚本**中：
+
+```c
+// 载具上同时挂 RDF_RadarComponent + RDF_RadarWeaponComponent
+RDF_RadarWeaponComponent fireCtrl = RDF_RadarWeaponComponent.FindOn(vehicle);
+RDF_RadarFireSolution sol = new RDF_RadarFireSolution();
+if (fireCtrl && fireCtrl.TryGetFireSolution(sol) && sol.m_CanAuthorizeFire)
+{
+    // 发射；飞行中：
+    // fireCtrl.GuideRocket(rocket, guideState, dt, nowS);
+}
+
+// 或不挂组件：
+RDF_RadarWeaponBridge.TryGetFireSolutionFromOwner(vehicle, sol, true);
+```
+
+1. **获取目标**：`TryGetFireSolution` → `m_AimPos` / `m_Target`；ESM/ARM 时
+   `m_IsArm` + `m_Radiating`（也可直接 `GetArmAim`）。
+2. **制导**：`GuideRocket` 或自写 PN；非制导武器用瞄点做瞄准辅助。
 3. **引信/命中**：用目标实体 / AABB / 距离半径判定。
 
 独立回归：`RDF_RadarRocketLockFireAutoTest.Start()`（不进 `StartAll`）。
@@ -210,11 +230,13 @@ RDF already provides:
 - **Radar**: public facade `RDF_RadarSensor` (SEARCH / STARE / WLR / ESM), outputting
   `RDF_RadarTarget` plots and `RDF_RadarTrack` tracks; entity entry point is
   `RDF_RadarComponent`. See [RADAR_API.md](RADAR_API.md).
-- **LiDAR**: `RDF_LidarScanner` ray point clouds, still useful for short-range sensing or backup scan.
+- **LiDAR**: `RDF_LidarSensor` / `RDF_LidarScanner` ray point clouds for short-range sensing or backup scan.
 - **Lock layer**: `RDF_RadarLockManager` (built into Sensor) already provides the
   `SEARCH → ACQUIRING → TRACKING → COAST` state machine, auto/manual lock selection, break-lock, and aim-point coast.
+- **Fire-control bridge**: `RDF_RadarWeaponBridge` / `RDF_RadarWeaponComponent` turn lock into
+  `RDF_RadarFireSolution` (launch gate + midcourse uplink).
 - **Guidance example**: `RDF_RadarRocketGuidance` + `RDF_RadarRocketLockFireAutoTest`
-  (Hydra70 BOOST/MIDCOURSE/TERMINAL) as a weapon-integration reference; production weapons still need mod-side wiring.
+  (Hydra70 BOOST/MIDCOURSE/TERMINAL) as a weapon-integration reference; production weapons still need mod-side prefab wiring.
 
 ---
 
@@ -224,7 +246,7 @@ RDF already provides:
 |------|-----------------|------------------|
 | Vehicle can scan vehicles | ✅ `RDF_RadarSensor` / `RDF_RadarComponent`; or `RDF_LidarScanner.Scan()` | Mount scan on the vehicle; configure mode/range/hardware |
 | Lock vehicles | ✅ `RDF_RadarLockManager`: auto/manual lock, unlock, coast, `GetLockedTarget` | Tune filters/thresholds as needed, or switch to manual lock |
-| Weapon lock & engage | ⚠️ `GetLockedTarget` + rocket guidance sample (`RDF_RadarRocketGuidance`); no generic weapon prefab | **Weapon/missile scripts**: read aim point each frame to drive guidance (see Lock-Fire regression) |
+| Weapon lock & engage | ✅ `RDF_RadarWeaponBridge` / `WeaponComponent` + rocket guidance sample; no generic weapon prefab | **Weapon/missile scripts**: read `FireSolution` or `GuideRocket` (see Lock-Fire regression) |
 
 ---
 
@@ -314,14 +336,32 @@ Regression: `RDF_RadarRwrAutoTest.Start()`.
 
 ### 2.3 Weapon engagement: Reforger weapon system
 
-RDF provides lock aim points and a **sample guidance** path (`RDF_RadarRocketGuidance` /
-`RDF_RadarRocketLockFireAutoTest`: Hydra70 BOOST → MIDCOURSE → TERMINAL PN),
-but no generic weapon prefab. Production weapons still live in your **weapon/projectile scripts**:
+RDF provides a **fire-control bridge** and **sample guidance**:
 
-1. **Acquire target**: `GetLockedTarget()` → `IEntity` or world position from the lock manager;
-   ESM/ARM use `GetArmAim()`.
-2. **Guide**: follow `RDF_RadarRocketGuidance.Update`, or compute heading each frame from
-   missile pose vs target position/velocity. Unguided weapons can use the lock as aim assist.
+- **`RDF_RadarWeaponBridge` / `RDF_RadarWeaponComponent`**: read `RDF_RadarFireSolution`
+  from Sensor lock (aim, velocity, track id, launch authorization, ARM flags).
+- **`RDF_RadarRocketGuidance`**: Hydra70-style BOOST → MIDCOURSE → TERMINAL PN
+  (`RDF_RadarRocketLockFireAutoTest`).
+
+No generic weapon prefab. Production weapons live in your **weapon/projectile scripts**:
+
+```c
+// Mount RDF_RadarComponent + RDF_RadarWeaponComponent on the vehicle
+RDF_RadarWeaponComponent fireCtrl = RDF_RadarWeaponComponent.FindOn(vehicle);
+RDF_RadarFireSolution sol = new RDF_RadarFireSolution();
+if (fireCtrl && fireCtrl.TryGetFireSolution(sol) && sol.m_CanAuthorizeFire)
+{
+    // Fire; in flight:
+    // fireCtrl.GuideRocket(rocket, guideState, dt, nowS);
+}
+
+// Or without the component:
+RDF_RadarWeaponBridge.TryGetFireSolutionFromOwner(vehicle, sol, true);
+```
+
+1. **Acquire target**: `TryGetFireSolution` → `m_AimPos` / `m_Target`; ESM/ARM sets
+   `m_IsArm` + `m_Radiating` (or call `GetArmAim` directly).
+2. **Guide**: `GuideRocket` or custom PN; unguided weapons can use the lock as aim assist.
 3. **Fuze / hit**: decide by target entity / AABB / range radius.
 
 Standalone regression: `RDF_RadarRocketLockFireAutoTest.Start()` (not in `StartAll`).

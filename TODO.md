@@ -82,7 +82,7 @@
 |----|----|------|------|----------------|
 | **P1 已完成** | Python CFAR / track 单测 + 可选 golden | 防逼真模型漂移 | 低 | `test_rdf_radar_cfar.py` / `test_rdf_radar_track.py` |
 | **P1 已完成** | 最小 CI（Python unittest） | 工程卫生 | 低 | `.github/workflows/python-dem-tests.yml` |
-| **产品缺口** | 锁定层对接模组武器 | 玩法闭环 | 中 | 不在旧勾选表内，但 CAPABILITIES 仍列为首选；示例制导已有 |
+| **产品缺口** | 锁定层对接模组武器 | 玩法闭环 | 中 | ~~指南+火箭示例~~；**火控桥 `WeaponBridge` / `WeaponComponent` 已落地**（prefab 仍模组侧） |
 | **P2 场景驱动** | 刀刃绕射 / 更精细多径 | 山地体感 | 高 | 已有弱 NLOS 反射因子；真绕射需几何模型 + 场景需求 |
 | **P2 场景驱动** | DEM span 遮挡 / 多径 | 城区/林冠 | 高 | 离线/烘焙有 span；游戏 SURF 路径故意不带 — 勿轻易重开 |
 | **P2 单雷达打磨后** | 多雷达 plots 融合 / 交叉定位 | 战役级 | 很高 | Network Sprint 已铺权威同步；融合是新产品层，非小补丁 |
@@ -95,7 +95,7 @@
 - [x] Network：权威结果（plots + K/W/L）+ 关键 Settings RplProp + 发射态（见 CHANGELOG Network Sprint）
 - [x] **P1** Python CFAR / track 单测 + 可选 Enforce golden（`test_rdf_radar_cfar.py` / `test_rdf_radar_track.py`；CA 与 `RDF_RadarCfarGate` 对齐）
 - [x] **P1** 最小 CI（`.github/workflows/python-dem-tests.yml` 跑 `test_rdf_*.py`；游戏内批跑仍见 P3）
-- [ ] **产品** 锁定层对接模组武器（见 VEHICLE_RADAR_LOCK_GUIDE）
+- [x] **产品** 锁定层对接模组武器（`RDF_RadarWeaponBridge` / `WeaponComponent` + VEHICLE_RADAR_LOCK_GUIDE；prefab 仍模组侧）
 - [ ] **P2** 刀刃绕射 / 更精细多径（明确山地场景时）
 - [ ] **P2** DEM span 遮挡 / 多径（明确城区/林冠需求且接受发布包变重时）
 - [ ] **P2** 多雷达 plots 融合 / 交叉定位（单雷达玩法打磨完）
@@ -121,7 +121,8 @@
 **Network Sprint（已完成）**：关键 Settings RplProp、plots 加厚、K/W/L 权威摘要、发射态。  
 **Sprint D（已完成核心）**：Python CFAR/track golden + 最小 CI。  
 **LiDAR UX（已完成）**：Showcase / PPI 动画 + `RDF_LidarSensor` + DiagMenu + 矩形 FOV。  
-**下一步**：锁定层对接武器（模组侧）；场景驱动绕射 / DEM span / 组网融合。
+**火控桥（已完成）**：`RDF_RadarWeaponBridge` / `WeaponComponent` + 指南 §2.3。  
+**下一步**：场景驱动绕射 / DEM span / 组网融合；或拆分 mass_battle_sim。
 
 Ideal：`RDF_RadarAutoTestSuite.StartAll()`  
 Realistic：`RDF_RadarAutoTestSuite.StartAllRealistic()`
@@ -136,6 +137,7 @@ Realistic：`RDF_RadarAutoTestSuite.StartAllRealistic()`
 - [x] PPI · DEM 杂波 · CA/GO/SO-CFAR · EW / 欺骗 · 测量合成
 - [x] 弹道 + WLR（多点真空拟合）· 散射体表 / Signature / Swerling
 - [x] `RDF_RadarSensor`（SEARCH / STARE / WLR / ESM）· `RDF_RadarLockManager` · `GetLockedTarget` / `GetArmAim`
+- [x] `RDF_RadarWeaponBridge` / `WeaponComponent` · `FireSolution` · `GuideRocket`
 - [x] `RDF_LidarSensor`（FULL_SPHERE / CONE / RECT / SWEEP / ENTS）· DiagMenu · 矩形 FOV
 - [x] RWR（`RDF_RadarRwr`）· ESM 侦收 · 反辐射瞄点
 - [x] 火箭制导示例（`RDF_RadarRocketGuidance` + Lock-Fire 回归）
@@ -256,7 +258,7 @@ Context: realistic channel + single-radar authoritative Network path shipped; ol
 |----|------|------|------|----------------|
 | **P1 done** | Python CFAR / track unit tests + optional golden | Drift guard | Low | `test_rdf_radar_cfar.py` / `test_rdf_radar_track.py` |
 | **P1 done** | Minimal CI (Python unittest) | Eng hygiene | Low | `.github/workflows/python-dem-tests.yml` |
-| **Product gap** | Lock layer → mod weapons | Gameplay loop | Medium | Outside old checklist; still CAPABILITIES #1; sample guidance exists |
+| **Product gap** | Lock layer → mod weapons | Gameplay loop | Medium | ~~guide + rocket sample~~; **`WeaponBridge` / `WeaponComponent` shipped** (prefab still mod-side) |
 | **P2 scenario** | Knife-edge diffraction / fine multipath | Mountain feel | High | Weak NLOS factor exists; real diffraction needs geometry + demand |
 | **P2 scenario** | DEM span occlusion / multipath | Urban / canopy | High | Offline/bake has spans; game SURF path deliberately omits — don’t reopen lightly |
 | **P2 after polish** | Multi-radar plots fusion / cross-fix | Campaign | Very high | Network Sprint paved sync; fusion is a new product layer |
@@ -269,7 +271,7 @@ Context: realistic channel + single-radar authoritative Network path shipped; ol
 - [x] Network: authoritative results (plots + K/W/L) + key Settings RplProp + emit state (see CHANGELOG Network Sprint)
 - [x] **P1** Python CFAR / track unit tests + optional Enforce golden (`test_rdf_radar_cfar.py` / `test_rdf_radar_track.py`; CA aligned with `RDF_RadarCfarGate`)
 - [x] **P1** Minimal CI (`.github/workflows/python-dem-tests.yml` runs `test_rdf_*.py`; in-game batch still P3)
-- [ ] **Product** Lock layer → mod weapons (see VEHICLE_RADAR_LOCK_GUIDE)
+- [x] **Product** Lock layer → mod weapons (`RDF_RadarWeaponBridge` / `WeaponComponent` + VEHICLE_RADAR_LOCK_GUIDE; prefab still mod-side)
 - [ ] **P2** Knife-edge diffraction / fine multipath (clear mountain scenario)
 - [ ] **P2** DEM span occlusion / multipath (urban/canopy need + accept heavier packs)
 - [ ] **P2** Multi-radar plots fusion / cross-fix (after single-radar polish)
@@ -295,7 +297,8 @@ Context: realistic channel + single-radar authoritative Network path shipped; ol
 **Network Sprint (done)**: key Settings RplProp, thicker plots, K/W/L authoritative summary, emit state.  
 **Sprint D (core done)**: Python CFAR/track golden + minimal CI.  
 **LiDAR UX (done)**: Showcase / PPI anim + `RDF_LidarSensor` + DiagMenu + rectangular FOV.  
-**Next**: lock→weapon integration (mod side); scenario-driven diffraction / DEM span / fusion.
+**Fire bridge (done)**: `RDF_RadarWeaponBridge` / `WeaponComponent` + guide §2.3.  
+**Next**: scenario-driven diffraction / DEM span / fusion; or split mass_battle_sim.
 
 Ideal: `RDF_RadarAutoTestSuite.StartAll()`  
 Realistic: `RDF_RadarAutoTestSuite.StartAllRealistic()`
@@ -310,6 +313,7 @@ Realistic: `RDF_RadarAutoTestSuite.StartAllRealistic()`
 - [x] PPI · DEM 杂波 · CA/GO/SO-CFAR · EW / 欺骗 · 测量合成
 - [x] 弹道 + WLR（多点真空拟合）· 散射体表 / Signature / Swerling
 - [x] `RDF_RadarSensor`（SEARCH / STARE / WLR / ESM）· `RDF_RadarLockManager` · `GetLockedTarget` / `GetArmAim`
+- [x] `RDF_RadarWeaponBridge` / `WeaponComponent` · `FireSolution` · `GuideRocket`
 - [x] `RDF_LidarSensor` (FULL_SPHERE / CONE / RECT / SWEEP / ENTS) · DiagMenu · rectangular FOV
 - [x] RWR（`RDF_RadarRwr`）· ESM 侦收 · 反辐射瞄点
 - [x] 火箭制导示例（`RDF_RadarRocketGuidance` + Lock-Fire 回归）
