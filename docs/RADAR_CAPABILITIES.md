@@ -113,6 +113,7 @@
 #### 离线（Python + DEM）
 
 - **优先**：CFAR / track 单测 + golden，防逼真通道漂移  
+- **全能力编排**：`tools/dem/rdf_radar_full_sim.py`（无 DEM；锁/ESM/RWR/CFAR/EW/融合/Network 策略等）；矩阵见 `tools/dem/RADAR_FRAMEWORK.md`
 - 更认真的传播、杂波谱、标定表再喂回游戏参数  
 - `mass_battle_sim` 拆分（离线大改时）
 
@@ -256,6 +257,7 @@ Aligned with deferred items in [TODO.md](../TODO.md):
 #### Offline (Python + DEM)
 
 - **First**: CFAR / track unit tests + golden to pin the realistic channel  
+- **Full-capability orchestration**: `tools/dem/rdf_radar_full_sim.py` (no DEM; lock/ESM/RWR/CFAR/EW/fusion/Network policy); matrix in `tools/dem/RADAR_FRAMEWORK.md`
 - More serious propagation, clutter-spectrum, calibration tables fed back into game parameters  
 - Split `mass_battle_sim` when offline needs a big rewrite  
 

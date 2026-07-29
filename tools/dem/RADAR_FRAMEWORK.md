@@ -36,10 +36,16 @@ presets, not core dependencies.
 - `rdf_radar_mass_battle_sim.py`: DEM-backed multi-radar / multi-target battle,
   trajectory prediction, and WLR evaluation (large monolith; split tracked in
   TODO.md).
+- `rdf_radar_systems.py`: lock FSM, ESM Friis, RWR/ARM hooks, GO/SO-CFAR,
+  measurement noise, rain path loss, RGPO/angular/intermittent deception,
+  Network Reliable/Unreliable / caps / throttle / interest / fingerprint.
+- `rdf_radar_full_sim.py`: no-DEM orchestrator exercising capability coverage
+  (writes `out/full_sim_report.json`).
 - `test_rdf_radar_ballistics.py`: deterministic ballistics, wind, drag, DEM
   intersection, and WLR regression tests.
 - `test_rdf_radar_cfar.py`: CA-CFAR golden + Enforce `RDF_RadarCfarGate` CA parity.
 - `test_rdf_radar_track.py`: association / α-β / polar roundtrip / vacuum fit golden.
+- `test_rdf_radar_systems.py`: systems unit tests + full_sim smoke (16 scenarios).
 
 Install: `pip install -r tools/dem/requirements.txt` (numpy + matplotlib).
 Golden suite: `cd tools/dem` then `python -m unittest discover -s . -p "test_rdf_*.py" -v`
@@ -64,8 +70,30 @@ Generated images/CSV under `tools/dem/out/` are gitignored — do not commit.
 4. Target RCS (Swerling) × multipath × pattern × radar equation
 5. Pulse compression / integration / MTI
 6. EW plugins (noise spectral overlap, deception)
-7. CA-CFAR
+7. CA/GO/SO-CFAR (+ optional thermal fill)
 8. Cross-scan alpha-beta tracker
+9. Lock / RWR / ARM, fusion / IFF, Network bandwidth policy (systems layer)
+
+## Capability coverage matrix (offline)
+
+| Capability | Module / entry |
+|------------|----------------|
+| Radar equation, MTI, Doppler | `rdf_radar_physics` + `full_sim` |
+| Atmosphere / rain | `rdf_radar_systems.two_way_path_loss_db` |
+| Measurement noise | `MeasurementModel` |
+| Multipath / knife-edge | `rdf_radar_channel` / `rdf_radar_diffraction` |
+| CA / GO / SO-CFAR + thermal fill | `cfar_detections` / `fill_thermal_noise` |
+| Aspect RCS / Swerling | `rdf_radar_channel` |
+| α-β track / WLR fit | `rdf_radar_track` |
+| EW noise + burn-through | `rdf_radar_ew` |
+| Deception / RGPO / angular / intermittent | `ew` + `systems` |
+| Frequency hop | `FrequencyHopSchedule` |
+| Fusion / cross-fix / IFF | `rdf_radar_fusion` + `resolve_iff` |
+| Lock / RWR / ARM / ESM Friis | `rdf_radar_systems` |
+| Network caps / throttle / interest | `network_should_send` |
+| DEM sector / mass battle | `sector_sim` / `mass_battle_sim` (optional DEM) |
+
+Not simulated (by design): FDTD, full DRFM, JPDA, STAP.
 
 ## Examples
 
@@ -76,6 +104,7 @@ python tools\dem\rdf_radar_framework_demo.py --preset p18
 python tools\dem\rdf_radar_framework_demo.py --use-ttile --world GM_Eden --preset shorad
 python tools\dem\rdf_radar_mass_battle_sim.py
 python tools\dem\rdf_radar_mass_battle_sim.py --use-ttile --world GM_Eden
+python tools\dem\rdf_radar_full_sim.py
 python tools\dem\rdf_ttile_unpack.py
 python tools\dem\test_rdf_radar_ballistics.py
 python -m unittest discover -s tools\dem -p "test_rdf_*.py" -v
@@ -126,9 +155,12 @@ Outputs under `tools/dem/out/`:
 - `rdf_radar_framework_demo.py`：干净通道 / EW 验证输出与 CSV。
 - `rdf_radar_shellfire_offline.py`：游戏内 ShellFire 回归的离线炮弹 / WLR 镜像。
 - `rdf_radar_mass_battle_sim.py`：基于 DEM 的多雷达 / 多目标战场、轨迹预测与 WLR 评估（大单体；拆分见 TODO.md）。
+- `rdf_radar_systems.py`：锁定状态机、ESM Friis、RWR/ARM、GO/SO-CFAR、测量噪声、降雨损耗、拖距/角闪烁/间歇假点、Network 带宽策略。
+- `rdf_radar_full_sim.py`：无 DEM 全能力编排（写出 `out/full_sim_report.json`）。
 - `test_rdf_radar_ballistics.py`：确定性弹道、风、阻力、DEM 交点与 WLR 回归测试。
 - `test_rdf_radar_cfar.py`：CA-CFAR golden + 与 Enforce `RDF_RadarCfarGate` CA 对齐。
 - `test_rdf_radar_track.py`：关联 / α-β / 极坐标往返 / 真空拟合 golden。
+- `test_rdf_radar_systems.py`：systems 单测 + full_sim 冒烟（16 场景）。
 
 安装：`pip install -r tools/dem/requirements.txt`（numpy + matplotlib）。
 Golden 套件：`cd tools/dem` 后 `python -m unittest discover -s . -p "test_rdf_*.py" -v`
@@ -153,8 +185,30 @@ Golden 套件：`cd tools/dem` 后 `python -m unittest discover -s . -p "test_rd
 4. 目标 RCS（Swerling）× 多径 × 方向图 × 雷达方程
 5. 脉压 / 积累 / MTI
 6. EW 插件（噪声频谱重叠、欺骗）
-7. CA-CFAR
+7. CA/GO/SO-CFAR（可选热噪声填空）
 8. 跨扫描 α-β 跟踪器
+9. 锁定 / RWR / ARM、融合 / IFF、Network 带宽策略（systems 层）
+
+## 能力覆盖矩阵（离线）
+
+| 能力 | 模块 / 入口 |
+|------|-------------|
+| 雷达方程、MTI、多普勒 | `rdf_radar_physics` + `full_sim` |
+| 大气 / 降雨 | `rdf_radar_systems.two_way_path_loss_db` |
+| 测量噪声 | `MeasurementModel` |
+| 多径 / 刀刃绕射 | `rdf_radar_channel` / `rdf_radar_diffraction` |
+| CA / GO / SO-CFAR + 热填空 | `cfar_detections` / `fill_thermal_noise` |
+| 方位 RCS / Swerling | `rdf_radar_channel` |
+| α-β 跟踪 / WLR 拟合 | `rdf_radar_track` |
+| EW 噪声 + 烧穿距离 | `rdf_radar_ew` |
+| 欺骗 / 拖距 / 角闪烁 / 间歇 | `ew` + `systems` |
+| 频率捷变 | `FrequencyHopSchedule` |
+| 融合 / 交会 / IFF | `rdf_radar_fusion` + `resolve_iff` |
+| 锁定 / RWR / ARM / ESM Friis | `rdf_radar_systems` |
+| Network 上限 / 降频 / 兴趣 | `network_should_send` |
+| DEM 扇区 / 大规模战场 | `sector_sim` / `mass_battle_sim`（可选 DEM） |
+
+故意不模拟：FDTD、完整 DRFM、JPDA、STAP。
 
 ## 示例
 
@@ -165,6 +219,7 @@ python tools\dem\rdf_radar_framework_demo.py --preset p18
 python tools\dem\rdf_radar_framework_demo.py --use-ttile --world GM_Eden --preset shorad
 python tools\dem\rdf_radar_mass_battle_sim.py
 python tools\dem\rdf_radar_mass_battle_sim.py --use-ttile --world GM_Eden
+python tools\dem\rdf_radar_full_sim.py
 python tools\dem\rdf_ttile_unpack.py
 python tools\dem\test_rdf_radar_ballistics.py
 python -m unittest discover -s tools\dem -p "test_rdf_*.py" -v

@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2026-07-30 — Python 全能力离线模拟
+
+- `rdf_radar_systems.py`：锁定 FSM、ESM Friis、RWR/ARM、GO/SO-CFAR、测量噪声、降雨、拖距/角闪烁/间歇、Network 带宽策略
+- `rdf_radar_full_sim.py`：无 DEM 16 场景编排 + `out/full_sim_report.json`；覆盖矩阵见 `tools/dem/RADAR_FRAMEWORK.md`
+- 单测：`test_rdf_radar_systems.py`（接入现有 `test_rdf_*.py` CI）
+
 ## 2026-07-30 — Network 规模对齐（官方风格）
 
 - Reliable：只同步确认航迹 + 锁 + 扫描几何（`RpcDo_ReceiveScanSummary`）

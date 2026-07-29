@@ -165,7 +165,7 @@ Realistic：`RDF_RadarAutoTestSuite.StartAllRealistic()`
 - [x] `AutoTestSuite` 7/7（Ballistics / DEM / Lock / Airborne / ShellFire / Perf / Play）；双档 ideal / realistic
 - [x] 独立回归：Stress / RWR / ESM-ARM / Rocket Lock-Fire / HeliDuel / SamEngage / Fusion；地图叠加 `RDF_RadarAutoTestMapOverlay`
 - [x] 测试不加辐射源 / 抬 RCS / 强制写表
-- [x] 离线 Python golden：ballistics / CFAR / track / EW / diffraction / fusion + GitHub Actions CI
+- [x] 离线 Python golden：ballistics / CFAR / track / EW / diffraction / fusion / systems+full_sim + GitHub Actions CI
 
 #### DEM / 仓库
 
@@ -351,7 +351,7 @@ Realistic: `RDF_RadarAutoTestSuite.StartAllRealistic()`
 - [x] `AutoTestSuite` 5/5（Ballistics / DEM / Lock / Airborne / ShellFire）；双档 ideal / realistic
 - [x] 独立回归：RWR / ESM-ARM / Rocket Lock-Fire / HeliDuel / SamEngage / Fusion；地图叠加 `RDF_RadarAutoTestMapOverlay`
 - [x] 测试不加辐射源 / 抬 RCS / 强制写表
-- [x] Offline Python golden: ballistics / CFAR / track / EW / diffraction / fusion + GitHub Actions CI
+- [x] Offline Python golden: ballistics / CFAR / track / EW / diffraction / fusion / systems+full_sim + GitHub Actions CI
 
 #### DEM / repo
 
