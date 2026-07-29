@@ -19,6 +19,8 @@ class RDF_RadarAutoRunner
     // Cached when ResolveLocalSubject succeeds; reused while GM free-cam makes
     // ControlledEntity null so scans do not stall mid-AutoTest.
     protected IEntity m_LastSubject;
+    // When set, RadarTick scans from this entity instead of the local player.
+    protected static IEntity s_ScanSubjectOverride;
 
     void RDF_RadarAutoRunner()
     {
@@ -66,6 +68,18 @@ class RDF_RadarAutoRunner
     static bool IsForceLocalScan()
     {
         return s_ForceLocalScan;
+    }
+
+    // Force scans to originate from a spawned platform (e.g. blue Mi-8 in HeliDuel).
+    // Pass null to restore local-player subject resolution.
+    static void SetScanSubjectOverride(IEntity subject)
+    {
+        s_ScanSubjectOverride = subject;
+    }
+
+    static IEntity GetScanSubjectOverride()
+    {
+        return s_ScanSubjectOverride;
     }
 
     static bool IsNetworkAPIValid()
@@ -215,7 +229,9 @@ class RDF_RadarAutoRunner
             return;
         }
 
-        IEntity subject = RDF_LidarSubjectResolver.ResolveLocalSubject(true);
+        IEntity subject = s_ScanSubjectOverride;
+        if (!subject)
+            subject = RDF_LidarSubjectResolver.ResolveLocalSubject(true);
         if (subject)
             m_LastSubject = subject;
         else

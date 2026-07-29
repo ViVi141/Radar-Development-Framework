@@ -108,6 +108,7 @@ RDF_RadarLockAutoTest.Start();             // 空中目标锁定状态机
 RDF_RadarRwrAutoTest.Start();              // RWR 被照射/锁定告警
 RDF_RadarEsmArmAutoTest.Start();           // ESM + GetArmAim / 静默丢锁
 RDF_RadarRocketLockFireAutoTest.Start();   // 锁定 → Hydra70 制导打击
+RDF_RadarHeliDuelAutoTest.Start();         // 机打机 + 拦截来袭导弹
 ```
 
 Suite scenarios and radar config:
@@ -300,6 +301,7 @@ RDF_RadarStressAutoTest.Start();           // 重负载 soak 压测
 RDF_RadarRwrAutoTest.Start();              // RWR 被照射/锁定告警
 RDF_RadarEsmArmAutoTest.Start();           // ESM + GetArmAim / 静默丢锁
 RDF_RadarRocketLockFireAutoTest.Start();   // 锁定 → Hydra70 制导打击
+RDF_RadarHeliDuelAutoTest.Start();         // 机打机 + 拦截来袭导弹
 ```
 
 套件内场景与雷达配置：

@@ -1,5 +1,41 @@
 # CHANGELOG
 
+## 2026-07-29 — HeliDuel 拦截不再脚本删威胁弹
+
+- 近炸只引爆拦截弹；威胁弹交给引擎破片/爆炸销毁
+- `ReleaseThreatToPhysics` 停止脚本驱动；结束后打印威胁是否被炸掉
+- 拦截近炸门限收紧到 12 m，提高命中破片概率
+
+## 2026-07-29 — HeliDuel 拉远距离 + 放慢节奏
+
+- 蓝/红约 1.2 km；轨道更慢；弹速约 90/55 m/s
+- 阶段停顿：锁后 4 s、命中后 5 s、威胁起飞前 3 s、来袭观察 6 s、拦截后 3 s
+- 总时长约 140 s；每阶段各 1 发
+
+## 2026-07-29 — HeliDuel 改为蓝机开火（非玩家）
+
+- 雷达扫描主体：`RDF_RadarAutoRunner.SetScanSubjectOverride(blue Mi-8)`
+- 交战/拦截 Hydra 从蓝直升机机外发射（`Launch` owner = blue）
+- 结束时清除 scan subject override
+
+## 2026-07-29 — HeliDuel 拦截阶段修复
+
+- 进入 `INTERCEPT` / `LOCK_THREAT` 时重置开火冷却（此前被 ENGAGE 的 3.5s 冷却挡住）
+- 威胁弹改为机外脚本驱动飞行（避开机体内生成被物理立刻删）
+- 缓存威胁瞄点；实体丢失后仍可短时拦截；收紧“已锁威胁”判定
+
+## 2026-07-29 — 修复 DiagMenu「Too many Diags」崩溃
+
+- 原因：引擎 Diag 表硬上限 512；`RDF_LidarDiagMenu` 使用 ID 5800100 越界
+- `EnsureRegistered` 改为空操作，不再 `DiagMenu.Register*`；bootstrap 不再自动注册
+- 调参改走 `RDF_LidarSensor.ConfigureMode` / `RDF_LidarDemoConfig` / AutoRunner API
+
+## 2026-07-29 — 直升机对战 / 拦截导弹自动化示例
+
+- 新增 `RDF_RadarHeliDuelAutoTest.Start()`（独立，不进 StartAll）
+- 流程：蓝/红 Mi-8 → `WeaponBridge` 锁红机开火 → 红机发射威胁 Hydra → 切弹丸锁 → 拦截
+- 使用 `RDF_RadarWeaponBridge` 发射门控 + `RDF_RadarRocketGuidance` ARH PN
+
 ## 2026-07-29 — 锁定层火控桥（武器对接）
 
 - 新增 `RDF_RadarFireSolution` + `RDF_RadarWeaponBridge`：Sensor 锁定 → 发射门控 / 中段瞄点 / ARM

@@ -100,7 +100,7 @@
 - [ ] **P2** DEM span 遮挡 / 多径（明确城区/林冠需求且接受发布包变重时）
 - [ ] **P2** 多雷达 plots 融合 / 交叉定位（单雷达玩法打磨完）
 - [x] **P2** LiDAR：PPI 动画 + Showcase（余晖/环/扇面）
-- [x] **P2** LiDAR：DiagMenu、Sensor 门面对齐（`RDF_LidarSensor` + `RDF_LidarDiagMenu` + `RDF_RectangularFOVSampleStrategy`）
+- [x] **P2** LiDAR：DiagMenu、Sensor 门面对齐（`RDF_LidarSensor` + 矩形 FOV；DiagMenu 因引擎 512 上限已禁用，改走 DemoConfig/Sensor）
 - [ ] **P2** 拆分 `rdf_radar_mass_battle_sim.py`
 - [ ] **P2/P3** IFF / 数据链抽象
 - [ ] **P3** 远程计算：设计文档 → Backend 接口 → Rest 异步 → 服务端对齐（失败回退 Local）
@@ -276,7 +276,7 @@ Context: realistic channel + single-radar authoritative Network path shipped; ol
 - [ ] **P2** DEM span occlusion / multipath (urban/canopy need + accept heavier packs)
 - [ ] **P2** Multi-radar plots fusion / cross-fix (after single-radar polish)
 - [x] **P2** LiDAR: PPI animation + Showcase
-- [x] **P2** LiDAR: DiagMenu + Sensor facade (`RDF_LidarSensor` + `RDF_LidarDiagMenu` + `RDF_RectangularFOVSampleStrategy`)
+- [x] **P2** LiDAR: DiagMenu + Sensor facade (`RDF_LidarSensor` + RECT FOV; DiagMenu disabled — engine 512-slot cap; use DemoConfig/Sensor)
 - [ ] **P2** Split `rdf_radar_mass_battle_sim.py`
 - [ ] **P2/P3** IFF / datalink abstraction
 - [ ] **P3** Remote compute: design doc → Backend → Rest async → server align (fallback Local)

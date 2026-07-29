@@ -147,7 +147,8 @@ RDF_RadarWeaponBridge.TryGetFireSolutionFromOwner(vehicle, sol, true);
 2. **制导**：`GuideRocket` 或自写 PN；非制导武器用瞄点做瞄准辅助。
 3. **引信/命中**：用目标实体 / AABB / 距离半径判定。
 
-独立回归：`RDF_RadarRocketLockFireAutoTest.Start()`（不进 `StartAll`）。
+独立回归：`RDF_RadarRocketLockFireAutoTest.Start()`；完整机战脚本：
+`RDF_RadarHeliDuelAutoTest.Start()`（蓝/红 Mi-8 → 开火 → 拦截来袭 Hydra；不进 `StartAll`）。
 
 ---
 
@@ -364,7 +365,8 @@ RDF_RadarWeaponBridge.TryGetFireSolutionFromOwner(vehicle, sol, true);
 2. **Guide**: `GuideRocket` or custom PN; unguided weapons can use the lock as aim assist.
 3. **Fuze / hit**: decide by target entity / AABB / range radius.
 
-Standalone regression: `RDF_RadarRocketLockFireAutoTest.Start()` (not in `StartAll`).
+Standalone regression: `RDF_RadarRocketLockFireAutoTest.Start()`; full heli duel:
+`RDF_RadarHeliDuelAutoTest.Start()` (blue/red Mi-8 → fire → intercept inbound Hydra; not in `StartAll`).
 
 ---
 

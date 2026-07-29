@@ -128,8 +128,17 @@ class RDF_RadarRocketGuidance
         {
             boostAlongA = state.m_BoostAccelMs2;
             steerAim = BuildLoftAim(pos, aimPos, aimVel, speed, state.m_LoftHeightM, 0.45);
-            navGain = state.m_NavGainMid * 0.6;
-            maxLatA = state.m_MaxLateralAccelMs2 * 0.65;
+            if (state.m_LoftHeightM <= 0.01)
+            {
+                // Intercept / no-loft: full midcourse gain during short boost.
+                navGain = state.m_NavGainMid;
+                maxLatA = state.m_MaxLateralAccelMs2 * 0.9;
+            }
+            else
+            {
+                navGain = state.m_NavGainMid * 0.6;
+                maxLatA = state.m_MaxLateralAccelMs2 * 0.65;
+            }
         }
         else if (state.m_Phase == ERDF_RadarRocketPhase.RDF_ROCKET_MIDCOURSE)
         {
@@ -140,7 +149,11 @@ class RDF_RadarRocketGuidance
         }
         else if (state.m_Phase == ERDF_RadarRocketPhase.RDF_ROCKET_TERMINAL)
         {
-            steerAim = PredictIntercept(pos, aimPos, aimVel, speed);
+            // Last ~100m: pure pursuit on body — lead overshoots on closing rockets.
+            if (rangeM < 100.0)
+                steerAim = aimPos;
+            else
+                steerAim = PredictIntercept(pos, aimPos, aimVel, speed);
             navGain = state.m_NavGainTerm;
             maxLatA = state.m_MaxLateralAccelMs2;
             boostAlongA = 0.0;
@@ -302,6 +315,7 @@ class RDF_RadarRocketGuidance
     }
 
     //------------------------------------------------------------------------------------------------
+    // Closing-speed lead: tGo = range / (Vm - Vt·los). Stable for inbound intercepts.
     protected static vector PredictIntercept(
         vector pos,
         vector aimPos,
@@ -312,17 +326,27 @@ class RDF_RadarRocketGuidance
         float rangeM = r.Length();
         if (rangeM < 1.0)
             return aimPos;
-        float speed = missileSpeed;
-        if (speed < 40.0)
-            speed = 40.0;
-        float tGo = rangeM / speed;
-        if (tGo > 12.0)
-            tGo = 12.0;
+
+        float vm = missileSpeed;
+        if (vm < 40.0)
+            vm = 40.0;
+
+        vector losHat = r * (1.0 / rangeM);
+        float closing = vm - vector.Dot(aimVel, losHat);
+        if (closing < 8.0)
+            closing = 8.0;
+
+        float tGo = rangeM / closing;
+        if (tGo < 0.05)
+            tGo = 0.05;
+        if (tGo > 20.0)
+            tGo = 20.0;
         return aimPos + aimVel * tGo;
     }
 
     //------------------------------------------------------------------------------------------------
     // Midcourse loft: raise aim by loftFrac * loftHeight scaled with remaining range.
+    // loftHeightM ~ 0 skips loft and uses pure collision-course lead (intercept demos).
     protected static vector BuildLoftAim(
         vector pos,
         vector aimPos,
@@ -332,6 +356,9 @@ class RDF_RadarRocketGuidance
         float loftFrac)
     {
         vector pred = PredictIntercept(pos, aimPos, aimVel, missileSpeed);
+        if (loftHeightM <= 0.01)
+            return pred;
+
         float rangeM = vector.Distance(pos, aimPos);
         float loftScale = rangeM / 900.0;
         if (loftScale > 1.0)

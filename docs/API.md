@@ -63,7 +63,9 @@
 - 静态预设：`CreateFullSphereSettings` / `CreateForwardConeSettings` / `CreateForwardRectSettings` / `CreateSweepSettings` / `CreateEntitiesNearSettings`
 
 ### RDF_LidarDiagMenu
-Workbench DiagMenu「RDF LiDAR」：Demo 开关、模式、射线数、量程、Showcase、PPI HUD、Verbose。`EnsureRegistered()` 在 `OnGameStart` 调用；边缘触发，不踩 bootstrap 配置。
+~~Workbench DiagMenu~~：**已禁用**（引擎 Diag 上限 512，自定义高 ID 会崩溃）。
+调参请用 `RDF_LidarSensor.ConfigureMode` / `RDF_LidarDemoConfig` / AutoRunner。
+`EnsureRegistered` / `ApplyTo*` 为空操作，保留仅为 API 兼容。
 
 ## Visual
 
@@ -475,7 +477,9 @@ Stable gameplay facade (mirrors `RDF_RadarSensor`).
 - Presets: `CreateFullSphereSettings` / `CreateForwardConeSettings` / `CreateForwardRectSettings` / `CreateSweepSettings` / `CreateEntitiesNearSettings`
 
 ### RDF_LidarDiagMenu
-Workbench DiagMenu "RDF LiDAR": demo toggle, mode, rays, range, Showcase, PPI HUD, verbose. Registered on `OnGameStart`; edge-triggered so bootstrap configs are not stomped.
+~~Workbench DiagMenu~~: **disabled** (engine hard-cap 512 diags; high private IDs crash).
+Tune via `RDF_LidarSensor.ConfigureMode` / `RDF_LidarDemoConfig` / AutoRunner.
+`EnsureRegistered` / `ApplyTo*` are no-ops (API compatibility only).
 ## Visual
 
 ### RDF_LidarVisualSettings
@@ -736,7 +740,7 @@ PPI Canvas: 210 × 210 (see LidarPPI.layout)
 - `RDF_RadarHUD`：PPI（面板 144×184 / 画布 128×128；默认匿名量测色；假目标白；NLOS 青；`m_KeepEntityTruth` 时才用类型色）。
 - `RDF_RadarAutoTestSuite.StartAll()` / `StartAllRealistic()`（Ballistics → DEM → Lock → Airborne → ShellFire → Perf → Play）。
 - 套件单项：`RDF_RadarAutoTest`、`Ballistics`、`ShellFire`、`AirborneScanTest`、`LockAutoTest`、`PerfAutoTest`、`PlayAutoTest`、`ManualDemo`。
-- 独立回归（不进 StartAll）：`RDF_RadarStressAutoTest`、`RDF_RadarRwrAutoTest`、`RDF_RadarEsmArmAutoTest`、`RDF_RadarRocketLockFireAutoTest`；地图标记 `RDF_RadarAutoTestMapOverlay`。
+- 独立回归（不进 StartAll）：`RDF_RadarStressAutoTest`、`RDF_RadarRwrAutoTest`、`RDF_RadarEsmArmAutoTest`、`RDF_RadarRocketLockFireAutoTest`、`RDF_RadarHeliDuelAutoTest`；地图标记 `RDF_RadarAutoTestMapOverlay`。
 
 ### DEM 运行时（雷达杂波）
 

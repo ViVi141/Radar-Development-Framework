@@ -269,6 +269,7 @@ Rocket lock-fire: `RDF_RadarRocketLockFireAutoTest.Start()` (Hydra70 + ARH-style
 boost / midcourse / terminal PN toward locked Mi-8; standalone, not in
 `StartAll`). Guidance: `RDF_RadarRocketGuidance.Update` +
 `RDF_RadarRocketGuidanceState`.
+Heli duel / missile intercept: `RDF_RadarHeliDuelAutoTest.Start()` (standalone).
 ESM / ARM: `RDF_RadarEsmArmAutoTest.Start()` (standalone, not in `StartAll`).
 
 ---
@@ -632,6 +633,7 @@ SEARCH → ACQUIRING → TRACKING 且瞄点可用。
 火箭锁射：`RDF_RadarRocketLockFireAutoTest.Start()`（Hydra70 + ARH 风格
 助推 / 中段 / 末段 PN 指向锁定 Mi-8；独立，不进 `StartAll`）。制导：
 `RDF_RadarRocketGuidance.Update` + `RDF_RadarRocketGuidanceState`。
+机战 / 拦截导弹：`RDF_RadarHeliDuelAutoTest.Start()`（独立）。
 ESM / ARM：`RDF_RadarEsmArmAutoTest.Start()`（独立，不进 `StartAll`）。
 
 ---

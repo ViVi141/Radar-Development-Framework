@@ -142,7 +142,8 @@ scripts/Game/RDF/Radar/
     ├── RDF_RadarStressAutoTest.c       性能压测：重负载 soak（独立）
     ├── RDF_RadarRwrAutoTest.c          RWR 告警（独立）
     ├── RDF_RadarEsmArmAutoTest.c       ESM + GetArmAim（独立）
-    └── RDF_RadarRocketLockFireAutoTest.c / RDF_RadarRocketGuidance.c  锁定→制导（独立）
+    ├── RDF_RadarRocketLockFireAutoTest.c / RDF_RadarRocketGuidance.c  锁定→制导（独立）
+    └── RDF_RadarHeliDuelAutoTest.c     机打机 + 拦截导弹（独立）
 ```
 
 数据流摘要见 [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md)；文件树若与仓库不一致，以 `scripts/Game/RDF/Radar/` 为准。
@@ -457,6 +458,7 @@ scripts/Game/RDF/Radar/
     ├── RDF_RadarRwrAutoTest.c          RWR 告警（独立）
     ├── RDF_RadarEsmArmAutoTest.c       ESM + GetArmAim（独立）
     ├── RDF_RadarRocketLockFireAutoTest.c / RDF_RadarRocketGuidance.c  锁定→制导（独立）
+    └── RDF_RadarHeliDuelAutoTest.c     机打机 + 拦截导弹（独立）
 ```
 
 Data-flow summary: [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md). If the tree drifts from the repo, treat `scripts/Game/RDF/Radar/` as authoritative.
