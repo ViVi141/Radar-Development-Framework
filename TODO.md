@@ -80,8 +80,8 @@
 
 | 档 | 项 | 收益 | 成本 | 为何现在这样排 |
 |----|----|------|------|----------------|
-| **P1 下一波** | Python CFAR / track 单测 + 可选 golden | 防逼真模型漂移 | 低 | `rdf_radar_physics` / `rdf_radar_track` 已有实现；仅 `test_rdf_radar_ballistics.py`，杠杆最高 |
-| **P1 下一波** | 最小 CI（先跑 Python unittest） | 工程卫生 | 低 | 游戏内无 Debugger 批跑仍难；先钉离线 golden |
+| **P1 已完成** | Python CFAR / track 单测 + 可选 golden | 防逼真模型漂移 | 低 | `test_rdf_radar_cfar.py` / `test_rdf_radar_track.py` |
+| **P1 已完成** | 最小 CI（Python unittest） | 工程卫生 | 低 | `.github/workflows/python-dem-tests.yml` |
 | **产品缺口** | 锁定层对接模组武器 | 玩法闭环 | 中 | 不在旧勾选表内，但 CAPABILITIES 仍列为首选；示例制导已有 |
 | **P2 场景驱动** | 刀刃绕射 / 更精细多径 | 山地体感 | 高 | 已有弱 NLOS 反射因子；真绕射需几何模型 + 场景需求 |
 | **P2 场景驱动** | DEM span 遮挡 / 多径 | 城区/林冠 | 高 | 离线/烘焙有 span；游戏 SURF 路径故意不带 — 勿轻易重开 |
@@ -93,8 +93,8 @@
 | **P3** | 游戏内 AutoTest 无 Debugger 批跑 | CI 完整 | 中高 | 依赖 Workbench 自动化；P1 用 Python CI 顶住 |
 
 - [x] Network：权威结果（plots + K/W/L）+ 关键 Settings RplProp + 发射态（见 CHANGELOG Network Sprint）
-- [ ] **P1** Python CFAR / track 单测 + 可选 Enforce golden
-- [ ] **P1** 最小 CI（Python `unittest` 先；游戏内批跑见 P3）
+- [x] **P1** Python CFAR / track 单测 + 可选 Enforce golden（`test_rdf_radar_cfar.py` / `test_rdf_radar_track.py`；CA 与 `RDF_RadarCfarGate` 对齐）
+- [x] **P1** 最小 CI（`.github/workflows/python-dem-tests.yml` 跑 `test_rdf_*.py`；游戏内批跑仍见 P3）
 - [ ] **产品** 锁定层对接模组武器（见 VEHICLE_RADAR_LOCK_GUIDE）
 - [ ] **P2** 刀刃绕射 / 更精细多径（明确山地场景时）
 - [ ] **P2** DEM span 遮挡 / 多径（明确城区/林冠需求且接受发布包变重时）
@@ -118,8 +118,8 @@
 **Sprint A+B（已完成）**：§1 + §2 — 观测、双档、测量噪声、热噪声填空、大气衰减。  
 **Sprint C（已完成）**：GO/SO-CFAR、Settings 阈值、欺骗扩展、WLR HUD。  
 **Network Sprint（已完成）**：关键 Settings RplProp、plots 加厚、K/W/L 权威摘要、发射态。  
-**Sprint D（建议下一波）**：Python CFAR/track golden + 最小 CI；并行推进锁定层对接武器（模组侧）。  
-**以后（场景/产品驱动）**：绕射 / DEM span / 组网融合 / LiDAR 空窗 / 远程算力。
+**Sprint D（已完成核心）**：Python CFAR/track golden + 最小 CI。  
+**下一步**：锁定层对接武器（模组侧）；场景驱动绕射 / DEM span / 组网融合。
 
 Ideal：`RDF_RadarAutoTestSuite.StartAll()`  
 Realistic：`RDF_RadarAutoTestSuite.StartAllRealistic()`
@@ -150,6 +150,7 @@ Realistic：`RDF_RadarAutoTestSuite.StartAllRealistic()`
 - [x] `AutoTestSuite` 7/7（Ballistics / DEM / Lock / Airborne / ShellFire / Perf / Play）；双档 ideal / realistic
 - [x] 独立回归：Stress / RWR / ESM-ARM / Rocket Lock-Fire；地图叠加 `RDF_RadarAutoTestMapOverlay`
 - [x] 测试不加辐射源 / 抬 RCS / 强制写表
+- [x] 离线 Python golden：ballistics / CFAR / track + GitHub Actions CI
 
 #### DEM / 仓库
 
@@ -250,8 +251,8 @@ Context: realistic channel + single-radar authoritative Network path shipped; ol
 
 | Tier | Item | Benefit | Cost | Why this order |
 |----|------|------|------|----------------|
-| **P1 next** | Python CFAR / track unit tests + optional golden | Drift guard | Low | Impl exists; only ballistics unittest today — highest leverage |
-| **P1 next** | Minimal CI (Python unittest first) | Eng hygiene | Low | In-game headless batch still hard; pin offline golden first |
+| **P1 done** | Python CFAR / track unit tests + optional golden | Drift guard | Low | `test_rdf_radar_cfar.py` / `test_rdf_radar_track.py` |
+| **P1 done** | Minimal CI (Python unittest) | Eng hygiene | Low | `.github/workflows/python-dem-tests.yml` |
 | **Product gap** | Lock layer → mod weapons | Gameplay loop | Medium | Outside old checklist; still CAPABILITIES #1; sample guidance exists |
 | **P2 scenario** | Knife-edge diffraction / fine multipath | Mountain feel | High | Weak NLOS factor exists; real diffraction needs geometry + demand |
 | **P2 scenario** | DEM span occlusion / multipath | Urban / canopy | High | Offline/bake has spans; game SURF path deliberately omits — don’t reopen lightly |
@@ -263,8 +264,8 @@ Context: realistic channel + single-radar authoritative Network path shipped; ol
 | **P3** | In-game AutoTest without Debugger | Full CI | Med–high | Needs Workbench automation; P1 Python CI covers interim |
 
 - [x] Network: authoritative results (plots + K/W/L) + key Settings RplProp + emit state (see CHANGELOG Network Sprint)
-- [ ] **P1** Python CFAR / track unit tests + optional Enforce golden
-- [ ] **P1** Minimal CI (Python `unittest` first; in-game batch → P3)
+- [x] **P1** Python CFAR / track unit tests + optional Enforce golden (`test_rdf_radar_cfar.py` / `test_rdf_radar_track.py`; CA aligned with `RDF_RadarCfarGate`)
+- [x] **P1** Minimal CI (`.github/workflows/python-dem-tests.yml` runs `test_rdf_*.py`; in-game batch still P3)
 - [ ] **Product** Lock layer → mod weapons (see VEHICLE_RADAR_LOCK_GUIDE)
 - [ ] **P2** Knife-edge diffraction / fine multipath (clear mountain scenario)
 - [ ] **P2** DEM span occlusion / multipath (urban/canopy need + accept heavier packs)
@@ -288,8 +289,8 @@ Context: realistic channel + single-radar authoritative Network path shipped; ol
 **Sprint A+B (done)**: §1 + §2 — observability, dual-tier, measurement noise, thermal fill, atmospheric attenuation.  
 **Sprint C (done)**: GO/SO-CFAR, Settings thresholds, deception extensions, WLR HUD.  
 **Network Sprint (done)**: key Settings RplProp, thicker plots, K/W/L authoritative summary, emit state.  
-**Sprint D (suggested next)**: Python CFAR/track golden + minimal CI; parallel lock→weapon integration (mod side).  
-**Later (scenario/product-driven)**: diffraction / DEM span / fusion / LiDAR idle / remote compute.
+**Sprint D (core done)**: Python CFAR/track golden + minimal CI.  
+**Next**: lock→weapon integration (mod side); scenario-driven diffraction / DEM span / fusion.
 
 Ideal: `RDF_RadarAutoTestSuite.StartAll()`  
 Realistic: `RDF_RadarAutoTestSuite.StartAllRealistic()`
@@ -320,6 +321,7 @@ Realistic: `RDF_RadarAutoTestSuite.StartAllRealistic()`
 - [x] `AutoTestSuite` 5/5（Ballistics / DEM / Lock / Airborne / ShellFire）；双档 ideal / realistic
 - [x] 独立回归：RWR / ESM-ARM / Rocket Lock-Fire；地图叠加 `RDF_RadarAutoTestMapOverlay`
 - [x] 测试不加辐射源 / 抬 RCS / 强制写表
+- [x] Offline Python golden: ballistics / CFAR / track + GitHub Actions CI
 
 #### DEM / repo
 

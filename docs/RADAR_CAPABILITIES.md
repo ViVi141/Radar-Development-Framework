@@ -124,9 +124,9 @@
 
 ### 5. 建议优先级（只选三条时）
 
-重评估（2026-07-29，与 [TODO.md](../TODO.md) Sprint D 对齐）：
+重评估（2026-07-29，与 [TODO.md](../TODO.md) 对齐）：
 
-1. **Python CFAR/track golden + 最小 CI**（低成本、防漂移；逼真通道已落地）  
+1. ~~**Python CFAR/track golden + 最小 CI**~~ **已完成**（`test_rdf_radar_cfar.py` / `test_rdf_radar_track.py` + GitHub Actions）  
 2. **锁定层对接武器**（示例制导已有；产品武器仍需模组接入）  
 3. **场景驱动**：山地绕射/多径，或单雷达打磨后的多雷达融合 — 勿与远程算力抢位  
 
@@ -266,9 +266,9 @@ Aligned with deferred items in [TODO.md](../TODO.md):
 
 ### 5. Suggested priority (if picking only three)
 
-Reprioritized 2026-07-29 (aligned with [TODO.md](../TODO.md) Sprint D):
+Reprioritized 2026-07-29 (aligned with [TODO.md](../TODO.md)):
 
-1. **Python CFAR/track golden + minimal CI** (low cost, drift guard; realistic channel already shipped)  
+1. ~~**Python CFAR/track golden + minimal CI**~~ **done** (`test_rdf_radar_cfar.py` / `test_rdf_radar_track.py` + GitHub Actions)  
 2. **Lock layer → weapon integration** (example guidance exists; product weapons still need mod wiring)  
 3. **Scenario-driven**: mountain diffraction/multipath, or multi-radar fusion after single-radar polish — do not let remote compute jump the queue  
 

@@ -139,7 +139,8 @@ Two hard-won lessons (see CHANGELOG 2026-07-27):
 
 Public API: [docs/RADAR_API.md](docs/RADAR_API.md)  
 In-game framework notes: [docs/RADAR_GAME_FRAMEWORK.md](docs/RADAR_GAME_FRAMEWORK.md)  
-Offline Python prototype: [tools/dem/RADAR_FRAMEWORK.md](tools/dem/RADAR_FRAMEWORK.md)
+Offline Python prototype: [tools/dem/RADAR_FRAMEWORK.md](tools/dem/RADAR_FRAMEWORK.md)  
+Offline golden tests: `cd tools/dem` → `python -m unittest discover -s . -p "test_rdf_*.py" -v` (CI workflow on `tools/dem/**`)
 
 ---
 
@@ -331,7 +332,8 @@ RDF_RadarRocketLockFireAutoTest.Start();   // 锁定 → Hydra70 制导打击
 
 公共 API：[docs/RADAR_API.md](docs/RADAR_API.md)  
 游戏内框架说明：[docs/RADAR_GAME_FRAMEWORK.md](docs/RADAR_GAME_FRAMEWORK.md)  
-离线 Python 原型：[tools/dem/RADAR_FRAMEWORK.md](tools/dem/RADAR_FRAMEWORK.md)
+离线 Python 原型：[tools/dem/RADAR_FRAMEWORK.md](tools/dem/RADAR_FRAMEWORK.md)  
+离线 golden 测试：`cd tools/dem` → `python -m unittest discover -s . -p "test_rdf_*.py" -v`（`tools/dem/**` 触发 CI）
 
 ---
 

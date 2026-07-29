@@ -9,7 +9,10 @@
 #
 # Example:
 #   pip install -r tools/dem/requirements.txt
-#   python tools/dem/test_rdf_radar_ballistics.py -v
+#   cd tools/dem
+#   python -m unittest discover -s . -p 'test_rdf_*.py' -v
+#
+# CI: .github/workflows/python-dem-tests.yml (numpy only)
 
 numpy>=1.24
 matplotlib>=3.7

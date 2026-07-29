@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-07-29 — Sprint D：CFAR/track golden + 最小 CI
+
+- 新增 `tools/dem/test_rdf_radar_cfar.py`：CA-CFAR 检出/虚警/杂波边缘 + 与 `RDF_RadarCfarGate` CA 公式对齐的 Enforce golden
+- 新增 `tools/dem/test_rdf_radar_track.py`：关联门限、α-β 滤波、方位 wrap、真空弹道拟合/预测
+- 新增 `.github/workflows/python-dem-tests.yml`：对 `tools/dem/test_rdf_*.py` 跑 unittest
+- 本地：`cd tools/dem` 后 `python -m unittest discover -s . -p 'test_rdf_*.py' -v`
+
 ## 2026-07-29 — 待办重评估（Sprint D）
 
 - [TODO.md](../TODO.md) §4 由「一律延后」改为 P1/P2/P3：下一波 = Python CFAR/track golden + 最小 CI；产品缺口 = 锁定对接武器；绕射/DEM span/融合/LiDAR/IFF 场景驱动；远程算力与游戏内无 Debugger 批跑压到 P3
