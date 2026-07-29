@@ -3,9 +3,9 @@ class RDF_RadarNetworkComponentClass : RDF_RadarNetworkAPIClass
 {
 }
 
-// Server-authority radar sync: RplProp for slow config, Reliable Rpc with typed
-// arrays for live scan results, RplSave/RplLoad (ScriptBitWriter) for JIP.
-// Presentation stays local.
+// Server-authority radar sync aligned with stock patterns:
+// Reliable = confirmed tracks + lock; Unreliable = optional HUD plots;
+// caps / throttle / interest radius; RplSave/RplLoad for JIP.
 class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
 {
     protected RplComponent m_RplComponent;
@@ -22,9 +22,34 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
     protected vector m_LastLockAimPos;
     protected bool m_HasSyncedLock;
 
-    // Stable datalink source id (assigned once; not RplId — works without Rpl).
     protected int m_DatalinkSourceId;
     protected static int s_NextDatalinkSourceId = 1;
+
+    protected float m_LastReliableBroadcastMs = -100000.0;
+    protected float m_LastPlotBroadcastMs = -100000.0;
+    protected int m_LastSummaryFingerprint = 0;
+
+    // Bandwidth / scale policy (editor Attributes, not RplProp — authority-only knobs).
+    [Attribute(defvalue: "1", desc: "Unreliable Broadcast of capped plots for HUD (official: FX-like)")]
+    bool m_SyncPlotsUnreliable = true;
+
+    [Attribute(defvalue: "24", desc: "Max plots in Unreliable plot Rpc (0 = unlimited)")]
+    int m_MaxSyncedPlots = 24;
+
+    [Attribute(defvalue: "32", desc: "Max confirmed tracks in Reliable summary Rpc (0 = unlimited)")]
+    int m_MaxSyncedTracks = 32;
+
+    [Attribute(defvalue: "0.15", desc: "Min seconds between Reliable summary Broadcasts")]
+    float m_MinReliableBroadcastIntervalS = 0.15;
+
+    [Attribute(defvalue: "0.05", desc: "Min seconds between Unreliable plot Broadcasts")]
+    float m_MinPlotBroadcastIntervalS = 0.05;
+
+    [Attribute(defvalue: "1", desc: "Skip Reliable Broadcast when track/lock fingerprint unchanged")]
+    bool m_SkipUnchangedSummary = true;
+
+    [Attribute(defvalue: "12000", desc: "Only Broadcast if a player is within this radius (m); 0 = always")]
+    float m_InterestRadiusM = 12000.0;
 
     [RplProp(condition: RplCondition.NoOwner, onRplName: "OnDemoEnabledChanged")]
     protected bool m_DemoEnabled = true;
@@ -299,21 +324,100 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         if (m_RplComponent.IsProxy())
             return;
 
-        array<int> ints = new array<int>();
-        array<float> floats = new array<float>();
-        RDF_RadarNetCodec.PackScanRpc(
-            m_LastScanOrigin,
-            m_LastScanForward,
-            m_LastScanRange,
+        float nowMs = 0.0;
+        if (GetGame().GetWorld())
+            nowMs = GetGame().GetWorld().GetWorldTime();
+
+        if (!HasInterestedAudience())
+            return;
+
+        int fingerprint = RDF_RadarNetCodec.FingerprintTracksAndLock(
+            m_LastTracks,
             m_HasSyncedLock,
             m_LastLockState,
-            m_LastLockTrackId,
-            m_LastLockAimPos,
+            m_LastLockTrackId);
+
+        bool allowReliable = true;
+        float reliableIntervalMs = Math.Max(0.0, m_MinReliableBroadcastIntervalS) * 1000.0;
+        if ((nowMs - m_LastReliableBroadcastMs) < reliableIntervalMs)
+            allowReliable = false;
+
+        bool summaryChanged = fingerprint != m_LastSummaryFingerprint;
+        if (m_SkipUnchangedSummary && !summaryChanged)
+            allowReliable = false;
+
+        // Always push when lock engages / changes even if throttled lightly.
+        if (summaryChanged && m_HasSyncedLock && m_LastLockState > 0)
+            allowReliable = true;
+
+        if (allowReliable)
+        {
+            array<int> summaryInts = new array<int>();
+            array<float> summaryFloats = new array<float>();
+            RDF_RadarNetCodec.PackScanRpc(
+                m_LastScanOrigin,
+                m_LastScanForward,
+                m_LastScanRange,
+                m_HasSyncedLock,
+                m_LastLockState,
+                m_LastLockTrackId,
+                m_LastLockAimPos,
+                null,
+                m_LastTracks,
+                summaryInts,
+                summaryFloats,
+                0,
+                m_MaxSyncedTracks,
+                false);
+            Rpc(RpcDo_ReceiveScanSummary, summaryInts, summaryFloats);
+            m_LastReliableBroadcastMs = nowMs;
+            m_LastSummaryFingerprint = fingerprint;
+        }
+
+        if (!m_SyncPlotsUnreliable)
+            return;
+
+        float plotIntervalMs = Math.Max(0.0, m_MinPlotBroadcastIntervalS) * 1000.0;
+        if ((nowMs - m_LastPlotBroadcastMs) < plotIntervalMs)
+            return;
+
+        array<int> plotInts = new array<int>();
+        array<float> plotFloats = new array<float>();
+        RDF_RadarNetCodec.PackScanPlotsRpc(
             m_LastTargets,
-            m_LastTracks,
-            ints,
-            floats);
-        Rpc(RpcDo_ReceiveScanPayload, ints, floats);
+            m_MaxSyncedPlots,
+            plotInts,
+            plotFloats);
+        Rpc(RpcDo_ReceiveScanPlots, plotInts, plotFloats);
+        m_LastPlotBroadcastMs = nowMs;
+    }
+
+    protected bool HasInterestedAudience()
+    {
+        if (m_InterestRadiusM <= 0.0)
+            return true;
+
+        PlayerManager pm = GetGame().GetPlayerManager();
+        if (!pm)
+            return true;
+
+        array<int> players = new array<int>();
+        pm.GetPlayers(players);
+        if (players.Count() < 1)
+            return true;
+
+        float radiusSq = m_InterestRadiusM * m_InterestRadiusM;
+        for (int i = 0; i < players.Count(); i++)
+        {
+            IEntity controlled = pm.GetPlayerControlledEntity(players.Get(i));
+            if (!controlled)
+                continue;
+            vector delta = controlled.GetOrigin() - m_LastScanOrigin;
+            float distSq = delta[0] * delta[0] + delta[2] * delta[2];
+            if (distSq <= radiusSq)
+                return true;
+        }
+        return false;
     }
 
     protected void UpdateLocalResults(array<ref RDF_RadarTarget> results)
@@ -447,18 +551,23 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
     }
 
     [RplRpc(RplChannel.Reliable, RplRcver.Broadcast)]
-    protected void RpcDo_ReceiveScanPayload(array<int> ints, array<float> floats)
+    protected void RpcDo_ReceiveScanSummary(array<int> ints, array<float> floats)
     {
-        ApplyScanPayload(ints, floats);
+        ApplyScanSummary(ints, floats);
     }
 
-    protected void ApplyScanPayload(array<int> ints, array<float> floats)
+    [RplRpc(RplChannel.Unreliable, RplRcver.Broadcast)]
+    protected void RpcDo_ReceiveScanPlots(array<int> ints, array<float> floats)
     {
-        if (!m_LastTargets)
-            m_LastTargets = new array<ref RDF_RadarTarget>();
+        ApplyScanPlots(ints, floats);
+    }
+
+    protected void ApplyScanSummary(array<int> ints, array<float> floats)
+    {
         if (!m_LastTracks)
             m_LastTracks = new array<ref RDF_RadarTrack>();
 
+        array<ref RDF_RadarTarget> ignoredPlots = new array<ref RDF_RadarTarget>();
         vector origin;
         vector forward;
         float rangeM;
@@ -476,7 +585,7 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
             lockState,
             lockTrackId,
             lockAim,
-            m_LastTargets,
+            ignoredPlots,
             m_LastTracks))
         {
             return;
@@ -490,6 +599,17 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         m_LastLockTrackId = lockTrackId;
         m_LastLockAimPos = lockAim;
 
+        if (GetGame().GetWorld())
+            m_LastScanTime = GetGame().GetWorld().GetWorldTime();
+        m_HasSyncedScan = true;
+    }
+
+    protected void ApplyScanPlots(array<int> ints, array<float> floats)
+    {
+        if (!m_LastTargets)
+            m_LastTargets = new array<ref RDF_RadarTarget>();
+        if (!RDF_RadarNetCodec.UnpackScanPlotsRpc(ints, floats, m_LastTargets))
+            return;
         if (GetGame().GetWorld())
             m_LastScanTime = GetGame().GetWorld().GetWorldTime();
         m_HasSyncedScan = true;

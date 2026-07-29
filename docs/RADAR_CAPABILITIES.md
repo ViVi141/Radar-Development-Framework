@@ -96,7 +96,7 @@
 #### 引擎与联机现实
 
 - 候选为散射体表 + Sphere/Active；仍非体素体积搜索
-- 已有服务器权威同步路径；轻量多雷达融合经 DatalinkHub 已落地；带宽自适应未覆盖
+- 已有服务器权威同步路径；轻量多雷达融合经 DatalinkHub 已落地；带宽自适应（Reliable 摘要 / Unreliable plots / 上限降频 / 兴趣半径）已接第一版
 
 ---
 
@@ -108,7 +108,7 @@
 
 1. **锁定层对接武器**（见 [VEHICLE_RADAR_LOCK_GUIDE.md](VEHICLE_RADAR_LOCK_GUIDE.md)）
 2. ~~更细多径/绕射近似~~ **单刃绕射已落地**；DEM span / 多刃仍场景驱动
-3. ~~联机：多雷达融合~~ **已落地**；带宽自适应可并行
+3. ~~联机：多雷达融合~~ **已落地**；~~带宽自适应~~ **第一版已接**（摘要/plots 分流 + 上限降频）
 
 #### 离线（Python + DEM）
 
@@ -239,7 +239,7 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 #### Engine & multiplayer reality
 
 - Candidates are scatterer tables + Sphere/Active; still not voxel volume search
-- Server-authoritative sync path exists; light multi-radar fusion via DatalinkHub shipped; bandwidth adaptation not covered
+- Server-authoritative sync path exists; light multi-radar fusion via DatalinkHub shipped; bandwidth adaptation v1 shipped (Reliable summary / Unreliable plots / caps / interest)
 
 ---
 
@@ -251,7 +251,7 @@ Aligned with deferred items in [TODO.md](../TODO.md):
 
 1. **Lock layer → weapon integration** (see [VEHICLE_RADAR_LOCK_GUIDE.md](VEHICLE_RADAR_LOCK_GUIDE.md))
 2. ~~Finer multipath / diffraction~~ **single knife-edge shipped**; DEM span / multi-edge still scenario-driven
-3. ~~MP: multi-radar fusion~~ **shipped**; bandwidth adaptation can proceed in parallel
+3. ~~MP: multi-radar fusion~~ **shipped**; ~~bandwidth adaptation~~ **v1 shipped** (summary/plots split + caps/throttle)
 
 #### Offline (Python + DEM)
 

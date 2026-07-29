@@ -120,7 +120,9 @@ class RDF_RadarNetCodec
         notnull array<int> trackInts,
         notnull array<float> trackFloats,
         notnull array<int> wlrInts,
-        notnull array<float> wlrFloats)
+        notnull array<float> wlrFloats,
+        int maxPlots,
+        int maxTracks)
     {
         plotInts.Clear();
         plotFloats.Clear();
@@ -133,6 +135,8 @@ class RDF_RadarNetCodec
         {
             for (int i = 0; i < plots.Count(); i++)
             {
+                if (maxPlots > 0 && (plotInts.Count() / PLOT_INT_STRIDE) >= maxPlots)
+                    break;
                 RDF_RadarTarget t = plots.Get(i);
                 if (!t)
                     continue;
@@ -154,6 +158,8 @@ class RDF_RadarNetCodec
         {
             for (int k = 0; k < tracks.Count(); k++)
             {
+                if (maxTracks > 0 && (trackInts.Count() / TRACK_INT_STRIDE) >= maxTracks)
+                    break;
                 RDF_RadarTrack tr = tracks.Get(k);
                 if (!tr)
                     continue;
@@ -302,15 +308,22 @@ class RDF_RadarNetCodec
         array<ref RDF_RadarTarget> plots,
         array<ref RDF_RadarTrack> tracks,
         notnull array<int> outInts,
-        notnull array<float> outFloats)
+        notnull array<float> outFloats,
+        int maxPlots,
+        int maxTracks,
+        bool includePlots)
     {
+        array<ref RDF_RadarTarget> plotSrc = null;
+        if (includePlots)
+            plotSrc = plots;
+
         array<int> plotInts = new array<int>();
         array<float> plotFloats = new array<float>();
         array<int> trackInts = new array<int>();
         array<float> trackFloats = new array<float>();
         array<int> wlrInts = new array<int>();
         array<float> wlrFloats = new array<float>();
-        PackScan(plots, tracks, plotInts, plotFloats, trackInts, trackFloats, wlrInts, wlrFloats);
+        PackScan(plotSrc, tracks, plotInts, plotFloats, trackInts, trackFloats, wlrInts, wlrFloats, maxPlots, maxTracks);
 
         int plotCount = plotInts.Count() / PLOT_INT_STRIDE;
         int trackCount = trackInts.Count() / TRACK_INT_STRIDE;
@@ -335,6 +348,85 @@ class RDF_RadarNetCodec
         AppendFloats(outFloats, plotFloats);
         AppendFloats(outFloats, trackFloats);
         AppendFloats(outFloats, wlrFloats);
+    }
+
+    // Unreliable HUD plots only: ints[0]=count, then plot int/float blocks (no meta/tracks).
+    static void PackScanPlotsRpc(
+        array<ref RDF_RadarTarget> plots,
+        int maxPlots,
+        notnull array<int> outInts,
+        notnull array<float> outFloats)
+    {
+        array<int> plotInts = new array<int>();
+        array<float> plotFloats = new array<float>();
+        array<int> trackInts = new array<int>();
+        array<float> trackFloats = new array<float>();
+        array<int> wlrInts = new array<int>();
+        array<float> wlrFloats = new array<float>();
+        PackScan(plots, null, plotInts, plotFloats, trackInts, trackFloats, wlrInts, wlrFloats, maxPlots, 0);
+
+        outInts.Clear();
+        outInts.Insert(plotInts.Count() / PLOT_INT_STRIDE);
+        AppendInts(outInts, plotInts);
+        outFloats.Clear();
+        AppendFloats(outFloats, plotFloats);
+    }
+
+    static bool UnpackScanPlotsRpc(
+        array<int> ints,
+        array<float> floats,
+        notnull array<ref RDF_RadarTarget> outPlots)
+    {
+        outPlots.Clear();
+        if (!ints || !floats)
+            return false;
+        if (ints.Count() < 1)
+            return false;
+        int plotCount = ints.Get(0);
+        if (plotCount < 0)
+            plotCount = 0;
+        int plotIntLen = plotCount * PLOT_INT_STRIDE;
+        int plotFloatLen = plotCount * PLOT_FLOAT_STRIDE;
+        if (ints.Count() < 1 + plotIntLen)
+            return false;
+        if (floats.Count() < plotFloatLen)
+            return false;
+
+        array<int> plotInts = SliceInts(ints, 1, plotIntLen);
+        array<float> plotFloats = SliceFloats(floats, 0, plotFloatLen);
+        array<int> emptyI = new array<int>();
+        array<float> emptyF = new array<float>();
+        array<ref RDF_RadarTrack> unusedTracks = new array<ref RDF_RadarTrack>();
+        UnpackScan(plotInts, plotFloats, emptyI, emptyF, emptyI, emptyF, outPlots, unusedTracks);
+        return true;
+    }
+
+    static int FingerprintTracksAndLock(
+        array<ref RDF_RadarTrack> tracks,
+        bool hasLock,
+        int lockState,
+        int lockTrackId)
+    {
+        int h = 17;
+        if (hasLock)
+            h = h * 31 + 1;
+        h = h * 31 + lockState;
+        h = h * 31 + lockTrackId;
+        if (!tracks)
+            return h;
+        h = h * 31 + tracks.Count();
+        for (int i = 0; i < tracks.Count(); i++)
+        {
+            RDF_RadarTrack tr = tracks.Get(i);
+            if (!tr)
+                continue;
+            h = h * 31 + tr.m_TrackId;
+            h = h * 31 + TargetTypeToInt(tr.m_Type);
+            h = h * 31 + Math.Round(tr.m_FilteredPosition[0]);
+            h = h * 31 + Math.Round(tr.m_FilteredPosition[2]);
+            h = h * 31 + Math.Round(tr.m_LastSnrDb);
+        }
+        return h;
     }
 
     static bool UnpackScanRpc(
@@ -501,13 +593,15 @@ class RDF_RadarNetCodec
         array<ref RDF_RadarDatalinkTrack> tracks,
         array<ref RDF_RadarFusedTrack> fused,
         notnull array<int> outInts,
-        notnull array<float> outFloats)
+        notnull array<float> outFloats,
+        int maxTracks,
+        int maxFused)
     {
         array<int> trackInts = new array<int>();
         array<float> trackFloats = new array<float>();
         array<int> fusedInts = new array<int>();
         array<float> fusedFloats = new array<float>();
-        PackDatalink(tracks, fused, trackInts, trackFloats, fusedInts, fusedFloats);
+        PackDatalink(tracks, fused, trackInts, trackFloats, fusedInts, fusedFloats, maxTracks, maxFused);
 
         int trackCount = trackInts.Count() / DL_TRACK_INT_STRIDE;
         int fusedCount = fusedInts.Count() / FUSED_INT_STRIDE;
@@ -634,7 +728,7 @@ class RDF_RadarNetCodec
         array<float> trackFloats = new array<float>();
         array<int> wlrInts = new array<int>();
         array<float> wlrFloats = new array<float>();
-        PackScan(plots, tracks, plotInts, plotFloats, trackInts, trackFloats, wlrInts, wlrFloats);
+        PackScan(plots, tracks, plotInts, plotFloats, trackInts, trackFloats, wlrInts, wlrFloats, 0, 0);
         WriteIntArray(writer, plotInts);
         WriteFloatArray(writer, plotFloats);
         WriteIntArray(writer, trackInts);
@@ -685,7 +779,9 @@ class RDF_RadarNetCodec
         notnull array<int> trackInts,
         notnull array<float> trackFloats,
         notnull array<int> fusedInts,
-        notnull array<float> fusedFloats)
+        notnull array<float> fusedFloats,
+        int maxTracks,
+        int maxFused)
     {
         trackInts.Clear();
         trackFloats.Clear();
@@ -696,6 +792,8 @@ class RDF_RadarNetCodec
         {
             for (int i = 0; i < tracks.Count(); i++)
             {
+                if (maxTracks > 0 && (trackInts.Count() / DL_TRACK_INT_STRIDE) >= maxTracks)
+                    break;
                 RDF_RadarDatalinkTrack t = tracks.Get(i);
                 if (!t)
                     continue;
@@ -719,6 +817,8 @@ class RDF_RadarNetCodec
         {
             for (int f = 0; f < fused.Count(); f++)
             {
+                if (maxFused > 0 && (fusedInts.Count() / FUSED_INT_STRIDE) >= maxFused)
+                    break;
                 RDF_RadarFusedTrack ft = fused.Get(f);
                 if (!ft)
                     continue;
@@ -818,7 +918,7 @@ class RDF_RadarNetCodec
         array<float> trackFloats = new array<float>();
         array<int> fusedInts = new array<int>();
         array<float> fusedFloats = new array<float>();
-        PackDatalink(tracks, fused, trackInts, trackFloats, fusedInts, fusedFloats);
+        PackDatalink(tracks, fused, trackInts, trackFloats, fusedInts, fusedFloats, 0, 0);
         WriteIntArray(writer, trackInts);
         WriteFloatArray(writer, trackFloats);
         WriteIntArray(writer, fusedInts);

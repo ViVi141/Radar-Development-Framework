@@ -313,19 +313,22 @@ Pass `RDF_RadarNetworkAPI` into `Tick` / `ScanOnce` when present.
 | Slow config (enabled, range, interval, sector, maxTargets, WLR flags, CFAR mode, SNR, Include*) | `[RplProp]` + `Replication.BumpMe()`; Proxy `onRpl` → apply to local Sensor |
 | Emitting / silent | `[RplProp] m_IsEmitting`; Proxy updates local `EmitterRegistry` only |
 | Client requests (config / scan / emitting) | `RplRpc` Reliable → `Server` |
-| Scan results (live) | `RplRpc` Reliable → `Broadcast` with **2 args**: `array<int>` + `array<float>` (`RDF_RadarNetCodec.PackScanRpc`) |
-| Client config ask | Same 2-array packing (`PackConfigRpc`) |
+| Scan summary (tracks + lock + meta) | `RplRpc` **Reliable** → `Broadcast` (`PackScanRpc`, plots omitted) |
+| Scan plots (HUD) | `RplRpc` **Unreliable** → `Broadcast` (`PackScanPlotsRpc`, capped) |
+| Scale knobs | caps, min broadcast interval, fingerprint skip, interest radius |
 | Scan results (JIP) | `RplSave` / `RplLoad` + `ScriptBitWriter` / `ScriptBitReader` |
 | HUD / Visualizer / DEM tiles | Local only |
 
 ### Live scan RPC layout
 
-`Rpc` arity is limited (~8 including method). Meta + plots/tracks/WLR are concatenated into two arrays:
+Aligned with stock scale patterns (summary Reliable, presentation Unreliable):
 
-| Array | Contents |
-|-------|----------|
-| ints | hasLock, lockState, lockTrackId, plotCount, trackCount, wlrCount, then plot/track/wlr int blocks |
-| floats | origin(3), forward(3), range, lockAim(3), then plot/track/wlr float blocks (vectors as 3 floats) |
+| Channel | Payload |
+|---------|---------|
+| Reliable summary | meta + capped confirmed tracks + WLR + lock (`includePlots=false`) |
+| Unreliable plots | plot count + capped plot SoA (no tracks) |
+
+Throttle / interest Attributes on `RDF_RadarNetworkComponent`: `m_MaxSyncedTracks`, `m_MaxSyncedPlots`, `m_MinReliableBroadcastIntervalS`, `m_MinPlotBroadcastIntervalS`, `m_SkipUnchangedSummary`, `m_InterestRadiusM`, `m_SyncPlotsUnreliable`.
 
 Proxy `RDF_RadarSensor` path: ingest plots + **inject tracks/lock**, skip local Tracker/Lock recompute for that frame. Authority still runs the full local chain then broadcasts.
 
@@ -696,19 +699,22 @@ RDF_RadarAutoRunner.GetSensor().GetStatusShort();
 | 慢配置（enabled、range、interval、sector、maxTargets、WLR flags、CFAR mode、SNR、Include*） | `[RplProp]` + `Replication.BumpMe()`；Proxy `onRpl` → 应用到本地 Sensor |
 | 发射 / 静默 | `[RplProp] m_IsEmitting`；Proxy 只更新本地 `EmitterRegistry` |
 | 客户端请求（config / scan / emitting） | `RplRpc` Reliable → `Server` |
-| 扫描结果（实时） | `RplRpc` Reliable → `Broadcast`，**2 参数**：`array<int>` + `array<float>`（`PackScanRpc`） |
-| 客户端配置请求 | 同样 2 数组打包（`PackConfigRpc`） |
+| 扫描摘要（航迹 + 锁 + 元数据） | `RplRpc` **Reliable** → `Broadcast`（`PackScanRpc`，不含 plots） |
+| 扫描 plots（HUD） | `RplRpc` **Unreliable** → `Broadcast`（`PackScanPlotsRpc`，有上限） |
+| 规模旋钮 | 上限、最小广播间隔、指纹跳过、兴趣半径 |
 | 扫描结果（JIP） | `RplSave` / `RplLoad` + `ScriptBitWriter` / `ScriptBitReader` |
 | HUD / Visualizer / DEM tiles | 仅本地 |
 
 ### 实时扫描 RPC 布局
 
-`Rpc` 参数上限很紧（约 8，含方法引用）。元数据 + plots/tracks/WLR 拼进两个数组：
+对齐官方规模模式（摘要 Reliable、观感 Unreliable）：
 
-| 数组 | 内容 |
-|-------|----------|
-| ints | hasLock、lockState、lockTrackId、plotCount、trackCount、wlrCount，随后 plot/track/wlr int 块 |
-| floats | origin(3)、forward(3)、range、lockAim(3)，随后 plot/track/wlr float 块（vector 为 3 float） |
+| 通道 | 载荷 |
+|---------|---------|
+| Reliable 摘要 | meta + 有上限确认航迹 + WLR + 锁（`includePlots=false`） |
+| Unreliable plots | plot 数量 + 有上限 plot SoA（无航迹） |
+
+`RDF_RadarNetworkComponent` 属性：`m_MaxSyncedTracks`、`m_MaxSyncedPlots`、`m_MinReliableBroadcastIntervalS`、`m_MinPlotBroadcastIntervalS`、`m_SkipUnchangedSummary`、`m_InterestRadiusM`、`m_SyncPlotsUnreliable`。
 
 Proxy 上的 `RDF_RadarSensor` 路径：吞入 plots + **注入航迹/锁定**，该帧跳过本地 Tracker/Lock 重算。权威端仍跑完整本地链再广播。
 

@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-07-30 — Network 规模对齐（官方风格）
+
+- Reliable：只同步确认航迹 + 锁 + 扫描几何（`RpcDo_ReceiveScanSummary`）
+- Unreliable：可选有上限 plots（`RpcDo_ReceiveScanPlots`，HUD）
+- 降频 / 指纹跳过不变摘要 / 兴趣半径；数据链同样限频与上限
+- Attribute：`m_MaxSyncedTracks/Plots`、`m_Min*BroadcastIntervalS`、`m_InterestRadiusM`、`m_SyncPlotsUnreliable`
+
 ## 2026-07-30 — Network / Datalink 官方复制路径
 
 - 扫描结果：CSV `string` Rpc → 类型化 `array<int>` / `array<float>`（`RDF_RadarNetCodec`）+ `RplSave`/`RplLoad`（JIP）

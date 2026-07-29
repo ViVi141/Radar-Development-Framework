@@ -1,5 +1,5 @@
-// Optional network face for DatalinkHub: Reliable Broadcast of typed arrays
-// for station tracks + fused tracks; RplSave/RplLoad for JIP.
+// Optional network face for DatalinkHub: Reliable Broadcast of capped track /
+// fused summaries; throttle + interest; RplSave/RplLoad for JIP.
 [ComponentEditorProps(category: "GameScripted/RDF", description: "Datalink hub network sync (typed arrays + RplSave)")]
 class RDF_RadarDatalinkComponentClass : RDF_RadarDatalinkAPIClass
 {
@@ -9,9 +9,22 @@ class RDF_RadarDatalinkComponent : RDF_RadarDatalinkAPI
 {
     protected RplComponent m_RplComponent;
     protected bool m_BroadcastEnabled = true;
+    protected float m_LastBroadcastMs = -100000.0;
 
     [Attribute(defvalue: "1", desc: "Broadcast datalink/fused summaries to proxies")]
-    bool m_EnableBroadcast;
+    bool m_EnableBroadcast = true;
+
+    [Attribute(defvalue: "48", desc: "Max datalink tracks per Broadcast (0 = unlimited)")]
+    int m_MaxSyncedTracks = 48;
+
+    [Attribute(defvalue: "32", desc: "Max fused tracks per Broadcast (0 = unlimited)")]
+    int m_MaxSyncedFused = 32;
+
+    [Attribute(defvalue: "0.25", desc: "Min seconds between datalink Broadcasts")]
+    float m_MinBroadcastIntervalS = 0.25;
+
+    [Attribute(defvalue: "15000", desc: "Only Broadcast if a player is within this radius of owner (m); 0 = always")]
+    float m_InterestRadiusM = 15000.0;
 
     override void EOnInit(IEntity owner)
     {
@@ -59,6 +72,18 @@ class RDF_RadarDatalinkComponent : RDF_RadarDatalinkAPI
             return;
         if (!m_BroadcastEnabled)
             return;
+        if (!m_EnableBroadcast)
+            return;
+
+        float nowMs = 0.0;
+        if (GetGame().GetWorld())
+            nowMs = GetGame().GetWorld().GetWorldTime();
+        float intervalMs = Math.Max(0.0, m_MinBroadcastIntervalS) * 1000.0;
+        if ((nowMs - m_LastBroadcastMs) < intervalMs)
+            return;
+
+        if (!HasInterestedAudience())
+            return;
 
         RDF_RadarDatalinkHub hub = RDF_RadarDatalinkHub.Get();
         array<int> ints = new array<int>();
@@ -67,8 +92,44 @@ class RDF_RadarDatalinkComponent : RDF_RadarDatalinkAPI
             hub.GetAllTracks(),
             hub.GetFusedTracks(),
             ints,
-            floats);
+            floats,
+            m_MaxSyncedTracks,
+            m_MaxSyncedFused);
         Rpc(RpcDo_ReceiveDatalinkPayload, ints, floats);
+        m_LastBroadcastMs = nowMs;
+    }
+
+    protected bool HasInterestedAudience()
+    {
+        if (m_InterestRadiusM <= 0.0)
+            return true;
+
+        IEntity owner = GetOwner();
+        if (!owner)
+            return true;
+
+        PlayerManager pm = GetGame().GetPlayerManager();
+        if (!pm)
+            return true;
+
+        array<int> players = new array<int>();
+        pm.GetPlayers(players);
+        if (players.Count() < 1)
+            return true;
+
+        vector origin = owner.GetOrigin();
+        float radiusSq = m_InterestRadiusM * m_InterestRadiusM;
+        for (int i = 0; i < players.Count(); i++)
+        {
+            IEntity controlled = pm.GetPlayerControlledEntity(players.Get(i));
+            if (!controlled)
+                continue;
+            vector delta = controlled.GetOrigin() - origin;
+            float distSq = delta[0] * delta[0] + delta[2] * delta[2];
+            if (distSq <= radiusSq)
+                return true;
+        }
+        return false;
     }
 
     [RplRpc(RplChannel.Reliable, RplRcver.Broadcast)]

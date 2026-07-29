@@ -151,6 +151,7 @@ Realistic：`RDF_RadarAutoTestSuite.StartAllRealistic()`
 - [x] 火箭制导示例（`RDF_RadarRocketGuidance` + Lock-Fire 回归）
 - [x] Network 权威端挂 Sensor
 - [x] Network：关键配置 RplProp + 扫描结果 Broadcast（plots / tracks / WLR / lock）+ 发射态
+- [x] Network 规模对齐：Reliable 航迹摘要 + Unreliable plots + 上限/降频/兴趣半径
 - [x] 数据链 Hub + 多雷达融合 / 双站交会 + 轻量 IFF（`RDF_RadarFusionAutoTest`）
 
 #### 工程 / 性能
@@ -336,6 +337,7 @@ Realistic: `RDF_RadarAutoTestSuite.StartAllRealistic()`
 - [x] 火箭制导示例（`RDF_RadarRocketGuidance` + Lock-Fire 回归）
 - [x] Network 权威端挂 Sensor
 - [x] Network：关键配置 RplProp + 扫描结果 Broadcast（plots / tracks / WLR / lock）+ 发射态
+- [x] Network 规模对齐：Reliable 航迹摘要 + Unreliable plots + 上限/降频/兴趣半径
 - [x] Datalink Hub + multi-radar fusion / dual-station cross-fix + light IFF (`RDF_RadarFusionAutoTest`)
 
 #### Engineering / performance
