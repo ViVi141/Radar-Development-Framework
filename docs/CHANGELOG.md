@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 2026-07-30 — 数据链 + 多雷达融合
+
+- `RDF_RadarDatalinkHub`：站间确认航迹摘要库（TTL）；轻量 `ERDF_RadarIff` + `RDF_RadarIffResolver`
+- `RDF_RadarNetworkComponent` 权威扫描后 `PublishTracksToDatalink`；可选 `RDF_RadarDatalinkComponent` Broadcast `D|` / `F|`
+- `RDF_RadarFusionService`：跨站关联 + SNR 加权融合 + 水平双站交会（夹角门限）
+- 回归：`RDF_RadarFusionAutoTest.Start()`（独立）；Python `test_rdf_radar_fusion.py`
+- 与武器中制导 `WeaponBridge.TryGetMidcourseAim`「datalink」语义分离
+
 ## 2026-07-30 — 刀刃绕射近似（NLOS 加深）
 
 - Trace 不通视时：`max(地面反射 bounce, 单刃绕射)`；绕射胜出标记 `m_BeamName …/diff`

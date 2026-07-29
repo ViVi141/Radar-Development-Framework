@@ -21,6 +21,10 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
     protected vector m_LastLockAimPos;
     protected bool m_HasSyncedLock;
 
+    // Stable datalink source id (assigned once; not RplId — works without Rpl).
+    protected int m_DatalinkSourceId;
+    protected static int s_NextDatalinkSourceId = 1;
+
     [RplProp(condition: RplCondition.NoOwner, onRplName: "OnDemoEnabledChanged")]
     protected bool m_DemoEnabled = true;
 
@@ -78,6 +82,11 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         m_LastLockState = 0;
         m_LastLockTrackId = -1;
         m_LastLockAimPos = "0 0 0";
+        if (m_DatalinkSourceId <= 0)
+        {
+            m_DatalinkSourceId = s_NextDatalinkSourceId;
+            s_NextDatalinkSourceId = s_NextDatalinkSourceId + 1;
+        }
         ApplyNetworkScalarsToSensor();
     }
 
@@ -280,6 +289,7 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         m_Sensor.ScanOnce(subject, null, worldTimeS);
         UpdateLocalResults(m_Sensor.GetPlots());
         CaptureLocalTracksAndLock();
+        PublishTracksToDatalink(worldTimeS);
 
         string payload = SerializePayload(m_LastTargets);
         if (!payload || payload == string.Empty)
@@ -351,6 +361,70 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
             m_LastLockAimPos = lockMgr.GetLockedPosition();
             m_HasSyncedLock = true;
         }
+    }
+
+    // Push confirmed track summaries into the station-to-station datalink hub.
+    protected void PublishTracksToDatalink(float worldTimeS)
+    {
+        RDF_RadarDatalinkHub hub = RDF_RadarDatalinkHub.Get();
+        if (!hub || !hub.IsEnabled())
+            return;
+        if (m_DatalinkSourceId <= 0)
+        {
+            m_DatalinkSourceId = s_NextDatalinkSourceId;
+            s_NextDatalinkSourceId = s_NextDatalinkSourceId + 1;
+        }
+        if (!m_LastTracks || m_LastTracks.Count() < 1)
+        {
+            hub.RemoveSource(m_DatalinkSourceId);
+            RDF_RadarFusionService.Get().UpdateFromHub(hub, worldTimeS);
+            return;
+        }
+
+        array<ref RDF_RadarDatalinkTrack> batch = new array<ref RDF_RadarDatalinkTrack>();
+        RDF_RadarIffResolver iff = hub.GetIffResolver();
+        IEntity subject = GetOwner();
+        for (int i = 0; i < m_LastTracks.Count(); i++)
+        {
+            RDF_RadarTrack src = m_LastTracks.Get(i);
+            if (!src)
+                continue;
+            RDF_RadarDatalinkTrack dt = new RDF_RadarDatalinkTrack();
+            dt.m_SourceRadarId = m_DatalinkSourceId;
+            dt.m_LocalTrackId = src.m_TrackId;
+            dt.m_WorldPos = src.m_FilteredPosition;
+            dt.m_Velocity = src.m_FilteredVelocity;
+            dt.m_RangeM = src.m_FilteredRangeM;
+            dt.m_AzimuthDeg = src.m_FilteredAzimuthDeg;
+            dt.m_ElevationDeg = src.m_FilteredElevationDeg;
+            dt.m_RangeRateMs = src.m_FilteredRangeRateMs;
+            dt.m_SnrDb = src.m_LastSnrDb;
+            dt.m_Type = src.m_Type;
+            dt.m_TimeS = worldTimeS;
+            dt.m_RadarOrigin = m_LastScanOrigin;
+            if (iff)
+                dt.m_Iff = iff.Resolve(subject, src);
+            if (src.m_LastWlrFix)
+            {
+                dt.m_WlrLaunchValid = src.m_LastWlrFix.m_LaunchValid;
+                dt.m_WlrLaunchPos = src.m_LastWlrFix.m_LaunchPos;
+                dt.m_WlrImpactValid = src.m_LastWlrFix.m_ImpactValid;
+                dt.m_WlrImpactPos = src.m_LastWlrFix.m_ImpactPos;
+            }
+            batch.Insert(dt);
+        }
+        hub.PublishFromRadar(m_DatalinkSourceId, m_LastScanOrigin, worldTimeS, batch);
+
+        // If a datalink network component exists on this entity, push Broadcast.
+        RDF_RadarDatalinkComponent dlNet = RDF_RadarDatalinkComponent.Cast(
+            GetOwner().FindComponent(RDF_RadarDatalinkComponent));
+        if (dlNet)
+            dlNet.BroadcastHubState();
+    }
+
+    int GetDatalinkSourceId()
+    {
+        return m_DatalinkSourceId;
     }
 
     [RplRpc(RplChannel.Reliable, RplRcver.Broadcast)]

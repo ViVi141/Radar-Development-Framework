@@ -41,6 +41,7 @@
 - **EW 效果栈**：噪声压制 + 欺骗假目标
 - **简化 CFAR**：粗栅格 CA / GO / SO（`m_CfarMode`）；空单元可填热噪声
 - **联机权威路径**：`RDF_RadarNetworkComponent`（RplProp 关键配置 + Reliable Broadcast plots/航迹/WLR/锁 + 发射态）
+- **站间数据链 / 多雷达融合**：`RDF_RadarDatalinkHub` + `RDF_RadarFusionService`（确认航迹关联 + 双站交会）；轻量 IFF 字段
 - **欺骗扩展**：静态假点 + 拖距 / 角闪烁 / 间歇假点 Effect
 - **反炮兵呈现**：PPI 发射/落点告警圈；世界空间地面环
 
@@ -80,8 +81,8 @@
 
 #### 跟踪与系统
 
-- 多假设关联 / JPDA（现为单假设最近邻）
-- 多雷达组网、IFF、数据链融合
+- 多假设关联 / JPDA（现为单假设最近邻；跨站融合为门限关联非 JPDA）
+- ~~多雷达组网、IFF、数据链融合~~ **轻量站间 Hub + 融合已接**；密码学 IFF / 完整数据链协议仍缺
 - 搜索 → 截获 → 跟踪的**资源管理**；武器制导有示例（`RDF_RadarRocketGuidance`），通用武器对接仍靠模组
 
 #### 电子战
@@ -95,7 +96,7 @@
 #### 引擎与联机现实
 
 - 候选为散射体表 + Sphere/Active；仍非体素体积搜索
-- 已有服务器权威同步路径；未覆盖复杂多雷达融合与带宽自适应
+- 已有服务器权威同步路径；轻量多雷达融合经 DatalinkHub 已落地；带宽自适应未覆盖
 
 ---
 
@@ -107,7 +108,7 @@
 
 1. **锁定层对接武器**（见 [VEHICLE_RADAR_LOCK_GUIDE.md](VEHICLE_RADAR_LOCK_GUIDE.md)）
 2. ~~更细多径/绕射近似~~ **单刃绕射已落地**；DEM span / 多刃仍场景驱动
-3. 联机：多雷达融合（单雷达权威路径已有；带宽自适应可并行）
+3. ~~联机：多雷达融合~~ **已落地**；带宽自适应可并行
 
 #### 离线（Python + DEM）
 
@@ -128,7 +129,7 @@
 
 1. ~~**Python CFAR/track golden + 最小 CI**~~ **已完成**（`test_rdf_radar_cfar.py` / `test_rdf_radar_track.py` + GitHub Actions）  
 2. **锁定层对接武器**（示例制导已有；产品武器仍需模组接入）  
-3. **场景驱动**：DEM span / 多刃，或单雷达打磨后的多雷达融合 — 勿与远程算力抢位  
+3. **场景驱动**：DEM span / 多刃 — 勿与远程算力抢位  
 
 目标产品形态：**可信的军武传感器玩法**（发现 / 丢失 / 压制 / 欺骗 / 锁定），而不是真实雷达仿真器。
 
@@ -185,6 +186,7 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 - **EW effect stack**: noise jamming + deceptive false targets
 - **Simplified CFAR**: coarse-grid CA / GO / SO (`m_CfarMode`); empty cells can be filled with thermal noise
 - **MP authority path**: `RDF_RadarNetworkComponent` (RplProp antenna config + Reliable Broadcast of plots / tracks / WLR / lock + transmit state)
+- **Station datalink / multi-radar fusion**: `RDF_RadarDatalinkHub` + `RDF_RadarFusionService` (confirmed-track association + dual-station cross-fix); light IFF field
 - **Deception extensions**: static false plots + range-gate pull-off / angular scintillation / intermittent false-plot Effects
 - **Counter-battery presentation**: PPI launch / impact alert circles; world-space ground rings
 
@@ -222,8 +224,8 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 
 #### Tracking & systems
 
-- Multi-hypothesis association / JPDA (currently single-hypothesis nearest neighbor)
-- Multi-radar networking, IFF, datalink fusion
+- Multi-hypothesis association / JPDA (currently single-hypothesis nearest neighbor; cross-site fusion is gated association, not JPDA)
+- ~~Multi-radar networking, IFF, datalink fusion~~ **light station Hub + fusion shipped**; crypto IFF / full datalink protocol still missing
 - **Resource management** for search → acquire → track; weapon guidance has an example (`RDF_RadarRocketGuidance`); general weapon integration still depends on the mod
 
 #### Electronic warfare
@@ -237,7 +239,7 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 #### Engine & multiplayer reality
 
 - Candidates are scatterer tables + Sphere/Active; still not voxel volume search
-- Server-authoritative sync path exists; complex multi-radar fusion and bandwidth adaptation are not covered
+- Server-authoritative sync path exists; light multi-radar fusion via DatalinkHub shipped; bandwidth adaptation not covered
 
 ---
 
@@ -249,7 +251,7 @@ Aligned with deferred items in [TODO.md](../TODO.md):
 
 1. **Lock layer → weapon integration** (see [VEHICLE_RADAR_LOCK_GUIDE.md](VEHICLE_RADAR_LOCK_GUIDE.md))
 2. ~~Finer multipath / diffraction~~ **single knife-edge shipped**; DEM span / multi-edge still scenario-driven
-3. MP: multi-radar fusion (single-radar authority path already exists; bandwidth adaptation can ship in parallel)
+3. ~~MP: multi-radar fusion~~ **shipped**; bandwidth adaptation can proceed in parallel
 
 #### Offline (Python + DEM)
 
@@ -270,7 +272,7 @@ Reprioritized 2026-07-29 (aligned with [TODO.md](../TODO.md)):
 
 1. ~~**Python CFAR/track golden + minimal CI**~~ **done** (`test_rdf_radar_cfar.py` / `test_rdf_radar_track.py` + GitHub Actions)  
 2. **Lock layer → weapon integration** (example guidance exists; product weapons still need mod wiring)  
-3. **Scenario-driven**: DEM span / multi-edge, or multi-radar fusion after single-radar polish — do not let remote compute jump the queue
+3. **Scenario-driven**: DEM span / multi-edge — do not let remote compute jump the queue
 
 Target product shape: **credible military-sensor gameplay** (detect / lose / jam / deceive / lock), not a real radar simulator.
 

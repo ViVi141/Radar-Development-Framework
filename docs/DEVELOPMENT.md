@@ -123,7 +123,13 @@ scripts/Game/RDF/Radar/
 │   └── RDF_RadarEwModel.c              噪声（SEARCH_AVG/BEAM/MAINLOBE）+ 欺骗（假点/拖距/角闪烁/间歇）
 ├── Network/
 │   ├── RDF_RadarNetworkAPI.c           基类（含 intentional no-op；SetEnabled 别名 SetDemoEnabled）
-│   └── RDF_RadarNetworkComponent.c     服务器权威同步（挂 Sensor）
+│   ├── RDF_RadarNetworkComponent.c     服务器权威同步（挂 Sensor；发布到 DatalinkHub）
+│   ├── RDF_RadarDatalinkTypes.c        IFF 枚举 / 航迹摘要 / IffResolver
+│   ├── RDF_RadarDatalinkAPI.c          数据链 API 基类
+│   ├── RDF_RadarDatalinkHub.c          站间航迹库 + 融合结果
+│   └── RDF_RadarDatalinkComponent.c    可选 D|/F| Broadcast
+├── Fusion/
+│   └── RDF_RadarFusionService.c        多雷达关联 + 双站交会
 ├── Visual/ / UI/
 │   ├── RDF_RadarVisualizer.c / RDF_RadarVisualSettings.c  （ShapeManager 托管）
 │   └── RDF_RadarHUD.c                  PPI ← UI/layouts/RDF/RadarPPI.layout（面板 144×184 / 画布 128×128）
@@ -142,6 +148,7 @@ scripts/Game/RDF/Radar/
     ├── RDF_RadarStressAutoTest.c       性能压测：重负载 soak（独立）
     ├── RDF_RadarRwrAutoTest.c          RWR 告警（独立）
     ├── RDF_RadarEsmArmAutoTest.c       ESM + GetArmAim（独立）
+    ├── RDF_RadarFusionAutoTest.c       数据链融合 / 交会（独立）
     ├── RDF_RadarRocketLockFireAutoTest.c / RDF_RadarRocketGuidance.c  锁定→制导（独立）
     ├── RDF_RadarHeliDuelAutoTest.c     机打机 + 拦截导弹（独立）
     └── RDF_RadarSamEngageAutoTest.c    地面 SAM（BTR）扫描/识别/打击 6×Mi-8（独立）
@@ -442,7 +449,13 @@ scripts/Game/RDF/Radar/
 │   └── RDF_RadarEwModel.c              噪声（SEARCH_AVG/BEAM/MAINLOBE）+ 欺骗（假点/拖距/角闪烁/间歇）
 ├── Network/
 │   ├── RDF_RadarNetworkAPI.c           基类（含 intentional no-op；SetEnabled 别名 SetDemoEnabled）
-│   └── RDF_RadarNetworkComponent.c     服务器权威同步（挂 Sensor）
+│   ├── RDF_RadarNetworkComponent.c     服务器权威同步（挂 Sensor；发布到 DatalinkHub）
+│   ├── RDF_RadarDatalinkTypes.c        IFF 枚举 / 航迹摘要 / IffResolver
+│   ├── RDF_RadarDatalinkAPI.c          数据链 API 基类
+│   ├── RDF_RadarDatalinkHub.c          站间航迹库 + 融合结果
+│   └── RDF_RadarDatalinkComponent.c    可选 D|/F| Broadcast
+├── Fusion/
+│   └── RDF_RadarFusionService.c        多雷达关联 + 双站交会
 ├── Visual/ / UI/
 │   ├── RDF_RadarVisualizer.c / RDF_RadarVisualSettings.c  （ShapeManager 托管）
 │   └── RDF_RadarHUD.c                  PPI ← UI/layouts/RDF/RadarPPI.layout（面板 144×184 / 画布 128×128）
@@ -458,6 +471,7 @@ scripts/Game/RDF/Radar/
     ├── RDF_RadarLockAutoTest.c         载具锁定状态机（入 StartAll）
     ├── RDF_RadarRwrAutoTest.c          RWR 告警（独立）
     ├── RDF_RadarEsmArmAutoTest.c       ESM + GetArmAim（独立）
+    ├── RDF_RadarFusionAutoTest.c       数据链融合 / 交会（独立）
     ├── RDF_RadarRocketLockFireAutoTest.c / RDF_RadarRocketGuidance.c  锁定→制导（独立）
     ├── RDF_RadarHeliDuelAutoTest.c     机打机 + 拦截导弹（独立）
     └── RDF_RadarSamEngageAutoTest.c    地面 SAM（BTR）扫描/识别/打击 6×Mi-8（独立）

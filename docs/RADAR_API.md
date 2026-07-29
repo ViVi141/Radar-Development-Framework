@@ -331,7 +331,28 @@ Single CSV string, rows joined by `;`:
 
 Proxy `RDF_RadarSensor` path: ingest plots + **inject tracks/lock**, skip local Tracker/Lock recompute for that frame. Authority still runs the full local chain then broadcasts.
 
-Not synced this sprint: full `Hardware` / `EwStack` / `MeasurementModel` objects, DEM tiles, multi-radar fusion.
+Not synced this sprint: full `Hardware` / `EwStack` / `MeasurementModel` objects, DEM tiles.
+
+### Datalink & multi-radar fusion
+
+Station-to-station sharing (not weapon midcourse uplink):
+
+```c
+RDF_RadarDatalinkHub hub = RDF_RadarDatalinkHub.Get();
+hub.SetIffResolver(new RDF_RadarDefaultIffResolver());
+// After authority scans, NetworkComponent publishes confirmed K tracks automatically.
+array<ref RDF_RadarDatalinkTrack> near = new array<ref RDF_RadarDatalinkTrack>();
+hub.GetTracksInRadius(origin, 8000.0, near);
+array<ref RDF_RadarFusedTrack> fused = hub.GetFusedTracks();
+Print(hub.GetStatusShort());
+```
+
+- `ERDF_RadarIff`: UNKNOWN / FRIEND / FOE / NEUTRAL (mod via `RDF_RadarIffResolver`)
+- `RDF_RadarFusionService`: world-gate association + optional dual-station horizontal cross-fix
+- Optional `RDF_RadarDatalinkComponent` Broadcasts `D|` / `F|` CSV rows
+- Test: `RDF_RadarFusionAutoTest.Start()` (standalone)
+
+Do **not** confuse with `RDF_RadarWeaponBridge.TryGetMidcourseAim` (missile uplink).
 
 ---
 
@@ -695,7 +716,27 @@ RDF_RadarAutoRunner.GetSensor().GetStatusShort();
 
 Proxy 上的 `RDF_RadarSensor` 路径：吞入 plots + **注入航迹/锁定**，该帧跳过本地 Tracker/Lock 重算。权威端仍跑完整本地链再广播。
 
-本 sprint 不同步：完整 `Hardware` / `EwStack` / `MeasurementModel` 对象、DEM 瓦片、多雷达融合。
+本 sprint 不同步：完整 `Hardware` / `EwStack` / `MeasurementModel` 对象、DEM 瓦片。
+
+### 数据链与多雷达融合
+
+站间共享（不是武器中制导上行）：
+
+```c
+RDF_RadarDatalinkHub hub = RDF_RadarDatalinkHub.Get();
+hub.SetIffResolver(new RDF_RadarDefaultIffResolver());
+array<ref RDF_RadarDatalinkTrack> near = new array<ref RDF_RadarDatalinkTrack>();
+hub.GetTracksInRadius(origin, 8000.0, near);
+array<ref RDF_RadarFusedTrack> fused = hub.GetFusedTracks();
+Print(hub.GetStatusShort());
+```
+
+- `ERDF_RadarIff`：UNKNOWN / FRIEND / FOE / NEUTRAL（模组通过 `RDF_RadarIffResolver`）
+- `RDF_RadarFusionService`：世界坐标门关联 + 可选双站水平交会
+- 可选 `RDF_RadarDatalinkComponent` 广播 `D|` / `F|`
+- 测试：`RDF_RadarFusionAutoTest.Start()`（独立）
+
+勿与 `RDF_RadarWeaponBridge.TryGetMidcourseAim`（导弹上行）混淆。
 
 ---
 
