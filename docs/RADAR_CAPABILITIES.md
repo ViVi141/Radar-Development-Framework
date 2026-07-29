@@ -107,12 +107,13 @@
 
 1. **锁定层对接武器**（见 [VEHICLE_RADAR_LOCK_GUIDE.md](VEHICLE_RADAR_LOCK_GUIDE.md)）
 2. 更细多径/绕射近似（有明确山地场景需求时）
-3. 联机：带宽自适应与多雷达融合（单雷达权威路径已有）
+3. 联机：多雷达融合（单雷达权威路径已有；带宽自适应可并行）
 
 #### 离线（Python + DEM）
 
-- 更认真的传播、杂波谱、CFAR 原型  
-- 标定表（功率因子、σ⁰、干扰耦合）再喂回游戏参数  
+- **优先**：CFAR / track 单测 + golden，防逼真通道漂移  
+- 更认真的传播、杂波谱、标定表再喂回游戏参数  
+- `mass_battle_sim` 拆分（离线大改时）
 
 #### 不宜作为游戏内实时主路径
 
@@ -123,9 +124,11 @@
 
 ### 5. 建议优先级（只选三条时）
 
-1. 锁定层对接武器（示例制导已有；产品武器仍需模组接入）  
-2. 更细多径/绕射近似（有明确山地场景需求时）  
-3. DEM 发布包与联机数据一致性  
+重评估（2026-07-29，与 [TODO.md](../TODO.md) Sprint D 对齐）：
+
+1. **Python CFAR/track golden + 最小 CI**（低成本、防漂移；逼真通道已落地）  
+2. **锁定层对接武器**（示例制导已有；产品武器仍需模组接入）  
+3. **场景驱动**：山地绕射/多径，或单雷达打磨后的多雷达融合 — 勿与远程算力抢位  
 
 目标产品形态：**可信的军武传感器玩法**（发现 / 丢失 / 压制 / 欺骗 / 锁定），而不是真实雷达仿真器。
 
@@ -246,12 +249,13 @@ Aligned with deferred items in [TODO.md](../TODO.md):
 
 1. **Lock layer → weapon integration** (see [VEHICLE_RADAR_LOCK_GUIDE.md](VEHICLE_RADAR_LOCK_GUIDE.md))
 2. Finer multipath / diffraction approximations (when there is a clear mountain-terrain need)
-3. MP: bandwidth adaptation and multi-radar fusion (single-radar authority path already exists)
+3. MP: multi-radar fusion (single-radar authority path already exists; bandwidth adaptation can ship in parallel)
 
 #### Offline (Python + DEM)
 
-- More serious propagation, clutter-spectrum, and CFAR prototypes  
-- Calibration tables (power factors, σ⁰, jamming coupling) fed back into game parameters  
+- **First**: CFAR / track unit tests + golden to pin the realistic channel  
+- More serious propagation, clutter-spectrum, calibration tables fed back into game parameters  
+- Split `mass_battle_sim` when offline needs a big rewrite  
 
 #### Not suitable as the in-game real-time main path
 
@@ -262,9 +266,11 @@ Aligned with deferred items in [TODO.md](../TODO.md):
 
 ### 5. Suggested priority (if picking only three)
 
-1. Lock layer → weapon integration (example guidance exists; product weapons still need mod wiring)  
-2. Finer multipath / diffraction approximations (when there is a clear mountain-terrain need)  
-3. DEM publish packs and multiplayer data consistency  
+Reprioritized 2026-07-29 (aligned with [TODO.md](../TODO.md) Sprint D):
+
+1. **Python CFAR/track golden + minimal CI** (low cost, drift guard; realistic channel already shipped)  
+2. **Lock layer → weapon integration** (example guidance exists; product weapons still need mod wiring)  
+3. **Scenario-driven**: mountain diffraction/multipath, or multi-radar fusion after single-radar polish — do not let remote compute jump the queue  
 
 Target product shape: **credible military-sensor gameplay** (detect / lose / jam / deceive / lock), not a real radar simulator.
 
