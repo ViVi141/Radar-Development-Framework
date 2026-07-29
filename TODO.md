@@ -17,8 +17,8 @@
 | 当前强项 | 当前弱项 |
 |----------|----------|
 | 功能链、Sensor 门面、双档回归 | 精细多径、绕射 |
-| 网格、LOS/物理复用、分片预算 + 统计 | GO/SO-CFAR、组网 |
-| 测量噪声/偏差、热噪声填空、大气衰减 | 远程算力、IFF |
+| 网格、LOS/物理复用、分片预算 + 统计 | 多雷达融合、IFF |
+| 测量噪声/偏差、GO/SO-CFAR、Network 权威同步 | 远程算力、golden/CI 卫生 |
 
 入口：[README.md](README.md)
 
@@ -73,34 +73,41 @@
 - [x] 欺骗库扩展（拖距、角闪烁、间歇假点）
 - [x] 反炮兵专用 HUD（WLR 告警圈）
 
-#### 4 — 延后（收益情景化 · 成本高）
+#### 4 — 重评估后排期（2026-07-29）
 
-| 项 | 收益 | 成本 | 何时启动 |
-|----|------|------|----------|
-| 刀刃绕射 / 精细多径 | 山地遮挡更真 | 高 | 基础噪声稳定后 |
-| DEM 柱状 span 遮挡 / 多径 | 城区/林冠 | 高 | 有明确场景需求时 |
-| 多雷达组网 / 交叉定位 | 战役级 | 很高 | 单雷达玩法打磨完 |
-| 远程计算后端 | 卸服务器算力 | 很高 | 本地算力真成瓶颈 |
-| `mass_battle_sim` 拆分 | 离线可维护 | 中 | 离线仿真要大改时 |
-| Python CFAR/track golden | 防漂移 | 中 | 逼真模型定稿后 |
-| IFF / 数据链 | 产品层 | 高 | 玩法需要识别友军时 |
-| AutoTest 批跑 / 最小 CI | 工程卫生 | 中 | 多人协作或发版频繁时 |
-| LiDAR PPI 动画 / DiagMenu / Sensor 对齐 | LiDAR 体验 | 中 | 雷达主线空窗 |
+原则不变：**误差合常理 → 加深模型；可观测 → 可调参；远程/组网最后。**  
+现状：逼真通道与 Network 单雷达权威路径已落地；§4 旧「一律延后」改为分档。
+
+| 档 | 项 | 收益 | 成本 | 为何现在这样排 |
+|----|----|------|------|----------------|
+| **P1 已完成** | Python CFAR / track 单测 + 可选 golden | 防逼真模型漂移 | 低 | `test_rdf_radar_cfar.py` / `test_rdf_radar_track.py` |
+| **P1 已完成** | 最小 CI（Python unittest） | 工程卫生 | 低 | `.github/workflows/python-dem-tests.yml` |
+| **产品缺口** | 锁定层对接模组武器 | 玩法闭环 | 中 | 不在旧勾选表内，但 CAPABILITIES 仍列为首选；示例制导已有 |
+| **P2 场景驱动** | 刀刃绕射 / 更精细多径 | 山地体感 | 高 | 已有弱 NLOS 反射因子；真绕射需几何模型 + 场景需求 |
+| **P2 场景驱动** | DEM span 遮挡 / 多径 | 城区/林冠 | 高 | 离线/烘焙有 span；游戏 SURF 路径故意不带 — 勿轻易重开 |
+| **P2 单雷达打磨后** | 多雷达 plots 融合 / 交叉定位 | 战役级 | 很高 | Network Sprint 已铺权威同步；融合是新产品层，非小补丁 |
+| **P2 空窗** | LiDAR：PPI 动画、DiagMenu、Sensor 门面 | LiDAR UX | 中 | 雷达主线空窗再做；无 `RDF_LidarSensor` |
+| **P2 离线大改时** | 拆分 `rdf_radar_mass_battle_sim.py`（~1.8k LOC） | 可维护 | 中 | 不挡游戏内路线 |
+| **P2→P3** | IFF / 数据链抽象 | 友军识别 | 高 | 无现成钩子；有明确友军玩法再启 |
+| **P3** | 远程计算全链路 | 卸算力 | 很高 | Stress/Perf 证伪瓶颈前不做；禁止远程替代 Trace/实体查询 |
+| **P3** | 游戏内 AutoTest 无 Debugger 批跑 | CI 完整 | 中高 | 依赖 Workbench 自动化；P1 用 Python CI 顶住 |
 
 - [x] Network：权威结果（plots + K/W/L）+ 关键 Settings RplProp + 发射态（见 CHANGELOG Network Sprint）
-- [ ] 刀刃绕射 / 更精细多径
-- [ ] DEM span 遮挡 / 多径
-- [ ] 多雷达 plots 融合 / 交叉定位
-- [ ] 远程计算：设计文档 → Backend 接口 → Rest 异步 → 服务端对齐（失败回退 Local）
-- [ ] 拆分 `rdf_radar_mass_battle_sim.py`
-- [ ] Python CFAR / track 单测 + 可选 Enforce golden
-- [ ] IFF / 数据链抽象
-- [ ] 游戏内 AutoTest 批跑或最小 CI（`StartAll` 已有；此处指无 Debugger 手工触发的自动化/CI）
-- [ ] LiDAR：PPI 动画、DiagMenu、Sensor 门面对齐
+- [x] **P1** Python CFAR / track 单测 + 可选 Enforce golden（`test_rdf_radar_cfar.py` / `test_rdf_radar_track.py`；CA 与 `RDF_RadarCfarGate` 对齐）
+- [x] **P1** 最小 CI（`.github/workflows/python-dem-tests.yml` 跑 `test_rdf_*.py`；游戏内批跑仍见 P3）
+- [ ] **产品** 锁定层对接模组武器（见 VEHICLE_RADAR_LOCK_GUIDE）
+- [ ] **P2** 刀刃绕射 / 更精细多径（明确山地场景时）
+- [ ] **P2** DEM span 遮挡 / 多径（明确城区/林冠需求且接受发布包变重时）
+- [ ] **P2** 多雷达 plots 融合 / 交叉定位（单雷达玩法打磨完）
+- [ ] **P2** LiDAR：PPI 动画、DiagMenu、Sensor 门面对齐
+- [ ] **P2** 拆分 `rdf_radar_mass_battle_sim.py`
+- [ ] **P2/P3** IFF / 数据链抽象
+- [ ] **P3** 远程计算：设计文档 → Backend 接口 → Rest 异步 → 服务端对齐（失败回退 Local）
+- [ ] **P3** 游戏内 AutoTest 无 Debugger 批跑 / 完整 CI
 
 #### 5 — 停车场（低收益或高风险，默认不做）
 
-- [ ] `LICENSE` / `LICENSE.txt` 合并（工具链兼容未确认前不动）
+- [ ] `LICENSE` / `LICENSE.txt` 合并（内容已一致；工具链路径未确认前不动）
 - 全场 FDTD / 训练级 RD 图每帧 / 完整 DRFM
 - 远程替代本地 Trace / 实体查询
 
@@ -111,7 +118,8 @@
 **Sprint A+B（已完成）**：§1 + §2 — 观测、双档、测量噪声、热噪声填空、大气衰减。  
 **Sprint C（已完成）**：GO/SO-CFAR、Settings 阈值、欺骗扩展、WLR HUD。  
 **Network Sprint（已完成）**：关键 Settings RplProp、plots 加厚、K/W/L 权威摘要、发射态。  
-**以后**：绕射 / DEM span / 组网融合 / 远程算力。
+**Sprint D（已完成核心）**：Python CFAR/track golden + 最小 CI。  
+**下一步**：锁定层对接武器（模组侧）；场景驱动绕射 / DEM span / 组网融合。
 
 Ideal：`RDF_RadarAutoTestSuite.StartAll()`  
 Realistic：`RDF_RadarAutoTestSuite.StartAllRealistic()`
@@ -142,6 +150,7 @@ Realistic：`RDF_RadarAutoTestSuite.StartAllRealistic()`
 - [x] `AutoTestSuite` 7/7（Ballistics / DEM / Lock / Airborne / ShellFire / Perf / Play）；双档 ideal / realistic
 - [x] 独立回归：Stress / RWR / ESM-ARM / Rocket Lock-Fire；地图叠加 `RDF_RadarAutoTestMapOverlay`
 - [x] 测试不加辐射源 / 抬 RCS / 强制写表
+- [x] 离线 Python golden：ballistics / CFAR / track + GitHub Actions CI
 
 #### DEM / 仓库
 
@@ -179,8 +188,8 @@ Physical noise / atmosphere / signal processing are highly idealized — regress
 | Current strengths | Current weaknesses |
 |----------|----------|
 | Feature chain, Sensor facade, dual-tier regression | Fine multipath, diffraction |
-| Grid, LOS/physics reuse, shard budget + stats | GO/SO-CFAR, networking |
-| Measurement noise/bias, thermal fill, atmospheric attenuation | Remote compute, IFF |
+| Grid, LOS/physics reuse, shard budget + stats | Multi-radar fusion, IFF |
+| Measurement noise/bias, GO/SO-CFAR, Network authority sync | Remote compute, golden/CI hygiene |
 
 Entry: [README.md](README.md)
 
@@ -235,34 +244,41 @@ Goal: gameplay shows “unstable discovery / false alarms / range jitter”, not
 - [x] 欺骗库扩展（拖距、角闪烁、间歇假点）
 - [x] 反炮兵专用 HUD（WLR 告警圈）
 
-#### 4 — Defer (situational benefit · high cost)
+#### 4 — Reprioritized (2026-07-29)
 
-| Item | Benefit | Cost | When to start |
-|----|------|------|----------|
-| Knife-edge diffraction / fine multipath | Mountain masking more real | High | After base noise is stable |
-| DEM columnar span occlusion / multipath | Urban / canopy | High | Clear scenario need |
-| Multi-radar networking / cross-fix | Campaign scale | Very high | After single-radar gameplay is polished |
-| Remote compute backend | Offload server CPU | Very high | When local compute is a real bottleneck |
-| Split `mass_battle_sim` | Offline maintainability | Medium | When offline sim needs a big rewrite |
-| Python CFAR/track golden | Drift guard | Medium | After realistic model is finalized |
-| IFF / datalink | Product layer | High | When gameplay needs friendly ID |
-| AutoTest batch run / minimal CI | Engineering hygiene | Medium | Multi-dev or frequent releases |
-| LiDAR PPI animation / DiagMenu / Sensor alignment | LiDAR UX | Medium | Gaps in the radar mainline |
+Same principles: **sane errors → deeper models; observability → knobs; remote/networking last.**  
+Context: realistic channel + single-radar authoritative Network path shipped; old “all deferred” list is now tiered.
 
-- [x] Network：权威结果（plots + K/W/L）+ 关键 Settings RplProp + 发射态（见 CHANGELOG Network Sprint）
-- [ ] 刀刃绕射 / 更精细多径
-- [ ] DEM span 遮挡 / 多径
-- [ ] 多雷达 plots 融合 / 交叉定位
-- [ ] 远程计算：设计文档 → Backend 接口 → Rest 异步 → 服务端对齐（失败回退 Local）
-- [ ] 拆分 `rdf_radar_mass_battle_sim.py`
-- [ ] Python CFAR / track 单测 + 可选 Enforce golden
-- [ ] IFF / 数据链抽象
-- [ ] 游戏内 AutoTest 批跑或最小 CI（`StartAll` 已有；此处指无 Debugger 手工触发的自动化/CI）
-- [ ] LiDAR：PPI 动画、DiagMenu、Sensor 门面对齐
+| Tier | Item | Benefit | Cost | Why this order |
+|----|------|------|------|----------------|
+| **P1 done** | Python CFAR / track unit tests + optional golden | Drift guard | Low | `test_rdf_radar_cfar.py` / `test_rdf_radar_track.py` |
+| **P1 done** | Minimal CI (Python unittest) | Eng hygiene | Low | `.github/workflows/python-dem-tests.yml` |
+| **Product gap** | Lock layer → mod weapons | Gameplay loop | Medium | Outside old checklist; still CAPABILITIES #1; sample guidance exists |
+| **P2 scenario** | Knife-edge diffraction / fine multipath | Mountain feel | High | Weak NLOS factor exists; real diffraction needs geometry + demand |
+| **P2 scenario** | DEM span occlusion / multipath | Urban / canopy | High | Offline/bake has spans; game SURF path deliberately omits — don’t reopen lightly |
+| **P2 after polish** | Multi-radar plots fusion / cross-fix | Campaign | Very high | Network Sprint paved sync; fusion is a new product layer |
+| **P2 idle** | LiDAR PPI anim / DiagMenu / Sensor facade | LiDAR UX | Medium | Radar-mainline idle only; no `RDF_LidarSensor` yet |
+| **P2 offline rewrite** | Split `rdf_radar_mass_battle_sim.py` (~1.8k LOC) | Maintainability | Medium | Does not block in-game roadmap |
+| **P2→P3** | IFF / datalink abstraction | Friendly ID | High | No hooks; start only with explicit friend/foe gameplay |
+| **P3** | Remote compute full chain | Offload CPU | Very high | Wait for Stress/Perf proof; never replace Trace/entity query remotely |
+| **P3** | In-game AutoTest without Debugger | Full CI | Med–high | Needs Workbench automation; P1 Python CI covers interim |
+
+- [x] Network: authoritative results (plots + K/W/L) + key Settings RplProp + emit state (see CHANGELOG Network Sprint)
+- [x] **P1** Python CFAR / track unit tests + optional Enforce golden (`test_rdf_radar_cfar.py` / `test_rdf_radar_track.py`; CA aligned with `RDF_RadarCfarGate`)
+- [x] **P1** Minimal CI (`.github/workflows/python-dem-tests.yml` runs `test_rdf_*.py`; in-game batch still P3)
+- [ ] **Product** Lock layer → mod weapons (see VEHICLE_RADAR_LOCK_GUIDE)
+- [ ] **P2** Knife-edge diffraction / fine multipath (clear mountain scenario)
+- [ ] **P2** DEM span occlusion / multipath (urban/canopy need + accept heavier packs)
+- [ ] **P2** Multi-radar plots fusion / cross-fix (after single-radar polish)
+- [ ] **P2** LiDAR: PPI animation, DiagMenu, Sensor facade alignment
+- [ ] **P2** Split `rdf_radar_mass_battle_sim.py`
+- [ ] **P2/P3** IFF / datalink abstraction
+- [ ] **P3** Remote compute: design doc → Backend → Rest async → server align (fallback Local)
+- [ ] **P3** In-game AutoTest without Debugger / full CI
 
 #### 5 — Parking lot (low benefit or high risk; default skip)
 
-- [ ] `LICENSE` / `LICENSE.txt` 合并（工具链兼容未确认前不动）
+- [ ] `LICENSE` / `LICENSE.txt` merge (content identical; wait for toolchain path confirmation)
 - Full-field FDTD / training-grade RD map every frame / full DRFM
 - Remote replacing local Trace / entity queries
 
@@ -273,7 +289,8 @@ Goal: gameplay shows “unstable discovery / false alarms / range jitter”, not
 **Sprint A+B (done)**: §1 + §2 — observability, dual-tier, measurement noise, thermal fill, atmospheric attenuation.  
 **Sprint C (done)**: GO/SO-CFAR, Settings thresholds, deception extensions, WLR HUD.  
 **Network Sprint (done)**: key Settings RplProp, thicker plots, K/W/L authoritative summary, emit state.  
-**Later**: diffraction / DEM span / network fusion / remote compute.
+**Sprint D (core done)**: Python CFAR/track golden + minimal CI.  
+**Next**: lock→weapon integration (mod side); scenario-driven diffraction / DEM span / fusion.
 
 Ideal: `RDF_RadarAutoTestSuite.StartAll()`  
 Realistic: `RDF_RadarAutoTestSuite.StartAllRealistic()`
@@ -304,6 +321,7 @@ Realistic: `RDF_RadarAutoTestSuite.StartAllRealistic()`
 - [x] `AutoTestSuite` 5/5（Ballistics / DEM / Lock / Airborne / ShellFire）；双档 ideal / realistic
 - [x] 独立回归：RWR / ESM-ARM / Rocket Lock-Fire；地图叠加 `RDF_RadarAutoTestMapOverlay`
 - [x] 测试不加辐射源 / 抬 RCS / 强制写表
+- [x] Offline Python golden: ballistics / CFAR / track + GitHub Actions CI
 
 #### DEM / repo
 

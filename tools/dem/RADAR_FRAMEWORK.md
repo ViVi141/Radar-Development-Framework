@@ -38,8 +38,12 @@ presets, not core dependencies.
   TODO.md).
 - `test_rdf_radar_ballistics.py`: deterministic ballistics, wind, drag, DEM
   intersection, and WLR regression tests.
+- `test_rdf_radar_cfar.py`: CA-CFAR golden + Enforce `RDF_RadarCfarGate` CA parity.
+- `test_rdf_radar_track.py`: association / α-β / polar roundtrip / vacuum fit golden.
 
 Install: `pip install -r tools/dem/requirements.txt` (numpy + matplotlib).
+Golden suite: `cd tools/dem` then `python -m unittest discover -s . -p "test_rdf_*.py" -v`
+(CI: `.github/workflows/python-dem-tests.yml`).
 Generated images/CSV under `tools/dem/out/` are gitignored — do not commit.
 
 ## Framework contracts
@@ -74,6 +78,7 @@ python tools\dem\rdf_radar_mass_battle_sim.py
 python tools\dem\rdf_radar_mass_battle_sim.py --use-ttile --world GM_Eden
 python tools\dem\rdf_ttile_unpack.py
 python tools\dem\test_rdf_radar_ballistics.py
+python -m unittest discover -s tools\dem -p "test_rdf_*.py" -v
 ```
 
 Outputs under `tools/dem/out/`:
@@ -122,8 +127,12 @@ Outputs under `tools/dem/out/`:
 - `rdf_radar_shellfire_offline.py`：游戏内 ShellFire 回归的离线炮弹 / WLR 镜像。
 - `rdf_radar_mass_battle_sim.py`：基于 DEM 的多雷达 / 多目标战场、轨迹预测与 WLR 评估（大单体；拆分见 TODO.md）。
 - `test_rdf_radar_ballistics.py`：确定性弹道、风、阻力、DEM 交点与 WLR 回归测试。
+- `test_rdf_radar_cfar.py`：CA-CFAR golden + 与 Enforce `RDF_RadarCfarGate` CA 对齐。
+- `test_rdf_radar_track.py`：关联 / α-β / 极坐标往返 / 真空拟合 golden。
 
 安装：`pip install -r tools/dem/requirements.txt`（numpy + matplotlib）。
+Golden 套件：`cd tools/dem` 后 `python -m unittest discover -s . -p "test_rdf_*.py" -v`
+（CI：`.github/workflows/python-dem-tests.yml`）。
 `tools/dem/out/` 下生成的图片/CSV 已 gitignore — 请勿提交。
 
 ## 框架契约
@@ -158,6 +167,7 @@ python tools\dem\rdf_radar_mass_battle_sim.py
 python tools\dem\rdf_radar_mass_battle_sim.py --use-ttile --world GM_Eden
 python tools\dem\rdf_ttile_unpack.py
 python tools\dem\test_rdf_radar_ballistics.py
+python -m unittest discover -s tools\dem -p "test_rdf_*.py" -v
 ```
 
 输出位于 `tools/dem/out/`：
