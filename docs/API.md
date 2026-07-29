@@ -69,11 +69,19 @@
 - `m_RenderWorld` (bool): 为 true 时渲染游戏画面+点云；为 false 时仅渲染点云（在相机前绘制黑色四边形遮挡场景，并通过 `SetCharacterCameraRenderActive(false)` 关闭场景渲染，默认 true）
 - `m_UseBatchedMesh` (bool): 为 true 时启用批量三角网格渲染（按颜色桶合并点/射线为较少的 Shape.CreateTris 调用），推荐在高射线计数 / 大点云场景下使用以减少绘制调用（默认 false）
 - `m_UseMaterialEffect` (bool): 为 true 且使用默认颜色策略时，点亮度/透明度按命中表面反射率（GameMaterial/BallisticInfo）缩放；若需按表面密度（g/cm³）着色且透明度随距离降低，请使用 `SetColorStrategy(new RDF_LidarMaterialColorStrategy())`（默认 false）
+- **Showcase**：`m_DrawAfterglow` / `m_AfterglowSec` / `m_AfterglowPointSize` / `m_AfterglowMaxBlips`（默认关；`ApplyShowcaseDefaults` 打开）
+- **Showcase**：`m_DrawRangeRings` / `m_RangeRingSegments` — ½/全量程地面环
+- **Showcase**：`m_DrawSectorSweep` / `m_SectorSweepSegments` / alpha / `m_SectorHeightM` — Sweep/Conical 扇面（需 AutoRunner 注入几何）
+- `void ApplyShowcaseDefaults()` — 点开、射线关、余晖/环/扇面开
+- `void ApplyMinimalDefaults()` — 关掉 Showcase 与点/射线（HUD-only）
 
 ### RDF_LidarVisualizer
 主要方法：
-- `RDF_LidarVisualizer(RDF_LidarVisualSettings settings = null)` — 构造函数
-- `void Render(IEntity subject, RDF_LidarScanner scanner)` — 执行扫描并绘制点云。
+- `RDF_LidarVisualizer(RDF_LidarVisualSettings settings = null)` — 构造函数；无参时默认 `ApplyShowcaseDefaults()`
+- `void Render(IEntity subject, RDF_LidarScanner scanner)` / `Render(..., int scanSerial)` — 扫描并绘制；`scanSerial` 变化时才灌入世界余晖
+- `void RenderWithSamples(IEntity subject, array<ref RDF_LidarSample> samples)` / `...(..., int scanSerial)` — 网络同步样本
+- `void SetSweepGeometry(float halfAngleDeg, float sweepWidthDeg, float azimuthDeg)` / `ClearSweepGeometry()` — 扇面几何
+- `void Reset()` / `ClearAfterglow()`
 - `RDF_LidarVisualSettings GetSettings()`
 - `ref array<ref RDF_LidarSample> GetLastSamples()` — 返回最近一次渲染样本的防御性副本（对返回数组的修改不会影响 visualizer 内部状态）。每次调用会分配新数组，避免每帧频繁调用以减轻 GC 压力（见 OPTIMIZATION_AND_MEMORY.md）。
 
@@ -89,6 +97,10 @@
 ### RDF_SweepSampleStrategy
 - 构造：`RDF_SweepSampleStrategy(float halfAngleDeg = 30.0, float sweepWidthDeg = 20.0, float sweepSpeedDegPerSec = 45.0)` — 锥半角、扇区宽度（度）、旋转速度（度/秒）。
 - 射线方向在扇区内沿弧线均匀分布，扇区随世界时间旋转。
+- `GetHalfAngleDeg()` / `GetSweepWidthDeg()` / `GetSweepSpeedDegPerSec()` / `GetCurrentAzimuthDeg()` — 供 Showcase 扇面绘制。
+
+### RDF_ConicalSampleStrategy
+- `GetHalfAngleDeg()` — 锥半角（度），供固定扇面绘制。
 
 ### RDF_LidarColorStrategy (接口)
 - `int BuildPointColor(float dist, bool hit, float lastRange, RDF_LidarVisualSettings settings)`
@@ -203,6 +215,8 @@ Network 模块内置实现，基于 Rpl 同步状态与扫描结果。
 - `static bool GetDemoRenderWorld()` — 获取当前是否渲染游戏画面（默认 true）
 - `static void SetDemoUseBatchedMesh(bool use)` — 为 true 时切换到 `RDF_LidarVisualizer` 的批量三角网格渲染（`m_UseBatchedMesh`），适用于高射线计数场景以减少 Shape 调用
 - `static bool GetDemoUseBatchedMesh()` — 获取当前 demo 是否使用批量网格渲染（默认 false）
+- `static void SetDemoUseShowcase(bool use)` — `ApplyShowcaseDefaults` / `ApplyMinimalDefaults`
+- `static void SetDemoDrawAfterglow(bool)` / `SetDemoDrawRangeRings(bool)` / `SetDemoDrawSectorSweep(bool)`
 - `static void SetDemoVerbose(bool verbose)` — 为 true 时使用内置回调每帧打印命中数与最近距离（使用 RDF_LidarSampleUtils）
 - `static void StartAutoRun()` / `static void StopAutoRun()` — 内部启停（一般通过 SetDemoEnabled 即可）
 - `static bool IsRunning()` — 当前是否正在自动运行
@@ -232,9 +246,13 @@ Network 模块内置实现，基于 Rpl 同步状态与扫描结果。
 - `int m_TraceTargetMode` — Trace 目标：0=仅地形, 1=全部, 2=仅实体（ApplyTo 时通过 SetDemoTraceTargetMode 应用）
 - `bool m_TraceSmokeOcclusion` — 烟雾遮挡：为 true 时烟雾/粒子阻挡激光射线（ApplyTo 时通过 SetDemoTraceSmokeOcclusion 应用）
 - `bool m_WriteLiveCSV` — 为 true 时每次扫描**追加**写入 `$profile:LiDAR/lidar_live_1.csv`（默认 true；含表面材质列，不覆盖上次扫描）
+- `bool m_UseShowcase` — Showcase 余晖/环/扇面（默认 true；`CreateWithHUD` 为 false）
+- `bool m_DrawAfterglow` / `m_DrawRangeRings` / `m_DrawSectorSweep` — 单项覆盖
 
 **预设工厂（替代原 RDF_*Demo.Start）：**
-- `static RDF_LidarDemoConfig CreateDefault(int rayCount = 256)`
+- `static RDF_LidarDemoConfig CreateDefault(int rayCount = 256)` — Showcase 默认开（点开、射线关）
+- `static RDF_LidarDemoConfig CreateShowcase(int rayCount = 512, float rangeM = 50.0)` — Sweep + 世界 Showcase + PPI HUD
+- `static RDF_LidarDemoConfig CreateWithHUD(int rayCount = 512, float rangeM = 1000.0)` — HUD-only（世界 Shape 关；PPI 磷光动画仍开）
 - `static RDF_LidarDemoConfig CreateThreeColor(int rayCount = 512)` — 同 CreateDefault，三色距离渐变（近绿→中黄→远红）
 - `static RDF_LidarDemoConfig CreateDefaultDebug(int rayCount = 512)` — 同 CreateDefault，并开启原点轴与统计输出（展示新功能）
 - `static RDF_LidarDemoConfig CreateHemisphere(int rayCount = 256)`
@@ -280,7 +298,10 @@ static bool IsVisible()                        // HUD 当前是否可见
 ```c
 static void SetMode(string modeName)           // 更新标题栏模式文本（如 "Sweep 512"）
 static void SetDisplayRange(float rangeM)      // 设置 PPI 显示量程（米），决定 PPI 比例尺
+static void TickAfterglow()                    // 磷光余晖淡出重绘（AutoRunner ~100ms 调用；也可手动）
 ```
+
+PPI：**主体朝向对齐**点云投影 + 前向扫线（青色）+ 磷光余晖（跨扫描衰减）。数据行仍按 `UPDATE_INTERVAL`（0.5s）节流；余晖重绘不受该节流限制。
 
 **手动推送数据（脱离 AutoRunner 使用）**：
 
@@ -444,11 +465,17 @@ Fields:
 - `m_DrawOriginAxis` (bool): draw origin axis (default false, debug)
 - `m_OriginAxisLength` (float): axis length (default 0.8)
 - `m_RenderWorld` (bool): when true render game world + point cloud; when false render point cloud only (draws a black quad and calls `SetCharacterCameraRenderActive(false)` to disable scene rendering; default true)
+- Showcase: `m_DrawAfterglow` / `m_AfterglowSec` / `m_AfterglowPointSize` / `m_AfterglowMaxBlips`
+- Showcase: `m_DrawRangeRings` / `m_RangeRingSegments`
+- Showcase: `m_DrawSectorSweep` / segments / alpha / `m_SectorHeightM` (Sweep/Conical; geometry from AutoRunner)
+- `ApplyShowcaseDefaults()` / `ApplyMinimalDefaults()`
 
 ### RDF_LidarVisualizer
 Key methods:
-- `RDF_LidarVisualizer(RDF_LidarVisualSettings settings = null)` — constructor
-- `void Render(IEntity subject, RDF_LidarScanner scanner)` — perform scan and render point-cloud
+- `RDF_LidarVisualizer(RDF_LidarVisualSettings settings = null)` — constructor; no-arg applies Showcase defaults
+- `void Render(IEntity subject, RDF_LidarScanner scanner)` / `Render(..., int scanSerial)`
+- `void RenderWithSamples(...)` / `RenderWithSamples(..., int scanSerial)`
+- `void SetSweepGeometry(...)` / `ClearSweepGeometry()` / `Reset()` / `ClearAfterglow()`
 - `RDF_LidarVisualSettings GetSettings()`
 - `ref array<ref RDF_LidarSample> GetLastSamples()` — returns a defensive copy of the last rendered samples
 
@@ -464,6 +491,10 @@ Implementations: `RDF_UniformSampleStrategy`, `RDF_HemisphereSampleStrategy`, `R
 ### RDF_SweepSampleStrategy
 - Constructor: `RDF_SweepSampleStrategy(float halfAngleDeg = 30.0, float sweepWidthDeg = 20.0, float sweepSpeedDegPerSec = 45.0)` — half-angle, sector width (deg), rotation speed (deg/sec).
 - Directions are distributed across the sector and sector rotates with world time.
+- `GetHalfAngleDeg()` / `GetSweepWidthDeg()` / `GetSweepSpeedDegPerSec()` / `GetCurrentAzimuthDeg()` for Showcase fan.
+
+### RDF_ConicalSampleStrategy
+- `GetHalfAngleDeg()` for fixed fan overlay.
 
 ### RDF_LidarColorStrategy (interface)
 - `int BuildPointColor(float dist, bool hit, float lastRange, RDF_LidarVisualSettings settings)`
@@ -564,7 +595,9 @@ Configuration object with factory presets (use `Create*()`):
 - `bool m_RenderWorld`
 - `bool m_WriteLiveCSV` — when true, each scan **appends** to `$profile:LiDAR/lidar_live_1.csv` with material columns (default true)
 
-Factory presets: `CreateDefault`, `CreateThreeColor`, `CreateDefaultDebug`, `CreateHemisphere`, `CreateConical`, `CreateStratified`, `CreateScanline`, `CreateSweep`.
+Factory presets: `CreateDefault` (Showcase on), `CreateShowcase` (Sweep+HUD+Showcase), `CreateWithHUD` (PPI only), `CreateThreeColor`, `CreateDefaultDebug`, `CreateHemisphere`, `CreateConical`, `CreateStratified`, `CreateScanline`, `CreateSweep`.
+
+Config Showcase fields: `m_UseShowcase`, `m_DrawAfterglow`, `m_DrawRangeRings`, `m_DrawSectorSweep`.
 
 Methods: `void ApplyTo(RDF_LidarAutoRunner runner)` — apply config to runner.
 
@@ -599,7 +632,10 @@ static bool IsVisible()                        // returns true when panel is bui
 ```c
 static void SetMode(string modeName)           // update the header mode label (e.g. "Sweep 512")
 static void SetDisplayRange(float rangeM)      // set PPI display range (metres), controls PPI scale
+static void TickAfterglow()                    // phosphor fade redraw (~100 ms from AutoRunner)
 ```
+
+PPI: subject-forward-aligned blips + cyan forward sweep + phosphor afterglow across scans. Data rows still throttle at 0.5 s; phosphor redraw does not.
 
 **Manual sample feed (use without AutoRunner)**:
 

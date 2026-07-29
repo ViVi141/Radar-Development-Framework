@@ -1,6 +1,7 @@
 // LiDAR HUD — layout-driven panel + CanvasWidget view-aligned PPI.
 // Structure: UI/layouts/RDF/LidarPPI.layout (CreateWidgets); script binds Names and draws Canvas.
 // Blue/cyan theme to distinguish from radar green.
+// Phosphor afterglow + forward sweep line for Showcase animation.
 //
 // Screen layout (bottom-left):
 //
@@ -15,6 +16,18 @@
 //  | Hits  123 / 512    Range  ...            |
 //  | By density (g/cm³), alpha by distance      |
 //  +==========================================+
+
+class RDF_LidarHudPhosphorBlip
+{
+    float m_NormX;
+    float m_NormZ;
+    float m_Dist;
+    float m_BirthS;
+    float m_R;
+    float m_G;
+    float m_B;
+    float m_BaseAlpha;
+}
 
 class RDF_LidarHUD : RDF_LidarScanCompleteHandler
 {
@@ -47,15 +60,17 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
     static const int COL_PPI_CROSS   = ARGB( 55, 40,  130, 165);
     static const int COL_PPI_AXIS    = ARGB( 50, 50,  160, 180);
     static const int COL_PPI_PLAYER  = ARGB(255, 80,  230, 255);
+    static const int COL_PPI_SWEEP   = ARGB(220, 80,  230, 255);
     // Distance gradient: near=green, mid=yellow, far=red (encodes 3D depth in 2D view)
     static const int COL_NEAR = ARGB(255,  0, 255, 100);   // green
     static const int COL_MID  = ARGB(255, 255, 220, 0);   // yellow
     static const int COL_FAR  = ARGB(255, 255, 80,  80);  // red
 
-    // Min update interval (seconds) to prevent flickering
+    // Min update interval (seconds) for data text rows
     static const float UPDATE_INTERVAL = 0.5;
-    // Max blips drawn per PPI update to avoid memory overflow from huge scans
-    static const int PPI_MAX_BLIPS = 1024;
+    // Max blips drawn / stored for phosphor afterglow
+    static const int PPI_MAX_BLIPS = 512;
+    static const float PHOSPHOR_LIFE_SEC = 2.2;
 
     // ---- singleton ----
     protected static ref RDF_LidarHUD s_Instance;
@@ -75,24 +90,33 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
     protected ref array<ref CanvasWidgetCommand> m_StaticCmds;
     protected ref array<ref CanvasWidgetCommand> m_AllCmds;
 
+    // ---- phosphor afterglow ----
+    protected ref array<ref RDF_LidarHudPhosphorBlip> m_Phosphor;
+    protected int m_PhosphorWrite;
+    protected vector m_CamForward;
+    protected vector m_CamRight;
+    protected bool m_HaveCamBasis;
+
     // ---- color interpolation (distance -> depth cue) ----
     protected int InterpColor(int a, int b, float t)
     {
         if (t < 0.0) t = 0.0;
         if (t > 1.0) t = 1.0;
-        int aa = (a >> 24) & 0xFF;
-        int ar = (a >> 16) & 0xFF;
-        int ag = (a >> 8) & 0xFF;
-        int ab = a & 0xFF;
-        int ba = (b >> 24) & 0xFF;
-        int br = (b >> 16) & 0xFF;
-        int bg = (b >> 8) & 0xFF;
-        int bb = b & 0xFF;
+        int aa;
+        int ar;
+        int ag;
+        int ab;
+        int ba;
+        int br;
+        int bg;
+        int bb;
+        Color.UnpackInt(a, aa, ar, ag, ab);
+        Color.UnpackInt(b, ba, br, bg, bb);
         int ra = aa + (int)((ba - aa) * t);
         int rr = ar + (int)((br - ar) * t);
         int rg = ag + (int)((bg - ag) * t);
         int rb = ab + (int)((bb - ab) * t);
-        return (ra << 24) | (rr << 16) | (rg << 8) | rb;
+        return ARGB(ra, rr, rg, rb);
     }
 
     protected int ColorByDistance(float dist)
@@ -157,7 +181,7 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
         if (rr > 255) rr = 255;
         if (gg > 255) gg = 255;
         if (bb > 255) bb = 255;
-        return (ar << 24) | (rr << 16) | (gg << 8) | bb;
+        return ARGB(ar, rr, gg, bb);
     }
 
     // ---- float helpers ----
@@ -200,6 +224,14 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
             inst.OnScanComplete(samples);
     }
 
+    // Fade phosphor blips between scans (called by AutoRunner CallLater ~100 ms).
+    static void TickAfterglow()
+    {
+        RDF_LidarHUD inst = GetInstance();
+        if (inst)
+            inst.RedrawPhosphor();
+    }
+
     // Demo convenience: wire HUD as AutoRunner scan-complete handler.
     // Prefer FeedSamples() for non-demo consumers; equivalent to
     // RDF_LidarAutoRunner.SetScanCompleteHandler(RDF_LidarHUD.GetInstance()).
@@ -227,13 +259,16 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
             m_DisplayRange = RDF_LidarAutoRunner.GetDemoScannerRange();
 
         float now = System.GetTickCount() * 0.001;
-        if (now - m_LastUpdateTime < UPDATE_INTERVAL)
-            return;
-        m_LastUpdateTime = now;
+        UpdateCamBasis();
+        IngestPhosphor(samples, now);
+        RedrawPhosphor();
 
-        UpdateDataRows(samples);
-        UpdatePPI(samples);
-        UpdateRingLabel();
+        if (now - m_LastUpdateTime >= UPDATE_INTERVAL)
+        {
+            m_LastUpdateTime = now;
+            UpdateDataRows(samples);
+            UpdateRingLabel();
+        }
     }
 
     //------------------------------------------------------------------------------------------------
@@ -258,6 +293,13 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
         }
 
         m_wRoot.SetVisible(true);
+
+        if (!m_Phosphor)
+            m_Phosphor = new array<ref RDF_LidarHudPhosphorBlip>();
+        m_PhosphorWrite = 0;
+        m_CamForward = Vector(0, 0, 1);
+        m_CamRight = Vector(1, 0, 0);
+        m_HaveCamBasis = false;
 
         Widget wCanvas = m_wRoot.FindAnyWidget("PpiCanvas");
         if (wCanvas)
@@ -377,67 +419,87 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
         m_StaticCmds.Insert(ring);
     }
 
-    // ---- update PPI with new sample data ----
-    protected void UpdatePPI(array<ref RDF_LidarSample> samples)
+    protected void UpdateCamBasis()
     {
-        if (!m_Canvas || !m_StaticCmds || !samples || samples.Count() == 0)
-            return;
+        m_CamRight = Vector(1, 0, 0);
+        m_CamForward = Vector(0, 0, 1);
+        m_HaveCamBasis = false;
 
-        // Reuse m_AllCmds to avoid per-frame allocation (memory optimization)
-        if (m_AllCmds)
-            m_AllCmds.Clear();
-        else
-            m_AllCmds = new array<ref CanvasWidgetCommand>();
-        foreach (CanvasWidgetCommand cmd : m_StaticCmds)
-            m_AllCmds.Insert(cmd);
-
-        vector origin = samples.Get(0).m_Start;
-
-        vector camRight = Vector(1, 0, 0);
-        vector camForward = Vector(0, 0, 1);
-        PlayerController controller = GetGame().GetPlayerController();
-        if (controller)
+        // Prefer subject body forward (north-up PPI like radar), fall back to camera.
+        IEntity subject = RDF_LidarSubjectResolver.ResolveLocalSubject(true);
+        if (subject)
         {
-            PlayerCamera playerCam = controller.GetPlayerCamera();
-            if (playerCam)
+            vector worldMat[4];
+            subject.GetWorldTransform(worldMat);
+            float fx = worldMat[2][0];
+            float fz = worldMat[2][2];
+            float flen = Math.Sqrt(fx * fx + fz * fz);
+            if (flen > 0.0001)
             {
-                vector camMat[4];
-                playerCam.GetWorldCameraTransform(camMat);
-                float fx = camMat[2][0];
-                float fz = camMat[2][2];
-                float flen = Math.Sqrt(fx * fx + fz * fz);
-                if (flen > 0.0001)
-                {
-                    camForward = Vector(fx / flen, 0, fz / flen);
-                    float rx = camMat[0][0];
-                    float rz = camMat[0][2];
-                    float rlen = Math.Sqrt(rx * rx + rz * rz);
-                    if (rlen > 0.0001)
-                        camRight = Vector(rx / rlen, 0, rz / rlen);
-                }
+                m_CamForward = Vector(fx / flen, 0, fz / flen);
+                float rx = worldMat[0][0];
+                float rz = worldMat[0][2];
+                float rlen = Math.Sqrt(rx * rx + rz * rz);
+                if (rlen > 0.0001)
+                    m_CamRight = Vector(rx / rlen, 0, rz / rlen);
+                else
+                    m_CamRight = Vector(m_CamForward[2], 0, -m_CamForward[0]);
+                m_HaveCamBasis = true;
+                return;
             }
         }
 
-        int hitCount = 0;
-        foreach (RDF_LidarSample s : samples)
+        PlayerController controller = GetGame().GetPlayerController();
+        if (!controller)
+            return;
+        PlayerCamera playerCam = controller.GetPlayerCamera();
+        if (!playerCam)
+            return;
+
+        vector camMat[4];
+        playerCam.GetWorldCameraTransform(camMat);
+        float cfx = camMat[2][0];
+        float cfz = camMat[2][2];
+        float cflen = Math.Sqrt(cfx * cfx + cfz * cfz);
+        if (cflen > 0.0001)
         {
-            if (s && s.m_Hit)
+            m_CamForward = Vector(cfx / cflen, 0, cfz / cflen);
+            float crx = camMat[0][0];
+            float crz = camMat[0][2];
+            float crlen = Math.Sqrt(crx * crx + crz * crz);
+            if (crlen > 0.0001)
+                m_CamRight = Vector(crx / crlen, 0, crz / crlen);
+            m_HaveCamBasis = true;
+        }
+    }
+
+    protected void IngestPhosphor(array<ref RDF_LidarSample> samples, float nowS)
+    {
+        if (!samples || samples.Count() == 0)
+            return;
+        if (!m_Phosphor)
+            m_Phosphor = new array<ref RDF_LidarHudPhosphorBlip>();
+
+        vector origin = samples.Get(0).m_Start;
+        if (m_DisplayRange <= 0.0)
+            return;
+
+        int hitCount = 0;
+        foreach (RDF_LidarSample sCheck : samples)
+        {
+            if (sCheck && sCheck.m_Hit)
                 hitCount = hitCount + 1;
         }
 
-        int maxBlips = 512;
         int step = 1;
-        if (hitCount > maxBlips)
-            step = hitCount / maxBlips;
+        if (hitCount > PPI_MAX_BLIPS)
+            step = hitCount / PPI_MAX_BLIPS;
         if (step < 1)
             step = 1;
 
         int hitIndex = 0;
-        int blipsAdded = 0;
         foreach (RDF_LidarSample s : samples)
         {
-            if (blipsAdded >= PPI_MAX_BLIPS)
-                break;
             if (!s || !s.m_Hit)
                 continue;
             if (hitIndex % step != 0)
@@ -448,16 +510,11 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
             hitIndex = hitIndex + 1;
 
             vector delta = s.m_HitPos - origin;
-            float projRight = delta[0] * camRight[0] + delta[2] * camRight[2];
-            float projForward = delta[0] * camForward[0] + delta[2] * camForward[2];
-            float dist = s.m_Distance;
-
-            if (m_DisplayRange <= 0.0)
-                continue;
+            float projRight = delta[0] * m_CamRight[0] + delta[2] * m_CamRight[2];
+            float projForward = delta[0] * m_CamForward[0] + delta[2] * m_CamForward[2];
 
             float normX = projRight / m_DisplayRange;
             float normZ = projForward / m_DisplayRange;
-
             float d2 = normX * normX + normZ * normZ;
             if (d2 > 1.0)
             {
@@ -466,24 +523,121 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
                 normZ = normZ / d;
             }
 
-            float bx = PPI_CX + normX * PPI_R;
-            float by = PPI_CY - normZ * PPI_R;
+            int col = ColorByMaterial(s);
+            int ca;
+            int cr;
+            int cg;
+            int cb;
+            Color.UnpackInt(col, ca, cr, cg, cb);
+            float baseA = ca / 255.0;
+            float r = cr / 255.0;
+            float g = cg / 255.0;
+            float b = cb / 255.0;
 
-            float t = dist / m_DisplayRange;
-            if (t > 1.0) t = 1.0;
-            float blipR = 2.5 - t * 1.0;
-            if (blipR < 0.8) blipR = 0.8;
+            RDF_LidarHudPhosphorBlip blip;
+            if (m_Phosphor.Count() < PPI_MAX_BLIPS)
+            {
+                blip = new RDF_LidarHudPhosphorBlip();
+                m_Phosphor.Insert(blip);
+            }
+            else
+            {
+                if (m_PhosphorWrite >= m_Phosphor.Count())
+                    m_PhosphorWrite = 0;
+                blip = m_Phosphor.Get(m_PhosphorWrite);
+                if (!blip)
+                {
+                    blip = new RDF_LidarHudPhosphorBlip();
+                    m_Phosphor.Set(m_PhosphorWrite, blip);
+                }
+                m_PhosphorWrite = m_PhosphorWrite + 1;
+            }
 
-            int blipCol = ColorByMaterial(s);
-
-            array<float> blipVerts = new array<float>();
-            m_Canvas.TessellateCircle(Vector(bx, by, 0), blipR, 6, blipVerts);
-            PolygonDrawCommand blip = new PolygonDrawCommand();
-            blip.m_iColor   = blipCol;
-            blip.m_Vertices = blipVerts;
-            m_AllCmds.Insert(blip);
-            blipsAdded = blipsAdded + 1;
+            blip.m_NormX = normX;
+            blip.m_NormZ = normZ;
+            blip.m_Dist = s.m_Distance;
+            blip.m_BirthS = nowS;
+            blip.m_R = r;
+            blip.m_G = g;
+            blip.m_B = b;
+            blip.m_BaseAlpha = baseA;
         }
+    }
+
+    protected void RedrawPhosphor()
+    {
+        if (!m_Canvas || !m_StaticCmds)
+            return;
+
+        if (m_AllCmds)
+            m_AllCmds.Clear();
+        else
+            m_AllCmds = new array<ref CanvasWidgetCommand>();
+        foreach (CanvasWidgetCommand cmd : m_StaticCmds)
+            m_AllCmds.Insert(cmd);
+
+        float nowS = System.GetTickCount() * 0.001;
+
+        if (m_Phosphor)
+        {
+            for (int i = 0; i < m_Phosphor.Count(); i++)
+            {
+                RDF_LidarHudPhosphorBlip blip = m_Phosphor.Get(i);
+                if (!blip)
+                    continue;
+                float age = nowS - blip.m_BirthS;
+                if (age < 0.0)
+                    age = 0.0;
+                if (age > PHOSPHOR_LIFE_SEC)
+                    continue;
+
+                float lifeT = 1.0 - (age / PHOSPHOR_LIFE_SEC);
+                float alpha = blip.m_BaseAlpha * (0.2 + 0.8 * lifeT);
+                if (alpha < 0.05)
+                    continue;
+
+                float bx = PPI_CX + blip.m_NormX * PPI_R;
+                float by = PPI_CY - blip.m_NormZ * PPI_R;
+
+                float t = 0.0;
+                if (m_DisplayRange > 0.0)
+                    t = blip.m_Dist / m_DisplayRange;
+                if (t > 1.0)
+                    t = 1.0;
+                float blipR = (2.5 - t * 1.0) * (0.55 + 0.45 * lifeT);
+                if (blipR < 0.6)
+                    blipR = 0.6;
+
+                int ar = (int)(alpha * 255.0);
+                int rr = (int)(blip.m_R * 255.0);
+                int gg = (int)(blip.m_G * 255.0);
+                int bb = (int)(blip.m_B * 255.0);
+                if (ar > 255) ar = 255;
+                if (rr > 255) rr = 255;
+                if (gg > 255) gg = 255;
+                if (bb > 255) bb = 255;
+                int blipCol = ARGB(ar, rr, gg, bb);
+
+                array<float> blipVerts = new array<float>();
+                m_Canvas.TessellateCircle(Vector(bx, by, 0), blipR, 6, blipVerts);
+                PolygonDrawCommand poly = new PolygonDrawCommand();
+                poly.m_iColor = blipCol;
+                poly.m_Vertices = blipVerts;
+                m_AllCmds.Insert(poly);
+            }
+        }
+
+        // Cyan sweep line: view-aligned PPI puts subject forward at screen-up.
+        array<float> sweepVerts = new array<float>();
+        sweepVerts.Insert(PPI_CX);
+        sweepVerts.Insert(PPI_CY);
+        sweepVerts.Insert(PPI_CX);
+        sweepVerts.Insert(PPI_CY - PPI_R);
+        LineDrawCommand sweep = new LineDrawCommand();
+        sweep.m_iColor = COL_PPI_SWEEP;
+        sweep.m_fWidth = 1.5;
+        sweep.m_Vertices = sweepVerts;
+        m_AllCmds.Insert(sweep);
 
         m_Canvas.SetDrawCommands(m_AllCmds);
     }
@@ -538,5 +692,9 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
         m_wRingLabel = null;
         m_StaticCmds = null;
         m_AllCmds    = null;
+        if (m_Phosphor)
+            m_Phosphor.Clear();
+        m_PhosphorWrite = 0;
+        m_HaveCamBasis = false;
     }
 }

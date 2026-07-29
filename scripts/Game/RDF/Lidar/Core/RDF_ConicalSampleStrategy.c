@@ -8,6 +8,11 @@ class RDF_ConicalSampleStrategy : RDF_LidarSampleStrategy
         m_HalfAngleDeg = Math.Clamp(halfAngleDeg, 0.1, 180.0);
     }
 
+    float GetHalfAngleDeg()
+    {
+        return m_HalfAngleDeg;
+    }
+
     override vector BuildDirection(int index, int count)
     {
         // Uniformly distribute directions over the spherical cap [0, halfAngle]

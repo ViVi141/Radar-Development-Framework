@@ -16,6 +16,9 @@ class RDF_LidarAutoRunner
     protected float m_LastScanTime = -1.0;
     protected bool m_Running = false;
     protected bool m_WriteLiveCSV = false;
+    protected int m_ScanSerial = 0;
+    protected bool m_HudAfterglowTickScheduled = false;
+    protected static const float HUD_AFTERGLOW_TICK_MS = 100.0;
 
     void RDF_LidarAutoRunner()
     {
@@ -23,6 +26,9 @@ class RDF_LidarAutoRunner
         m_Visualizer = new RDF_LidarVisualizer();
         // Demo default: material-based coloring (metal/vegetation/water etc.). Configs can override via SetDemoColorStrategy.
         m_Visualizer.SetColorStrategy(new RDF_LidarMaterialColorStrategy());
+        RDF_LidarVisualSettings vs = m_Visualizer.GetSettings();
+        if (vs)
+            vs.ApplyShowcaseDefaults();
         // recurring tick; scanning is gated by m_Running. Use a non-zero min tick interval to avoid per-frame overhead.
         GetGame().GetCallqueue().CallLater(StaticTick, s_MinTickInterval, true);
     }
@@ -104,6 +110,7 @@ class RDF_LidarAutoRunner
     {
         RDF_LidarAutoRunner inst = GetInstance();
         inst.m_Running = false;
+        inst.StopHudAfterglowTick();
         // Release stale Shape refs and IEntity-holding sample refs immediately.
         // Without this, the last frame's shapes (ONCE flag shapes still occupy memory
         // as ref-counted objects) and sample IEntity refs survive until the next Render().
@@ -247,6 +254,135 @@ class RDF_LidarAutoRunner
         RDF_LidarVisualSettings vs = inst.m_Visualizer.GetSettings();
         if (!vs) return false;
         return vs.m_UseBatchedMesh;
+    }
+
+    // When true: ApplyShowcaseDefaults then keep current draw rays/points overrides.
+    // When false: ApplyMinimalDefaults (no afterglow / rings / sector).
+    static void SetDemoUseShowcase(bool use)
+    {
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (!inst || !inst.m_Visualizer)
+            return;
+        RDF_LidarVisualSettings vs = inst.m_Visualizer.GetSettings();
+        if (!vs)
+            return;
+        if (use)
+            vs.ApplyShowcaseDefaults();
+        else
+            vs.ApplyMinimalDefaults();
+    }
+
+    static void SetDemoDrawAfterglow(bool draw)
+    {
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (!inst || !inst.m_Visualizer)
+            return;
+        RDF_LidarVisualSettings vs = inst.m_Visualizer.GetSettings();
+        if (vs)
+            vs.m_DrawAfterglow = draw;
+    }
+
+    static void SetDemoDrawRangeRings(bool draw)
+    {
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (!inst || !inst.m_Visualizer)
+            return;
+        RDF_LidarVisualSettings vs = inst.m_Visualizer.GetSettings();
+        if (vs)
+            vs.m_DrawRangeRings = draw;
+    }
+
+    static void SetDemoDrawSectorSweep(bool draw)
+    {
+        RDF_LidarAutoRunner inst = GetInstance();
+        if (!inst || !inst.m_Visualizer)
+            return;
+        RDF_LidarVisualSettings vs = inst.m_Visualizer.GetSettings();
+        if (vs)
+            vs.m_DrawSectorSweep = draw;
+    }
+
+    protected void EnsureHudAfterglowTick()
+    {
+        if (m_HudAfterglowTickScheduled)
+            return;
+        if (!RDF_LidarHUD.IsVisible())
+            return;
+        GetGame().GetCallqueue().CallLater(StaticHudAfterglowTick, HUD_AFTERGLOW_TICK_MS, true);
+        m_HudAfterglowTickScheduled = true;
+    }
+
+    protected void StopHudAfterglowTick()
+    {
+        if (!m_HudAfterglowTickScheduled)
+            return;
+        GetGame().GetCallqueue().Remove(StaticHudAfterglowTick);
+        m_HudAfterglowTickScheduled = false;
+    }
+
+    static void StaticHudAfterglowTick()
+    {
+        if (!RDF_LidarHUD.IsVisible())
+        {
+            RDF_LidarAutoRunner inst = GetInstance();
+            if (inst)
+                inst.StopHudAfterglowTick();
+            return;
+        }
+        RDF_LidarHUD.TickAfterglow();
+    }
+
+    protected void UpdateSweepGeometryFromStrategy(IEntity subject)
+    {
+        if (!m_Visualizer || !m_Scanner)
+            return;
+        RDF_LidarSampleStrategy strategy = m_Scanner.GetSampleStrategy();
+        if (!strategy)
+        {
+            m_Visualizer.ClearSweepGeometry();
+            return;
+        }
+
+        RDF_SweepSampleStrategy sweep = RDF_SweepSampleStrategy.Cast(strategy);
+        if (sweep)
+        {
+            float yawDeg = 0.0;
+            if (subject)
+            {
+                float azRad = sweep.GetCurrentAzimuthDeg() * Math.DEG2RAD;
+                float halfRad = sweep.GetHalfAngleDeg() * Math.DEG2RAD;
+                float cosA = Math.Cos(halfRad);
+                float elevFrac = 0.5;
+                float z = cosA + (1.0 - cosA) * elevFrac;
+                float r = Math.Sqrt(Math.Max(0.0, 1.0 - z * z));
+                vector dirLocal = Vector(Math.Cos(azRad) * r, Math.Sin(azRad) * r, z);
+
+                vector worldMat[4];
+                subject.GetWorldTransform(worldMat);
+                vector worldDir = (worldMat[0] * dirLocal[0])
+                    + (worldMat[1] * dirLocal[1])
+                    + (worldMat[2] * dirLocal[2]);
+                float flen = Math.Sqrt(worldDir[0] * worldDir[0] + worldDir[2] * worldDir[2]);
+                if (flen > 0.001)
+                    yawDeg = Math.Atan2(worldDir[2], worldDir[0]) * Math.RAD2DEG;
+            }
+
+            m_Visualizer.SetSweepGeometry(
+                sweep.GetHalfAngleDeg(),
+                sweep.GetSweepWidthDeg(),
+                yawDeg);
+            return;
+        }
+
+        RDF_ConicalSampleStrategy conical = RDF_ConicalSampleStrategy.Cast(strategy);
+        if (conical)
+        {
+            // Fixed cone: fan centred on subject forward (sweepWidth 0 → use entity forward).
+            m_Visualizer.SetSweepGeometry(conical.GetHalfAngleDeg(), 0.0, 0.0);
+            return;
+        }
+
+        m_Visualizer.ClearSweepGeometry();
     }
 
     // When true, installs built-in handler that prints hit count and closest distance after each scan (uses RDF_LidarSampleUtils).
@@ -415,6 +551,10 @@ class RDF_LidarAutoRunner
 
         IEntity subject = RDF_LidarSubjectResolver.ResolveLocalSubject(true);
 
+        UpdateSweepGeometryFromStrategy(subject);
+        m_ScanSerial = m_ScanSerial + 1;
+        EnsureHudAfterglowTick();
+
         // Check if we have network API for server-authoritative scanning
         if (IsNetworkAPIValid())
         {
@@ -428,7 +568,7 @@ class RDF_LidarAutoRunner
                 if (!syncedSamples)
                     return;
                 // Update visualizer with server results
-                m_Visualizer.RenderWithSamples(subject, syncedSamples);
+                m_Visualizer.RenderWithSamples(subject, syncedSamples, m_ScanSerial);
 
                 if (m_WriteLiveCSV && syncedSamples.Count() > 0)
                 {
@@ -442,7 +582,7 @@ class RDF_LidarAutoRunner
         else
         {
             // Local scanning (single-player or no network component)
-            m_Visualizer.Render(subject, m_Scanner);
+            m_Visualizer.Render(subject, m_Scanner, m_ScanSerial);
             ref array<ref RDF_LidarSample> samples = m_Visualizer.GetLastSamples();
             if (m_WriteLiveCSV && samples && samples.Count() > 0)
             {

@@ -12,6 +12,31 @@ class RDF_SweepSampleStrategy : RDF_LidarSampleStrategy
         m_SweepSpeedDegPerSec = sweepSpeedDegPerSec;
     }
 
+    float GetHalfAngleDeg()
+    {
+        return m_HalfAngleDeg;
+    }
+
+    float GetSweepWidthDeg()
+    {
+        return m_SweepWidthDeg;
+    }
+
+    float GetSweepSpeedDegPerSec()
+    {
+        return m_SweepSpeedDegPerSec;
+    }
+
+    // Current sweep centre azimuth in degrees (same time base as BuildDirection).
+    float GetCurrentAzimuthDeg()
+    {
+        World world = GetGame().GetWorld();
+        float time = 0.0;
+        if (world)
+            time = world.GetWorldTime();
+        return time * m_SweepSpeedDegPerSec;
+    }
+
     override vector BuildDirection(int index, int count)
     {
         World world = GetGame().GetWorld();

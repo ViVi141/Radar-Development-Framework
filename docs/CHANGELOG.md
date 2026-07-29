@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 2026-07-29 — 修复 LiDAR 材质密度全紫
+
+- `RDF_LidarScanner`：恢复 `hitSurface = param.SurfaceProps`（官方写法）；`GameMaterial.Cast(SurfaceProps)` 恒为 null，导致密度着色全部退回中间紫
+
+## 2026-07-29 — LiDAR Showcase 可视化
+
+- 世界空间 Showcase：点云余晖、½/全量程距离环、Sweep/Conical 扇面（`RDF_LidarVisualSettings.ApplyShowcaseDefaults`）
+- `RDF_LidarVisualizer`：静态/动态/余晖 Shape 分桶；`scanSerial` 门控余晖；`SetSweepGeometry`
+- PPI：磷光余晖衰减 + 前向扫线；`TickAfterglow`（AutoRunner ~100 ms）
+- Demo：`CreateDefault` 默认开 Showcase；`CreateShowcase`（Sweep+HUD）；`CreateWithHUD` 关世界 Shape、保留 PPI 动画
+- `RDF_SweepSampleStrategy` / `RDF_ConicalSampleStrategy` 暴露半角与方位 getter
+
 ## 2026-07-29 — Sprint D：CFAR/track golden + 最小 CI
 
 - 新增 `tools/dem/test_rdf_radar_cfar.py`：CA-CFAR 检出/虚警/杂波边缘 + 与 `RDF_RadarCfarGate` CA 公式对齐的 Enforce golden

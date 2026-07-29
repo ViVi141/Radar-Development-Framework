@@ -16,7 +16,7 @@ Modular sensor framework for Arma Reforger: **LiDAR**, **Radar**, and **DEM bake
 
 | Module | Status | Notes |
 |--------|--------|-------|
-| LiDAR | Maintaining | Ray point cloud, visualization, HUD, CSV, multiplayer sync |
+| LiDAR | Maintaining | Ray point cloud, Showcase (afterglow/rings/sweep), PPI phosphor HUD, CSV, multiplayer sync |
 | Radar | Shipped | Entity scan, physical detection, DEM clutter, PPI, ESM/RWR, authoritative multiplayer, automated tests |
 | DEM | Shipped | Bake V3 CSV; publish SURF JSON; runtime GetSurfaceY + SURF (fallback CSV/BIN/LIVE) |
 
@@ -44,8 +44,10 @@ docs/        Documentation (bilingual — see docs/I18N.md)
 ### Quick start — LiDAR
 
 ```c
+// Showcase on by default (afterglow + range rings; Sweep fan when using CreateSweep / CreateShowcase)
 RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateDefault(256));
-RDF_LidarAutoRunner.SetDemoEnabled(true);
+// Promo: Sweep + world Showcase + PPI phosphor HUD
+// RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateShowcase(512));
 ```
 
 Full API: [docs/API.md](docs/API.md)
@@ -203,7 +205,7 @@ Arma Reforger 用的模块化传感器开发框架：**LiDAR**、**雷达**、**
 
 | 模块 | 状态 | 说明 |
 |------|------|------|
-| LiDAR | 维护中 | 射线点云、可视化、HUD、CSV、联机同步 |
+| LiDAR | 维护中 | 射线点云、Showcase（余晖/环/扇面）、PPI 磷光 HUD、CSV、联机同步 |
 | Radar | 已落地 | 实体扫描、物理检测、DEM 杂波、PPI、ESM/RWR、联机权威、自动化测试 |
 | DEM | 已落地 | 烘焙 V3 CSV；发布用 SURF JSON；运行时 GetSurfaceY + SURF（回退 CSV/BIN/LIVE） |
 
@@ -231,8 +233,10 @@ docs/        文档（双语，见 docs/I18N.md）
 ### 快速上手 — LiDAR
 
 ```c
+// 默认开 Showcase（余晖 + 距离环；CreateSweep / CreateShowcase 时有扇面）
 RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateDefault(256));
-RDF_LidarAutoRunner.SetDemoEnabled(true);
+// 促销预设：Sweep + 世界 Showcase + PPI 磷光 HUD
+// RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateShowcase(512));
 ```
 
 完整 API：[docs/API.md](docs/API.md)

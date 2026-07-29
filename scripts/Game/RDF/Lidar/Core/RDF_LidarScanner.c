@@ -284,9 +284,11 @@ class RDF_LidarScanner
             {
                 vector hitPos = start + (dir * alongRay);
                 IEntity hitEntity = param.TraceEnt;
+                // SurfaceProps is typed SurfaceProperties but holds GameMaterial at runtime.
+                // Use assignment (engine idiom); GameMaterial.Cast() always returns null here.
                 GameMaterial hitSurface = null;
                 if (m_Settings.m_CaptureSurface)
-                    hitSurface = GameMaterial.Cast(param.SurfaceProps);
+                    hitSurface = param.SurfaceProps;
 
                 if (m_Settings.m_TraceTargetMode == ERDF_TraceTargetMode.ENTITIES_ONLY)
                 {

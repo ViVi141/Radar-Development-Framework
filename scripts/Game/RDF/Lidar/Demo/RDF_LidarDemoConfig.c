@@ -11,12 +11,13 @@ class RDF_LidarDemoConfig
     protected static float s_DefaultUpdateInterval = 1.0;
     protected static int s_DefaultTraceMode = 2;
     protected static bool s_DefaultDrawRays = false;
-    protected static bool s_DefaultDrawPoints = true;  
+    protected static bool s_DefaultDrawPoints = true;
     protected static bool s_DefaultDrawOriginAxis = false;
     protected static bool s_DefaultVerbose = false;
     protected static bool s_DefaultRenderWorld = true;
     protected static float s_DefaultMinTickInterval = -1.0;
     protected static bool s_DefaultUseBatchedMesh = true;
+    protected static bool s_DefaultUseShowcase = true;
 
     static void SetBootstrapEnabled(bool enabled) { s_BootstrapEnabled = enabled; }
     static bool IsBootstrapEnabled() { return s_BootstrapEnabled; }
@@ -41,11 +42,17 @@ class RDF_LidarDemoConfig
             s_DefaultMinTickInterval = -1.0;
     }
     static void SetDefaultUseBatchedMesh(bool use) { s_DefaultUseBatchedMesh = use; }
+    static void SetDefaultUseShowcase(bool use) { s_DefaultUseShowcase = use; }
 
     // Build the config used when bootstrap runs. Uses central params.
     static RDF_LidarDemoConfig GetBootstrapConfig()
     {
-        RDF_LidarDemoConfig cfg = CreateWithHUD(s_DefaultRayCount, s_DefaultRange);
+        RDF_LidarDemoConfig cfg;
+        if (s_DefaultUseShowcase && s_DefaultDrawPoints)
+            cfg = CreateDefault(s_DefaultRayCount);
+        else
+            cfg = CreateWithHUD(s_DefaultRayCount, s_DefaultRange);
+
         cfg.m_UpdateInterval = s_DefaultUpdateInterval;
         cfg.m_TraceTargetMode = s_DefaultTraceMode;
         cfg.m_DrawRays = s_DefaultDrawRays;
@@ -54,6 +61,9 @@ class RDF_LidarDemoConfig
         cfg.m_Verbose = s_DefaultVerbose;
         cfg.m_RenderWorld = s_DefaultRenderWorld;
         cfg.m_UseBatchedMesh = s_DefaultUseBatchedMesh;
+        cfg.m_UseShowcase = s_DefaultUseShowcase;
+        if (s_DefaultRange > 0.0)
+            cfg.m_Range = s_DefaultRange;
         if (s_DefaultMinTickInterval > 0.0)
             cfg.m_MinTickInterval = s_DefaultMinTickInterval;
         return cfg;
@@ -76,6 +86,11 @@ class RDF_LidarDemoConfig
     bool m_UseBatchedMesh = false;
     // When true, show 2D point cloud HUD (RDF_LidarHUD).
     bool m_ShowHUD = false;
+    // When true: afterglow + range rings + sector sweep (when Sweep/Conical).
+    bool m_UseShowcase = true;
+    bool m_DrawAfterglow = true;
+    bool m_DrawRangeRings = true;
+    bool m_DrawSectorSweep = true;
     // Scanner max range (m). When > 0, applied to scanner; HUD always syncs from scanner. 0 = leave scanner default (50).
     float m_Range = 0.0;
     // Trace target: 0=terrain only, 1=all (terrain+entities), 2=entities only. Applied when preset is used.
@@ -95,37 +110,38 @@ class RDF_LidarDemoConfig
         cfg.m_Enable = true;
         cfg.m_SampleStrategy = new RDF_UniformSampleStrategy();
         cfg.m_RayCount = Math.Max(rayCount, 1);
+        cfg.m_ColorStrategy = new RDF_LidarMaterialColorStrategy();
         cfg.m_UseBatchedMesh = true;
+        cfg.m_DrawRays = false;
+        cfg.m_DrawPoints = true;
+        cfg.m_UseShowcase = true;
+        cfg.m_DrawAfterglow = true;
+        cfg.m_DrawRangeRings = true;
+        cfg.m_DrawSectorSweep = true;
         return cfg;
     }
 
     // Like CreateDefault but with three-color distance gradient (near=green, mid=yellow, far=red).
     static RDF_LidarDemoConfig CreateThreeColor(int rayCount = 512)
     {
-        RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
-        cfg.m_Enable = true;
-        cfg.m_SampleStrategy = new RDF_UniformSampleStrategy();
-        cfg.m_RayCount = Math.Max(rayCount, 1);
+        RDF_LidarDemoConfig cfg = CreateDefault(rayCount);
         cfg.m_ColorStrategy = new RDF_ThreeColorStrategy(0xFF00FF00, 0xFFFFFF00, 0xFFFF0000);
-        cfg.m_UseBatchedMesh = true;
         return cfg;
     }
 
     // Like CreateDefault but with origin axis and verbose stats (showcases new features).
     static RDF_LidarDemoConfig CreateDefaultDebug(int rayCount = 512)
     {
-        RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
+        RDF_LidarDemoConfig cfg = CreateDefault(rayCount);
         // debug preset does not auto-enable demo by default — keep behaviour opt-in
         cfg.m_Enable = false;
-        cfg.m_SampleStrategy = new RDF_UniformSampleStrategy();
-        cfg.m_RayCount = Math.Max(rayCount, 1);
         cfg.m_DrawOriginAxis = true;
         cfg.m_Verbose = true;
-        cfg.m_UseBatchedMesh = true;
         return cfg;
     }
 
-    // Preset with HUD enabled (2D point cloud display). Scanner and HUD use same range. 3D rays/points off.
+    // Preset with HUD enabled (2D point cloud display). Scanner and HUD use same range.
+    // World showcase off (no Shape allocation); PPI phosphor animation still runs.
     static RDF_LidarDemoConfig CreateWithHUD(int rayCount = 512, float rangeM = 1000.0)
     {
         RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
@@ -135,7 +151,12 @@ class RDF_LidarDemoConfig
         cfg.m_ShowHUD = true;
         cfg.m_DrawRays = false;
         cfg.m_DrawPoints = false;
+        cfg.m_ColorStrategy = new RDF_LidarMaterialColorStrategy();
         cfg.m_UseBatchedMesh = true;
+        cfg.m_UseShowcase = false;
+        cfg.m_DrawAfterglow = false;
+        cfg.m_DrawRangeRings = false;
+        cfg.m_DrawSectorSweep = false;
         if (rangeM > 0.0)
             cfg.m_Range = rangeM;
         else
@@ -143,57 +164,59 @@ class RDF_LidarDemoConfig
         return cfg;
     }
 
+    // Promo preset: Sweep strategy + world Showcase + PPI HUD.
+    static RDF_LidarDemoConfig CreateShowcase(int rayCount = 512, float rangeM = 50.0)
+    {
+        RDF_LidarDemoConfig cfg = CreateSweep(30.0, 20.0, 45.0, rayCount);
+        cfg.m_ShowHUD = true;
+        cfg.m_DrawRays = false;
+        cfg.m_DrawPoints = true;
+        cfg.m_UseShowcase = true;
+        cfg.m_DrawAfterglow = true;
+        cfg.m_DrawRangeRings = true;
+        cfg.m_DrawSectorSweep = true;
+        cfg.m_ColorStrategy = new RDF_LidarMaterialColorStrategy();
+        if (rangeM > 0.0)
+            cfg.m_Range = rangeM;
+        return cfg;
+    }
+
     static RDF_LidarDemoConfig CreateHemisphere(int rayCount = 512)
     {
-        RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
-        cfg.m_Enable = true;
+        RDF_LidarDemoConfig cfg = CreateDefault(rayCount);
         cfg.m_SampleStrategy = new RDF_HemisphereSampleStrategy();
-        cfg.m_RayCount = Math.Max(rayCount, 1);
-        cfg.m_UseBatchedMesh = true;
         return cfg;
     }
 
     static RDF_LidarDemoConfig CreateConical(float halfAngleDeg = 30.0, int rayCount = 512)
     {
-        RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
-        cfg.m_Enable = true;
+        RDF_LidarDemoConfig cfg = CreateDefault(rayCount);
         cfg.m_SampleStrategy = new RDF_ConicalSampleStrategy(halfAngleDeg);
-        cfg.m_RayCount = Math.Max(rayCount, 1);
         cfg.m_ColorStrategy = new RDF_IndexColorStrategy();
-        cfg.m_UseBatchedMesh = true;
         return cfg;
     }
 
     static RDF_LidarDemoConfig CreateStratified(int rayCount = 512)
     {
-        RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
-        cfg.m_Enable = true;
+        RDF_LidarDemoConfig cfg = CreateDefault(rayCount);
         cfg.m_SampleStrategy = new RDF_StratifiedSampleStrategy();
-        cfg.m_RayCount = Math.Max(rayCount, 1);
         cfg.m_ColorStrategy = new RDF_IndexColorStrategy();
-        cfg.m_UseBatchedMesh = true;
         return cfg;
     }
 
     static RDF_LidarDemoConfig CreateScanline(int sectors = 32, int rayCount = 512)
     {
-        RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
-        cfg.m_Enable = true;
+        RDF_LidarDemoConfig cfg = CreateDefault(rayCount);
         cfg.m_SampleStrategy = new RDF_ScanlineSampleStrategy(sectors);
-        cfg.m_RayCount = Math.Max(rayCount, 1);
         cfg.m_ColorStrategy = new RDF_IndexColorStrategy();
-        cfg.m_UseBatchedMesh = true;
         return cfg;
     }
 
     static RDF_LidarDemoConfig CreateSweep(float halfAngleDeg = 30.0, float sweepWidthDeg = 20.0, float sweepSpeedDegPerSec = 45.0, int rayCount = 512)
     {
-        RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
-        cfg.m_Enable = true;
+        RDF_LidarDemoConfig cfg = CreateDefault(rayCount);
         cfg.m_SampleStrategy = new RDF_SweepSampleStrategy(halfAngleDeg, sweepWidthDeg, sweepSpeedDegPerSec);
-        cfg.m_RayCount = Math.Max(rayCount, 1);
         cfg.m_ColorStrategy = new RDF_IndexColorStrategy();
-        cfg.m_UseBatchedMesh = true;
         return cfg;
     }
 
@@ -201,11 +224,8 @@ class RDF_LidarDemoConfig
     static RDF_LidarDemoConfig FromStrategy(RDF_LidarSampleStrategy strategy, int rayCount = 512, RDF_LidarColorStrategy colorStrategy = null)
     {
         if (!strategy) return null;
-        RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
-        cfg.m_Enable = true;
+        RDF_LidarDemoConfig cfg = CreateDefault(rayCount);
         cfg.m_SampleStrategy = strategy;
-        cfg.m_RayCount = Math.Max(rayCount, 1);
-        cfg.m_UseBatchedMesh = true;
         if (colorStrategy)
             cfg.m_ColorStrategy = colorStrategy;
         return cfg;
@@ -224,12 +244,17 @@ class RDF_LidarDemoConfig
             RDF_LidarAutoRunner.SetDemoRange(m_Range);
         if (m_MinTickInterval > 0.0)
             RDF_LidarAutoRunner.SetMinTickInterval(m_MinTickInterval);
-        if (m_ColorStrategy)
-            RDF_LidarAutoRunner.SetDemoColorStrategy(m_ColorStrategy);
         if (m_UpdateInterval > 0.0)
             RDF_LidarAutoRunner.SetDemoUpdateInterval(Math.Max(0.01, m_UpdateInterval));
         RDF_LidarAutoRunner.SetDemoTraceTargetMode(m_TraceTargetMode);
         RDF_LidarAutoRunner.SetDemoTraceSmokeOcclusion(m_TraceSmokeOcclusion);
+
+        // Showcase base first, then per-flag overrides (draw rays/points must win).
+        RDF_LidarAutoRunner.SetDemoUseShowcase(m_UseShowcase);
+        RDF_LidarAutoRunner.SetDemoDrawAfterglow(m_DrawAfterglow);
+        RDF_LidarAutoRunner.SetDemoDrawRangeRings(m_DrawRangeRings);
+        RDF_LidarAutoRunner.SetDemoDrawSectorSweep(m_DrawSectorSweep);
+
         RDF_LidarAutoRunner.SetDemoDrawOriginAxis(m_DrawOriginAxis);
         RDF_LidarAutoRunner.SetDemoVerbose(m_Verbose);
         RDF_LidarAutoRunner.SetDemoRenderWorld(m_RenderWorld);
@@ -238,6 +263,11 @@ class RDF_LidarDemoConfig
         RDF_LidarAutoRunner.SetDemoShowHitsOnly(m_ShowHitsOnly);
         RDF_LidarAutoRunner.SetDemoUseBatchedMesh(m_UseBatchedMesh);
         RDF_LidarAutoRunner.SetDemoWriteLiveCSV(m_WriteLiveCSV);
+        // Color last so Showcase/preset cannot leave a stale Index/ThreeColor strategy.
+        if (m_ColorStrategy)
+            RDF_LidarAutoRunner.SetDemoColorStrategy(m_ColorStrategy);
+        else
+            RDF_LidarAutoRunner.SetDemoColorStrategy(new RDF_LidarMaterialColorStrategy());
         // HUD takes precedence over verbose handler
         if (m_ShowHUD)
         {

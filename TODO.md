@@ -86,7 +86,7 @@
 | **P2 场景驱动** | 刀刃绕射 / 更精细多径 | 山地体感 | 高 | 已有弱 NLOS 反射因子；真绕射需几何模型 + 场景需求 |
 | **P2 场景驱动** | DEM span 遮挡 / 多径 | 城区/林冠 | 高 | 离线/烘焙有 span；游戏 SURF 路径故意不带 — 勿轻易重开 |
 | **P2 单雷达打磨后** | 多雷达 plots 融合 / 交叉定位 | 战役级 | 很高 | Network Sprint 已铺权威同步；融合是新产品层，非小补丁 |
-| **P2 空窗** | LiDAR：PPI 动画、DiagMenu、Sensor 门面 | LiDAR UX | 中 | 雷达主线空窗再做；无 `RDF_LidarSensor` |
+| **P2 空窗** | LiDAR：DiagMenu、Sensor 门面 | LiDAR UX | 中 | PPI 动画 + Showcase 已落地；无 `RDF_LidarSensor` |
 | **P2 离线大改时** | 拆分 `rdf_radar_mass_battle_sim.py`（~1.8k LOC） | 可维护 | 中 | 不挡游戏内路线 |
 | **P2→P3** | IFF / 数据链抽象 | 友军识别 | 高 | 无现成钩子；有明确友军玩法再启 |
 | **P3** | 远程计算全链路 | 卸算力 | 很高 | Stress/Perf 证伪瓶颈前不做；禁止远程替代 Trace/实体查询 |
@@ -99,7 +99,8 @@
 - [ ] **P2** 刀刃绕射 / 更精细多径（明确山地场景时）
 - [ ] **P2** DEM span 遮挡 / 多径（明确城区/林冠需求且接受发布包变重时）
 - [ ] **P2** 多雷达 plots 融合 / 交叉定位（单雷达玩法打磨完）
-- [ ] **P2** LiDAR：PPI 动画、DiagMenu、Sensor 门面对齐
+- [x] **P2** LiDAR：PPI 动画 + Showcase（余晖/环/扇面；DiagMenu / Sensor 门面仍空）
+- [ ] **P2** LiDAR：DiagMenu、Sensor 门面对齐
 - [ ] **P2** 拆分 `rdf_radar_mass_battle_sim.py`
 - [ ] **P2/P3** IFF / 数据链抽象
 - [ ] **P3** 远程计算：设计文档 → Backend 接口 → Rest 异步 → 服务端对齐（失败回退 Local）
