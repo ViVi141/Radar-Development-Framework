@@ -428,6 +428,26 @@ class RDF_LidarAutoRunner
         s.m_Range = Math.Clamp(rangeM, 0.1, 100000.0);
     }
 
+    // Show / hide PPI HUD and wire it as the scan-complete handler.
+    static void SetDemoHudEnabled(bool enabled)
+    {
+        if (enabled)
+        {
+            RDF_LidarHUD.Show();
+            RDF_LidarHUD.SetDisplayRange(GetDemoScannerRange());
+            SetScanCompleteHandler(RDF_LidarHUD.GetInstance());
+            GetInstance().EnsureHudAfterglowTick();
+        }
+        else
+        {
+            RDF_LidarHUD.Hide();
+            GetInstance().StopHudAfterglowTick();
+            RDF_LidarAutoRunner inst = GetInstance();
+            if (inst && inst.m_ScanCompleteHandler == RDF_LidarHUD.GetInstance())
+                inst.m_ScanCompleteHandler = null;
+        }
+    }
+
     // Set the demo scanner update interval safely (seconds)
     static void SetDemoUpdateInterval(float interval)
     {
@@ -530,6 +550,9 @@ class RDF_LidarAutoRunner
 
     void RDF_LidarTick()
     {
+        if (RDF_LidarDiagMenu.IsRegistered())
+            RDF_LidarDiagMenu.ApplyToAutoRunner();
+
         if (!m_Running)
             return;
 

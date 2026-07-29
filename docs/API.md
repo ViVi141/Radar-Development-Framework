@@ -51,7 +51,19 @@
 - `void SetSampleStrategy(RDF_LidarSampleStrategy strategy)` — 注入自定义采样策略
 - `RDF_LidarSampleStrategy GetSampleStrategy()` — 获取当前采样策略
 
-备注：默认采样策略为 `RDF_UniformSampleStrategy`。
+备注：默认采样策略为 `RDF_UniformSampleStrategy`。玩法模组优先用 `RDF_LidarSensor`，不要直接编排 Scanner。
+
+### RDF_LidarSensor
+稳定玩法门面（对齐 `RDF_RadarSensor`）。
+- 模式 `ERDF_LidarSensorMode`：`FULL_SPHERE` / `FORWARD_CONE` / `FORWARD_RECT` / `SWEEP` / `ENTITIES_NEAR`
+- `ConfigureMode(mode, rayCount)` / `SetMode` / `Configure(settings)`
+- `Tick(subject, networkAPI)` / `ScanOnce(subject, networkAPI, worldTimeS)`
+- `GetSamples()` / `GetSamplesCopy()` / `GetClosestHit()` / `GetClosestHitEntity()` / `GetHitCount()`
+- `GetStatusShort()` / `ResetSession()` / `SetScanCompleteHandler`
+- 静态预设：`CreateFullSphereSettings` / `CreateForwardConeSettings` / `CreateForwardRectSettings` / `CreateSweepSettings` / `CreateEntitiesNearSettings`
+
+### RDF_LidarDiagMenu
+Workbench DiagMenu「RDF LiDAR」：Demo 开关、模式、射线数、量程、Showcase、PPI HUD、Verbose。`EnsureRegistered()` 在 `OnGameStart` 调用；边缘触发，不踩 bootstrap 配置。
 
 ## Visual
 
@@ -92,7 +104,12 @@
 ### RDF_LidarSampleStrategy (接口)
 - `vector BuildDirection(int index, int count)` — 返回单位方向向量
 
-实现：`RDF_UniformSampleStrategy`、`RDF_HemisphereSampleStrategy`、`RDF_ConicalSampleStrategy`、`RDF_StratifiedSampleStrategy`、`RDF_ScanlineSampleStrategy`、`RDF_SweepSampleStrategy`（随时间旋转的扇区扫描，雷达风格）。
+实现：`RDF_UniformSampleStrategy`、`RDF_HemisphereSampleStrategy`、`RDF_ConicalSampleStrategy`、`RDF_StratifiedSampleStrategy`、`RDF_ScanlineSampleStrategy`、`RDF_SweepSampleStrategy`（随时间旋转的扇区扫描，雷达风格）、`RDF_RectangularFOVSampleStrategy`（矩形视场网格，车载前向）。
+
+### RDF_RectangularFOVSampleStrategy
+- 构造：`RDF_RectangularFOVSampleStrategy(horizFOVDeg = 120, vertFOVDeg = 25.4, cols = 120, rows = 32)`
+- `GetHorizFOVDeg` / `GetVertFOVDeg` / `GetCols` / `GetRows` / `GetGridRayCount`
+- 局部 +Z 为前向；射线在水平×垂直 FOV 上均匀铺网格。
 
 ### RDF_SweepSampleStrategy
 - 构造：`RDF_SweepSampleStrategy(float halfAngleDeg = 30.0, float sweepWidthDeg = 20.0, float sweepSpeedDegPerSec = 45.0)` — 锥半角、扇区宽度（度）、旋转速度（度/秒）。
@@ -449,8 +466,16 @@ Key methods:
 - `void SetSampleStrategy(RDF_LidarSampleStrategy strategy)` — inject a sampling strategy
 - `RDF_LidarSampleStrategy GetSampleStrategy()` — get current strategy
 
-Notes: default sampling strategy is `RDF_UniformSampleStrategy`.
+Notes: default sampling strategy is `RDF_UniformSampleStrategy`. Prefer `RDF_LidarSensor` for gameplay.
 
+### RDF_LidarSensor
+Stable gameplay facade (mirrors `RDF_RadarSensor`).
+- Modes `ERDF_LidarSensorMode`: `FULL_SPHERE` / `FORWARD_CONE` / `FORWARD_RECT` / `SWEEP` / `ENTITIES_NEAR`
+- `ConfigureMode` / `Tick` / `ScanOnce` / `GetSamples` / `GetClosestHit` / `GetStatusShort`
+- Presets: `CreateFullSphereSettings` / `CreateForwardConeSettings` / `CreateForwardRectSettings` / `CreateSweepSettings` / `CreateEntitiesNearSettings`
+
+### RDF_LidarDiagMenu
+Workbench DiagMenu "RDF LiDAR": demo toggle, mode, rays, range, Showcase, PPI HUD, verbose. Registered on `OnGameStart`; edge-triggered so bootstrap configs are not stomped.
 ## Visual
 
 ### RDF_LidarVisualSettings
@@ -486,8 +511,11 @@ Color strategy: replaceable via `RDF_LidarColorStrategy`. For exports, use `GetL
 ### RDF_LidarSampleStrategy (interface)
 - `vector BuildDirection(int index, int count)` — returns a unit direction vector
 
-Implementations: `RDF_UniformSampleStrategy`, `RDF_HemisphereSampleStrategy`, `RDF_ConicalSampleStrategy`, `RDF_StratifiedSampleStrategy`, `RDF_ScanlineSampleStrategy`, `RDF_SweepSampleStrategy` (time-rotating sector — radar style).
+Implementations: `RDF_UniformSampleStrategy`, `RDF_HemisphereSampleStrategy`, `RDF_ConicalSampleStrategy`, `RDF_StratifiedSampleStrategy`, `RDF_ScanlineSampleStrategy`, `RDF_SweepSampleStrategy` (time-rotating sector — radar style), `RDF_RectangularFOVSampleStrategy` (rectangular FOV grid — vehicle forward).
 
+### RDF_RectangularFOVSampleStrategy
+- ctor: `RDF_RectangularFOVSampleStrategy(horizFOVDeg = 120, vertFOVDeg = 25.4, cols = 120, rows = 32)`
+- `GetHorizFOVDeg` / `GetVertFOVDeg` / `GetCols` / `GetRows` / `GetGridRayCount`
 ### RDF_SweepSampleStrategy
 - Constructor: `RDF_SweepSampleStrategy(float halfAngleDeg = 30.0, float sweepWidthDeg = 20.0, float sweepSpeedDegPerSec = 45.0)` — half-angle, sector width (deg), rotation speed (deg/sec).
 - Directions are distributed across the sector and sector rotates with world time.
@@ -717,7 +745,7 @@ PPI Canvas: 210 × 210 (see LidarPPI.layout)
 
 ## Logic-only (no visualizer)
 
-仅逻辑扫描时，LiDAR 直接用 `RDF_LidarScanner`，Radar 首选
+仅逻辑扫描时，LiDAR 首选 `RDF_LidarSensor`（或底层 `RDF_LidarScanner`），Radar 首选
 `RDF_RadarSensor`；不要创建 Visualizer，即可跳过 debug Shape。
 底层扩展才直接调用 `RDF_RadarScanner`。示例见 README 与
 [RADAR_API.md](RADAR_API.md)。

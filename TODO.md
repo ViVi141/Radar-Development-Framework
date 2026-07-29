@@ -86,7 +86,7 @@
 | **P2 场景驱动** | 刀刃绕射 / 更精细多径 | 山地体感 | 高 | 已有弱 NLOS 反射因子；真绕射需几何模型 + 场景需求 |
 | **P2 场景驱动** | DEM span 遮挡 / 多径 | 城区/林冠 | 高 | 离线/烘焙有 span；游戏 SURF 路径故意不带 — 勿轻易重开 |
 | **P2 单雷达打磨后** | 多雷达 plots 融合 / 交叉定位 | 战役级 | 很高 | Network Sprint 已铺权威同步；融合是新产品层，非小补丁 |
-| **P2 空窗** | LiDAR：DiagMenu、Sensor 门面 | LiDAR UX | 中 | PPI 动画 + Showcase 已落地；无 `RDF_LidarSensor` |
+| **P2 空窗** | LiDAR：DiagMenu、Sensor 门面 | LiDAR UX | 中 | ~~PPI + Showcase~~；**Sensor + DiagMenu + RECT FOV 已落地** |
 | **P2 离线大改时** | 拆分 `rdf_radar_mass_battle_sim.py`（~1.8k LOC） | 可维护 | 中 | 不挡游戏内路线 |
 | **P2→P3** | IFF / 数据链抽象 | 友军识别 | 高 | 无现成钩子；有明确友军玩法再启 |
 | **P3** | 远程计算全链路 | 卸算力 | 很高 | Stress/Perf 证伪瓶颈前不做；禁止远程替代 Trace/实体查询 |
@@ -99,8 +99,8 @@
 - [ ] **P2** 刀刃绕射 / 更精细多径（明确山地场景时）
 - [ ] **P2** DEM span 遮挡 / 多径（明确城区/林冠需求且接受发布包变重时）
 - [ ] **P2** 多雷达 plots 融合 / 交叉定位（单雷达玩法打磨完）
-- [x] **P2** LiDAR：PPI 动画 + Showcase（余晖/环/扇面；DiagMenu / Sensor 门面仍空）
-- [ ] **P2** LiDAR：DiagMenu、Sensor 门面对齐
+- [x] **P2** LiDAR：PPI 动画 + Showcase（余晖/环/扇面）
+- [x] **P2** LiDAR：DiagMenu、Sensor 门面对齐（`RDF_LidarSensor` + `RDF_LidarDiagMenu` + `RDF_RectangularFOVSampleStrategy`）
 - [ ] **P2** 拆分 `rdf_radar_mass_battle_sim.py`
 - [ ] **P2/P3** IFF / 数据链抽象
 - [ ] **P3** 远程计算：设计文档 → Backend 接口 → Rest 异步 → 服务端对齐（失败回退 Local）
@@ -120,6 +120,7 @@
 **Sprint C（已完成）**：GO/SO-CFAR、Settings 阈值、欺骗扩展、WLR HUD。  
 **Network Sprint（已完成）**：关键 Settings RplProp、plots 加厚、K/W/L 权威摘要、发射态。  
 **Sprint D（已完成核心）**：Python CFAR/track golden + 最小 CI。  
+**LiDAR UX（已完成）**：Showcase / PPI 动画 + `RDF_LidarSensor` + DiagMenu + 矩形 FOV。  
 **下一步**：锁定层对接武器（模组侧）；场景驱动绕射 / DEM span / 组网融合。
 
 Ideal：`RDF_RadarAutoTestSuite.StartAll()`  
@@ -135,6 +136,7 @@ Realistic：`RDF_RadarAutoTestSuite.StartAllRealistic()`
 - [x] PPI · DEM 杂波 · CA/GO/SO-CFAR · EW / 欺骗 · 测量合成
 - [x] 弹道 + WLR（多点真空拟合）· 散射体表 / Signature / Swerling
 - [x] `RDF_RadarSensor`（SEARCH / STARE / WLR / ESM）· `RDF_RadarLockManager` · `GetLockedTarget` / `GetArmAim`
+- [x] `RDF_LidarSensor`（FULL_SPHERE / CONE / RECT / SWEEP / ENTS）· DiagMenu · 矩形 FOV
 - [x] RWR（`RDF_RadarRwr`）· ESM 侦收 · 反辐射瞄点
 - [x] 火箭制导示例（`RDF_RadarRocketGuidance` + Lock-Fire 回归）
 - [x] Network 权威端挂 Sensor
@@ -258,7 +260,7 @@ Context: realistic channel + single-radar authoritative Network path shipped; ol
 | **P2 scenario** | Knife-edge diffraction / fine multipath | Mountain feel | High | Weak NLOS factor exists; real diffraction needs geometry + demand |
 | **P2 scenario** | DEM span occlusion / multipath | Urban / canopy | High | Offline/bake has spans; game SURF path deliberately omits — don’t reopen lightly |
 | **P2 after polish** | Multi-radar plots fusion / cross-fix | Campaign | Very high | Network Sprint paved sync; fusion is a new product layer |
-| **P2 idle** | LiDAR PPI anim / DiagMenu / Sensor facade | LiDAR UX | Medium | Radar-mainline idle only; no `RDF_LidarSensor` yet |
+| **P2 idle** | LiDAR PPI / DiagMenu / Sensor facade | LiDAR UX | Medium | Showcase + **`RDF_LidarSensor` + DiagMenu + RECT FOV shipped** |
 | **P2 offline rewrite** | Split `rdf_radar_mass_battle_sim.py` (~1.8k LOC) | Maintainability | Medium | Does not block in-game roadmap |
 | **P2→P3** | IFF / datalink abstraction | Friendly ID | High | No hooks; start only with explicit friend/foe gameplay |
 | **P3** | Remote compute full chain | Offload CPU | Very high | Wait for Stress/Perf proof; never replace Trace/entity query remotely |
@@ -271,7 +273,8 @@ Context: realistic channel + single-radar authoritative Network path shipped; ol
 - [ ] **P2** Knife-edge diffraction / fine multipath (clear mountain scenario)
 - [ ] **P2** DEM span occlusion / multipath (urban/canopy need + accept heavier packs)
 - [ ] **P2** Multi-radar plots fusion / cross-fix (after single-radar polish)
-- [ ] **P2** LiDAR: PPI animation, DiagMenu, Sensor facade alignment
+- [x] **P2** LiDAR: PPI animation + Showcase
+- [x] **P2** LiDAR: DiagMenu + Sensor facade (`RDF_LidarSensor` + `RDF_LidarDiagMenu` + `RDF_RectangularFOVSampleStrategy`)
 - [ ] **P2** Split `rdf_radar_mass_battle_sim.py`
 - [ ] **P2/P3** IFF / datalink abstraction
 - [ ] **P3** Remote compute: design doc → Backend → Rest async → server align (fallback Local)
@@ -291,6 +294,7 @@ Context: realistic channel + single-radar authoritative Network path shipped; ol
 **Sprint C (done)**: GO/SO-CFAR, Settings thresholds, deception extensions, WLR HUD.  
 **Network Sprint (done)**: key Settings RplProp, thicker plots, K/W/L authoritative summary, emit state.  
 **Sprint D (core done)**: Python CFAR/track golden + minimal CI.  
+**LiDAR UX (done)**: Showcase / PPI anim + `RDF_LidarSensor` + DiagMenu + rectangular FOV.  
 **Next**: lock→weapon integration (mod side); scenario-driven diffraction / DEM span / fusion.
 
 Ideal: `RDF_RadarAutoTestSuite.StartAll()`  
@@ -306,6 +310,7 @@ Realistic: `RDF_RadarAutoTestSuite.StartAllRealistic()`
 - [x] PPI · DEM 杂波 · CA/GO/SO-CFAR · EW / 欺骗 · 测量合成
 - [x] 弹道 + WLR（多点真空拟合）· 散射体表 / Signature / Swerling
 - [x] `RDF_RadarSensor`（SEARCH / STARE / WLR / ESM）· `RDF_RadarLockManager` · `GetLockedTarget` / `GetArmAim`
+- [x] `RDF_LidarSensor` (FULL_SPHERE / CONE / RECT / SWEEP / ENTS) · DiagMenu · rectangular FOV
 - [x] RWR（`RDF_RadarRwr`）· ESM 侦收 · 反辐射瞄点
 - [x] 火箭制导示例（`RDF_RadarRocketGuidance` + Lock-Fire 回归）
 - [x] Network 权威端挂 Sensor

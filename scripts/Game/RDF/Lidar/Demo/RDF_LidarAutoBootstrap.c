@@ -9,6 +9,8 @@ modded class SCR_BaseGameMode
     {
         super.OnGameStart();
 
+        RDF_LidarDiagMenu.EnsureRegistered();
+
         if (RDF_LidarDemoConfig.IsBootstrapEnabled())
         {
             if (RDF_LidarDemoConfig.IsBootstrapAutoCycle())

@@ -38,7 +38,7 @@ RDF 现已提供：
 - **方案 A（推荐，雷达）**：挂 `RDF_RadarComponent`，通过
   `GetSensor().GetPlots()` 或 `GetTracks()` 读取结果，过滤载具类型后按
   距离、SNR 或航迹质量选锁。
-- **方案 B（LiDAR 射线优先）**：使用 `RDF_LidarScanner`，配置为只打实体，扇区用锥形/扫掠策略；按 `m_Distance` 自动锁。
+- **方案 B（LiDAR 射线优先）**：使用 `RDF_LidarSensor`（`FORWARD_RECT` / `ENTITIES_NEAR`）或底层 `RDF_LidarScanner`；按 `GetClosestHit()` / `m_Distance` 自动锁。
 - **方案 C（底层扩展）**：直接扩展 `RDF_RadarScanner` 或第五节 Query +
   Trace；仅在公共 Sensor 无法满足需求时采用。
 
@@ -235,7 +235,7 @@ RDF already provides:
 - **Option A (recommended, radar)**: attach `RDF_RadarComponent`, read
   `GetSensor().GetPlots()` or `GetTracks()`, filter vehicle types, then pick lock by
   range, SNR, or track quality.
-- **Option B (LiDAR ray-first)**: use `RDF_LidarScanner`, entities-only, conical/sweep sector; auto-lock by `m_Distance`.
+- **Option B (LiDAR ray-first)**: use `RDF_LidarSensor` (`FORWARD_RECT` / `ENTITIES_NEAR`) or low-level `RDF_LidarScanner`; auto-lock via `GetClosestHit()` / `m_Distance`.
 - **Option C (low-level)**: extend `RDF_RadarScanner` or section 5 Query +
   Trace; only when the public Sensor cannot meet the need.
 

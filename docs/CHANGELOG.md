@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 2026-07-29 — LiDAR Sensor 门面 + DiagMenu + 矩形 FOV
+
+- 新增 `RDF_LidarSensor`：对齐 `RDF_RadarSensor` 的玩法门面（`ConfigureMode` / `Tick` / `ScanOnce` / `GetSamples` / `GetClosestHit`）
+- 模式：`FULL_SPHERE` / `FORWARD_CONE` / `FORWARD_RECT` / `SWEEP` / `ENTITIES_NEAR`
+- 新增 `RDF_RectangularFOVSampleStrategy`（车载前向矩形视场；默认 120°×25.4° @ 120×32）
+- 新增 `RDF_LidarDiagMenu`（Workbench「RDF LiDAR」：Demo 开关、模式、射线、量程、Showcase、HUD）；`OnGameStart` 注册，边缘触发避免踩掉 bootstrap 配置
+- `RDF_LidarAutoRunner.SetDemoHudEnabled`
+
 ## 2026-07-29 — 修复 LiDAR 材质密度全紫
 
 - `RDF_LidarScanner`：恢复 `hitSurface = param.SurfaceProps`（官方写法）；`GameMaterial.Cast(SurfaceProps)` 恒为 null，导致密度着色全部退回中间紫

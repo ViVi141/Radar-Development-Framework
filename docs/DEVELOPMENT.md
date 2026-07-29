@@ -52,9 +52,11 @@ scripts/Game/RDF/
     │   ├── RDF_LidarSettings.c        参数与校验
     │   ├── RDF_LidarTypes.c           数据结构（RDF_LidarSample）
     │   ├── RDF_LidarScanner.c         扫描器与射线构建
+    │   ├── RDF_LidarSensor.c          玩法门面（ConfigureMode / Tick）
     │   ├── RDF_LidarSampleStrategy.c  采样策略接口（均匀策略）
     │   ├── RDF_HemisphereSampleStrategy.c
     │   ├── RDF_ConicalSampleStrategy.c
+    │   ├── RDF_RectangularFOVSampleStrategy.c  矩形视场（车载）
     │   ├── RDF_StratifiedSampleStrategy.c
     │   ├── RDF_ScanlineSampleStrategy.c
     │   └── RDF_SweepSampleStrategy.c  扇区扫掠策略
@@ -84,6 +86,7 @@ scripts/Game/RDF/
         ├── RDF_LidarAutoRunner.c      演示唯一入口
         ├── RDF_LidarDemoConfig.c      配置与预设工厂
         ├── RDF_LidarDemoCycler.c       策略轮换
+        ├── RDF_LidarDiagMenu.c         Workbench DiagMenu
         └── RDF_LidarDemoStatsHandler.c 内置统计回调
 ```
 
@@ -364,9 +367,11 @@ scripts/Game/RDF/
     │   ├── RDF_LidarSettings.c        参数与校验
     │   ├── RDF_LidarTypes.c           数据结构（RDF_LidarSample）
     │   ├── RDF_LidarScanner.c         扫描器与射线构建
+    │   ├── RDF_LidarSensor.c          玩法门面（ConfigureMode / Tick）
     │   ├── RDF_LidarSampleStrategy.c  采样策略接口（均匀策略）
     │   ├── RDF_HemisphereSampleStrategy.c
     │   ├── RDF_ConicalSampleStrategy.c
+    │   ├── RDF_RectangularFOVSampleStrategy.c  矩形视场（车载）
     │   ├── RDF_StratifiedSampleStrategy.c
     │   ├── RDF_ScanlineSampleStrategy.c
     │   └── RDF_SweepSampleStrategy.c  扇区扫掠策略
@@ -396,6 +401,7 @@ scripts/Game/RDF/
         ├── RDF_LidarAutoRunner.c      演示唯一入口
         ├── RDF_LidarDemoConfig.c      配置与预设工厂
         ├── RDF_LidarDemoCycler.c       策略轮换
+        ├── RDF_LidarDiagMenu.c         Workbench DiagMenu
         └── RDF_LidarDemoStatsHandler.c 内置统计回调
 ```
 
