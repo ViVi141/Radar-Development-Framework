@@ -353,15 +353,18 @@ def main() -> None:
         jammer_z = (radar_iz + 600) * cell_m
         # Fixed jammer center: hopping can walk partially out of band.
         jam_center = hardware.frequency_hz
+        jammer = NoiseJammer(
+            x_m=jammer_x,
+            z_m=jammer_z,
+            erp_w=1.0e4,
+            bandwidth_hz=20.0e6,
+            center_frequency_hz=jam_center,
+        )
+        # Demo wants visible burn-through; use stare / beam coupling.
+        jammer.configure_physics_beam(sidelobe_level_db=-25.0)
         ew_stack = EWStack(
             effects=[
-                NoiseJammer(
-                    x_m=jammer_x,
-                    z_m=jammer_z,
-                    erp_w=1.0e4,
-                    bandwidth_hz=20.0e6,
-                    center_frequency_hz=jam_center,
-                ),
+                jammer,
                 DeceptionJammer(
                     false_targets=[
                         FalseTarget(

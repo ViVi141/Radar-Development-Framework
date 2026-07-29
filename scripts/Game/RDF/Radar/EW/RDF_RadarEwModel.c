@@ -29,12 +29,131 @@ class RDF_RadarFalsePlot
     float m_RangeRateMs;
 }
 
+// Burn-through under noise jamming: Reff = R0 · (N / (N+J))^(1/4).
+// thermalNoiseW and jamNoiseW must be in the same domain (RF or both post-PG).
+class RDF_RadarEwBurnThrough
+{
+    static float RangeM(
+        float cleanInstrumentedRangeM,
+        float thermalNoiseW,
+        float jamNoiseW)
+    {
+        float r0 = cleanInstrumentedRangeM;
+        if (r0 < 1.0)
+            r0 = 1.0;
+        float n = thermalNoiseW;
+        if (n < 0.0)
+            n = 0.0;
+        float j = jamNoiseW;
+        if (j < 0.0)
+            j = 0.0;
+        float denom = n + j;
+        if (denom <= 0.0)
+            return r0;
+        float factor = n / denom;
+        if (factor <= 0.0)
+            return 0.0;
+        if (factor >= 1.0)
+            return r0;
+        return r0 * Math.Pow(factor, 0.25);
+    }
+}
+
 class RDF_RadarNoiseJammerEffect : RDF_RadarEwEffect
 {
     bool m_Enabled = true;
     vector m_Position;
     float m_ErpW = 10000.0;
     float m_BandwidthHz = 5000000.0;
+    // Default SEARCH_AVG + deeper sidelobe: playable partial suppression for
+    // rotating search. Use ConfigurePhysicsBeam() for stare / hard fidelity.
+    ERDF_NoiseJamCoupling m_CouplingMode = ERDF_NoiseJamCoupling.RDF_JAM_COUPLE_SEARCH_AVG;
+    float m_SidelobeLevelDb = -40.0;
+    // Scales received jammer power after coupling (gameplay soft knob).
+    float m_CouplingGain = 1.0;
+    // SEARCH_AVG duty override; <0 → az_beamwidth_deg / 360.
+    float m_SearchDutyOverride = -1.0;
+
+    // Instantaneous beam coupling (legacy hard path).
+    void ConfigurePhysicsBeam(float sidelobeLevelDb = -25.0)
+    {
+        m_CouplingMode = ERDF_NoiseJamCoupling.RDF_JAM_COUPLE_BEAM;
+        m_SidelobeLevelDb = sidelobeLevelDb;
+        m_CouplingGain = 1.0;
+        m_SearchDutyOverride = -1.0;
+    }
+
+    // Rotating-search average coupling (default soft path).
+    void ConfigureGameplaySearchAvg(
+        float sidelobeLevelDb = -40.0,
+        float couplingGain = 1.0)
+    {
+        m_CouplingMode = ERDF_NoiseJamCoupling.RDF_JAM_COUPLE_SEARCH_AVG;
+        m_SidelobeLevelDb = sidelobeLevelDb;
+        m_CouplingGain = couplingGain;
+        m_SearchDutyOverride = -1.0;
+    }
+
+    // Only inject when the scan beam points at the jammer.
+    void ConfigureMainlobeOnly()
+    {
+        m_CouplingMode = ERDF_NoiseJamCoupling.RDF_JAM_COUPLE_MAINLOBE_ONLY;
+        m_CouplingGain = 1.0;
+        m_SearchDutyOverride = -1.0;
+    }
+
+    protected float ResolveCoupling(
+        vector radarOrigin,
+        vector scanForward,
+        RDF_RadarHardware hardware)
+    {
+        float sideLin = RDF_RadarClutterModel.DbToLin(m_SidelobeLevelDb);
+        if (sideLin < 0.0)
+            sideLin = 0.0;
+
+        if (m_CouplingMode == ERDF_NoiseJamCoupling.RDF_JAM_COUPLE_SEARCH_AVG)
+        {
+            float duty = m_SearchDutyOverride;
+            if (duty < 0.0)
+            {
+                float beam = hardware.m_AzimuthBeamwidthDeg;
+                if (beam < 0.1)
+                    beam = 0.1;
+                duty = beam / 360.0;
+            }
+            if (duty < 0.0)
+                duty = 0.0;
+            if (duty > 1.0)
+                duty = 1.0;
+            return duty * 1.0 + (1.0 - duty) * sideLin;
+        }
+
+        vector delta = m_Position - radarOrigin;
+        float rangeM = delta.Length();
+        if (rangeM < 1.0)
+            rangeM = 1.0;
+        vector direction = delta * (1.0 / rangeM);
+        float dot = scanForward[0] * direction[0]
+            + scanForward[1] * direction[1]
+            + scanForward[2] * direction[2];
+        float halfBeamRad = hardware.m_AzimuthBeamwidthDeg * 0.5 * 0.01745329;
+        float mainThreshold = Math.Cos(halfBeamRad);
+        bool inMain = false;
+        if (dot >= mainThreshold)
+            inMain = true;
+
+        if (m_CouplingMode == ERDF_NoiseJamCoupling.RDF_JAM_COUPLE_MAINLOBE_ONLY)
+        {
+            if (inMain)
+                return 1.0;
+            return 0.0;
+        }
+
+        // BEAM (default legacy).
+        if (inMain)
+            return 1.0;
+        return sideLin;
+    }
 
     override float GetAdditionalNoisePowerW(
         vector radarOrigin,
@@ -43,21 +162,17 @@ class RDF_RadarNoiseJammerEffect : RDF_RadarEwEffect
     {
         if (!m_Enabled || !hardware || m_ErpW <= 0.0)
             return 0.0;
+        if (m_CouplingGain <= 0.0)
+            return 0.0;
 
         vector delta = m_Position - radarOrigin;
         float rangeM = delta.Length();
         if (rangeM < 1.0)
             rangeM = 1.0;
-        vector direction = delta / rangeM;
 
-        float dot = scanForward[0] * direction[0]
-            + scanForward[1] * direction[1]
-            + scanForward[2] * direction[2];
-        float halfBeamRad = hardware.m_AzimuthBeamwidthDeg * 0.5 * 0.01745329;
-        float mainThreshold = Math.Cos(halfBeamRad);
-        float coupling = RDF_RadarClutterModel.DbToLin(-25.0);
-        if (dot >= mainThreshold)
-            coupling = 1.0;
+        float coupling = ResolveCoupling(radarOrigin, scanForward, hardware);
+        if (coupling <= 0.0)
+            return 0.0;
 
         float jammerBandwidth = Math.Max(1.0, m_BandwidthHz);
         float receiverBandwidth = Math.Max(1.0, hardware.m_BandwidthHz);
@@ -73,7 +188,7 @@ class RDF_RadarNoiseJammerEffect : RDF_RadarEwEffect
             * wavelength
             * wavelength
             / RDF_RadarClutterModel.FOUR_PI;
-        return fluxDensity * aperture * overlap * coupling;
+        return fluxDensity * aperture * overlap * coupling * m_CouplingGain;
     }
 }
 

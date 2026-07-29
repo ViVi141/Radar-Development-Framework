@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## 2026-07-30 — 刀刃绕射近似（NLOS 加深）
+
+- Trace 不通视时：`max(地面反射 bounce, 单刃绕射)`；绕射胜出标记 `m_BeamName …/diff`
+- 沿程 DEM/`GetSurfaceY` 采样（默认 ≤8）+ Trace `hitFraction` 刃候选；Fresnel ν + ITU-R P.526 近似损耗
+- Settings：`m_EnableKnifeEdgeDiffraction`、`m_KnifeEdgeMaxSamples`、`m_KnifeEdgeClearanceSlackM`（仍受 `m_EnableNlosMultipath` 总闸）
+- Python：`rdf_radar_diffraction.py` + `test_rdf_radar_diffraction.py`
+
+## 2026-07-30 — EW 噪声压制软化曲线 + 可观测
+
+- `RDF_RadarNoiseJammerEffect`：耦合模式 `SEARCH_AVG`（默认）/ `BEAM` / `MAINLOBE_ONLY`；`m_SidelobeLevelDb`（默认 -40）；`m_CouplingGain`；`m_SearchDutyOverride`
+- 预设：`ConfigureGameplaySearchAvg` / `ConfigurePhysicsBeam` / `ConfigureMainlobeOnly`
+- `RDF_RadarEwBurnThrough.RangeM(R0,N,J)`：`Reff = R0·(N/(N+J))¼`
+- Scanner：`GetEwStatsShort` / `GetLastJnDb` / `GetLastBurnThroughRangeM`；Sensor `GetStatusShort` 附加 `ewJN` / `Reff`
+- Python：`rdf_radar_ew.py` 对齐 + `test_rdf_radar_ew.py`；framework demo 显式 `configure_physics_beam` 以保留硬压制演示
+
 ## 2026-07-29 — 地面 SAM 扫描/识别/打击演示
 
 - 新增 `RDF_RadarSamEngageAutoTest.Start()`（独立，不进 StartAll）

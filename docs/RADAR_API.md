@@ -146,7 +146,7 @@ array<ref RDF_RadarTrack> tracks = sensor.GetTracks();
 RDF_RadarScanContext ctx = sensor.GetScanContext();
 
 Print(sensor.GetStatusShort());
-// e.g. SEARCH | DEM OK | plots=3 tracks=2 wlr=0
+// e.g. SEARCH | DEM OK | plots=3 tracks=2 wlr=0 | reuse=… | ew=0 | LOCK …
 ```
 
 ### Callbacks
@@ -258,7 +258,8 @@ if (sensor.GetLockedTarget(target, aimPos))
 }
 ```
 
-`GetStatusShort()` appends the lock state, e.g. `LOCK TRACKING id=3 r=812m az=41`.
+`GetStatusShort()` appends scan reuse, EW burn-through (`ewJN` / `Reff`, or
+`ew=0`), and lock state, e.g. `ewJN=12.3dB Reff=1800m | LOCK TRACKING id=3 …`.
 
 Entity component convenience: `RDF_RadarComponent.LockTrackId`, `Unlock`,
 `GetLockedTarget`, `LockArmTrackId`, `GetArmAim`, `GetLockManager`.
@@ -515,7 +516,7 @@ array<ref RDF_RadarTrack> tracks = sensor.GetTracks();
 RDF_RadarScanContext ctx = sensor.GetScanContext();
 
 Print(sensor.GetStatusShort());
-// e.g. SEARCH | DEM OK | plots=3 tracks=2 wlr=0
+// e.g. SEARCH | DEM OK | plots=3 tracks=2 wlr=0 | reuse=… | ew=0 | LOCK …
 ```
 
 ### 回调
@@ -624,7 +625,7 @@ if (sensor.GetLockedTarget(target, aimPos))
 }
 ```
 
-`GetStatusShort()` 会追加锁状态，例如 `LOCK TRACKING id=3 r=812m az=41`。
+`GetStatusShort()` 会追加扫描复用、EW 烧穿（`ewJN` / `Reff`，或 `ew=0`）与锁状态，例如 `ewJN=12.3dB Reff=1800m | LOCK TRACKING id=3 …`。
 
 实体组件便捷方法：`RDF_RadarComponent.LockTrackId`、`Unlock`、
 `GetLockedTarget`、`LockArmTrackId`、`GetArmAim`、`GetLockManager`。

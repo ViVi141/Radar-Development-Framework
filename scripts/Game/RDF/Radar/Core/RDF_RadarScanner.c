@@ -22,6 +22,11 @@ class RDF_RadarScanner
     protected int m_StatFreshUpdates;
     protected int m_StatBudgetSkips;
     protected int m_StatLosCacheHits;
+    // Last-dwell EW noise observability (RF domain, before processing gain).
+    protected float m_LastEwNoiseRfW;
+    protected float m_LastThermalNoiseW;
+    protected float m_LastJnDb;
+    protected float m_LastBurnThroughRangeM;
     // Registry pass fair cursor; carry budget cutoff to next scan.
     protected int m_RegistryScanCursor;
     // Resolved once per Scan() when atmospheric loss is enabled.
@@ -43,6 +48,10 @@ class RDF_RadarScanner
         m_SettingsValidated = false;
         m_RegistryScanCursor = 0;
         m_ScanRainLossDbPerKm = 0.0;
+        m_LastEwNoiseRfW = 0.0;
+        m_LastThermalNoiseW = 0.0;
+        m_LastJnDb = -300.0;
+        m_LastBurnThroughRangeM = 0.0;
     }
 
     RDF_RadarSettings GetSettings()
@@ -118,6 +127,70 @@ class RDF_RadarScanner
             + " losHit=" + m_StatLosCacheHits.ToString();
     }
 
+    float GetLastEwNoiseRfW()
+    {
+        return m_LastEwNoiseRfW;
+    }
+
+    float GetLastThermalNoiseW()
+    {
+        return m_LastThermalNoiseW;
+    }
+
+    float GetLastJnDb()
+    {
+        return m_LastJnDb;
+    }
+
+    float GetLastBurnThroughRangeM()
+    {
+        return m_LastBurnThroughRangeM;
+    }
+
+    string GetEwStatsShort()
+    {
+        if (m_LastEwNoiseRfW <= 0.0)
+            return "ew=0";
+        float jnRounded = Math.Round(m_LastJnDb * 10.0) * 0.1;
+        float reffRounded = Math.Round(m_LastBurnThroughRangeM);
+        return "ewJN=" + jnRounded.ToString()
+            + "dB Reff=" + reffRounded.ToString() + "m";
+    }
+
+    protected void RefreshEwScanStats(vector origin, vector forward, float rangeM)
+    {
+        m_LastEwNoiseRfW = 0.0;
+        m_LastThermalNoiseW = 0.0;
+        m_LastJnDb = -300.0;
+        m_LastBurnThroughRangeM = rangeM;
+
+        if (!m_Settings || !m_Settings.m_Hardware)
+            return;
+
+        RDF_RadarHardware hardware = m_Settings.m_Hardware;
+        float thermal = hardware.GetNoisePowerW();
+        m_LastThermalNoiseW = thermal;
+
+        float ew = 0.0;
+        if (m_Settings.m_EwStack)
+        {
+            ew = m_Settings.m_EwStack.GetAdditionalNoisePowerW(
+                origin,
+                forward,
+                hardware);
+        }
+        if (ew < 0.0)
+            ew = 0.0;
+        m_LastEwNoiseRfW = ew;
+
+        float denom = Math.Max(1.0e-30, thermal);
+        m_LastJnDb = RDF_RadarClutterModel.LinToDb(ew / denom);
+        m_LastBurnThroughRangeM = RDF_RadarEwBurnThrough.RangeM(
+            rangeM,
+            thermal,
+            ew);
+    }
+
     void Scan(IEntity subject, array<ref RDF_RadarTarget> outTargets)
     {
         if (!subject || !m_Settings || !m_Settings.m_Enabled || !outTargets)
@@ -159,6 +232,7 @@ class RDF_RadarScanner
         m_LastOrigin = origin;
         m_LastForward = forward;
         m_LastRange = range;
+        RefreshEwScanStats(origin, forward, range);
         if (m_DemCache)
         {
             m_DemCache.SetPreloadAll(m_Settings.m_DemPreloadAll);

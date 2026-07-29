@@ -16,9 +16,9 @@
 
 | 当前强项 | 当前弱项 |
 |----------|----------|
-| 功能链、Sensor 门面、双档回归 | 精细多径、绕射 |
+| 功能链、Sensor 门面、双档回归 | 多刃多径、DEM span |
 | 网格、LOS/物理复用、分片预算 + 统计 | 多雷达融合、IFF |
-| 测量噪声/偏差、GO/SO-CFAR、Network 权威同步 | 远程算力、golden/CI 卫生 |
+| 测量噪声/偏差、GO/SO-CFAR、Network 权威同步、单刃绕射 | 远程算力、游戏内批跑 CI |
 
 入口：[README.md](README.md)
 
@@ -83,7 +83,8 @@
 | **P1 已完成** | Python CFAR / track 单测 + 可选 golden | 防逼真模型漂移 | 低 | `test_rdf_radar_cfar.py` / `test_rdf_radar_track.py` |
 | **P1 已完成** | 最小 CI（Python unittest） | 工程卫生 | 低 | `.github/workflows/python-dem-tests.yml` |
 | **产品缺口** | 锁定层对接模组武器 | 玩法闭环 | 中 | ~~指南+火箭示例~~；**火控桥 `WeaponBridge` / `WeaponComponent` 已落地**（prefab 仍模组侧） |
-| **P2 场景驱动** | 刀刃绕射 / 更精细多径 | 山地体感 | 高 | 已有弱 NLOS 反射因子；真绕射需几何模型 + 场景需求 |
+| **框架已完成** | EW 噪声软化 + burn-through 可观测 | 压制可调 | 低中 | `SEARCH_AVG` 默认；`GetEwStatsShort` |
+| **P2 已完成** | 刀刃绕射近似 | 山地半遮挡弱检 | 中 | 单刃 Fresnel + DEM 采样；非多刃/UTD |
 | **P2 场景驱动** | DEM span 遮挡 / 多径 | 城区/林冠 | 高 | 离线/烘焙有 span；游戏 SURF 路径故意不带 — 勿轻易重开 |
 | **P2 单雷达打磨后** | 多雷达 plots 融合 / 交叉定位 | 战役级 | 很高 | Network Sprint 已铺权威同步；融合是新产品层，非小补丁 |
 | **P2 空窗** | LiDAR：DiagMenu、Sensor 门面 | LiDAR UX | 中 | ~~PPI + Showcase~~；**Sensor + DiagMenu + RECT FOV 已落地** |
@@ -96,7 +97,8 @@
 - [x] **P1** Python CFAR / track 单测 + 可选 Enforce golden（`test_rdf_radar_cfar.py` / `test_rdf_radar_track.py`；CA 与 `RDF_RadarCfarGate` 对齐）
 - [x] **P1** 最小 CI（`.github/workflows/python-dem-tests.yml` 跑 `test_rdf_*.py`；游戏内批跑仍见 P3）
 - [x] **产品** 锁定层对接模组武器（`RDF_RadarWeaponBridge` / `WeaponComponent` + VEHICLE_RADAR_LOCK_GUIDE；prefab 仍模组侧）
-- [ ] **P2** 刀刃绕射 / 更精细多径（明确山地场景时）
+- [x] **框架** EW 噪声软化：`SEARCH_AVG`/`BEAM`/`MAINLOBE_ONLY` + `m_CouplingGain` + burn-through 状态行
+- [x] **P2** 刀刃绕射近似（单刃 Fresnel + DEM 沿程采样；与 bounce 取 max）
 - [ ] **P2** DEM span 遮挡 / 多径（明确城区/林冠需求且接受发布包变重时）
 - [ ] **P2** 多雷达 plots 融合 / 交叉定位（单雷达玩法打磨完）
 - [x] **P2** LiDAR：PPI 动画 + Showcase（余晖/环/扇面）
@@ -122,7 +124,9 @@
 **Sprint D（已完成核心）**：Python CFAR/track golden + 最小 CI。  
 **LiDAR UX（已完成）**：Showcase / PPI 动画 + `RDF_LidarSensor` + DiagMenu + 矩形 FOV。  
 **火控桥（已完成）**：`RDF_RadarWeaponBridge` / `WeaponComponent` + 指南 §2.3。  
-**下一步**：场景驱动绕射 / DEM span / 组网融合；或拆分 mass_battle_sim。
+**EW 软化（已完成）**：噪声干扰耦合模式 + burn-through 可观测。  
+**刀刃绕射（已完成）**：单刃 Fresnel + DEM 沿程；与 NLOS bounce 取 max。  
+**下一步**：DEM span / 组网融合；或拆分 mass_battle_sim。
 
 Ideal：`RDF_RadarAutoTestSuite.StartAll()`  
 Realistic：`RDF_RadarAutoTestSuite.StartAllRealistic()`
@@ -135,6 +139,8 @@ Realistic：`RDF_RadarAutoTestSuite.StartAllRealistic()`
 
 - [x] 扫描 + Trace LOS / NLOS · 分类跟踪 · 雷达方程 / 多普勒 / MTI / SNR
 - [x] PPI · DEM 杂波 · CA/GO/SO-CFAR · EW / 欺骗 · 测量合成
+- [x] EW 噪声软化（`SEARCH_AVG`/`BEAM`/`MAINLOBE_ONLY` + burn-through 状态）
+- [x] 刀刃绕射近似（单刃 Fresnel + DEM 沿程；与 bounce 取 max）
 - [x] 弹道 + WLR（多点真空拟合）· 散射体表 / Signature / Swerling
 - [x] `RDF_RadarSensor`（SEARCH / STARE / WLR / ESM）· `RDF_RadarLockManager` · `GetLockedTarget` / `GetArmAim`
 - [x] `RDF_RadarWeaponBridge` / `WeaponComponent` · `FireSolution` · `GuideRocket`
@@ -155,7 +161,7 @@ Realistic：`RDF_RadarAutoTestSuite.StartAllRealistic()`
 - [x] `AutoTestSuite` 7/7（Ballistics / DEM / Lock / Airborne / ShellFire / Perf / Play）；双档 ideal / realistic
 - [x] 独立回归：Stress / RWR / ESM-ARM / Rocket Lock-Fire / HeliDuel / SamEngage；地图叠加 `RDF_RadarAutoTestMapOverlay`
 - [x] 测试不加辐射源 / 抬 RCS / 强制写表
-- [x] 离线 Python golden：ballistics / CFAR / track + GitHub Actions CI
+- [x] 离线 Python golden：ballistics / CFAR / track / EW / diffraction + GitHub Actions CI
 
 #### DEM / 仓库
 
@@ -192,9 +198,9 @@ Physical noise / atmosphere / signal processing are highly idealized — regress
 
 | Current strengths | Current weaknesses |
 |----------|----------|
-| Feature chain, Sensor facade, dual-tier regression | Fine multipath, diffraction |
+| Feature chain, Sensor facade, dual-tier regression | Cascaded multipath, DEM span |
 | Grid, LOS/physics reuse, shard budget + stats | Multi-radar fusion, IFF |
-| Measurement noise/bias, GO/SO-CFAR, Network authority sync | Remote compute, golden/CI hygiene |
+| Measurement noise/bias, GO/SO-CFAR, Network authority, knife-edge | Remote compute, in-game batch CI |
 
 Entry: [README.md](README.md)
 
@@ -259,7 +265,8 @@ Context: realistic channel + single-radar authoritative Network path shipped; ol
 | **P1 done** | Python CFAR / track unit tests + optional golden | Drift guard | Low | `test_rdf_radar_cfar.py` / `test_rdf_radar_track.py` |
 | **P1 done** | Minimal CI (Python unittest) | Eng hygiene | Low | `.github/workflows/python-dem-tests.yml` |
 | **Product gap** | Lock layer → mod weapons | Gameplay loop | Medium | ~~guide + rocket sample~~; **`WeaponBridge` / `WeaponComponent` shipped** (prefab still mod-side) |
-| **P2 scenario** | Knife-edge diffraction / fine multipath | Mountain feel | High | Weak NLOS factor exists; real diffraction needs geometry + demand |
+| **Framework done** | EW noise soft + burn-through observability | Tunable jam | Low–med | `SEARCH_AVG` default; `GetEwStatsShort` |
+| **P2 done** | Knife-edge diffraction approx | Mountain partial LOS | Med | Single-edge Fresnel + DEM samples; not multi-edge/UTD |
 | **P2 scenario** | DEM span occlusion / multipath | Urban / canopy | High | Offline/bake has spans; game SURF path deliberately omits — don’t reopen lightly |
 | **P2 after polish** | Multi-radar plots fusion / cross-fix | Campaign | Very high | Network Sprint paved sync; fusion is a new product layer |
 | **P2 idle** | LiDAR PPI / DiagMenu / Sensor facade | LiDAR UX | Medium | Showcase + **`RDF_LidarSensor` + DiagMenu + RECT FOV shipped** |
@@ -272,7 +279,8 @@ Context: realistic channel + single-radar authoritative Network path shipped; ol
 - [x] **P1** Python CFAR / track unit tests + optional Enforce golden (`test_rdf_radar_cfar.py` / `test_rdf_radar_track.py`; CA aligned with `RDF_RadarCfarGate`)
 - [x] **P1** Minimal CI (`.github/workflows/python-dem-tests.yml` runs `test_rdf_*.py`; in-game batch still P3)
 - [x] **Product** Lock layer → mod weapons (`RDF_RadarWeaponBridge` / `WeaponComponent` + VEHICLE_RADAR_LOCK_GUIDE; prefab still mod-side)
-- [ ] **P2** Knife-edge diffraction / fine multipath (clear mountain scenario)
+- [x] **Framework** EW noise soft curve: `SEARCH_AVG`/`BEAM`/`MAINLOBE_ONLY` + `m_CouplingGain` + burn-through status
+- [x] **P2** Knife-edge diffraction approx (single-edge Fresnel + DEM samples; max with bounce)
 - [ ] **P2** DEM span occlusion / multipath (urban/canopy need + accept heavier packs)
 - [ ] **P2** Multi-radar plots fusion / cross-fix (after single-radar polish)
 - [x] **P2** LiDAR: PPI animation + Showcase
@@ -298,7 +306,9 @@ Context: realistic channel + single-radar authoritative Network path shipped; ol
 **Sprint D (core done)**: Python CFAR/track golden + minimal CI.  
 **LiDAR UX (done)**: Showcase / PPI anim + `RDF_LidarSensor` + DiagMenu + rectangular FOV.  
 **Fire bridge (done)**: `RDF_RadarWeaponBridge` / `WeaponComponent` + guide §2.3.  
-**Next**: scenario-driven diffraction / DEM span / fusion; or split mass_battle_sim.
+**EW soft curve (done)**: noise-jammer coupling modes + burn-through observability.  
+**Knife-edge (done)**: single-edge Fresnel + DEM samples; max with NLOS bounce.  
+**Next**: DEM span / fusion; or split mass_battle_sim.
 
 Ideal: `RDF_RadarAutoTestSuite.StartAll()`  
 Realistic: `RDF_RadarAutoTestSuite.StartAllRealistic()`
@@ -311,6 +321,8 @@ Realistic: `RDF_RadarAutoTestSuite.StartAllRealistic()`
 
 - [x] 扫描 + Trace LOS / NLOS · 分类跟踪 · 雷达方程 / 多普勒 / MTI / SNR
 - [x] PPI · DEM 杂波 · CA/GO/SO-CFAR · EW / 欺骗 · 测量合成
+- [x] EW noise soft curve (`SEARCH_AVG`/`BEAM`/`MAINLOBE_ONLY` + burn-through status)
+- [x] Knife-edge diffraction approx (single-edge Fresnel + DEM samples; max with bounce)
 - [x] 弹道 + WLR（多点真空拟合）· 散射体表 / Signature / Swerling
 - [x] `RDF_RadarSensor`（SEARCH / STARE / WLR / ESM）· `RDF_RadarLockManager` · `GetLockedTarget` / `GetArmAim`
 - [x] `RDF_RadarWeaponBridge` / `WeaponComponent` · `FireSolution` · `GuideRocket`
@@ -331,7 +343,7 @@ Realistic: `RDF_RadarAutoTestSuite.StartAllRealistic()`
 - [x] `AutoTestSuite` 5/5（Ballistics / DEM / Lock / Airborne / ShellFire）；双档 ideal / realistic
 - [x] 独立回归：RWR / ESM-ARM / Rocket Lock-Fire / HeliDuel / SamEngage；地图叠加 `RDF_RadarAutoTestMapOverlay`
 - [x] 测试不加辐射源 / 抬 RCS / 强制写表
-- [x] Offline Python golden: ballistics / CFAR / track + GitHub Actions CI
+- [x] Offline Python golden: ballistics / CFAR / track / EW / diffraction + GitHub Actions CI
 
 #### DEM / repo
 

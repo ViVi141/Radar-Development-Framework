@@ -100,7 +100,7 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarSettings.c / RDF_RadarTypes.c / RDF_RadarHardware.c
 │   ├── RDF_RadarScanner.c              编排：Registry/Legacy 扫描 + Trace + 复用预算
 │   ├── RDF_RadarScanGeometry.c         LOS / 实体中心 / 速度几何辅助
-│   ├── RDF_RadarPhysicalDetect.c       雷达方程 / NLOS / DEM 杂波 / SNR / ESM
+│   ├── RDF_RadarPhysicalDetect.c       雷达方程 / NLOS bounce+刀刃绕射 / DEM 杂波 / SNR / ESM
 │   ├── RDF_RadarScattererRegistry.c    全局散射体/辐射源表（增量维护）
 │   ├── RDF_RadarEmitterRegistry.c      辐射标记门面（转发到散射体表）
 │   ├── RDF_RadarCandidateCollect.c     候选收集辅助
@@ -120,7 +120,7 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarMeasurementModel.c     CFAR 后 / Tracker 前可扩展测量误差
 │   └── RDF_RadarCfarGate.c             粗栅格 CA/GO/SO-CFAR 判检
 ├── EW/
-│   └── RDF_RadarEwModel.c              噪声 + 欺骗（静态假点 / 拖距 / 角闪烁 / 间歇）
+│   └── RDF_RadarEwModel.c              噪声（SEARCH_AVG/BEAM/MAINLOBE）+ 欺骗（假点/拖距/角闪烁/间歇）
 ├── Network/
 │   ├── RDF_RadarNetworkAPI.c           基类（含 intentional no-op；SetEnabled 别名 SetDemoEnabled）
 │   └── RDF_RadarNetworkComponent.c     服务器权威同步（挂 Sensor）
@@ -419,7 +419,7 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarSettings.c / RDF_RadarTypes.c / RDF_RadarHardware.c
 │   ├── RDF_RadarScanner.c              编排：Registry/Legacy 扫描 + Trace + 复用预算
 │   ├── RDF_RadarScanGeometry.c         LOS / 实体中心 / 速度几何辅助
-│   ├── RDF_RadarPhysicalDetect.c       雷达方程 / NLOS / DEM 杂波 / SNR / ESM
+│   ├── RDF_RadarPhysicalDetect.c       雷达方程 / NLOS bounce+刀刃绕射 / DEM 杂波 / SNR / ESM
 │   ├── RDF_RadarScattererRegistry.c    全局散射体/辐射源表（增量维护）
 │   ├── RDF_RadarEmitterRegistry.c      辐射标记门面（转发到散射体表）
 │   ├── RDF_RadarCandidateCollect.c     候选收集辅助
@@ -439,7 +439,7 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarMeasurementModel.c     CFAR 后 / Tracker 前可扩展测量误差
 │   └── RDF_RadarCfarGate.c             粗栅格 CA/GO/SO-CFAR 判检
 ├── EW/
-│   └── RDF_RadarEwModel.c              噪声 + 欺骗（静态假点 / 拖距 / 角闪烁 / 间歇）
+│   └── RDF_RadarEwModel.c              噪声（SEARCH_AVG/BEAM/MAINLOBE）+ 欺骗（假点/拖距/角闪烁/间歇）
 ├── Network/
 │   ├── RDF_RadarNetworkAPI.c           基类（含 intentional no-op；SetEnabled 别名 SetDemoEnabled）
 │   └── RDF_RadarNetworkComponent.c     服务器权威同步（挂 Sensor）

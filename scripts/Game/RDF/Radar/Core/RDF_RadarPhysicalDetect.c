@@ -76,6 +76,7 @@ class RDF_RadarPhysicalDetect
             return;
         }
 
+        bool usedKnifeEdge = false;
         if (target.m_LosBlocked)
         {
             target.m_MultipathFactor = ComputeNlosMultipathFactor(
@@ -87,8 +88,10 @@ class RDF_RadarPhysicalDetect
                 target.m_AglM,
                 target.m_DemSampleValid,
                 target.m_DemTerrainY,
+                hardware.GetWavelengthM(),
                 settings,
-                demCache);
+                demCache,
+                usedKnifeEdge);
             if (target.m_MultipathFactor <= 0.0)
             {
                 target.m_Detected = false;
@@ -108,7 +111,12 @@ class RDF_RadarPhysicalDetect
             beamName);
         target.m_BeamName = beamName;
         if (target.m_LosBlocked)
-            target.m_BeamName = beamName + "/nlos";
+        {
+            if (usedKnifeEdge)
+                target.m_BeamName = beamName + "/diff";
+            else
+                target.m_BeamName = beamName + "/nlos";
+        }
 
         // Registry entries carry a cached RCS; only estimate when absent.
         if (target.m_RcsM2 <= 0.0)
@@ -380,9 +388,65 @@ class RDF_RadarPhysicalDetect
         return receivedClutter * processingGain * clutterMti;
     }
 
-    // NLOS-only bounce scale using image-method path length and |Gamma|^2.
-    // Early Trace blockers further weaken the return (hitFraction small).
+    // NLOS: max(ground-bounce, single knife-edge). usedKnifeEdge true when
+    // diffraction path wins (or is the only surviving path).
     protected static float ComputeNlosMultipathFactor(
+        vector origin,
+        vector targetPos,
+        float distance,
+        float hitFraction,
+        BaseWorld world,
+        float targetAglM,
+        bool haveTargetTerrain,
+        float targetTerrainYCached,
+        float wavelengthM,
+        RDF_RadarSettings settings,
+        RDF_DemRuntimeCache demCache,
+        out bool usedKnifeEdge)
+    {
+        usedKnifeEdge = false;
+        if (!settings || !settings.m_EnableNlosMultipath)
+            return 0.0;
+        if (distance < 1.0)
+            return 0.0;
+
+        float bounce = ComputeNlosBounceFactor(
+            origin,
+            targetPos,
+            distance,
+            hitFraction,
+            world,
+            targetAglM,
+            haveTargetTerrain,
+            targetTerrainYCached,
+            settings,
+            demCache);
+
+        float knife = 0.0;
+        if (settings.m_EnableKnifeEdgeDiffraction)
+        {
+            knife = ComputeKnifeEdgeFactor(
+                origin,
+                targetPos,
+                distance,
+                hitFraction,
+                wavelengthM,
+                world,
+                settings,
+                demCache);
+        }
+
+        float factor = bounce;
+        if (knife > factor)
+        {
+            factor = knife;
+            usedKnifeEdge = true;
+        }
+        return factor;
+    }
+
+    // Image-method ground bounce × |Gamma|^2; early Trace hits weaken further.
+    protected static float ComputeNlosBounceFactor(
         vector origin,
         vector targetPos,
         float distance,
@@ -394,11 +458,6 @@ class RDF_RadarPhysicalDetect
         RDF_RadarSettings settings,
         RDF_DemRuntimeCache demCache)
     {
-        if (!settings || !settings.m_EnableNlosMultipath)
-            return 0.0;
-        if (distance < 1.0)
-            return 0.0;
-
         float originTerrainY = SampleTerrainY(origin[0], origin[2], world, settings, demCache);
         float targetTerrainY = targetTerrainYCached;
         if (!haveTargetTerrain)
@@ -436,6 +495,132 @@ class RDF_RadarPhysicalDetect
             return 0.0;
         if (factor > 1.0)
             factor = 1.0;
+        return factor;
+    }
+
+    // Single knife-edge over DEM/surface samples + Trace hitFraction candidate.
+    protected static float ComputeKnifeEdgeFactor(
+        vector origin,
+        vector targetPos,
+        float distance,
+        float hitFraction,
+        float wavelengthM,
+        BaseWorld world,
+        RDF_RadarSettings settings,
+        RDF_DemRuntimeCache demCache)
+    {
+        if (!settings)
+            return 0.0;
+        if (distance < 1.0)
+            return 0.0;
+
+        float lambdaM = wavelengthM;
+        if (lambdaM < 0.001)
+            lambdaM = 0.001;
+
+        float hitU = hitFraction;
+        if (hitU < 0.05)
+            hitU = 0.05;
+        if (hitU > 0.95)
+            hitU = 0.95;
+
+        float slackM = settings.m_KnifeEdgeClearanceSlackM;
+        float maxHObs = -1.0e9;
+        float maxU = hitU;
+
+        int samples = settings.m_KnifeEdgeMaxSamples;
+        if (samples < 2)
+            samples = 2;
+
+        int i;
+        for (i = 1; i <= samples; i++)
+        {
+            float u = i / (samples + 1.0);
+            float hObs = ObstacleHeightAboveLos(
+                origin,
+                targetPos,
+                u,
+                slackM,
+                world,
+                settings,
+                demCache);
+            if (hObs > maxHObs)
+            {
+                maxHObs = hObs;
+                maxU = u;
+            }
+        }
+
+        float hHit = ObstacleHeightAboveLos(
+            origin,
+            targetPos,
+            hitU,
+            slackM,
+            world,
+            settings,
+            demCache);
+        if (hHit > maxHObs)
+        {
+            maxHObs = hHit;
+            maxU = hitU;
+        }
+
+        // No terrain above LOS → no knife-edge path (entity/building block stays
+        // on bounce-only). Do not return 1.0 or Trace occlusion is ignored.
+        if (maxHObs <= 0.0)
+            return 0.0;
+
+        float d1 = maxU * distance;
+        float d2 = distance - d1;
+        if (d1 < 1.0)
+            d1 = 1.0;
+        if (d2 < 1.0)
+            d2 = 1.0;
+
+        float nu = maxHObs * Math.Sqrt(
+            2.0 * distance / (lambdaM * d1 * d2));
+        float factor = KnifeEdgeLinearFactor(nu);
+        if (factor < settings.m_NlosMinFactor)
+            return 0.0;
+        return factor;
+    }
+
+    protected static float ObstacleHeightAboveLos(
+        vector origin,
+        vector targetPos,
+        float u,
+        float slackM,
+        BaseWorld world,
+        RDF_RadarSettings settings,
+        RDF_DemRuntimeCache demCache)
+    {
+        float x = origin[0] + (targetPos[0] - origin[0]) * u;
+        float yLos = origin[1] + (targetPos[1] - origin[1]) * u;
+        float z = origin[2] + (targetPos[2] - origin[2]) * u;
+        float terrainY = SampleTerrainY(x, z, world, settings, demCache);
+        // Slack reduces obstacle height (less false block from DEM noise).
+        return terrainY - slackM - yLos;
+    }
+
+    // ITU-R P.526-ish approximate diffraction loss → linear power factor.
+    // nu <= -0.78 → ~1; larger nu (deeper obstacle) attenuates.
+    protected static float KnifeEdgeLinearFactor(float nu)
+    {
+        if (nu <= -0.78)
+            return 1.0;
+
+        float t = nu - 0.1;
+        float inner = Math.Sqrt(t * t + 1.0) + t;
+        if (inner < 0.001)
+            inner = 0.001;
+        float lossDb = 6.9 + 20.0 * Math.Log10(inner);
+        if (lossDb < 0.0)
+            lossDb = 0.0;
+        float factor = RDF_RadarClutterModel.DbToLin(-lossDb);
+        if (factor > 1.0)
+            factor = 1.0;
+        if (factor < 0.0)
+            factor = 0.0;
         return factor;
     }
 

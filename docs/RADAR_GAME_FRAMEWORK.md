@@ -19,8 +19,10 @@ feasible): [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md).
    Type and RCS are cached per entry, so scans never re-classify entities.
 3. Read candidates from the table, then apply range and azimuth dwell.
 4. `TraceMove` line-of-sight check. Clear path → direct detection.
-   Blocked path → optional NLOS ground-bounce (default on): image-method path
-   length + `|Gamma|^2` + early-blocker depth scale; mark `m_LosBlocked`.
+   Blocked path → optional NLOS (default on): ground-bounce (image-method +
+   `|Gamma|^2` + early-hit depth) **and/or** single knife-edge diffraction
+   (DEM/`GetSurfaceY` samples, Fresnel ν); factor = max of paths; tag
+   `m_LosBlocked` (`/nlos` vs `/diff` on beam name).
 5. Read projectile or rigid-body velocity (**truth, physics only**).
 6. Estimate entity RCS; scale received power by `m_MultipathFactor`.
 7. Select the strongest configured elevation beam.
@@ -99,8 +101,15 @@ RDF_RadarNoiseJammerEffect jammer = new RDF_RadarNoiseJammerEffect();
 jammer.m_Position = jammerWorldPosition;
 jammer.m_ErpW = 10000.0;
 jammer.m_BandwidthHz = 5000000.0;
+// Default: SEARCH_AVG + -40 dB sidelobe (playable soft). Hard stare:
+// jammer.ConfigurePhysicsBeam(-25.0);
+// Mainlobe sector only: jammer.ConfigureMainlobeOnly();
+// Extra soft knob: jammer.m_CouplingGain = 0.25;
 settings.m_EwStack.Add(jammer);
 ```
+
+Burn-through helper: `RDF_RadarEwBurnThrough.RangeM(R0, N, J)`.  
+Status: `scanner.GetEwStatsShort()` / Sensor `GetStatusShort` appends `ewJN=…dB Reff=…m`.
 
 ## Optional EW deception / false plots
 
@@ -160,7 +169,7 @@ Each `RDF_RadarTarget` now includes:
 - RCS, received/processed power, MTI gain
 - sampled DEM surface class and clutter power contribution
 - SNR, detection flag, and selected beam name
-- `m_LosBlocked`, `m_LosHitFraction`, `m_MultipathFactor` (NLOS bounce scale)
+- `m_LosBlocked`, `m_LosHitFraction`, `m_MultipathFactor` (NLOS bounce and/or knife-edge scale)
 - `m_IsAnonymous`, `m_IsFalsePlot`, and `m_CfarPowerW`
 
 ## PPI HUD
@@ -347,7 +356,9 @@ Output report:
   detection **results** sync via `RDF_RadarNetworkComponent` (not a substitute
   for local terrain data).
 - EW supports directional noise plus deception (static false plots, range
-  walk-off, angle scintillation, intermittent false plots). Not full DRFM /
+  walk-off, angle scintillation, intermittent false plots). Noise jammers
+  expose coupling modes (`SEARCH_AVG` default / `BEAM` / `MAINLOBE_ONLY`),
+  sidelobe level, and `m_CouplingGain`. Not full DRFM /
   coherent range-gate pull-off.
 - Tracking associates by measurement gates (nearest neighbor), not entity
   identity. Default plots clear `m_Entity` unless `m_KeepEntityTruth`.
@@ -371,7 +382,9 @@ Enforce 实现现已遵循与离线原型相同的契约。游戏实体是物理
    类型与 RCS 按条目缓存，扫描不再重新分类实体。
 3. 从表中读取候选，再施加距离与方位驻留。
 4. `TraceMove` 通视检查。通畅 → 直接检测。
-   遮挡 → 可选 NLOS 地面反射（默认开）：镜像法路径长度 + `|Gamma|^2` + 前阻挡深度缩放；标记 `m_LosBlocked`。
+   遮挡 → 可选 NLOS（默认开）：地面反射（镜像法 + `|Gamma|^2` + 前阻挡深度）
+   **和/或** 单刃绕射（DEM/`GetSurfaceY` 沿程，Fresnel ν）；因子取较强路径；
+   标记 `m_LosBlocked`（beam 名 `/nlos` 或 `/diff`）。
 5. 读取炮弹或刚体速度（**真值，仅物理用**）。
 6. 估计实体 RCS；接收功率乘以 `m_MultipathFactor`。
 7. 选择配置中最强的俯仰波束。
@@ -443,8 +456,15 @@ RDF_RadarNoiseJammerEffect jammer = new RDF_RadarNoiseJammerEffect();
 jammer.m_Position = jammerWorldPosition;
 jammer.m_ErpW = 10000.0;
 jammer.m_BandwidthHz = 5000000.0;
+// 默认：SEARCH_AVG + -40 dB 副瓣（可玩软压制）。硬凝视：
+// jammer.ConfigurePhysicsBeam(-25.0);
+// 仅主瓣：jammer.ConfigureMainlobeOnly();
+// 再软：jammer.m_CouplingGain = 0.25;
 settings.m_EwStack.Add(jammer);
 ```
+
+烧穿：`RDF_RadarEwBurnThrough.RangeM(R0, N, J)`。  
+状态：`scanner.GetEwStatsShort()` / Sensor `GetStatusShort` 附加 `ewJN=…dB Reff=…m`。
 
 ## 可选 EW 欺骗 / 假 plots
 
@@ -499,7 +519,7 @@ settings.m_EwStack.Add(burst);
 - RCS、接收/处理功率、MTI 增益
 - 采样的 DEM 地表类与杂波功率贡献
 - SNR、检测标志与所选波束名
-- `m_LosBlocked`、`m_LosHitFraction`、`m_MultipathFactor`（NLOS 反射缩放）
+- `m_LosBlocked`、`m_LosHitFraction`、`m_MultipathFactor`（NLOS bounce / 刀刃绕射缩放）
 - `m_IsAnonymous`、`m_IsFalsePlot`、`m_CfarPowerW`
 
 ## PPI HUD
@@ -657,8 +677,9 @@ RDF_RadarAirborneScanTest.StartKeepTarget();
 - DEM / 地表：优先 SURF JSON + 实时 `GetSurfaceY`；CSV/BIN 为回退。
   杂波多人一致仍需匹配的本地 SURF/DEM（或 LIVE）；
   检测**结果**经 `RDF_RadarNetworkComponent` 同步（不能替代本地地形数据）。
-- EW 支持定向噪声与欺骗（静态假点、拖距、角闪烁、间歇假点）。非完整 DRFM /
-  相干距离门拖引。
+- EW 支持定向噪声与欺骗（静态假点、拖距、角闪烁、间歇假点）。噪声干扰可调
+  耦合模式（默认 `SEARCH_AVG` / `BEAM` / `MAINLOBE_ONLY`）、副瓣与
+  `m_CouplingGain`。非完整 DRFM / 相干距离门拖引。
 - 跟踪按量测波门关联（最近邻），不按实体身份。默认 plots 清除 `m_Entity`，除非 `m_KeepEntityTruth`。
 - 产品目标：可玩的传感器玩法，不是电磁仿真器。见
   [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md) 与 [TODO.md](../TODO.md)。

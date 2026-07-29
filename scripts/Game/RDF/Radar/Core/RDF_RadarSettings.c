@@ -52,6 +52,12 @@ class RDF_RadarSettings
     float m_NlosMinFactor = 0.008;
     // Skip bounce model for high-flying targets (AGL).
     float m_NlosMaxTargetAglM = 800.0;
+    // Single knife-edge diffraction over DEM/surface samples (still under NLOS gate).
+    bool m_EnableKnifeEdgeDiffraction = true;
+    // Uniform samples along radar→target (plus Trace hitFraction candidate).
+    int m_KnifeEdgeMaxSamples = 8;
+    // Subtract from obstacle height to reduce GetSurfaceY / DEM noise false blocks.
+    float m_KnifeEdgeClearanceSlackM = 2.0;
     // Optional receiver-side EW/noise injection after processing.
     float m_AdditionalNoisePowerW = 0.0;
     ref RDF_RadarEwStack m_EwStack;
@@ -164,6 +170,8 @@ class RDF_RadarSettings
         m_NlosReflectionAbs = Math.Clamp(m_NlosReflectionAbs, 0.0, 1.0);
         m_NlosMinFactor = Math.Clamp(m_NlosMinFactor, 0.0, 1.0);
         m_NlosMaxTargetAglM = Math.Clamp(m_NlosMaxTargetAglM, 10.0, 20000.0);
+        m_KnifeEdgeMaxSamples = Math.Clamp(m_KnifeEdgeMaxSamples, 2, 16);
+        m_KnifeEdgeClearanceSlackM = Math.Clamp(m_KnifeEdgeClearanceSlackM, 0.0, 50.0);
         m_AdditionalNoisePowerW = Math.Max(0.0, m_AdditionalNoisePowerW);
         m_CfarGuardCells = Math.Clamp(m_CfarGuardCells, 0, 32);
         m_CfarTrainingCells = Math.Clamp(m_CfarTrainingCells, 2, 128);

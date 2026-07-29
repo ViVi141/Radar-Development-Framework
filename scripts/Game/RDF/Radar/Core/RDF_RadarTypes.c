@@ -15,6 +15,17 @@ enum ERDF_CfarMode
     RDF_CFAR_SO
 }
 
+// Noise-jammer antenna coupling vs victim scan beam.
+// BEAM = instantaneous scanForward (stare / track fidelity).
+// SEARCH_AVG = beamwidth/360 duty blend (rotating search, playable soft).
+// MAINLOBE_ONLY = contribute only when jammer is in the main beam.
+enum ERDF_NoiseJamCoupling
+{
+    RDF_JAM_COUPLE_BEAM,
+    RDF_JAM_COUPLE_SEARCH_AVG,
+    RDF_JAM_COUPLE_MAINLOBE_ONLY
+}
+
 // Single radar detection / plot. With measurement synthesis enabled, kinematics
 // are model-derived (quantized + noisy); m_Entity is debug-only when kept.
 class RDF_RadarTarget

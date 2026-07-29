@@ -30,7 +30,7 @@
 - **ESM 模式**（`RDF_RADAR_MODE_ESM`）：仅辐射源；单向 Friis 侦收功率；平台静默不登记发射
 - **反辐射瞄点 API**：`GetArmAim` / `LockArmTrackId`（关辐射丢锁）；不含导弹 prefab
 - **RWR**：被搜索 / 跟踪 / 锁定告警（`RDF_RadarRwr`）；无专用 UI，模组读 API
-- 通视用 `TraceMove`；遮挡时可选 **NLOS 地面反射弱检**
+- 通视用 `TraceMove`；遮挡时可选 **NLOS 地面反射弱检** + **单刃绕射**（DEM/`GetSurfaceY` 沿程，`/diff`）
 - 硬件参数 → 雷达方程、多普勒、MTI、处理增益、SNR 门限（辐射源在 `m_EnableEsmReceive` 下用 ESM 方程）
 - DEM σ⁰ **地面杂波**进入噪声分母（ESM 路径跳过）
 - **测量合成**：距离门中心 + 波束角抖动 + 多普勒反解径向速度（SNR 越低越抖）
@@ -68,7 +68,7 @@
 
 #### 传播与回波
 
-- 真多径 / 刀刃绕射 / **大气折射**（衰减与雨雾损耗已有简化模型，见 §2）
+- 真多径级联 / **大气折射**（衰减与雨雾损耗已有简化模型，见 §2）；**单刃绕射已接**（非多刃/UTD）
 - 距离门上的杂波谱（不只是 σ⁰ 功率进噪声）
 - 目标起伏（Swerling）已接简化版（0–4）；完整极化 / 闪烁谱仍缺
 
@@ -106,7 +106,7 @@
 #### 游戏内（推荐）
 
 1. **锁定层对接武器**（见 [VEHICLE_RADAR_LOCK_GUIDE.md](VEHICLE_RADAR_LOCK_GUIDE.md)）
-2. 更细多径/绕射近似（有明确山地场景需求时）
+2. ~~更细多径/绕射近似~~ **单刃绕射已落地**；DEM span / 多刃仍场景驱动
 3. 联机：多雷达融合（单雷达权威路径已有；带宽自适应可并行）
 
 #### 离线（Python + DEM）
@@ -128,7 +128,7 @@
 
 1. ~~**Python CFAR/track golden + 最小 CI**~~ **已完成**（`test_rdf_radar_cfar.py` / `test_rdf_radar_track.py` + GitHub Actions）  
 2. **锁定层对接武器**（示例制导已有；产品武器仍需模组接入）  
-3. **场景驱动**：山地绕射/多径，或单雷达打磨后的多雷达融合 — 勿与远程算力抢位  
+3. **场景驱动**：DEM span / 多刃，或单雷达打磨后的多雷达融合 — 勿与远程算力抢位  
 
 目标产品形态：**可信的军武传感器玩法**（发现 / 丢失 / 压制 / 欺骗 / 锁定），而不是真实雷达仿真器。
 
@@ -174,7 +174,7 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 - **ESM mode** (`RDF_RADAR_MODE_ESM`): emitters only; one-way Friis receive power; platform stays silent (no transmit registration)
 - **Anti-radiation aim API**: `GetArmAim` / `LockArmTrackId` (lock drops when emission stops); no missile prefab included
 - **RWR**: search / track / lock warnings (`RDF_RadarRwr`); no dedicated UI — mods read the API
-- LOS via `TraceMove`; optional **NLOS ground-bounce weak detection** when occluded
+- LOS via `TraceMove`; optional **NLOS ground-bounce** + **single knife-edge diffraction** when occluded (DEM/`GetSurfaceY` samples, `/diff`)
 - Hardware params → radar equation, Doppler, MTI, processing gain, SNR threshold (emitters use the ESM equation when `m_EnableEsmReceive` is on)
 - DEM σ⁰ **ground clutter** enters the noise denominator (skipped on the ESM path)
 - **Measurement synthesis**: range-gate center + beam-angle jitter + Doppler-derived radial velocity (more jitter at lower SNR)
@@ -210,7 +210,7 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 
 #### Propagation & returns
 
-- True multipath / knife-edge diffraction / **atmospheric refraction** (attenuation and rain/fog loss already have simplified models; see §2)
+- Cascaded multipath / **atmospheric refraction** (attenuation and rain/fog loss already have simplified models; see §2); **single knife-edge shipped** (not multi-edge/UTD)
 - Clutter spectrum on range gates (not only σ⁰ power into noise)
 - Target fluctuation (Swerling) has a simplified hook (0–4); full polarization / scintillation spectra still missing
 
@@ -248,7 +248,7 @@ Aligned with deferred items in [TODO.md](../TODO.md):
 #### In-game (recommended)
 
 1. **Lock layer → weapon integration** (see [VEHICLE_RADAR_LOCK_GUIDE.md](VEHICLE_RADAR_LOCK_GUIDE.md))
-2. Finer multipath / diffraction approximations (when there is a clear mountain-terrain need)
+2. ~~Finer multipath / diffraction~~ **single knife-edge shipped**; DEM span / multi-edge still scenario-driven
 3. MP: multi-radar fusion (single-radar authority path already exists; bandwidth adaptation can ship in parallel)
 
 #### Offline (Python + DEM)
@@ -270,7 +270,7 @@ Reprioritized 2026-07-29 (aligned with [TODO.md](../TODO.md)):
 
 1. ~~**Python CFAR/track golden + minimal CI**~~ **done** (`test_rdf_radar_cfar.py` / `test_rdf_radar_track.py` + GitHub Actions)  
 2. **Lock layer → weapon integration** (example guidance exists; product weapons still need mod wiring)  
-3. **Scenario-driven**: mountain diffraction/multipath, or multi-radar fusion after single-radar polish — do not let remote compute jump the queue  
+3. **Scenario-driven**: DEM span / multi-edge, or multi-radar fusion after single-radar polish — do not let remote compute jump the queue
 
 Target product shape: **credible military-sensor gameplay** (detect / lose / jam / deceive / lock), not a real radar simulator.
 

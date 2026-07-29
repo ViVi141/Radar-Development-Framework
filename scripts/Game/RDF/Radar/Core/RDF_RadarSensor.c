@@ -756,6 +756,10 @@ class RDF_RadarSensor
         if (m_Scanner)
             reuse = " | " + m_Scanner.GetScanReuseStatsShort();
 
+        string ew = "";
+        if (m_Scanner)
+            ew = " | " + m_Scanner.GetEwStatsShort();
+
         string lock = "";
         if (m_LockManager)
             lock = " | " + m_LockManager.GetStatusShort();
@@ -766,6 +770,7 @@ class RDF_RadarSensor
             + " wlr=" + CountWlrFixes().ToString()
             + " scanMs=" + (Math.Round(m_LastScanDurationMs * 10.0) * 0.1).ToString()
             + reuse
+            + ew
             + lock;
     }
 }
