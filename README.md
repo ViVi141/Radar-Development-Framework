@@ -35,7 +35,7 @@ scripts/WorkbenchGame/RDF/
 RadarData/   SurfaceTable.conf (surface-class EM params)
 Signatures/  rdf_radar_signatures.conf (target signatures)
 UI/layouts/RDF/  RadarPPI.layout / LidarPPI.layout
-tools/dem/   Offline pack, radar physics prototypes, full_sim / golden tests
+tools/dem/   Offline pack, radar physics prototypes, full_sim / golden tests (catalog: tools/README.md)
 docs/        Documentation (bilingual — see docs/I18N.md)
 ```
 
@@ -188,6 +188,7 @@ python tools\dem\rdf_dem_pack.py --world GM_Eden
 
 | File | Content |
 |------|---------|
+| [tools/README.md](tools/README.md) | Offline tools catalog (pack / sim / tests) |
 | [docs/API.md](docs/API.md) | LiDAR / Radar API summary (radar contract is RADAR_API) |
 | [docs/RADAR_API.md](docs/RADAR_API.md) | Radar public Sensor / Network / Datalink / Fusion contract |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Architecture and extension |
@@ -245,7 +246,7 @@ scripts/WorkbenchGame/RDF/
 RadarData/   SurfaceTable.conf（地表类电磁参数）
 Signatures/  rdf_radar_signatures.conf（目标特征）
 UI/layouts/RDF/  RadarPPI.layout / LidarPPI.layout
-tools/dem/   离线打包、雷达物理原型、full_sim / golden 测试
+tools/dem/   离线打包、雷达物理原型、full_sim / golden 测试（目录：tools/README.md）
 docs/        文档（双语，见 docs/I18N.md）
 ```
 
@@ -403,6 +404,7 @@ python tools\dem\rdf_dem_pack.py --world GM_Eden
 
 | 文件 | 内容 |
 |------|------|
+| [tools/README.md](tools/README.md) | 离线工具目录（打包 / 仿真 / 测试） |
 | [docs/API.md](docs/API.md) | LiDAR / Radar API 摘要（雷达契约以 RADAR_API 为准） |
 | [docs/RADAR_API.md](docs/RADAR_API.md) | 雷达公共 Sensor / Network / Datalink / Fusion 契约 |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 架构与扩展 |

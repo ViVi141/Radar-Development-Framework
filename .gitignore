@@ -31,7 +31,8 @@ __pycache__/
 *.py[cod]
 
 # DEM / offline radar generated outputs
-tools/dem/out/
+tools/dem/out/*
+!tools/dem/out/.gitkeep
 *.npz
 TrainData/
 tools/dem/TrainData/

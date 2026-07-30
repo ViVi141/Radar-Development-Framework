@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2026-07-30 — tools 目录整理
+
+- 新增 [tools/README.md](../tools/README.md) 分类目录（Pack / 仿真库 / CLI / 测试）
+- `tools/dem/RADAR_FRAMEWORK.md` Layers 按同类重组；`run_tools.ps1`（test / full-sim / demo）
+- `tools/dem/out/.gitkeep` + gitignore 微调（忽略产物、保留空目录）
+
 ## 2026-07-30 — Docs sync（全文档对齐）
 
 - 对齐 Network：类型化 Rpc、Reliable 摘要 / Unreliable plots、规模旋钮；去掉过时 CSV / `M|T|K|W|L` 描述

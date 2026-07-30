@@ -8,6 +8,7 @@ DEM / 地表类数据为雷达杂波与离线电磁仿真提供地形基底。
 
 ### 仓库卫生
 
+- 离线工具目录索引：[tools/README.md](../tools/README.md)；Windows 入口 `tools/dem/run_tools.ps1`。
 - 离线生成物写在 `tools/dem/out/`（png / json / csv / npz）与 `tools/dem/TrainData/`，
   已在根 `.gitignore` 中忽略，**不要提交**。
 - 运行时工坊数据目录 `DemData/` 同样 gitignore（体积大，本地/发布另管）。
@@ -134,6 +135,7 @@ DEM / surface-class data provides the terrain base for radar clutter and offline
 
 ### Repo hygiene
 
+- Tools catalog: [tools/README.md](../tools/README.md); Windows entry `tools/dem/run_tools.ps1`.
 - Offline outputs go under `tools/dem/out/` (png / json / csv / npz) and
   `tools/dem/TrainData/`; both are root-`.gitignore`d — **do not commit**.
 - Runtime workshop folder `DemData/` is also gitignored (large; manage locally / for publish).

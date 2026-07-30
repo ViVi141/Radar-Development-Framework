@@ -1,0 +1,194 @@
+> **Languages / 语言**: [English](#english) · [中文](#中文)
+
+# RDF tools
+
+Offline helpers for DEM packing and radar simulation prototypes.
+Scripts stay flat under [`dem/`](dem/) (shared imports + CI). This file is the
+**catalog**; physics contracts live in [`dem/RADAR_FRAMEWORK.md`](dem/RADAR_FRAMEWORK.md).
+Bake / SURF publish: [`docs/DEM.md`](../docs/DEM.md).
+
+Install: `pip install -r tools/dem/requirements.txt`
+
+Quick entry (Windows):
+
+```powershell
+cd tools\dem
+.\run_tools.ps1 help
+.\run_tools.ps1 test
+.\run_tools.ps1 full-sim
+.\run_tools.ps1 demo
+.\run_tools.ps1 demo -Ew
+```
+
+Generated files go to `tools/dem/out/` (gitignored except `.gitkeep`). Do not commit.
+
+---
+
+## English
+
+### Layout
+
+| Path | Role |
+|------|------|
+| `dem/` | All Python scripts (pack + sim + tests) |
+| `dem/calib/` | σ⁰ calibration JSON |
+| `dem/out/` | Generated png / csv / json / npz |
+| `dem/run_tools.ps1` | Windows helper (`test` / `full-sim` / `demo`) |
+| `dem/RADAR_FRAMEWORK.md` | Offline radar framework contracts |
+
+### Pack / Bake
+
+| Script | Purpose |
+|--------|---------|
+| `rdf_dem_io.py` | Terrain / material / vertical-span I/O |
+| `rdf_dem_bake_help.py` | Workbench bake flag helper |
+| `rdf_dem_preview.py` | Heightfield preview plots |
+| `rdf_dem_pack.py` | Pack V3 bake → offline `TrainData` npz |
+| `rdf_dem_pack_bin.py` | Pack → `.dem.data` (legacy / offline) |
+| `rdf_dem_pack_json.py` | Pack → full DEM JSON |
+| `rdf_dem_pack_surface_json.py` | Pack → SURF JSON (workshop path) |
+| `rdf_sig_pack_bin.py` | Signature table → binary |
+| `rdf_sig_pack_json.py` | Signature table → JSON |
+| `rdf_sig_pack_conf.py` | Signature table → `.conf` (workshop) |
+| `rdf_ttile_unpack.py` | Unpack official `.ttile` height for overlays |
+
+### Simulation libraries
+
+| Script | Purpose |
+|--------|---------|
+| `rdf_radar_physics.py` | Hardware, radar equation, MTI, CA-CFAR |
+| `rdf_radar_materials.py` | Band / sea-state σ⁰ tables |
+| `rdf_radar_channel.py` | Retune, multipath, Swerling, aspect RCS |
+| `rdf_radar_targets.py` | Trajectories, ballistics integrate |
+| `rdf_radar_scan.py` | Time-stepped scan / dwell |
+| `rdf_radar_sector_sim.py` | Static sector RF / clutter snapshot |
+| `rdf_radar_track.py` | NN association, α-β, WLR vacuum fit |
+| `rdf_radar_ew.py` | Noise / deception / hop schedule |
+| `rdf_radar_diffraction.py` | Knife-edge diffraction helpers |
+| `rdf_radar_fusion.py` | Multi-radar associate / cross-fix |
+| `rdf_radar_systems.py` | Lock, ESM/RWR/ARM, GO/SO-CFAR, Network policy |
+
+### CLI demos / validation
+
+| Script | Purpose |
+|--------|---------|
+| `rdf_radar_full_sim.py` | No-DEM capability suite → `out/full_sim_report.json` |
+| `rdf_radar_framework_demo.py` | Clean / EW PPI demo + CSV |
+| `rdf_radar_sector_preview.py` | Sector preview plots |
+| `rdf_radar_shellfire_offline.py` | ShellFire / WLR offline mirror |
+| `rdf_radar_mass_battle_sim.py` | Multi-radar DEM battle (large; split in TODO) |
+| `rdf_knife_edge_eden_validate.py` | Eden knife-edge validation helper |
+
+### Golden tests
+
+| Script | Purpose |
+|--------|---------|
+| `test_rdf_radar_ballistics.py` | Ballistics / wind / drag / DEM hit |
+| `test_rdf_radar_cfar.py` | CA-CFAR golden + Enforce CA parity |
+| `test_rdf_radar_track.py` | Association / α-β / vacuum fit |
+| `test_rdf_radar_ew.py` | Noise jam coupling / burn-through |
+| `test_rdf_radar_diffraction.py` | Knife-edge factors |
+| `test_rdf_radar_fusion.py` | Associate / cross-fix |
+| `test_rdf_radar_systems.py` | Systems + full_sim smoke |
+
+```powershell
+cd tools\dem
+python -m unittest discover -s . -p "test_rdf_*.py" -v
+```
+
+CI: `.github/workflows/python-dem-tests.yml` (triggers on `tools/dem/**`).
+
+---
+
+## 中文
+
+离线 DEM 打包与雷达仿真原型工具。脚本仍扁平放在 [`dem/`](dem/)（共享 import + CI）。
+本文件是**目录索引**；物理契约见 [`dem/RADAR_FRAMEWORK.md`](dem/RADAR_FRAMEWORK.md)；
+烘焙 / SURF 发布见 [`docs/DEM.md`](../docs/DEM.md)。
+
+安装：`pip install -r tools/dem/requirements.txt`
+
+Windows 快捷入口：
+
+```powershell
+cd tools\dem
+.\run_tools.ps1 help
+.\run_tools.ps1 test
+.\run_tools.ps1 full-sim
+.\run_tools.ps1 demo
+.\run_tools.ps1 demo -Ew
+```
+
+生成物在 `tools/dem/out/`（除 `.gitkeep` 外 gitignore）——请勿提交。
+
+### 布局
+
+| 路径 | 作用 |
+|------|------|
+| `dem/` | 全部 Python（打包 + 仿真 + 测试） |
+| `dem/calib/` | σ⁰ 标定 JSON |
+| `dem/out/` | 生成的 png / csv / json / npz |
+| `dem/run_tools.ps1` | Windows 助手（`test` / `full-sim` / `demo`） |
+| `dem/RADAR_FRAMEWORK.md` | 离线雷达框架契约 |
+
+### Pack / 烘焙
+
+| 脚本 | 用途 |
+|------|------|
+| `rdf_dem_io.py` | 地形 / 材质 / 垂直跨度 I/O |
+| `rdf_dem_bake_help.py` | Workbench 烘焙 flag 辅助 |
+| `rdf_dem_preview.py` | 高程预览图 |
+| `rdf_dem_pack.py` | V3 烘焙 → 离线 `TrainData` npz |
+| `rdf_dem_pack_bin.py` | → `.dem.data`（遗留 / 离线） |
+| `rdf_dem_pack_json.py` | → 全量 DEM JSON |
+| `rdf_dem_pack_surface_json.py` | → SURF JSON（工坊路径） |
+| `rdf_sig_pack_bin.py` | 特征表 → 二进制 |
+| `rdf_sig_pack_json.py` | 特征表 → JSON |
+| `rdf_sig_pack_conf.py` | 特征表 → `.conf`（工坊） |
+| `rdf_ttile_unpack.py` | 解包官方 `.ttile` 高程叠加 |
+
+### 仿真库
+
+| 脚本 | 用途 |
+|------|------|
+| `rdf_radar_physics.py` | 硬件、雷达方程、MTI、CA-CFAR |
+| `rdf_radar_materials.py` | 频段 / 海况 σ⁰ 表 |
+| `rdf_radar_channel.py` | 重调、多径、Swerling、方位 RCS |
+| `rdf_radar_targets.py` | 轨迹、弹道积分 |
+| `rdf_radar_scan.py` | 时间步进扫描 / 驻留 |
+| `rdf_radar_sector_sim.py` | 静态扇区 RF / 杂波快照 |
+| `rdf_radar_track.py` | 最近邻关联、α-β、WLR 真空拟合 |
+| `rdf_radar_ew.py` | 噪声 / 欺骗 / 跳频表 |
+| `rdf_radar_diffraction.py` | 刀刃绕射辅助 |
+| `rdf_radar_fusion.py` | 多雷达关联 / 交会 |
+| `rdf_radar_systems.py` | 锁定、ESM/RWR/ARM、GO/SO-CFAR、Network 策略 |
+
+### CLI / 校验
+
+| 脚本 | 用途 |
+|------|------|
+| `rdf_radar_full_sim.py` | 无 DEM 全能力套件 → `out/full_sim_report.json` |
+| `rdf_radar_framework_demo.py` | 干净 / EW PPI Demo + CSV |
+| `rdf_radar_sector_preview.py` | 扇区预览图 |
+| `rdf_radar_shellfire_offline.py` | ShellFire / WLR 离线镜像 |
+| `rdf_radar_mass_battle_sim.py` | 多雷达 DEM 战场（大体量；拆分见 TODO） |
+| `rdf_knife_edge_eden_validate.py` | Eden 刀刃绕射校验 |
+
+### Golden 测试
+
+| 脚本 | 用途 |
+|------|------|
+| `test_rdf_radar_ballistics.py` | 弹道 / 风 / 阻 / DEM 交点 |
+| `test_rdf_radar_cfar.py` | CA-CFAR golden + Enforce CA 对齐 |
+| `test_rdf_radar_track.py` | 关联 / α-β / 真空拟合 |
+| `test_rdf_radar_ew.py` | 噪声耦合 / 烧穿 |
+| `test_rdf_radar_diffraction.py` | 刀刃因子 |
+| `test_rdf_radar_fusion.py` | 关联 / 交会 |
+| `test_rdf_radar_systems.py` | systems + full_sim 冒烟 |
+
+```powershell
+cd tools\dem
+python -m unittest discover -s . -p "test_rdf_*.py" -v
+```
+
+CI：`.github/workflows/python-dem-tests.yml`（`tools/dem/**` 变更触发）。
