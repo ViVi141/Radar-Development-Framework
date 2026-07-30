@@ -17,7 +17,7 @@ Modular sensor framework for Arma Reforger: **LiDAR**, **Radar**, and **DEM bake
 | Module | Status | Notes |
 |--------|--------|-------|
 | LiDAR | Maintaining | Ray point cloud, Showcase (afterglow/rings/sweep), PPI phosphor HUD, CSV, multiplayer sync |
-| Radar | Shipped | Entity scan, physical detection, DEM clutter, PPI, ESM/RWR, authoritative multiplayer, automated tests |
+| Radar | Shipped | Entity scan, physical detect, DEM clutter, knife-edge NLOS, PPI, ESM/RWR/ARM, EW soft jam + burn-through, Network (typed Rpc + Reliable summary / Unreliable plots), datalink Hub + fusion, automated tests |
 | DEM | Shipped | Bake V3 CSV; publish SURF JSON; runtime GetSurfaceY + SURF (fallback CSV/BIN/LIVE) |
 
 ---
@@ -28,14 +28,14 @@ Modular sensor framework for Arma Reforger: **LiDAR**, **Radar**, and **DEM bake
 scripts/Game/RDF/
   Common/    RDF_DebugShapeManager (world-space Shape lifetime)
   Lidar/     Core / Visual / Util / Demo / Network / UI
-  Radar/     Core / Physics / EW / Network / Visual / UI / Demo / Util
+  Radar/     Core / Physics / EW / Network / Fusion / Visual / UI / Demo / Util
   DEM/       Bake + Runtime/ (SURF JSON / BIN / CSV parse + LRU)
 scripts/WorkbenchGame/RDF/
   RDF_DemBakePlugin.c / RDF_RadarSignatureBakePlugin.c
 RadarData/   SurfaceTable.conf (surface-class EM params)
 Signatures/  rdf_radar_signatures.conf (target signatures)
 UI/layouts/RDF/  RadarPPI.layout / LidarPPI.layout
-tools/dem/   Offline pack, radar physics prototypes, framework demos
+tools/dem/   Offline pack, radar physics prototypes, full_sim / golden tests
 docs/        Documentation (bilingual — see docs/I18N.md)
 ```
 
@@ -67,6 +67,9 @@ array<ref RDF_RadarTarget> plots = sensor.GetPlots();
 array<ref RDF_RadarTrack> tracks = sensor.GetTracks();
 ```
 
+Network / datalink (optional on the radar entity): `RplComponent` +
+`RDF_RadarNetworkComponent` (+ optional `RDF_RadarDatalinkComponent`).
+Contract: [docs/RADAR_API.md](docs/RADAR_API.md) § Network / Datalink.
 In-mission demo — pick one:
 
 1. `SCR_BaseGameMode.SetRadarBootstrapEnabled(true);`
@@ -109,7 +112,20 @@ RDF_RadarRwrAutoTest.Start();              // RWR 被照射/锁定告警
 RDF_RadarEsmArmAutoTest.Start();           // ESM + GetArmAim / 静默丢锁
 RDF_RadarRocketLockFireAutoTest.Start();   // 锁定 → Hydra70 制导打击
 RDF_RadarHeliDuelAutoTest.Start();         // 机打机 + 拦截来袭导弹
+RDF_RadarSamEngageAutoTest.Start();        // 地面 SAM 搜索/识别/打击
+RDF_RadarFusionAutoTest.Start();           // 数据链 Hub + 多雷达融合
+RDF_RadarStressAutoTest.Start();           // 重负载 soak
 ```
+
+Offline Python (no DEM required for full capability smoke):
+
+```
+cd tools/dem
+python rdf_radar_full_sim.py
+python -m unittest discover -s . -p "test_rdf_*.py" -v
+```
+
+See [tools/dem/RADAR_FRAMEWORK.md](tools/dem/RADAR_FRAMEWORK.md).
 
 Suite scenarios and radar config:
 
@@ -125,9 +141,13 @@ Standalone regressions:
 
 | Test | Checks |
 |---|---|
+| Stress | UAZ×24 + Mi-8×3 heavy soak; tickAvg / P95 / hitch ≥16/33 ms |
 | RWR | SEARCH/TRACK/LOCK warnings on the target entity |
 | ESM/ARM | ESM intercept + `GetArmAim`; drop lock after emitter goes silent |
 | Rocket Lock-Fire | Lock Mi-8 → Hydra70 BOOST/MIDCOURSE/TERMINAL guidance |
+| Heli Duel | Heli vs heli + intercept inbound missiles |
+| SAM Engage | Ground SAM search / ID / engage demo |
+| Fusion | Datalink Hub + multi-radar association / cross-fix |
 
 Test rule: **do not give detection assists to objects under test** — no emitter tags, no RCS edits, no pre-writing into the scatterer table.
 Targets must be found by discovery sweep and detected from their own returns. Each test's `discovered_unaided` check enforces this line.
@@ -169,7 +189,7 @@ python tools\dem\rdf_dem_pack.py --world GM_Eden
 | File | Content |
 |------|---------|
 | [docs/API.md](docs/API.md) | LiDAR / Radar API summary (radar contract is RADAR_API) |
-| [docs/RADAR_API.md](docs/RADAR_API.md) | Radar public Sensor facade |
+| [docs/RADAR_API.md](docs/RADAR_API.md) | Radar public Sensor / Network / Datalink / Fusion contract |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Architecture and extension |
 | [docs/RADAR_GAME_FRAMEWORK.md](docs/RADAR_GAME_FRAMEWORK.md) | In-game radar framework |
 | [docs/RADAR_CAPABILITIES.md](docs/RADAR_CAPABILITIES.md) | Capability bounds: have / missing vs reality / next |
@@ -207,7 +227,7 @@ Arma Reforger 用的模块化传感器开发框架：**LiDAR**、**雷达**、**
 | 模块 | 状态 | 说明 |
 |------|------|------|
 | LiDAR | 维护中 | 射线点云、Showcase（余晖/环/扇面）、PPI 磷光 HUD、CSV、联机同步 |
-| Radar | 已落地 | 实体扫描、物理检测、DEM 杂波、PPI、ESM/RWR、联机权威、自动化测试 |
+| Radar | 已落地 | 实体扫描、物理检测、DEM 杂波、刀刃 NLOS、PPI、ESM/RWR/ARM、EW 软压制+烧穿、Network（类型化 Rpc + Reliable 摘要 / Unreliable plots）、数据链 Hub+融合、自动化测试 |
 | DEM | 已落地 | 烘焙 V3 CSV；发布用 SURF JSON；运行时 GetSurfaceY + SURF（回退 CSV/BIN/LIVE） |
 
 ---
@@ -218,14 +238,14 @@ Arma Reforger 用的模块化传感器开发框架：**LiDAR**、**雷达**、**
 scripts/Game/RDF/
   Common/    RDF_DebugShapeManager（世界 Shape 托管）
   Lidar/     Core / Visual / Util / Demo / Network / UI
-  Radar/     Core / Physics / EW / Network / Visual / UI / Demo / Util
+  Radar/     Core / Physics / EW / Network / Fusion / Visual / UI / Demo / Util
   DEM/       烘焙 + Runtime/（SURF JSON / BIN / CSV 解析与 LRU）
 scripts/WorkbenchGame/RDF/
   RDF_DemBakePlugin.c / RDF_RadarSignatureBakePlugin.c
 RadarData/   SurfaceTable.conf（地表类电磁参数）
 Signatures/  rdf_radar_signatures.conf（目标特征）
 UI/layouts/RDF/  RadarPPI.layout / LidarPPI.layout
-tools/dem/   离线打包、雷达物理原型、框架 Demo
+tools/dem/   离线打包、雷达物理原型、full_sim / golden 测试
 docs/        文档（双语，见 docs/I18N.md）
 ```
 
@@ -256,6 +276,10 @@ sensor.Tick(subject, null);
 array<ref RDF_RadarTarget> plots = sensor.GetPlots();
 array<ref RDF_RadarTrack> tracks = sensor.GetTracks();
 ```
+
+联机 / 数据链（可选挂在雷达实体）：`RplComponent` +
+`RDF_RadarNetworkComponent`（+ 可选 `RDF_RadarDatalinkComponent`）。
+契约：[docs/RADAR_API.md](docs/RADAR_API.md) § Network / Datalink。
 
 进图演示任选其一：
 
@@ -295,14 +319,26 @@ RDF_RadarAirborneScanTest.StartKeepTarget(); // 空中目标 + PPI
 RDF_RadarLockAutoTest.Start();             // 空中目标锁定状态机
 RDF_RadarPerfAutoTest.Start();             // 扫描/弹道性能开销
 RDF_RadarPlayAutoTest.Start();             // 游玩路径：HUD + 发现 + DEM + 漫步负载
-RDF_RadarStressAutoTest.Start();           // 重负载 soak 压测
 
 // 独立回归（不进 StartAll；一次只跑一个）：
 RDF_RadarRwrAutoTest.Start();              // RWR 被照射/锁定告警
 RDF_RadarEsmArmAutoTest.Start();           // ESM + GetArmAim / 静默丢锁
 RDF_RadarRocketLockFireAutoTest.Start();   // 锁定 → Hydra70 制导打击
 RDF_RadarHeliDuelAutoTest.Start();         // 机打机 + 拦截来袭导弹
+RDF_RadarSamEngageAutoTest.Start();        // 地面 SAM 搜索/识别/打击
+RDF_RadarFusionAutoTest.Start();           // 数据链 Hub + 多雷达融合
+RDF_RadarStressAutoTest.Start();           // 重负载 soak
 ```
+
+离线 Python（全能力冒烟无需 DEM）：
+
+```
+cd tools/dem
+python rdf_radar_full_sim.py
+python -m unittest discover -s . -p "test_rdf_*.py" -v
+```
+
+见 [tools/dem/RADAR_FRAMEWORK.md](tools/dem/RADAR_FRAMEWORK.md)。
 
 套件内场景与雷达配置：
 
@@ -324,6 +360,9 @@ RDF_RadarHeliDuelAutoTest.Start();         // 机打机 + 拦截来袭导弹
 | RWR | 目标实体上 SEARCH/TRACK/LOCK 告警 |
 | ESM/ARM | ESM 侦收 + `GetArmAim`；辐射源静默后丢锁 |
 | Rocket Lock-Fire | 锁定 Mi-8 → Hydra70 BOOST/MIDCOURSE/TERMINAL 制导 |
+| Heli Duel | 机打机 + 拦截来袭导弹 |
+| SAM Engage | 地面 SAM 搜索 / 识别 / 打击演示 |
+| Fusion | 数据链 Hub + 多雷达关联 / 交会 |
 
 测试约定：**不得给被探测物体添加任何探测助攻** —— 不加辐射源标记、不改 RCS、不预先写进散射体表。
 目标必须由发现扫掠自行找到，并靠自身回波被检测。各测试的 `discovered_unaided` 检查即用于守住这条线。
@@ -365,7 +404,7 @@ python tools\dem\rdf_dem_pack.py --world GM_Eden
 | 文件 | 内容 |
 |------|------|
 | [docs/API.md](docs/API.md) | LiDAR / Radar API 摘要（雷达契约以 RADAR_API 为准） |
-| [docs/RADAR_API.md](docs/RADAR_API.md) | 雷达公共 Sensor 门面 |
+| [docs/RADAR_API.md](docs/RADAR_API.md) | 雷达公共 Sensor / Network / Datalink / Fusion 契约 |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 架构与扩展 |
 | [docs/RADAR_GAME_FRAMEWORK.md](docs/RADAR_GAME_FRAMEWORK.md) | 游戏内雷达框架 |
 | [docs/RADAR_CAPABILITIES.md](docs/RADAR_CAPABILITIES.md) | 能力边界：已有 / 相对现实缺什么 / 还能做什么 |

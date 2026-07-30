@@ -208,12 +208,32 @@ Use `RDF_RadarNetworkComponent` on the radar owner together with `RplComponent`.
 `RDF_RadarAutoRunner` and `RDF_RadarComponent` auto-detect
 `RDF_RadarNetworkAPI` on the subject. Prefer driving gameplay through
 `RDF_RadarSensor` on the authority; the network component syncs scan results.
+Full contract: [RADAR_API.md](RADAR_API.md) § Network.
 
 1. client calls `RequestScan()`,
 2. server runs the authoritative scan path (Sensor / Scanner + Tracker / Lock / WLR),
-3. server broadcasts compact payload (`M` meta + `T` plots + `K` tracks + `W` WLR + `L` lock),
-4. clients update synced caches; `RDF_RadarSensor` injects tracks/lock and skips local recompute for that frame.
-5. Slow knobs (range, sector, CFAR, Include*, emitting) use `[RplProp]`; HUD/DEM stay local.
+3. server packs via `RDF_RadarNetCodec` into typed `array<int>` / `array<float>` (not CSV strings),
+4. **Reliable** Broadcast: scan **summary** (capped confirmed tracks + WLR + lock + meta; plots omitted),
+5. optional **Unreliable** Broadcast: capped plots for HUD (`m_SyncPlotsUnreliable`),
+6. clients update synced caches; proxy `RDF_RadarSensor` injects tracks/lock and skips local Tracker/Lock recompute for that frame,
+7. JIP via `RplSave` / `RplLoad` + `ScriptBitWriter` / `ScriptBitReader`,
+8. slow knobs (range, sector, CFAR, Include*, emitting) use `[RplProp]`; HUD/DEM stay local.
+
+Scale Attributes on `RDF_RadarNetworkComponent`: `m_MaxSyncedTracks` / `m_MaxSyncedPlots`,
+`m_MinReliableBroadcastIntervalS` / `m_MinPlotBroadcastIntervalS`,
+`m_SkipUnchangedSummary` (fingerprint), `m_InterestRadiusM`, `m_SyncPlotsUnreliable`.
+
+### Datalink & multi-radar fusion
+
+Station-to-station sharing (not weapon midcourse uplink — see WeaponBridge
+“datalink” naming carefully):
+
+- `RDF_RadarDatalinkHub` — confirmed-track library with TTL + light IFF
+- `RDF_RadarFusionService` — association gate + optional dual-station horizontal cross-fix
+- Optional `RDF_RadarDatalinkComponent` — typed-array Broadcast of hub state (same NetCodec style; caps/throttle/interest)
+
+Authority may `PublishTracksToDatalink` after a successful scan. API:
+`RDF_RadarDatalinkAPI` / `GetFusedTracks`. Regression: `RDF_RadarFusionAutoTest.Start()`.
 
 ### Minimal setup (entity-mounted radar)
 
@@ -225,6 +245,7 @@ Use `RDF_RadarNetworkComponent` on the radar owner together with `RplComponent`.
 3. Start radar via existing entry points (`RDF_RadarComponent` tick or
    `RDF_RadarAutoRunner`), no extra script wiring required.
 4. Optional: keep `RDF_RadarAutoRunner.SetHudEnabled(true)` to observe client HUD.
+5. Optional: `RDF_RadarDatalinkComponent` for station Hub Broadcast.
 
 ### Quick verification (server-authoritative)
 
@@ -232,7 +253,7 @@ Use `RDF_RadarNetworkComponent` on the radar owner together with `RplComponent`.
 2. On host, enable radar demo/config as usual.
 3. On client, verify HUD mode text shows `PPI | NET`.
 4. Move targets/emitter sources and confirm both host/client see consistent
-   target count/type trends (allowing normal timing jitter).
+   track / lock trends (plots may lag or drop under Unreliable + caps).
 
 ## Automated live shell fire + WLR test
 
@@ -308,6 +329,18 @@ Standalone regressions (**not** in `StartAll`; run one at a time):
 RDF_RadarRwrAutoTest.Start();            // RWR SEARCH/TRACK/LOCK on victim
 RDF_RadarEsmArmAutoTest.Start();         // ESM + GetArmAim / silence unlock
 RDF_RadarRocketLockFireAutoTest.Start(); // lock Mi-8 → Hydra70 guidance
+RDF_RadarHeliDuelAutoTest.Start();       // heli vs heli + intercept
+RDF_RadarSamEngageAutoTest.Start();      // ground SAM search / ID / engage demo
+RDF_RadarFusionAutoTest.Start();         // datalink Hub + fusion / cross-fix
+RDF_RadarStressAutoTest.Start();         // heavy soak load
+```
+
+Offline Python capability suite (no DEM required):
+
+```
+cd tools/dem
+python rdf_radar_full_sim.py
+python -m unittest discover -s . -p "test_rdf_*.py" -v
 ```
 
 Map markers while tests run: `RDF_RadarAutoTestMapOverlay` (e.g. Lock / Airborne).
@@ -350,16 +383,20 @@ Output report:
 ## Current boundaries
 
 - Target candidates remain entity-first (scatterer registry + sphere/active
-  fallback) and LOS still relies on `TraceMove`.
+  fallback) and LOS still relies on `TraceMove`; NLOS may use ground-bounce
+  weak detection + **single knife-edge diffraction** (not multi-edge/UTD).
 - DEM / surface: prefer SURF JSON + live `GetSurfaceY`; CSV/BIN are fallbacks.
   Multiplayer parity for clutter still needs matching local SURF/DEM (or LIVE);
   detection **results** sync via `RDF_RadarNetworkComponent` (not a substitute
-  for local terrain data).
+  for local terrain data). Bandwidth: Reliable track summary / Unreliable plots
+  + caps / throttle / interest radius.
+- Station datalink / fusion shipped (Hub + FusionService); not crypto IFF /
+  full datalink protocol.
 - EW supports directional noise plus deception (static false plots, range
   walk-off, angle scintillation, intermittent false plots). Noise jammers
   expose coupling modes (`SEARCH_AVG` default / `BEAM` / `MAINLOBE_ONLY`),
-  sidelobe level, and `m_CouplingGain`. Not full DRFM /
-  coherent range-gate pull-off.
+  sidelobe level, and `m_CouplingGain`; burn-through range is observable.
+  Not full DRFM / coherent range-gate pull-off.
 - Tracking associates by measurement gates (nearest neighbor), not entity
   identity. Default plots clear `m_Entity` unless `m_KeepEntityTruth`.
 - Product target: playable sensor gameplay, not an EM simulator. See
@@ -550,12 +587,31 @@ Runner 自动从 `RDF_RadarScanner.GetLastOrigin()`、`GetLastForward()`、`GetL
 在雷达所有者上同时使用 `RDF_RadarNetworkComponent` 与 `RplComponent`。
 `RDF_RadarAutoRunner` 与 `RDF_RadarComponent` 会在 subject 上自动检测 `RDF_RadarNetworkAPI`。
 玩法优先在权威端驱动 `RDF_RadarSensor`；网络组件同步扫描结果。
+完整契约见 [RADAR_API.md](RADAR_API.md) § Network。
 
 1. 客户端调用 `RequestScan()`，
 2. 服务器跑权威扫描路径（Sensor / Scanner + Tracker / Lock / WLR），
-3. 服务器广播紧凑载荷（`M` 元数据 + `T` plots + `K` 航迹 + `W` WLR + `L` 锁定），
-4. 客户端更新同步缓存；`RDF_RadarSensor` 注入航迹/锁定并跳过该帧本地重算。
-5. 慢旋钮（range、sector、CFAR、Include*、emitting）用 `[RplProp]`；HUD/DEM 保持本地。
+3. 经 `RDF_RadarNetCodec` 打成类型化 `array<int>` / `array<float>`（非 CSV 字符串），
+4. **Reliable** Broadcast：扫描**摘要**（有上限确认航迹 + WLR + 锁 + 元数据；不含 plots），
+5. 可选 **Unreliable** Broadcast：有上限 plots（HUD，`m_SyncPlotsUnreliable`），
+6. 客户端更新同步缓存；Proxy 上的 `RDF_RadarSensor` 注入航迹/锁定并跳过该帧本地 Tracker/Lock 重算，
+7. JIP 经 `RplSave` / `RplLoad` + `ScriptBitWriter` / `ScriptBitReader`，
+8. 慢旋钮（range、sector、CFAR、Include*、emitting）用 `[RplProp]`；HUD/DEM 保持本地。
+
+规模属性：`m_MaxSyncedTracks` / `m_MaxSyncedPlots`、
+`m_MinReliableBroadcastIntervalS` / `m_MinPlotBroadcastIntervalS`、
+`m_SkipUnchangedSummary`（指纹）、`m_InterestRadiusM`、`m_SyncPlotsUnreliable`。
+
+### 站间数据链与多雷达融合
+
+站间共享（≠ 武器中制导 uplink — 注意 WeaponBridge「datalink」命名）：
+
+- `RDF_RadarDatalinkHub` — 确认航迹库（TTL）+ 轻量 IFF
+- `RDF_RadarFusionService` — 关联门限 + 可选双站水平交会
+- 可选 `RDF_RadarDatalinkComponent` — Hub 状态类型化 Broadcast（同 NetCodec；限频/上限/兴趣）
+
+权威扫描成功后可 `PublishTracksToDatalink`。API：`RDF_RadarDatalinkAPI` / `GetFusedTracks`。
+回归：`RDF_RadarFusionAutoTest.Start()`。
 
 ### 最小搭建（实体挂载雷达）
 
@@ -566,13 +622,14 @@ Runner 自动从 `RDF_RadarScanner.GetLastOrigin()`、`GetLastForward()`、`GetL
 2. 确保实体在场景/会话设置中可复制。
 3. 经现有入口启动雷达（`RDF_RadarComponent` tick 或 `RDF_RadarAutoRunner`），无需额外脚本接线。
 4. 可选：保持 `RDF_RadarAutoRunner.SetHudEnabled(true)` 以观察客户端 HUD。
+5. 可选：`RDF_RadarDatalinkComponent` 做站间 Hub Broadcast。
 
 ### 快速验证（服务器权威）
 
 1. 运行至少主机 + 一个客户端的多人会话。
 2. 在主机上照常启用雷达演示/配置。
 3. 在客户端确认 HUD 模式文本显示 `PPI | NET`。
-4. 移动目标/辐射源，确认主机/客户端看到一致的目标数量/类型趋势（允许正常时间抖动）。
+4. 移动目标/辐射源，确认主机/客户端航迹/锁定趋势一致（plots 在 Unreliable + 上限下可能滞后或丢包）。
 
 ## 自动化实弹射击 + WLR 测试
 
@@ -633,6 +690,18 @@ RDF_RadarAutoTestSuite.StartAllRealistic();
 RDF_RadarRwrAutoTest.Start();            // RWR SEARCH/TRACK/LOCK on victim
 RDF_RadarEsmArmAutoTest.Start();         // ESM + GetArmAim / silence unlock
 RDF_RadarRocketLockFireAutoTest.Start(); // lock Mi-8 → Hydra70 guidance
+RDF_RadarHeliDuelAutoTest.Start();       // 机打机 + 拦截
+RDF_RadarSamEngageAutoTest.Start();      // 地面 SAM 搜索/识别/打击演示
+RDF_RadarFusionAutoTest.Start();         // 数据链 Hub + 融合 / 交会
+RDF_RadarStressAutoTest.Start();         // 重负载 soak
+```
+
+离线 Python 全能力套件（无需 DEM）：
+
+```
+cd tools/dem
+python rdf_radar_full_sim.py
+python -m unittest discover -s . -p "test_rdf_*.py" -v
 ```
 
 测试运行时地图标记：`RDF_RadarAutoTestMapOverlay`（如 Lock / Airborne）。
@@ -673,13 +742,16 @@ RDF_RadarAirborneScanTest.StartKeepTarget();
 
 ## 当前边界
 
-- 目标候选仍以实体优先（散射体表 + sphere/active 回退），通视仍依赖 `TraceMove`。
+- 目标候选仍以实体优先（散射体表 + sphere/active 回退），通视仍依赖 `TraceMove`；
+  NLOS 可选地面反射弱检 + **单刃绕射**（非多刃/UTD）。
 - DEM / 地表：优先 SURF JSON + 实时 `GetSurfaceY`；CSV/BIN 为回退。
   杂波多人一致仍需匹配的本地 SURF/DEM（或 LIVE）；
   检测**结果**经 `RDF_RadarNetworkComponent` 同步（不能替代本地地形数据）。
+  带宽：Reliable 航迹摘要 / Unreliable plots + 上限降频 / 兴趣半径。
+- 站间数据链 / 融合已落地（Hub + FusionService）；非密码学 IFF / 完整数据链协议。
 - EW 支持定向噪声与欺骗（静态假点、拖距、角闪烁、间歇假点）。噪声干扰可调
   耦合模式（默认 `SEARCH_AVG` / `BEAM` / `MAINLOBE_ONLY`）、副瓣与
-  `m_CouplingGain`。非完整 DRFM / 相干距离门拖引。
+  `m_CouplingGain`；可观测烧穿距离。非完整 DRFM / 相干距离门拖引。
 - 跟踪按量测波门关联（最近邻），不按实体身份。默认 plots 清除 `m_Entity`，除非 `m_KeepEntityTruth`。
 - 产品目标：可玩的传感器玩法，不是电磁仿真器。见
   [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md) 与 [TODO.md](../TODO.md)。

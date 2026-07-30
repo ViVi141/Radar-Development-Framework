@@ -40,7 +40,7 @@
 - DEM / 地表：`GetSurfaceY` + SURF JSON；电磁参数优先 `RadarData/SurfaceTable.conf`
 - **EW 效果栈**：噪声压制 + 欺骗假目标
 - **简化 CFAR**：粗栅格 CA / GO / SO（`m_CfarMode`）；空单元可填热噪声
-- **联机权威路径**：`RDF_RadarNetworkComponent`（RplProp 关键配置 + Reliable Broadcast plots/航迹/WLR/锁 + 发射态）
+- **联机权威路径**：`RDF_RadarNetworkComponent`（RplProp 关键配置 + **Reliable** 航迹/WLR/锁摘要 + 可选 **Unreliable** 有上限 plots + 发射态；类型化 `array<int/float>` Rpc，非 CSV）
 - **站间数据链 / 多雷达融合**：`RDF_RadarDatalinkHub` + `RDF_RadarFusionService`（确认航迹关联 + 双站交会）；轻量 IFF 字段
 - **欺骗扩展**：静态假点 + 拖距 / 角闪烁 / 间歇假点 Effect
 - **反炮兵呈现**：PPI 发射/落点告警圈；世界空间地面环
@@ -51,7 +51,7 @@
 - 量测驱动 α-β 跟踪 + `PredictAt` 外推（最近邻波门；匿名/假目标可进跟踪）
 - **锁定层** `RDF_RadarLockManager`：SEARCH → 截获 → 跟踪 → coast + `GetLockedTarget`
 - AutoTest 双档：`RDF_RadarAutoTestSuite.StartAll()`（ideal）/
-  `StartAllRealistic()`（逼真误差带）；套件 7 项 + 独立 Stress / RWR / ESM-ARM / Rocket
+  `StartAllRealistic()`（逼真误差带）；套件 7 项 + 独立 Stress / RWR / ESM-ARM / Rocket / HeliDuel / SamEngage / Fusion
 - 单项：DEM / Ballistics / ShellFire / Airborne / Lock / Perf / Play
 - 压测（独立）：`RDF_RadarStressAutoTest`（重负载 soak）
 - DEM/SURF 默认可全图预载入 RAM（`m_DemPreloadAll`，HUD 显示 `SURF RAM`）
@@ -186,7 +186,7 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 - DEM / surface: `GetSurfaceY` + SURF JSON; EM params prefer `RadarData/SurfaceTable.conf`
 - **EW effect stack**: noise jamming + deceptive false targets
 - **Simplified CFAR**: coarse-grid CA / GO / SO (`m_CfarMode`); empty cells can be filled with thermal noise
-- **MP authority path**: `RDF_RadarNetworkComponent` (RplProp antenna config + Reliable Broadcast of plots / tracks / WLR / lock + transmit state)
+- **MP authority path**: `RDF_RadarNetworkComponent` (RplProp antenna config + **Reliable** track/WLR/lock summary + optional **Unreliable** capped plots + transmit state; typed `array<int/float>` Rpc, not CSV)
 - **Station datalink / multi-radar fusion**: `RDF_RadarDatalinkHub` + `RDF_RadarFusionService` (confirmed-track association + dual-station cross-fix); light IFF field
 - **Deception extensions**: static false plots + range-gate pull-off / angular scintillation / intermittent false-plot Effects
 - **Counter-battery presentation**: PPI launch / impact alert circles; world-space ground rings
@@ -197,8 +197,10 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 - Measurement-driven α-β tracking + `PredictAt` extrapolation (nearest-neighbor gate; anonymous / false targets can enter tracking)
 - **Lock layer** `RDF_RadarLockManager`: SEARCH → acquire → track → coast + `GetLockedTarget`
 - AutoTest dual profiles: `RDF_RadarAutoTestSuite.StartAll()` (ideal) /
-  `StartAllRealistic()` (realistic error band); suite of 5 items + standalone RWR / ESM-ARM / Rocket
-- Singles: DEM / Ballistics / ShellFire / Airborne / Lock
+  `StartAllRealistic()` (realistic error band); suite of 7 + standalone Stress / RWR / ESM-ARM / Rocket / HeliDuel / SamEngage / Fusion
+- Singles: DEM / Ballistics / ShellFire / Airborne / Lock / Perf / Play
+- Stress (standalone): `RDF_RadarStressAutoTest` (heavy soak)
+- DEM/SURF may preload full map into RAM by default (`m_DemPreloadAll`, HUD shows `SURF RAM`)
 - **Public façade** `RDF_RadarSensor` (SEARCH / STARE / WLR / ESM → Plots / Tracks / Lock / ARM / RWR); see [RADAR_API.md](RADAR_API.md)
 
 #### Parts that “feel like radar”

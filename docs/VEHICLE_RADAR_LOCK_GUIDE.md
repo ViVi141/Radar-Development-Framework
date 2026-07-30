@@ -21,6 +21,10 @@ RDF 现已提供：
 - **制导示例**：`RDF_RadarRocketGuidance` + `RDF_RadarRocketLockFireAutoTest`
   （Hydra70 BOOST/MIDCOURSE/TERMINAL）可作为武器对接参考；正式武器仍需模组侧接入 prefab。
 
+**站间数据链 ≠ 武器中制导**：`RDF_RadarDatalinkHub` / `RDF_RadarFusionService`
+是雷达站间航迹共享与融合；`WeaponBridge` 里的「datalink」中段瞄点是另一语义。
+组网契约见 [RADAR_API.md](RADAR_API.md) § Datalink。
+
 ---
 
 ## 一、目标与实现分工
@@ -239,6 +243,11 @@ RDF already provides:
   `RDF_RadarFireSolution` (launch gate + midcourse uplink).
 - **Guidance example**: `RDF_RadarRocketGuidance` + `RDF_RadarRocketLockFireAutoTest`
   (Hydra70 BOOST/MIDCOURSE/TERMINAL) as a weapon-integration reference; production weapons still need mod-side prefab wiring.
+
+**Station datalink ≠ weapon midcourse uplink**: `RDF_RadarDatalinkHub` /
+`RDF_RadarFusionService` share fused tracks between radars; WeaponBridge
+“datalink” midcourse aim is a different concept. Networking contract:
+[RADAR_API.md](RADAR_API.md) § Datalink.
 
 ---
 

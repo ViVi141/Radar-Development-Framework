@@ -102,9 +102,12 @@
 
 | API | 用途 | 验证状态 | 说明 |
 |-----|------|----------|------|
-| **RplProp / RplComponent** | 复制属性与组件 | ❓ | RDF 已在 LiDAR 网络组件中使用 `[RplProp]` 等；api_search 未直接命中，属 Enfusion 复制注解与基类。 |
-| **RplRpc** | RPC 方法 | ❓ | 同上，RDF 已用；见 RDF_LidarNetworkComponent。 |
-| **Replication** | 服务器权威同步 | ⚠️ | 实现方式以现有 RDF 网络模块与 BIKI “Replication” 文档为准。 |
+| **RplProp / RplComponent** | 复制属性与组件 | ❓ | Radar：关键 Settings / 发射态；LiDAR 网络组件亦用。属 Enfusion 复制注解。 |
+| **RplRpc** | RPC 方法 | ❓ | Radar：Reliable 摘要 / Unreliable plots；参数优先 `array<int>` / `array<float>`（见 `RDF_RadarNetCodec`），**勿**用超长 CSV `string` 作 Rpc 载荷。 |
+| **ScriptBitWriter / ScriptBitReader** | JIP 位流 | ❓ | 配 `RplSave` / `RplLoad`；**不是**直播 Rpc 参数类型。 |
+| **Replication** | 服务器权威同步 | ⚠️ | 实现约定见 [RADAR_API.md](RADAR_API.md) § Network / Datalink。 |
+
+Radar 规模旋钮（上限、降频、指纹跳过、兴趣半径）为组件 Attribute，非额外引擎 API。
 
 ---
 
@@ -231,9 +234,12 @@ Suggested identification: `QueryEntitiesBySphere`, then in the callback `FindCom
 
 | API | Purpose | Status | Notes |
 |-----|---------|--------|-------|
-| **RplProp / RplComponent** | Replicated props & components | ❓ | RDF LiDAR network uses `[RplProp]` etc.; not directly hit by api_search — Enfusion replication annotations/base classes. |
-| **RplRpc** | RPC methods | ❓ | Same; used by RDF — see RDF_LidarNetworkComponent. |
-| **Replication** | Server-authoritative sync | ⚠️ | Follow existing RDF network modules and BIKI “Replication” docs. |
+| **RplProp / RplComponent** | Replicated props & components | ❓ | Radar: key Settings / emit state; LiDAR network likewise. Enfusion replication annotations. |
+| **RplRpc** | RPC methods | ❓ | Radar: Reliable summary / Unreliable plots; prefer `array<int>` / `array<float>` (`RDF_RadarNetCodec`) — **not** long CSV `string` Rpc payloads. |
+| **ScriptBitWriter / ScriptBitReader** | JIP bit streams | ❓ | Pair with `RplSave` / `RplLoad`; **not** live Rpc argument types. |
+| **Replication** | Server-authoritative sync | ⚠️ | Contract: [RADAR_API.md](RADAR_API.md) § Network / Datalink. |
+
+Radar scale knobs (caps, throttle, fingerprint skip, interest radius) are component Attributes, not extra engine APIs.
 
 ---
 

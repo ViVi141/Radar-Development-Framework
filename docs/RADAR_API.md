@@ -332,7 +332,7 @@ Throttle / interest Attributes on `RDF_RadarNetworkComponent`: `m_MaxSyncedTrack
 
 Proxy `RDF_RadarSensor` path: ingest plots + **inject tracks/lock**, skip local Tracker/Lock recompute for that frame. Authority still runs the full local chain then broadcasts.
 
-Not synced this sprint: full `Hardware` / `EwStack` / `MeasurementModel` objects, DEM tiles.
+Not synced (by design for now): full `Hardware` / `EwStack` / `MeasurementModel` objects, DEM tiles.
 
 ### Datalink & multi-radar fusion
 
@@ -718,7 +718,7 @@ RDF_RadarAutoRunner.GetSensor().GetStatusShort();
 
 Proxy 上的 `RDF_RadarSensor` 路径：吞入 plots + **注入航迹/锁定**，该帧跳过本地 Tracker/Lock 重算。权威端仍跑完整本地链再广播。
 
-本 sprint 不同步：完整 `Hardware` / `EwStack` / `MeasurementModel` 对象、DEM 瓦片。
+仍不同步（当前设计）：完整 `Hardware` / `EwStack` / `MeasurementModel` 对象、DEM 瓦片。
 
 ### 数据链与多雷达融合
 

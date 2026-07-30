@@ -189,8 +189,9 @@ if (parentEntityRay != parentEntityAct)
 
 ### 6.2 RPC 选型
 
-- **Unreliable**：粒子、音效、非关键可视化；允许丢包。
-- **Reliable**：检测结果、关键状态同步。
+- **Unreliable**：粒子、音效、非关键可视化；允许丢包。Radar：**有上限 plots**（HUD）走 Unreliable。
+- **Reliable**：关键状态同步。Radar：**确认航迹摘要 + 锁 + 扫描元数据**走 Reliable；载荷用类型化数组（`RDF_RadarNetCodec`），非 CSV 字符串。
+- 详见 [RADAR_API.md](RADAR_API.md) § Network。
 
 ### 6.3 命中结果校验
 
@@ -227,7 +228,7 @@ if (parentEntityRay != parentEntityAct)
 
 1. 保持 `param.Exclude = subject`；必要时实现 `TraceFilter` 排除主体及其子实体。
 2. 地物散射/RCS 可结合 `GetTerrainY`、`TraceNorm` 判断命中类型与表面朝向。
-3. LiDAR/雷达网络可视化：非关键帧用 Unreliable，关键检测用 Reliable。
+3. LiDAR/雷达网络：非关键帧用 Unreliable；Radar 关键检测用 Reliable **摘要**，plots 用 Unreliable + 上限（见 RADAR_API）。
 
 ---
 
@@ -460,8 +461,9 @@ if (parentEntityRay != parentEntityAct)
 
 ### 6.2 RPC channel choice
 
-- **Unreliable**: particles, SFX, non-critical viz; loss OK.
-- **Reliable**: detection results, critical state sync.
+- **Unreliable**: particles, SFX, non-critical viz; loss OK. Radar: **capped plots** (HUD) use Unreliable.
+- **Reliable**: critical state sync. Radar: **confirmed-track summary + lock + scan meta** use Reliable; typed arrays (`RDF_RadarNetCodec`), not CSV strings.
+- See [RADAR_API.md](RADAR_API.md) § Network.
 
 ### 6.3 Validate hit results
 
@@ -498,7 +500,7 @@ if (parentEntityRay != parentEntityAct)
 
 1. Keep `param.Exclude = subject`; add `TraceFilter` for subject + children when needed.
 2. Clutter/RCS can use `GetTerrainY` and `TraceNorm` for hit kind and surface facing.
-3. LiDAR/radar network viz: Unreliable for non-critical frames, Reliable for critical detects.
+3. LiDAR/radar network: Unreliable for non-critical frames; Radar critical detects use Reliable **summary**, plots use Unreliable + caps (see RADAR_API).
 
 ---
 

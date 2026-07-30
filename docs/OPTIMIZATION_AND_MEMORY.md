@@ -6,6 +6,12 @@
 
 本文档针对 **LiDAR** 模块的优化与**内存溢出防护**。雷达 / DEM 性能要点见 [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md) 与 [DEM.md](DEM.md)。
 
+### Radar Network 规模（交叉引用）
+
+Radar 联机**不要**沿用 LiDAR CSV 分片缓冲思路。权威路径用类型化 Rpc：
+**Reliable** 航迹摘要、**Unreliable** 有上限 plots，外加 `m_MaxSynced*` /
+降频 / 指纹跳过 / `m_InterestRadiusM`。契约见 [RADAR_API.md](RADAR_API.md) § Network。
+
 ---
 
 ### 一、内存风险点概览
@@ -98,6 +104,12 @@
 # LiDAR Optimization & Memory Overflow Prevention
 
 This document covers **LiDAR** module optimization and **memory overflow prevention**. Radar / DEM performance notes: [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md) and [DEM.md](DEM.md).
+
+### Radar Network scale (cross-ref)
+
+Do **not** reuse LiDAR CSV shard-buffer patterns for Radar MP. Authority path uses typed Rpc:
+**Reliable** track summary, **Unreliable** capped plots, plus `m_MaxSynced*` /
+throttle / fingerprint skip / `m_InterestRadiusM`. Contract: [RADAR_API.md](RADAR_API.md) § Network.
 
 ---
 

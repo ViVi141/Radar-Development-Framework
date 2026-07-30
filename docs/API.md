@@ -732,7 +732,9 @@ PPI Canvas: 210 × 210 (see LidarPPI.layout)
 - **火控**：`RDF_RadarWeaponBridge` / `RDF_RadarWeaponComponent` → `RDF_RadarFireSolution`（`CanAuthorizeFire` / 中段瞄点 / `GuideRocket`）。
 - 模式：SEARCH / STARE / WLR / **ESM**；默认量测匿名（切断 `m_Entity`），跟踪为最近邻波门关联。
 - 通道：理想档 / 逼真档（测量噪声、CFAR 热填空、大气/天气衰减）；可 override `RDF_RadarMeasurementModel`。
-- `RDF_RadarSettings` / `RDF_RadarHardware` / EW 栈 / DEM 杂波等细节见 RADAR_API。
+- **联机**：`RDF_RadarNetworkComponent` — 类型化 Rpc；**Reliable** 航迹摘要 / **Unreliable** plots；`RplSave` JIP；规模旋钮见 RADAR_API。
+- **站间**：`RDF_RadarDatalinkHub` + `RDF_RadarFusionService`（轻量 IFF）；≠ WeaponBridge「datalink」中制导语义。
+- `RDF_RadarSettings` / `RDF_RadarHardware` / EW（软耦合 + 烧穿）/ 刀刃绕射 / DEM 杂波等细节见 RADAR_API。
 
 ### Demo / UI / 测试
 
@@ -740,7 +742,8 @@ PPI Canvas: 210 × 210 (see LidarPPI.layout)
 - `RDF_RadarHUD`：PPI（面板 144×184 / 画布 128×128；默认匿名量测色；假目标白；NLOS 青；`m_KeepEntityTruth` 时才用类型色）。
 - `RDF_RadarAutoTestSuite.StartAll()` / `StartAllRealistic()`（Ballistics → DEM → Lock → Airborne → ShellFire → Perf → Play）。
 - 套件单项：`RDF_RadarAutoTest`、`Ballistics`、`ShellFire`、`AirborneScanTest`、`LockAutoTest`、`PerfAutoTest`、`PlayAutoTest`、`ManualDemo`。
-- 独立回归（不进 StartAll）：`RDF_RadarStressAutoTest`、`RDF_RadarRwrAutoTest`、`RDF_RadarEsmArmAutoTest`、`RDF_RadarRocketLockFireAutoTest`、`RDF_RadarHeliDuelAutoTest`、`RDF_RadarSamEngageAutoTest`；地图标记 `RDF_RadarAutoTestMapOverlay`。
+- 独立回归（不进 StartAll）：`Stress`、`Rwr`、`EsmArm`、`RocketLockFire`、`HeliDuel`、`SamEngage`、`Fusion`；地图标记 `RDF_RadarAutoTestMapOverlay`。
+- 离线：`tools/dem/rdf_radar_full_sim.py` + `test_rdf_*.py`（见 [tools/dem/RADAR_FRAMEWORK.md](../tools/dem/RADAR_FRAMEWORK.md)）。
 
 ### DEM 运行时（雷达杂波）
 

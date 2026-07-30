@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2026-07-30 — Docs sync（全文档对齐）
+
+- 对齐 Network：类型化 Rpc、Reliable 摘要 / Unreliable plots、规模旋钮；去掉过时 CSV / `M|T|K|W|L` 描述
+- 补齐 Datalink / Fusion / 刀刃绕射 / EW 烧穿 / Python `full_sim` 交叉链接
+- 更新：`RADAR_GAME_FRAMEWORK`、`README`、`RADAR_CAPABILITIES`、`API`、`TODO`、`REQUIRED_APIS`、`OPTIMIZATION`、`LESSONS`、`VEHICLE_RADAR_LOCK_GUIDE`、`DEM`、`DEVELOPMENT`、`RADAR_API` 措辞
+
 ## 2026-07-30 — Python 全能力离线模拟
 
 - `rdf_radar_systems.py`：锁定 FSM、ESM Friis、RWR/ARM、GO/SO-CFAR、测量噪声、降雨、拖距/角闪烁/间歇、Network 带宽策略

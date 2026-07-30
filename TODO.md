@@ -85,7 +85,7 @@
 | **产品缺口** | 锁定层对接模组武器 | 玩法闭环 | 中 | ~~指南+火箭示例~~；**火控桥 `WeaponBridge` / `WeaponComponent` 已落地**（prefab 仍模组侧） |
 | **框架已完成** | EW 噪声软化 + burn-through 可观测 | 压制可调 | 低中 | `SEARCH_AVG` 默认；`GetEwStatsShort` |
 | **P2 已完成** | 刀刃绕射近似 | 山地半遮挡弱检 | 中 | 单刃 Fresnel + DEM 采样；非多刃/UTD |
-| **P2 已完成** | 数据链 + 多雷达融合 | 战役组网 | 高 | Hub `D|`/`F|`；Fusion 关联+交会；轻量 IFF |
+| **P2 已完成** | 数据链 + 多雷达融合 | 战役组网 | 高 | Hub typed Rpc（NetCodec）；Fusion 关联+交会；轻量 IFF |
 | **P2 场景驱动** | DEM span 遮挡 / 多径 | 城区/林冠 | 高 | 离线/烘焙有 span；游戏 SURF 路径故意不带 — 勿轻易重开 |
 | **P2 单雷达打磨后** | ~~多雷达 plots 融合 / 交叉定位~~ | 战役级 | 很高 | **已落地** `RDF_RadarFusionService` |
 | **P2 空窗** | LiDAR：DiagMenu、Sensor 门面 | LiDAR UX | 中 | ~~PPI + Showcase~~；**Sensor + DiagMenu + RECT FOV 已落地** |
@@ -94,7 +94,8 @@
 | **P3** | 远程计算全链路 | 卸算力 | 很高 | Stress/Perf 证伪瓶颈前不做；禁止远程替代 Trace/实体查询 |
 | **P3** | 游戏内 AutoTest 无 Debugger 批跑 | CI 完整 | 中高 | 依赖 Workbench 自动化；P1 用 Python CI 顶住 |
 
-- [x] Network：权威结果（plots + K/W/L）+ 关键 Settings RplProp + 发射态（见 CHANGELOG Network Sprint）
+- [x] Network：权威结果（Reliable 航迹摘要 + 可选 Unreliable plots）+ 关键 Settings RplProp + 发射态（见 CHANGELOG Network Sprint / 规模对齐）
+- [x] Network 协议：类型化 `array<int/float>` Rpc + `RplSave` JIP（`RDF_RadarNetCodec`；非 CSV）
 - [x] **P1** Python CFAR / track 单测 + 可选 Enforce golden（`test_rdf_radar_cfar.py` / `test_rdf_radar_track.py`；CA 与 `RDF_RadarCfarGate` 对齐）
 - [x] **P1** 最小 CI（`.github/workflows/python-dem-tests.yml` 跑 `test_rdf_*.py`；游戏内批跑仍见 P3）
 - [x] **产品** 锁定层对接模组武器（`RDF_RadarWeaponBridge` / `WeaponComponent` + VEHICLE_RADAR_LOCK_GUIDE；prefab 仍模组侧）
@@ -121,7 +122,7 @@
 
 **Sprint A+B（已完成）**：§1 + §2 — 观测、双档、测量噪声、热噪声填空、大气衰减。  
 **Sprint C（已完成）**：GO/SO-CFAR、Settings 阈值、欺骗扩展、WLR HUD。  
-**Network Sprint（已完成）**：关键 Settings RplProp、plots 加厚、K/W/L 权威摘要、发射态。  
+**Network Sprint（已完成）**：关键 Settings RplProp、发射态、类型化 Rpc、Reliable 摘要 / Unreliable plots、上限降频/指纹/兴趣半径。  
 **Sprint D（已完成核心）**：Python CFAR/track golden + 最小 CI。  
 **LiDAR UX（已完成）**：Showcase / PPI 动画 + `RDF_LidarSensor` + DiagMenu + 矩形 FOV。  
 **火控桥（已完成）**：`RDF_RadarWeaponBridge` / `WeaponComponent` + 指南 §2.3。  
@@ -271,7 +272,7 @@ Context: realistic channel + single-radar authoritative Network path shipped; ol
 | **Product gap** | Lock layer → mod weapons | Gameplay loop | Medium | ~~guide + rocket sample~~; **`WeaponBridge` / `WeaponComponent` shipped** (prefab still mod-side) |
 | **Framework done** | EW noise soft + burn-through observability | Tunable jam | Low–med | `SEARCH_AVG` default; `GetEwStatsShort` |
 | **P2 done** | Knife-edge diffraction approx | Mountain partial LOS | Med | Single-edge Fresnel + DEM samples; not multi-edge/UTD |
-| **P2 done** | Datalink + multi-radar fusion | Campaign net | High | Hub `D|`/`F|`; Fusion assoc+cross-fix; light IFF |
+| **P2 done** | Datalink + multi-radar fusion | Campaign net | High | Hub typed Rpc (NetCodec); Fusion assoc+cross-fix; light IFF |
 | **P2 scenario** | DEM span occlusion / multipath | Urban / canopy | High | Offline/bake has spans; game SURF path deliberately omits — don’t reopen lightly |
 | **P2 after polish** | ~~Multi-radar plots fusion / cross-fix~~ | Campaign | Very high | **Shipped** `RDF_RadarFusionService` |
 | **P2 idle** | LiDAR PPI / DiagMenu / Sensor facade | LiDAR UX | Medium | Showcase + **`RDF_LidarSensor` + DiagMenu + RECT FOV shipped** |
@@ -280,7 +281,8 @@ Context: realistic channel + single-radar authoritative Network path shipped; ol
 | **P3** | Remote compute full chain | Offload CPU | Very high | Wait for Stress/Perf proof; never replace Trace/entity query remotely |
 | **P3** | In-game AutoTest without Debugger | Full CI | Med–high | Needs Workbench automation; P1 Python CI covers interim |
 
-- [x] Network: authoritative results (plots + K/W/L) + key Settings RplProp + emit state (see CHANGELOG Network Sprint)
+- [x] Network: authoritative results (Reliable track summary + optional Unreliable plots) + key Settings RplProp + emit state (see CHANGELOG Network Sprint / scale alignment)
+- [x] Network protocol: typed `array<int/float>` Rpc + `RplSave` JIP (`RDF_RadarNetCodec`; not CSV)
 - [x] **P1** Python CFAR / track unit tests + optional Enforce golden (`test_rdf_radar_cfar.py` / `test_rdf_radar_track.py`; CA aligned with `RDF_RadarCfarGate`)
 - [x] **P1** Minimal CI (`.github/workflows/python-dem-tests.yml` runs `test_rdf_*.py`; in-game batch still P3)
 - [x] **Product** Lock layer → mod weapons (`RDF_RadarWeaponBridge` / `WeaponComponent` + VEHICLE_RADAR_LOCK_GUIDE; prefab still mod-side)
@@ -307,7 +309,7 @@ Context: realistic channel + single-radar authoritative Network path shipped; ol
 
 **Sprint A+B (done)**: §1 + §2 — observability, dual-tier, measurement noise, thermal fill, atmospheric attenuation.  
 **Sprint C (done)**: GO/SO-CFAR, Settings thresholds, deception extensions, WLR HUD.  
-**Network Sprint (done)**: key Settings RplProp, thicker plots, K/W/L authoritative summary, emit state.  
+**Network Sprint (done)**: key Settings RplProp, emit state, typed Rpc, Reliable summary / Unreliable plots, caps/throttle/fingerprint/interest.  
 **Sprint D (core done)**: Python CFAR/track golden + minimal CI.  
 **LiDAR UX (done)**: Showcase / PPI anim + `RDF_LidarSensor` + DiagMenu + rectangular FOV.  
 **Fire bridge (done)**: `RDF_RadarWeaponBridge` / `WeaponComponent` + guide §2.3.  

@@ -36,7 +36,7 @@ UI/layouts/RDF/
 scripts/WorkbenchGame/RDF/
 ├── RDF_DemBakePlugin.c
 └── RDF_RadarSignatureBakePlugin.c   离线扫可放置 prefab → 特征 CSV / pack 为 .conf
-tools/dem/     离线打包、雷达物理原型、批量战场仿真与回归测试
+tools/dem/     离线打包、雷达物理原型、full_sim / golden 测试（见 tools/dem/RADAR_FRAMEWORK.md）
 ```
 
 首次加载 layout 前请在 Workbench Resource Browser 中打开/注册 `UI/layouts/RDF/*.layout`（或确认 `.meta` GUID 已入资源库），否则 `CreateWidgets` 会失败并打 ERROR 日志。玩法模组若要挂进 `SCR_HUDManager`，可复用同一 layout 路径。
@@ -363,7 +363,7 @@ UI/layouts/RDF/
 scripts/WorkbenchGame/RDF/
 ├── RDF_DemBakePlugin.c
 └── RDF_RadarSignatureBakePlugin.c   离线扫可放置 prefab → 特征 CSV / pack 为 .conf
-tools/dem/     离线打包、雷达物理原型、批量战场仿真与回归测试
+tools/dem/     离线打包、雷达物理原型、full_sim / golden 测试（见 tools/dem/RADAR_FRAMEWORK.md）
 ```
 
 Before first load, open/register `UI/layouts/RDF/*.layout` in the Workbench Resource Browser (or confirm `.meta` GUIDs are in the resource DB); otherwise `CreateWidgets` fails and logs ERROR. Gameplay mods that attach into `SCR_HUDManager` can reuse the same layout paths.
