@@ -177,8 +177,9 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 - **Anti-radiation aim API**: `GetArmAim` / `LockArmTrackId` (lock drops when emission stops); no missile prefab included
 - **RWR**: search / track / lock warnings (`RDF_RadarRwr`); no dedicated UI — mods read the API
 - LOS via `TraceMove`; optional **NLOS ground-bounce** + **single knife-edge diffraction** when occluded (DEM/`GetSurfaceY` samples, `/diff`)
-- Hardware params → radar equation, Doppler, MTI, processing gain, SNR threshold (emitters use the ESM equation when `m_EnableEsmReceive` is on)
-- DEM σ⁰ **ground clutter** enters the noise denominator (skipped on the ESM path)
+- Hardware params → radar equation, Doppler, MTI / optional **MTD filter bank**, processing gain, SNR threshold (emitters use the ESM equation when `m_EnableEsmReceive` is on)
+- Default MTI remains two-pulse (`RDF_MTI_TWOPULSE`); `RDF_MTI_MTD_BANK` puts clutter in the near-zero bin and picks the best Doppler channel (rotor sidebands keep tangential helis alive)
+- DEM σ⁰ **ground clutter** enters the noise denominator (skipped on the ESM path); optional runtime clutter-map EMA
 - **Measurement synthesis**: range-gate center + beam-angle jitter + Doppler-derived radial velocity (more jitter at lower SNR)
 - **Tunable measurement noise / bias**: ideal vs realistic profiles (`MeasNoiseScale`, etc.); downstream can override `RDF_RadarMeasurementModel`
 - **Atmosphere / rain / weather-driven loss**: simplified model, can be disabled; realistic profile can enable weather rain/fog attenuation

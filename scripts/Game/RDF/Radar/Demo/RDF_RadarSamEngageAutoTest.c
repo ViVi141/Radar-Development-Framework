@@ -551,7 +551,8 @@ class RDF_RadarSamEngageAutoTest
 
     protected void ApplySamSearchConfig()
     {
-        RDF_RadarSettings cfg = RDF_RadarSensor.CreateSearchSettings(160);
+        // Pulse-Doppler so circling Mi-8s keep paint through CPA (vr≈0).
+        RDF_RadarSettings cfg = RDF_RadarSensor.CreatePulseDopplerSettings(160);
         cfg.m_Range = 4000.0;
         cfg.m_SectorHalfAngleDeg = 180.0;
         cfg.m_UpdateInterval = 0.2;
@@ -574,11 +575,15 @@ class RDF_RadarSamEngageAutoTest
         // Mast / antenna height above BTR hull.
         cfg.m_OriginOffset = Vector(0.0, 6.0, 0.0);
 
-        RDF_RadarHardware hw = RDF_RadarHardware.CreateShorad();
+        RDF_RadarHardware hw = cfg.m_Hardware;
+        if (!hw)
+            hw = RDF_RadarHardware.CreateShorad();
         hw.m_AzimuthBeamwidthDeg = 30.0;
         hw.m_BandwidthHz = 20000000.0;
         hw.m_ScanRpm = 12.0;
         hw.m_EnableMti = true;
+        hw.m_MtiMode = ERDF_MtiMode.RDF_MTI_MTD_BANK;
+        hw.m_DopplerBinCount = 16;
         hw.ClearElevationBeams();
         hw.AddElevationBeam("sam_low", 4.0, 16.0, 0.0);
         hw.AddElevationBeam("sam_mid", 12.0, 18.0, 0.0);

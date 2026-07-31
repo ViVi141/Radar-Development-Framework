@@ -10,6 +10,11 @@ class RDF_RadarSignature
     float m_MeanRcsM2;
     int m_SwerlingModel;
     int m_TypeHint;
+    // Rotor / micro-Doppler (0 tip speed = fuselage line only).
+    float m_RotorTipSpeedMs;
+    int m_BladeCount;
+    float m_RotorRcsFraction;
+    float m_HubWidthMs;
     // True when loaded from the baked table (not measured this session).
     bool m_Baked;
 }
@@ -31,8 +36,16 @@ class RDF_RadarSignatureLibrary
     static const string SIG_MAGIC = "RDF_RADAR_SIG_V2";
     static const string SIG_BIN_MAGIC = "RDFSIG1";
     static const int SIG_BIN_VERSION = 1;
-    static const string SIG_HEADER = "key,size_x_m,size_y_m,size_z_m,char_length_m,mean_rcs_m2,swerling,type_hint";
+    // Trailing rotor columns are optional for backward-compatible CSV loads.
+    static const string SIG_HEADER = "key,size_x_m,size_y_m,size_z_m,char_length_m,mean_rcs_m2,swerling,type_hint,rotor_tip_ms,blade_count,rotor_rcs_frac,hub_width_ms";
+    static const string SIG_HEADER_LEGACY = "key,size_x_m,size_y_m,size_z_m,char_length_m,mean_rcs_m2,swerling,type_hint";
     static const string FIELD_SEP = ",";
+
+    // UH-1 / Mi-8 class defaults when conf omits rotor columns.
+    static const float DEFAULT_HELI_TIP_MS = 220.0;
+    static const int DEFAULT_HELI_BLADES = 2;
+    static const float DEFAULT_HELI_ROTOR_FRAC = 0.35;
+    static const float DEFAULT_HELI_HUB_MS = 40.0;
 
     // Newly measured unknown models (runtime) flushed at most this often.
     static const float AUTO_EXPORT_INTERVAL_S = 30.0;
@@ -258,6 +271,7 @@ class RDF_RadarSignatureLibrary
             targetType);
         sig.m_SwerlingModel = RDF_RadarRcsModel.GetDefaultSwerlingModel(targetType);
         sig.m_TypeHint = TargetTypeToInt(targetType);
+        MaybeApplyHelicopterRotorDefaults(sig);
 
         s_StatMeasured = s_StatMeasured + 1;
         return sig;
@@ -329,9 +343,14 @@ class RDF_RadarSignatureLibrary
             sig.m_MeanRcsM2 = e.m_fMeanRcsM2;
             sig.m_SwerlingModel = e.m_iSwerling;
             sig.m_TypeHint = e.m_iTypeHint;
+            sig.m_RotorTipSpeedMs = e.m_fRotorTipSpeedMs;
+            sig.m_BladeCount = e.m_iBladeCount;
+            sig.m_RotorRcsFraction = e.m_fRotorRcsFraction;
+            sig.m_HubWidthMs = e.m_fHubWidthMs;
             sig.m_Baked = true;
             if (sig.m_CharacteristicLengthM < 0.1)
                 sig.m_CharacteristicLengthM = 0.1;
+            MaybeApplyHelicopterRotorDefaults(sig);
 
             s_ByKey.Set(sig.m_Key, sig);
             loaded = loaded + 1;
@@ -426,6 +445,7 @@ class RDF_RadarSignatureLibrary
             sig.m_Baked = true;
             if (sig.m_CharacteristicLengthM < 0.1)
                 sig.m_CharacteristicLengthM = 0.1;
+            MaybeApplyHelicopterRotorDefaults(sig);
 
             s_ByKey.Set(sig.m_Key, sig);
             loaded = loaded + 1;
@@ -451,7 +471,8 @@ class RDF_RadarSignatureLibrary
             Print("[RDF Radar Sig] magic mismatch: " + path, LogLevel.WARNING);
             return false;
         }
-        if (lines.Get(1) != SIG_HEADER)
+        string header = lines.Get(1);
+        if (header != SIG_HEADER && header != SIG_HEADER_LEGACY)
         {
             Print("[RDF Radar Sig] header mismatch: " + path, LogLevel.WARNING);
             return false;
@@ -479,11 +500,19 @@ class RDF_RadarSignatureLibrary
             sig.m_MeanRcsM2 = f.Get(5).ToFloat();
             sig.m_SwerlingModel = f.Get(6).ToInt();
             sig.m_TypeHint = f.Get(7).ToInt();
+            if (f.Count() >= 12)
+            {
+                sig.m_RotorTipSpeedMs = f.Get(8).ToFloat();
+                sig.m_BladeCount = f.Get(9).ToInt();
+                sig.m_RotorRcsFraction = f.Get(10).ToFloat();
+                sig.m_HubWidthMs = f.Get(11).ToFloat();
+            }
             sig.m_Baked = true;
             if (sig.m_Key == "")
                 continue;
             if (sig.m_CharacteristicLengthM < 0.1)
                 sig.m_CharacteristicLengthM = 0.1;
+            MaybeApplyHelicopterRotorDefaults(sig);
 
             s_ByKey.Set(sig.m_Key, sig);
             loaded = loaded + 1;
@@ -543,6 +572,10 @@ class RDF_RadarSignatureLibrary
             row = row + FIELD_SEP + sig.m_MeanRcsM2.ToString();
             row = row + FIELD_SEP + sig.m_SwerlingModel.ToString();
             row = row + FIELD_SEP + sig.m_TypeHint.ToString();
+            row = row + FIELD_SEP + sig.m_RotorTipSpeedMs.ToString();
+            row = row + FIELD_SEP + sig.m_BladeCount.ToString();
+            row = row + FIELD_SEP + sig.m_RotorRcsFraction.ToString();
+            row = row + FIELD_SEP + sig.m_HubWidthMs.ToString();
             lines.Insert(row);
         }
 
@@ -659,5 +692,43 @@ class RDF_RadarSignatureLibrary
         if (type == ERDF_RadarTargetType.RDF_RADAR_TARGET_ANONYMOUS)
             return 3;
         return 0;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Prefab path under Helicopters/ with no rotor columns → UH-1-class defaults.
+    protected static void MaybeApplyHelicopterRotorDefaults(RDF_RadarSignature sig)
+    {
+        if (!sig)
+            return;
+        if (sig.m_RotorTipSpeedMs > 0.0)
+            return;
+        if (sig.m_Key == "")
+            return;
+
+        string key = sig.m_Key;
+        bool isHeli = false;
+        if (key.IndexOf("Helicopters/") >= 0)
+            isHeli = true;
+        if (!isHeli && key.IndexOf("UH1H") >= 0)
+            isHeli = true;
+        if (!isHeli && key.IndexOf("Mi8") >= 0)
+            isHeli = true;
+        if (!isHeli)
+            return;
+
+        // Skip rotor/cockpit parts — only airframe prefabs.
+        if (key.IndexOf("VehParts/") >= 0)
+            return;
+        if (key.IndexOf("rotor_") >= 0)
+            return;
+        if (key.IndexOf("cockpit") >= 0)
+            return;
+
+        sig.m_RotorTipSpeedMs = DEFAULT_HELI_TIP_MS;
+        sig.m_BladeCount = DEFAULT_HELI_BLADES;
+        if (key.IndexOf("Mi8") >= 0)
+            sig.m_BladeCount = 5;
+        sig.m_RotorRcsFraction = DEFAULT_HELI_ROTOR_FRAC;
+        sig.m_HubWidthMs = DEFAULT_HELI_HUB_MS;
     }
 }

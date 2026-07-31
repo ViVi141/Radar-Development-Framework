@@ -271,4 +271,61 @@ class RDF_RadarRcsModel
             u = 1.0;
         return u;
     }
+
+    //------------------------------------------------------------------------------------------------
+    // Doppler spectrum lines for MTD: body radial line (+ optional rotor sidebands).
+    // powers are relative RCS weights (sum need not be 1; MaxMtdSpectrumGain normalizes).
+    static void FillDopplerSpectrum(
+        RDF_RadarTarget target,
+        float wavelengthM,
+        float bodyDopplerHz,
+        notnull array<float> outDopplerHz,
+        notnull array<float> outPowers)
+    {
+        outDopplerHz.Clear();
+        outPowers.Clear();
+        outDopplerHz.Insert(bodyDopplerHz);
+        outPowers.Insert(1.0);
+
+        if (!target)
+            return;
+        if (wavelengthM <= 0.0)
+            return;
+
+        // Rotor / micro-Doppler sidebands from signature (0 tip speed → none).
+        float tipMs = target.m_RotorTipSpeedMs;
+        float rotorFrac = target.m_RotorRcsFraction;
+        int blades = target.m_BladeCount;
+        if (tipMs <= 0.0)
+            return;
+        if (rotorFrac <= 0.0)
+            return;
+        if (blades < 2)
+            blades = 2;
+
+        float bodyFrac = 1.0 - rotorFrac;
+        if (bodyFrac < 0.05)
+            bodyFrac = 0.05;
+        outPowers.Set(0, bodyFrac);
+
+        // Tip Doppler extremes ±2·v_tip/λ about the body line (approaching / receding).
+        float tipDopplerHz = RDF_RadarClutterModel.DopplerHz(tipMs, wavelengthM);
+        float sidePower = rotorFrac * 0.5;
+        outDopplerHz.Insert(bodyDopplerHz + tipDopplerHz);
+        outPowers.Insert(sidePower);
+        outDopplerHz.Insert(bodyDopplerHz - tipDopplerHz);
+        outPowers.Insert(sidePower);
+
+        // Optional hub / blade-flash mid line (weaker, near body + hub width).
+        float hubMs = target.m_HubWidthMs;
+        if (hubMs > 0.0)
+        {
+            float hubFd = RDF_RadarClutterModel.DopplerHz(hubMs, wavelengthM);
+            float hubPower = rotorFrac * 0.15;
+            outDopplerHz.Insert(bodyDopplerHz + hubFd);
+            outPowers.Insert(hubPower);
+            outDopplerHz.Insert(bodyDopplerHz - hubFd);
+            outPowers.Insert(hubPower);
+        }
+    }
 }

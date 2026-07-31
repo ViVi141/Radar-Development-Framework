@@ -67,7 +67,7 @@ class RDF_RadarMeasurement
         if (trueDoppler == 0.0 && wavelength > 0.0)
             trueDoppler = RDF_RadarClutterModel.DopplerHz(target.m_RadialSpeedMs, wavelength);
 
-        float obsTimeS = EstimateObservationTimeS(hardware);
+        float obsTimeS = EstimateObservationTimeS(hardware, target.m_ScanNumber);
         float dopplerSigma = 0.0;
         if (obsTimeS > 0.000001 && wavelength > 0.0)
             dopplerSigma = (1.0 / (obsTimeS * denom)) * noiseScale;
@@ -143,11 +143,11 @@ class RDF_RadarMeasurement
     }
 
     //------------------------------------------------------------------------------------------------
-    static float EstimateObservationTimeS(RDF_RadarHardware hardware)
+    static float EstimateObservationTimeS(RDF_RadarHardware hardware, int scanNumber)
     {
         if (!hardware)
             return 0.001;
-        float prf = hardware.m_PrfHz;
+        float prf = hardware.GetActivePrfHz(scanNumber);
         if (prf < 1.0)
             prf = 1.0;
         int pulses = hardware.m_PulsesIntegrated;

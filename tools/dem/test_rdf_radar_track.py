@@ -30,6 +30,7 @@ class FakeDetection:
     snr_db: float
     detected: bool = True
     elevation_deg: float = 0.0
+    doppler_bin: int = -1
 
 
 class TestPolarCartesian(unittest.TestCase):
@@ -219,6 +220,28 @@ class TestAssociateAndFilter(unittest.TestCase):
         confirmed = confirmed_tracks(result, min_hits=2)
         self.assertEqual(len(confirmed), 1)
         self.assertEqual(confirmed[0].hit_count, 2)
+
+    def test_coast_on_miss_advances_range(self) -> None:
+        # Two hits, one miss scan (unassociated distant plot), then reacquire.
+        dets = [
+            FakeDetection(0.0, 1, "C", 3000.0, 10.0, 50.0, 14.0, doppler_bin=4),
+            FakeDetection(1.0, 2, "C", 3050.0, 10.0, 50.0, 14.0, doppler_bin=4),
+            FakeDetection(2.0, 3, "NOISE", 9000.0, 90.0, 0.0, 5.0, doppler_bin=0),
+            FakeDetection(3.0, 4, "C", 3150.0, 10.0, 50.0, 14.0, doppler_bin=4),
+        ]
+        cfg = TrackerConfig(
+            confirm_hits=2,
+            max_misses=4,
+            coast_on_miss=True,
+            coast_on_doppler_null=True,
+            gate_range_m=200.0,
+        )
+        result = associate_and_filter(dets, cfg)
+        coasted = [t for t in result.tracks if t.last_target_name == "C"]
+        self.assertTrue(coasted)
+        track = max(coasted, key=lambda t: t.hit_count)
+        self.assertGreaterEqual(track.hit_count, 3)
+        self.assertFalse(track.coasting)
 
 
 class TestBallisticFit(unittest.TestCase):

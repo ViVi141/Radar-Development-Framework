@@ -45,16 +45,20 @@ Mod code
 ```c
 enum ERDF_RadarSensorMode
 {
-    RDF_RADAR_MODE_SEARCH,  // sector search, vehicles + shells + emitters
-    RDF_RADAR_MODE_STARE,   // wide stare, no mechanical scan
-    RDF_RADAR_MODE_WLR,     // projectile focus + ballistic WLR + DEM ground
-    RDF_RADAR_MODE_ESM      // receive-only: emitters via one-way Friis; silent platform
+    RDF_RADAR_MODE_SEARCH,         // sector search; MTI off by default (stationary vehicles)
+    RDF_RADAR_MODE_STARE,          // wide stare, no mechanical scan
+    RDF_RADAR_MODE_WLR,            // projectile focus + ballistic WLR + DEM ground
+    RDF_RADAR_MODE_ESM,            // receive-only: emitters via one-way Friis; silent platform
+    RDF_RADAR_MODE_PULSE_DOPPLER   // MTD bank + rotor sidebands + PRF stagger + track coast
 }
 ```
 
 ```c
 RDF_RadarSensor sensor = new RDF_RadarSensor();
 sensor.ConfigureMode(ERDF_RadarSensorMode.RDF_RADAR_MODE_WLR, 128);
+
+// Tangential helicopters / CPA: use Pulse-Doppler (do NOT rewrite PhysicalDetect).
+sensor.ConfigureMode(ERDF_RadarSensorMode.RDF_RADAR_MODE_PULSE_DOPPLER, 96);
 
 // Or attach to an entity:
 RDF_RadarComponent radar = ...;
@@ -67,7 +71,29 @@ Preset factories (same settings objects):
 - `RDF_RadarSensor.CreateStareSettings`
 - `RDF_RadarSensor.CreateWlrSettings`
 - `RDF_RadarSensor.CreateEsmSettings`
-- `RDF_RadarDemoConfig.CreateSearch` / `CreateStare` / `CreateWlr` / `CreateEsm`
+- `RDF_RadarSensor.CreatePulseDopplerSettings`
+- `RDF_RadarDemoConfig.CreateSearch` / `CreateStare` / `CreateWlr` / `CreateEsm` / `CreatePulseDoppler`
+
+### Pulse-Doppler (MTD) — GBRS / AD search
+
+Default `SEARCH` keeps MTI **off** so parked vehicles paint. For moving air targets that cross CPA (\(v_r\approx0\)):
+
+```c
+sensor.ConfigureMode(ERDF_RadarSensorMode.RDF_RADAR_MODE_PULSE_DOPPLER, 96);
+// equivalent knobs on Hardware / Settings (Validate() clamps):
+//   hw.m_EnableMti = true;
+//   hw.m_MtiMode = ERDF_MtiMode.RDF_MTI_MTD_BANK;   // TwoPulse = legacy
+//   hw.m_DopplerBinCount = 16;                      // 8–32 typical
+//   hw.m_MtiClutterFloor = 1e-4;                    // zero-speed bin only
+//   hw.m_MtdClutterLeakage = 1e-6;                  // non-zero bins
+//   hw.m_PrfStaggerRatio = 1.2;                     // or m_PrfSetHz[]
+//   settings.m_EnableClutterMap = true;
+//   settings.m_TrackCoastOnMiss = true;
+//   settings.m_TrackCoastOnDopplerNull = true;
+```
+
+Plots expose `m_DopplerHz`, `m_DopplerBin`, `m_PrfIndex`, `m_RadialSpeedMs` (network-synced).  
+Helicopter signatures auto-fill rotor tip / blade / RCS fraction when conf omits them (`Helicopters/*`).
 
 ### ESM + anti-radiation aim (no weapon prefab)
 
@@ -437,16 +463,20 @@ Mod code
 ```c
 enum ERDF_RadarSensorMode
 {
-    RDF_RADAR_MODE_SEARCH,  // sector search, vehicles + shells + emitters
-    RDF_RADAR_MODE_STARE,   // wide stare, no mechanical scan
-    RDF_RADAR_MODE_WLR,     // projectile focus + ballistic WLR + DEM ground
-    RDF_RADAR_MODE_ESM      // receive-only: emitters via one-way Friis; silent platform
+    RDF_RADAR_MODE_SEARCH,         // 扇区搜索；默认关 MTI（静止载具可报）
+    RDF_RADAR_MODE_STARE,          // 宽波束凝视
+    RDF_RADAR_MODE_WLR,            // 弹道 / 武器定位
+    RDF_RADAR_MODE_ESM,            // 纯接收 ESM
+    RDF_RADAR_MODE_PULSE_DOPPLER   // MTD 通道 + 旋翼边带 + 参差 PRF + 航迹 coast
 }
 ```
 
 ```c
 RDF_RadarSensor sensor = new RDF_RadarSensor();
 sensor.ConfigureMode(ERDF_RadarSensorMode.RDF_RADAR_MODE_WLR, 128);
+
+// 切向直升机 / CPA：用脉冲多普勒（不要在 GBRS 里重写 PhysicalDetect）
+sensor.ConfigureMode(ERDF_RadarSensorMode.RDF_RADAR_MODE_PULSE_DOPPLER, 96);
 
 // Or attach to an entity:
 RDF_RadarComponent radar = ...;
@@ -459,7 +489,25 @@ radar.SetMode(ERDF_RadarSensorMode.RDF_RADAR_MODE_SEARCH);
 - `RDF_RadarSensor.CreateStareSettings`
 - `RDF_RadarSensor.CreateWlrSettings`
 - `RDF_RadarSensor.CreateEsmSettings`
-- `RDF_RadarDemoConfig.CreateSearch` / `CreateStare` / `CreateWlr` / `CreateEsm`
+- `RDF_RadarSensor.CreatePulseDopplerSettings`
+- `RDF_RadarDemoConfig.CreateSearch` / `CreateStare` / `CreateWlr` / `CreateEsm` / `CreatePulseDoppler`
+
+### 脉冲多普勒（MTD）— GBRS / 防空搜索
+
+默认 `SEARCH` **关闭** MTI，保证静止载具可报。对掠过 CPA（\(v_r\approx0\)）的空中目标：
+
+```c
+sensor.ConfigureMode(ERDF_RadarSensorMode.RDF_RADAR_MODE_PULSE_DOPPLER, 96);
+// 等价旋钮（Validate 会钳位）：
+//   hw.m_MtiMode = ERDF_MtiMode.RDF_MTI_MTD_BANK;
+//   hw.m_DopplerBinCount = 16;
+//   hw.m_PrfStaggerRatio = 1.2;
+//   settings.m_EnableClutterMap = true;
+//   settings.m_TrackCoastOnMiss = true;
+```
+
+Plot 带 `m_DopplerHz` / `m_DopplerBin` / `m_PrfIndex` / `m_RadialSpeedMs`（网络同步）。  
+直升机 signature 缺旋翼字段时，运行时对 `Helicopters/*` 自动填 UH-1/Mi-8 类默认。
 
 ### ESM + 反辐射瞄点（不含武器 prefab）
 

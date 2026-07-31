@@ -36,6 +36,11 @@ class RDF_RadarScatterer
     float m_RcsM2;
     int m_SwerlingModel = 1;
     int m_RcsFluctSeed = 1;
+    // Rotor / micro-Doppler from signature (0 tip = none).
+    float m_RotorTipSpeedMs;
+    int m_BladeCount;
+    float m_RotorRcsFraction;
+    float m_HubWidthMs;
     bool m_Emitting;
     float m_EmitStrength = 1.0;
     // Emitter RF summary for ESM / passive detection hooks.
@@ -537,6 +542,10 @@ class RDF_RadarScattererRegistry
         entry.m_MeanRcsM2 = sig.m_MeanRcsM2;
         entry.m_RcsM2 = sig.m_MeanRcsM2;
         entry.m_SwerlingModel = sig.m_SwerlingModel;
+        entry.m_RotorTipSpeedMs = sig.m_RotorTipSpeedMs;
+        entry.m_BladeCount = sig.m_BladeCount;
+        entry.m_RotorRcsFraction = sig.m_RotorRcsFraction;
+        entry.m_HubWidthMs = sig.m_HubWidthMs;
     }
 
     //------------------------------------------------------------------------------------------------

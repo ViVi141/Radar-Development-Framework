@@ -22,6 +22,10 @@ class RDF_RadarTrack
     int m_LastScanNumber = -1;
     bool m_Confirmed;
     float m_LastUpdateTime = -1.0;
+    // Last associated plot Doppler bin (-1 unknown / TwoPulse).
+    int m_LastDopplerBin = -1;
+    // True while coasting on filtered velocity after a miss.
+    bool m_Coasting;
     ERDF_RadarTargetType m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_ANONYMOUS;
     // Ballistic prior (ShellMoveComponent.AirDrag). <=0 disables drag path.
     float m_AirDrag = RDF_RadarBallistics.AIR_DRAG_SHELL_82MM_HE;
@@ -51,9 +55,13 @@ class RDF_RadarTrack
 
     float GetLastTime()
     {
-        if (m_Times.Count() == 0)
+        float hist = -1.0;
+        if (m_Times.Count() > 0)
+            hist = m_Times.Get(m_Times.Count() - 1);
+        // Coast advances m_LastUpdateTime without Push; prefer the newer clock.
+        if (m_LastUpdateTime > hist)
             return m_LastUpdateTime;
-        return m_Times.Get(m_Times.Count() - 1);
+        return hist;
     }
 
     bool IsProjectileTrack()
@@ -225,6 +233,8 @@ class RDF_RadarTrack
         m_LastSnrDb = target.m_SnrDb;
         m_HitCount = m_HitCount + 1;
         m_MissCount = 0;
+        m_Coasting = false;
+        m_LastDopplerBin = target.m_DopplerBin;
         m_LastScanNumber = target.m_ScanNumber;
         m_LastUpdateTime = target.m_Time;
         if (m_HitCount >= confirmHits)
@@ -234,6 +244,40 @@ class RDF_RadarTrack
         if (target.m_Entity)
             m_Entity = target.m_Entity;
         Push(m_FilteredPosition, m_FilteredVelocity, target.m_Time);
+    }
+
+    // Advance filtered state with velocity (and ballistic integrate for shells).
+    void CoastTo(float worldTimeSec, vector radarOrigin)
+    {
+        float lastTime = GetLastTime();
+        if (lastTime < 0.0)
+            return;
+        float dt = worldTimeSec - lastTime;
+        if (dt <= 0.0)
+            return;
+
+        vector pred = PredictAt(worldTimeSec);
+        m_FilteredPosition = pred;
+
+        vector delta = pred - radarOrigin;
+        float rangeM = delta.Length();
+        if (rangeM > 0.001)
+        {
+            m_FilteredRangeM = rangeM;
+            m_FilteredAzimuthDeg = Math.Atan2(delta[2], delta[0]) * 57.2957795;
+            float horizontal = Math.Sqrt(delta[0] * delta[0] + delta[2] * delta[2]);
+            m_FilteredElevationDeg = Math.Atan2(delta[1], Math.Max(0.001, horizontal)) * 57.2957795;
+        }
+        else
+        {
+            m_FilteredRangeM = m_FilteredRangeM + m_FilteredRangeRateMs * dt;
+            if (m_FilteredRangeM < 0.0)
+                m_FilteredRangeM = 0.0;
+        }
+
+        // Do not Push coast samples — history stays measurement-only (WLR / fit).
+        m_LastUpdateTime = worldTimeSec;
+        m_Coasting = true;
     }
 
     static float NormalizeAngleDeg(float deg)
@@ -268,6 +312,8 @@ class RDF_RadarProjectileTracker
     protected float m_WeaponLocateMaxFitRmsM = 80.0;
     protected int m_WeaponLocateFitWindow = 20;
     protected float m_WeaponLocateSmoothAlpha = 0.35;
+    protected bool m_CoastOnMiss = true;
+    protected bool m_CoastOnDopplerNull = true;
 
     void ConfigureFromSettings(RDF_RadarSettings settings)
     {
@@ -285,6 +331,8 @@ class RDF_RadarProjectileTracker
         m_WeaponLocateMaxFitRmsM = settings.m_WeaponLocateMaxFitRmsM;
         m_WeaponLocateFitWindow = settings.m_WeaponLocateFitWindow;
         m_WeaponLocateSmoothAlpha = settings.m_WeaponLocateSmoothAlpha;
+        m_CoastOnMiss = settings.m_TrackCoastOnMiss;
+        m_CoastOnDopplerNull = settings.m_TrackCoastOnDopplerNull;
         RDF_RadarBallistics.SetUseDemGround(settings.m_EnableDemGroundForWlr);
     }
 
@@ -379,25 +427,44 @@ class RDF_RadarProjectileTracker
                 if (!plot)
                     continue;
 
-                float dt = plot.m_Time - track.GetLastTime();
+                float lastT = track.m_LastUpdateTime;
+                if (lastT < 0.0)
+                    lastT = track.GetLastTime();
+                float dt = plot.m_Time - lastT;
                 if (dt < 0.0)
                     dt = 0.0;
+                float gateRange = m_GateRangeM;
+                float gateAz = m_GateAzimuthDeg;
+                // Widen association while coasting through MTI / zero-Doppler nulls.
+                if (m_CoastOnDopplerNull)
+                {
+                    bool dopplerNull = false;
+                    if (track.m_LastDopplerBin == 0)
+                        dopplerNull = true;
+                    if (track.m_Coasting)
+                        dopplerNull = true;
+                    if (dopplerNull)
+                    {
+                        gateRange = gateRange * 1.5;
+                        gateAz = gateAz * 1.5;
+                    }
+                }
                 float predRange = track.m_FilteredRangeM + track.m_FilteredRangeRateMs * dt;
                 float dRange = plot.m_Distance - predRange;
                 if (dRange < 0.0)
                     dRange = -dRange;
-                if (dRange > m_GateRangeM)
+                if (dRange > gateRange)
                     continue;
 
                 float dAz = RDF_RadarTrack.NormalizeAngleDeg(
                     plot.m_AzimuthDeg - track.m_FilteredAzimuthDeg);
                 if (dAz < 0.0)
                     dAz = -dAz;
-                if (dAz > m_GateAzimuthDeg)
+                if (dAz > gateAz)
                     continue;
 
-                float cost = dRange / Math.Max(m_GateRangeM, 1.0)
-                    + dAz / Math.Max(m_GateAzimuthDeg, 0.1);
+                float cost = dRange / Math.Max(gateRange, 1.0)
+                    + dAz / Math.Max(gateAz, 0.1);
                 pairCosts.Insert(cost);
                 pairTrackIdx.Insert(ti);
                 pairPlotIdx.Insert(pi);
@@ -449,8 +516,11 @@ class RDF_RadarProjectileTracker
             if (trackAssigned.Get(tm))
                 continue;
             RDF_RadarTrack missed = m_Tracks.Get(tm);
-            if (missed)
-                missed.m_MissCount = missed.m_MissCount + 1;
+            if (!missed)
+                continue;
+            missed.m_MissCount = missed.m_MissCount + 1;
+            if (m_CoastOnMiss)
+                missed.CoastTo(worldTimeSec, m_LastRadarOrigin);
         }
 
         for (int pn = 0; pn < plots.Count(); pn++)

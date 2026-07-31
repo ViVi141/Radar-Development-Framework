@@ -70,6 +70,11 @@ class RadarTarget:
     vx_m_s: float = 0.0
     vy_m_s: float = 0.0
     vz_m_s: float = 0.0
+    # Rotor / micro-Doppler (0 tip = fuselage line only).
+    rotor_tip_m_s: float = 0.0
+    rotor_rcs_fraction: float = 0.0
+    hub_width_m_s: float = 0.0
+    blade_count: int = 0
 
 
 @dataclass

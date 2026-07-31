@@ -41,10 +41,12 @@ from rdf_radar_physics import (
     doppler_hz,
     get_preset,
     lin_to_db,
+    max_mtd_spectrum_gain,
     mti_apply_clutter,
     mti_apply_target,
     processed_power_w,
     received_power_w,
+    rotor_doppler_spectrum,
 )
 from rdf_radar_systems import (
     AngularScintillation,
@@ -148,6 +150,92 @@ def scenario_detection_physics(cov: FeatureCoverage) -> ScenarioResult:
             "mti_target_w": tgt,
             "mti_clutter_w": clut,
         },
+    )
+
+
+def scenario_mtd_rotor_cpa(cov: FeatureCoverage) -> ScenarioResult:
+    """Tangential heli (vr≈0): TwoPulse nulls; MtdBank keeps rotor sidebands."""
+    cov.add("detection.mtd_bank")
+    cov.add("detection.rotor_microdoppler")
+    cov.add("detection.heli_cpa")
+    hw = get_preset("shorad")
+    hw.enable_mti = True
+    tip = 220.0
+    rotor_frac = 0.35
+    hub = 40.0
+
+    hw.mti_mode = "twopulse"
+    tp = mti_apply_target(
+        hw, 1.0, 0.0, tip_speed_m_s=tip, rotor_rcs_fraction=rotor_frac, hub_width_m_s=hub
+    )
+
+    hw.mti_mode = "mtd_bank"
+    hw.doppler_bin_count = 16
+    mtd = mti_apply_target(
+        hw, 1.0, 0.0, tip_speed_m_s=tip, rotor_rcs_fraction=rotor_frac, hub_width_m_s=hub
+    )
+    lines, powers = rotor_doppler_spectrum(0.0, hw.wavelength_m, tip, rotor_frac, hub)
+    gain, bin_i, peak_fd = max_mtd_spectrum_gain(
+        lines,
+        powers,
+        hw.prf_hz,
+        hw.doppler_bin_count,
+        hw.mti_clutter_floor,
+        hw.mtd_clutter_leakage,
+    )
+    clut = mti_apply_clutter(hw, 1.0, 0.0, target_doppler_bin=bin_i)
+
+    if tp >= 1.0e-4:
+        return _fail("mtd_rotor_cpa", "two-pulse should null vr=0", {"tp": tp})
+    if bin_i == 0:
+        return _fail("mtd_rotor_cpa", "sideband should leave zero bin", {"bin": bin_i})
+    if mtd <= 0.05:
+        return _fail("mtd_rotor_cpa", "mtd sideband too weak", {"mtd": mtd, "gain": gain})
+    if mtd <= clut * 10.0:
+        return _fail(
+            "mtd_rotor_cpa",
+            "mtd target should beat leakage clutter",
+            {"mtd": mtd, "clut": clut},
+        )
+    return _ok(
+        "mtd_rotor_cpa",
+        {
+            "twopulse_gain": tp,
+            "mtd_gain": mtd,
+            "doppler_bin": bin_i,
+            "peak_fd_hz": peak_fd,
+            "clutter_leak_w": clut,
+        },
+    )
+
+
+def scenario_prf_stagger(cov: FeatureCoverage) -> ScenarioResult:
+    cov.add("detection.prf_stagger")
+    hw = get_preset("shorad")
+    hw.prf_hz = 4000.0
+    hw.prf_set_hz = [4000.0, 4800.0]
+    p0 = hw.active_prf_hz(0)
+    p1 = hw.active_prf_hz(1)
+    p2 = hw.active_prf_hz(2)
+    if abs(p0 - 4000.0) > 1.0e-6:
+        return _fail("prf_stagger", "scan0 PRF", {"p0": p0})
+    if abs(p1 - 4800.0) > 1.0e-6:
+        return _fail("prf_stagger", "scan1 PRF", {"p1": p1})
+    if abs(p2 - 4000.0) > 1.0e-6:
+        return _fail("prf_stagger", "scan2 wrap", {"p2": p2})
+    # Blind speed for PRF0 should not match PRF1 (λ·PRF/2).
+    lam = hw.wavelength_m
+    blind0 = lam * p0 / 2.0
+    blind1 = lam * p1 / 2.0
+    if abs(blind0 - blind1) < 1.0:
+        return _fail(
+            "prf_stagger",
+            "stagger should split blind speeds",
+            {"blind0": blind0, "blind1": blind1},
+        )
+    return _ok(
+        "prf_stagger",
+        {"prf0": p0, "prf1": p1, "blind0_ms": blind0, "blind1_ms": blind1},
     )
 
 
@@ -536,6 +624,8 @@ def scenario_polar_cartesian(cov: FeatureCoverage) -> ScenarioResult:
 
 SCENARIOS = [
     scenario_detection_physics,
+    scenario_mtd_rotor_cpa,
+    scenario_prf_stagger,
     scenario_atmosphere_weather,
     scenario_measurement_noise,
     scenario_multipath_diffraction,

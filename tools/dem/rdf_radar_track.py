@@ -36,6 +36,8 @@ class TrackState:
     miss_count: int = 0
     last_target_name: str = ""
     elevation_deg: float = 0.0
+    last_doppler_bin: int = -1
+    coasting: bool = False
     # (time_s, range_m, azimuth_deg, elevation_deg)
     history: list[tuple[float, float, float, float]] = field(default_factory=list)
 
@@ -51,6 +53,11 @@ class TrackerConfig:
     # Keep confirmed tracks in the result even after they go stale
     # (target left coverage / impacted). Useful for offline analysis.
     keep_confirmed_dead: bool = False
+    # On miss, advance filtered kinematics (Enforce m_TrackCoastOnMiss).
+    coast_on_miss: bool = False
+    # Widen association gates while coasting / after near-zero Doppler hit.
+    coast_on_doppler_null: bool = False
+    coast_gate_scale: float = 1.5
 
 
 @dataclass
@@ -91,6 +98,13 @@ def associate_and_filter(
         for ti, track in enumerate(tracks):
             if track.miss_count > config.max_misses:
                 continue
+            gate_range = config.gate_range_m
+            gate_az = config.gate_azimuth_deg
+            if config.coast_on_doppler_null:
+                doppler_null = track.last_doppler_bin == 0 or track.coasting
+                if doppler_null:
+                    gate_range = gate_range * config.coast_gate_scale
+                    gate_az = gate_az * config.coast_gate_scale
             for pi, plot in enumerate(scan_plots):
                 dt = plot.time_s - track.time_s
                 if dt < 0.0:
@@ -98,13 +112,11 @@ def associate_and_filter(
                 pred_range = track.range_m + track.range_rate_m_s * dt
                 d_range = abs(plot.measured_range_m - pred_range)
                 d_az = abs(_angle_diff_deg(plot.azimuth_deg, track.azimuth_deg))
-                if d_range > config.gate_range_m:
+                if d_range > gate_range:
                     continue
-                if d_az > config.gate_azimuth_deg:
+                if d_az > gate_az:
                     continue
-                cost = d_range / max(config.gate_range_m, 1.0) + d_az / max(
-                    config.gate_azimuth_deg, 0.1
-                )
+                cost = d_range / max(gate_range, 1.0) + d_az / max(gate_az, 0.1)
                 pairs.append((cost, ti, pi))
         pairs.sort(key=lambda item: item[0])
 
@@ -134,16 +146,27 @@ def associate_and_filter(
             track.snr_db = plot.snr_db
             track.hit_count = track.hit_count + 1
             track.miss_count = 0
+            track.coasting = False
+            track.last_doppler_bin = int(getattr(plot, "doppler_bin", -1))
             track.last_target_name = plot.target_name
             track.history.append(
                 (plot.time_s, track.range_m, track.azimuth_deg, track.elevation_deg)
             )
             associations.append((track.track_id, plot))
 
+        # Nominal scan time for coasting unassigned tracks.
+        coast_time = scan_plots[0].time_s if scan_plots else 0.0
         for ti, track in enumerate(tracks):
             if ti in assigned_tracks:
                 continue
             track.miss_count = track.miss_count + 1
+            if config.coast_on_miss and coast_time > track.time_s:
+                dt_coast = coast_time - track.time_s
+                track.range_m = track.range_m + track.range_rate_m_s * dt_coast
+                if track.range_m < 0.0:
+                    track.range_m = 0.0
+                track.time_s = coast_time
+                track.coasting = True
 
         for pi, plot in enumerate(scan_plots):
             if pi in used:

@@ -22,10 +22,12 @@ function Show-Help {
     Write-Host @"
 RDF tools/dem helper (catalog: ..\README.md)
 
-  .\run_tools.ps1 test       Run golden suite (test_rdf_*.py)
+  .\run_tools.ps1 test       Run golden suite (test_rdf_*.py incl. MTD/CPA)
   .\run_tools.ps1 full-sim   Capability smoke -> out\full_sim_report.json
   .\run_tools.ps1 demo       Framework demo (--preset shorad)
   .\run_tools.ps1 demo -Ew   Framework demo with EW
+
+Linux/macOS: ./run_tools.sh <same commands>
 
 Also common:
   python rdf_dem_pack_surface_json.py --world GM_Eden --from-bin

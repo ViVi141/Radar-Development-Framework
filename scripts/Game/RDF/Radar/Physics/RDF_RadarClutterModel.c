@@ -230,6 +230,201 @@ class RDF_RadarClutterModel
     }
 
     //------------------------------------------------------------------------------------------------
+    // Wrap normalized Doppler (fd/PRF) into [-0.5, 0.5).
+    static float WrapNormalizedDoppler(float normFd)
+    {
+        float x = normFd;
+        while (x >= 0.5)
+            x = x - 1.0;
+        while (x < -0.5)
+            x = x + 1.0;
+        return x;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // DFT / MTD bin power response |H_k(fd)|², peak-normalized to 1 at bin centre.
+    // binCount pulses, rectangular window (Dirichlet kernel).
+    static float MtdBinPowerGain(
+        float dopplerHz,
+        float prfHz,
+        int binIndex,
+        int binCount)
+    {
+        if (prfHz <= 0.0)
+            return 1.0;
+        if (binCount < 2)
+            return 1.0;
+        if (binIndex < 0)
+            return 0.0;
+        if (binIndex >= binCount)
+            return 0.0;
+
+        float normFd = WrapNormalizedDoppler(dopplerHz / prfHz);
+        float binCenter = binIndex / binCount;
+        if (binCenter >= 0.5)
+            binCenter = binCenter - 1.0;
+        float delta = WrapNormalizedDoppler(normFd - binCenter);
+        float absDelta = delta;
+        if (absDelta < 0.0)
+            absDelta = -absDelta;
+        if (absDelta < 0.0000001)
+            return 1.0;
+
+        float n = binCount;
+        float num = Math.Sin(Math.PI * n * delta);
+        float den = n * Math.Sin(Math.PI * delta);
+        if (den < 0.0)
+            den = -den;
+        if (den < 0.0000001)
+            return 0.0;
+        if (num < 0.0)
+            num = -num;
+        float h = num / den;
+        return h * h;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // max_k |H_k(fd)|² for a single Doppler line. outBin is the winning index.
+    static float MaxMtdBinGain(
+        float dopplerHz,
+        float prfHz,
+        int binCount,
+        out int outBin)
+    {
+        outBin = 0;
+        if (prfHz <= 0.0 || binCount < 2)
+            return 1.0;
+
+        float best = -1.0;
+        int bestBin = 0;
+        for (int k = 0; k < binCount; k++)
+        {
+            float g = MtdBinPowerGain(dopplerHz, prfHz, k, binCount);
+            if (g > best)
+            {
+                best = g;
+                bestBin = k;
+            }
+        }
+        outBin = bestBin;
+        if (best < 0.0)
+            best = 0.0;
+        return best;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Peak over a short Doppler spectrum (body line + optional micro-Doppler lines).
+    // Picks the bin with best signal / clutter-gain score so weak rotor sidebands in
+    // non-zero bins beat a strong body line trapped in the clutter map cell.
+    // Returns the fraction of total spectral power that lands in the winning bin.
+    static float MaxMtdSpectrumGain(
+        array<float> dopplerHzLines,
+        array<float> powers,
+        float prfHz,
+        int binCount,
+        float mtiClutterFloor,
+        float mtdClutterLeakage,
+        out int outBin,
+        out float outPeakDopplerHz)
+    {
+        outBin = 0;
+        outPeakDopplerHz = 0.0;
+        if (!dopplerHzLines || dopplerHzLines.Count() == 0)
+            return 1.0;
+        if (prfHz <= 0.0 || binCount < 2)
+            return 1.0;
+
+        float bestScore = -1.0;
+        float bestNormalized = 0.0;
+        int bestBin = 0;
+        float bestFd = dopplerHzLines.Get(0);
+        float powerSum = 0.0;
+        int n = dopplerHzLines.Count();
+        for (int i = 0; i < n; i++)
+        {
+            float p = 1.0;
+            if (powers && i < powers.Count())
+                p = powers.Get(i);
+            if (p < 0.0)
+                p = 0.0;
+            powerSum = powerSum + p;
+        }
+        if (powerSum <= 0.0)
+            powerSum = 1.0;
+
+        for (int k = 0; k < binCount; k++)
+        {
+            float channelPower = 0.0;
+            float channelFd = 0.0;
+            float channelFdWeight = 0.0;
+            for (int i = 0; i < n; i++)
+            {
+                float p = 1.0;
+                if (powers && i < powers.Count())
+                    p = powers.Get(i);
+                if (p <= 0.0)
+                    continue;
+                float fd = dopplerHzLines.Get(i);
+                float g = MtdBinPowerGain(fd, prfHz, k, binCount);
+                float contrib = p * g;
+                channelPower = channelPower + contrib;
+                channelFd = channelFd + fd * contrib;
+                channelFdWeight = channelFdWeight + contrib;
+            }
+            float normalized = channelPower / powerSum;
+            float clutterGain = MtdClutterBinGain(
+                k, binCount, mtiClutterFloor, mtdClutterLeakage);
+            // Thermal pedestal so empty bins don't win on tiny leakage alone.
+            float scoreDenom = clutterGain + 0.0000001;
+            float score = normalized / scoreDenom;
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestNormalized = normalized;
+                bestBin = k;
+                if (channelFdWeight > 0.0)
+                    bestFd = channelFd / channelFdWeight;
+                else
+                    bestFd = dopplerHzLines.Get(0);
+            }
+        }
+
+        outBin = bestBin;
+        outPeakDopplerHz = bestFd;
+        if (bestNormalized < 0.0)
+            bestNormalized = 0.0;
+        return bestNormalized;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Clutter attenuation into a Doppler bin. Zero-speed bin uses mtiClutterFloor;
+    // others use leakage only (thermal+leakage path in PhysicalDetect).
+    static float MtdClutterBinGain(
+        int binIndex,
+        int binCount,
+        float mtiClutterFloor,
+        float mtdClutterLeakage)
+    {
+        if (binCount < 2)
+            return mtiClutterFloor;
+
+        // Near-zero bins: index 0 and (for even N) the Nyquist wrap neighbour is
+        // still "moving"; only bin 0 is treated as the clutter map cell.
+        if (binIndex == 0)
+        {
+            float floorGain = mtiClutterFloor;
+            if (floorGain < 0.000001)
+                floorGain = 0.000001;
+            return floorGain;
+        }
+
+        float leak = mtdClutterLeakage;
+        if (leak < 0.000000001)
+            leak = 0.000000001;
+        return leak;
+    }
+
+    //------------------------------------------------------------------------------------------------
     static float DopplerHz(float radialSpeedMs, float wavelengthM)
     {
         if (wavelengthM <= 0.0)

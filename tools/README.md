@@ -9,16 +9,25 @@ Bake / SURF publish: [`docs/DEM.md`](../docs/DEM.md).
 
 Install: `pip install -r tools/dem/requirements.txt`
 
-Quick entry (Windows):
+Quick entry:
 
 ```powershell
 cd tools\dem
 .\run_tools.ps1 help
-.\run_tools.ps1 test
+.\run_tools.ps1 test        # unittest discover test_rdf_*.py (MTD/CPA included)
 .\run_tools.ps1 full-sim
 .\run_tools.ps1 demo
 .\run_tools.ps1 demo -Ew
 ```
+
+```bash
+cd tools/dem
+chmod +x run_tools.sh   # once
+./run_tools.sh test
+./run_tools.sh full-sim
+```
+
+CI: `.github/workflows/python-dem-tests.yml` runs unittest discover + `full_sim` coverage checks (`detection.mtd_bank`, rotor CPA, PRF stagger).
 
 Generated files go to `tools/dem/out/` (gitignored except `.gitkeep`). Do not commit.
 
@@ -56,7 +65,7 @@ Generated files go to `tools/dem/out/` (gitignored except `.gitkeep`). Do not co
 
 | Script | Purpose |
 |--------|---------|
-| `rdf_radar_physics.py` | Hardware, radar equation, MTI, CA-CFAR |
+| `rdf_radar_physics.py` | Hardware, radar equation, MTI / MTD bank, CA-CFAR |
 | `rdf_radar_materials.py` | Band / sea-state σ⁰ tables |
 | `rdf_radar_channel.py` | Retune, multipath, Swerling, aspect RCS |
 | `rdf_radar_targets.py` | Trajectories, ballistics integrate |

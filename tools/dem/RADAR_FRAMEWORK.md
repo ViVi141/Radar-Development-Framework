@@ -100,6 +100,10 @@ Generated images/CSV under `tools/dem/out/` are gitignored — do not commit.
 | Capability | Module / entry |
 |------------|----------------|
 | Radar equation, MTI, Doppler | `rdf_radar_physics` + `full_sim` |
+| MTD bank + rotor micro-Doppler + heli CPA | `test_rdf_radar_mtd` / `heli_cpa` + `full_sim` |
+| PRF stagger | `RadarHardware.active_prf_hz` + `full_sim` |
+| Signature rotor pack | `rdf_sig_pack_conf` / `test_rdf_radar_sig_pack` |
+| Track coast on miss | `TrackerConfig.coast_on_miss` + `test_rdf_radar_track` |
 | Atmosphere / rain | `rdf_radar_systems.two_way_path_loss_db` |
 | Measurement noise | `MeasurementModel` |
 | Multipath / knife-edge | `rdf_radar_channel` / `rdf_radar_diffraction` |
@@ -240,6 +244,10 @@ Golden 套件：`cd tools/dem` 后 `.\run_tools.ps1 test` 或
 | 能力 | 模块 / 入口 |
 |------|-------------|
 | 雷达方程、MTI、多普勒 | `rdf_radar_physics` + `full_sim` |
+| MTD 滤波器组 + 旋翼微多普勒 + 直升机 CPA | `test_rdf_radar_mtd` / `heli_cpa` + `full_sim` |
+| 参差 PRF | `RadarHardware.active_prf_hz` + `full_sim` |
+| Signature 旋翼打包 | `rdf_sig_pack_conf` / `test_rdf_radar_sig_pack` |
+| 航迹 miss coast | `TrackerConfig.coast_on_miss` + `test_rdf_radar_track` |
 | 大气 / 降雨 | `rdf_radar_systems.two_way_path_loss_db` |
 | 测量噪声 | `MeasurementModel` |
 | 多径 / 刀刃绕射 | `rdf_radar_channel` / `rdf_radar_diffraction` |

@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 2026-07-31 — MTD 多普勒通道 + 旋翼微多普勒
+
+- `ERDF_MtiMode`：`TwoPulse`（默认，兼容旧 GBRS/demo）/ `MtdBank`
+- Hardware：`m_DopplerBinCount`、`m_MtdClutterLeakage`、`m_PrfSetHz` / `m_PrfStaggerRatio`
+- PhysicalDetect：目标取杂波加权最强多普勒 bin；杂波进零速 bin，非零 bin 仅泄漏
+- Signature / scatterer：旋翼字段（tip speed / blades / RCS fraction / hub）；`Helicopters/*` 缺省 UH-1/Mi-8 类默认
+- Clutter map EMA（`m_EnableClutterMap`）+ 航迹 miss coast（`m_TrackCoastOnMiss` / `m_TrackCoastOnDopplerNull`）
+- 产品模式：`RDF_RADAR_MODE_PULSE_DOPPLER` + `CreatePulseDopplerSettings` / `DemoConfig.CreatePulseDoppler`
+- NetCodec plot 同步 `m_DopplerBin` / `m_PrfIndex` / `m_DopplerHz`；SamEngage 改用 MTD
+- 离线验收：`test_rdf_radar_mtd.py` + `test_rdf_radar_heli_cpa.py`（UH-1 CPA Pd）
+- CI：`python-dem-tests.yml` 双 job（unittest discover + `full_sim` coverage）；`full_sim` 增 MTD/CPA/PRF 场景；`run_tools.sh`；sig-pack / track-coast 单测
+
 ## 2026-07-30 — tools 目录整理
 
 - 新增 [tools/README.md](../tools/README.md) 分类目录（Pack / 仿真库 / CLI / 测试）
