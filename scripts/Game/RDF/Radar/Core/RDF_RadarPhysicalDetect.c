@@ -14,7 +14,8 @@ class RDF_RadarPhysicalDetect
         BaseWorld world,
         RDF_RadarSettings settings,
         RDF_DemRuntimeCache demCache,
-        float scanRainLossDbPerKm)
+        float scanRainLossDbPerKm,
+        RDF_RadarClutterMap clutterMap = null)
     {
         if (!target)
             return;
@@ -174,6 +175,8 @@ class RDF_RadarPhysicalDetect
 
             target.m_DopplerHz = 0.0;
             target.m_MtiGain = 1.0;
+            target.m_DopplerBin = -1;
+            target.m_PrfIndex = 0;
             float processingGainEsm = hardware.GetProcessingGain();
             target.m_ProcessedPowerW = target.m_ReceivedPowerW * processingGainEsm;
             target.m_CfarPowerW = target.m_ProcessedPowerW;
@@ -226,17 +229,60 @@ class RDF_RadarPhysicalDetect
         }
 
         float wavelength = hardware.GetWavelengthM();
-        target.m_DopplerHz = RDF_RadarClutterModel.DopplerHz(
+        float bodyDopplerHz = RDF_RadarClutterModel.DopplerHz(
             target.m_RadialSpeedMs,
             wavelength);
+        target.m_DopplerHz = bodyDopplerHz;
         target.m_MtiGain = 1.0;
+        target.m_DopplerBin = -1;
+
+        float scanPeriodPre = hardware.GetScanPeriodS();
+        int scanNumberPre = 0;
+        if (scanPeriodPre < 1000000.0)
+            scanNumberPre = Math.Floor(worldTime / scanPeriodPre);
+        float activePrfHz = hardware.GetActivePrfHz(scanNumberPre);
+        target.m_PrfIndex = hardware.GetActivePrfIndex(scanNumberPre);
+
+        // Optional micro-Doppler spectrum (rotor sidebands). Empty → body line only.
+        array<float> dopplerLines = new array<float>();
+        array<float> dopplerPowers = new array<float>();
+        RDF_RadarRcsModel.FillDopplerSpectrum(
+            target,
+            wavelength,
+            bodyDopplerHz,
+            dopplerLines,
+            dopplerPowers);
+
         if (hardware.m_EnableMti)
         {
-            target.m_MtiGain = RDF_RadarClutterModel.MtiTwoPulseGain(
-                target.m_DopplerHz,
-                hardware.m_PrfHz);
-            if (target.m_MtiGain < 0.000001)
-                target.m_MtiGain = 0.000001;
+            if (hardware.m_MtiMode == ERDF_MtiMode.RDF_MTI_MTD_BANK)
+            {
+                int winBin = 0;
+                float peakFd = bodyDopplerHz;
+                target.m_MtiGain = RDF_RadarClutterModel.MaxMtdSpectrumGain(
+                    dopplerLines,
+                    dopplerPowers,
+                    activePrfHz,
+                    hardware.m_DopplerBinCount,
+                    hardware.m_MtiClutterFloor,
+                    hardware.m_MtdClutterLeakage,
+                    winBin,
+                    peakFd);
+                target.m_DopplerBin = winBin;
+                target.m_DopplerHz = peakFd;
+                if (wavelength > 0.0)
+                    target.m_RadialSpeedMs = peakFd * wavelength * 0.5;
+                if (target.m_MtiGain < 0.000001)
+                    target.m_MtiGain = 0.000001;
+            }
+            else
+            {
+                target.m_MtiGain = RDF_RadarClutterModel.MtiTwoPulseGain(
+                    bodyDopplerHz,
+                    activePrfHz);
+                if (target.m_MtiGain < 0.000001)
+                    target.m_MtiGain = 0.000001;
+            }
         }
 
         float processingGain = hardware.GetProcessingGain();
@@ -258,6 +304,18 @@ class RDF_RadarPhysicalDetect
                 processingGain,
                 settings,
                 demCache);
+            if (settings.m_EnableClutterMap && clutterMap)
+            {
+                clutterMap.Configure(
+                    36,
+                    settings.m_RangeBinCount,
+                    settings.m_ClutterMapAlpha,
+                    settings.m_Range);
+                clutterPower = clutterMap.UpdateAndGet(
+                    distance,
+                    target.m_AzimuthDeg,
+                    clutterPower);
+            }
         }
         target.m_ClutterPowerW = clutterPower;
 
@@ -285,10 +343,7 @@ class RDF_RadarPhysicalDetect
         }
         target.m_Detected = target.m_SnrDb >= settings.m_DetectionSnrDb;
 
-        float scanPeriod = hardware.GetScanPeriodS();
-        target.m_ScanNumber = 0;
-        if (scanPeriod < 1000000.0)
-            target.m_ScanNumber = Math.Floor(worldTime / scanPeriod);
+        target.m_ScanNumber = scanNumberPre;
     }
 
     protected static float ComputeDemClutterPower(
@@ -381,7 +436,23 @@ class RDF_RadarPhysicalDetect
 
         float clutterMti = 1.0;
         if (hardware.m_EnableMti)
-            clutterMti = hardware.m_MtiClutterFloor;
+        {
+            if (hardware.m_MtiMode == ERDF_MtiMode.RDF_MTI_MTD_BANK)
+            {
+                int binIndex = target.m_DopplerBin;
+                if (binIndex < 0)
+                    binIndex = 0;
+                clutterMti = RDF_RadarClutterModel.MtdClutterBinGain(
+                    binIndex,
+                    hardware.m_DopplerBinCount,
+                    hardware.m_MtiClutterFloor,
+                    hardware.m_MtdClutterLeakage);
+            }
+            else
+            {
+                clutterMti = hardware.m_MtiClutterFloor;
+            }
+        }
         if (clutterMti < 0.000001)
             clutterMti = 0.000001;
 

@@ -100,6 +100,13 @@ class RDF_RadarSettings
     float m_TrackGateAzimuthDeg = 4.0;
     int m_TrackConfirmHits = 2;
     int m_TrackMaxMisses = 3;
+    // On miss, coast filtered kinematics instead of only counting misses.
+    bool m_TrackCoastOnMiss = true;
+    // Extra miss budget / wider gates when last hit used a near-zero Doppler bin.
+    bool m_TrackCoastOnDopplerNull = true;
+    // Runtime clutter-map EMA over DEM σ⁰ (per range–az cell).
+    bool m_EnableClutterMap = false;
+    float m_ClutterMapAlpha = 0.15;
     // Projectile tracks: AirDrag + global wind extrapolation / WLR fixes.
     bool m_EnableBallisticPrediction = true;
     // Prefab prior (82mm HE O832DU). Override per ammo family later if needed.
@@ -181,6 +188,7 @@ class RDF_RadarSettings
         m_TrackGateAzimuthDeg = Math.Clamp(m_TrackGateAzimuthDeg, 0.1, 90.0);
         m_TrackConfirmHits = Math.Clamp(m_TrackConfirmHits, 1, 16);
         m_TrackMaxMisses = Math.Clamp(m_TrackMaxMisses, 1, 32);
+        m_ClutterMapAlpha = Math.Clamp(m_ClutterMapAlpha, 0.01, 1.0);
         m_ShellAirDrag = Math.Clamp(m_ShellAirDrag, 0.0, 1.0);
         m_WeaponLocateMinHits = Math.Clamp(m_WeaponLocateMinHits, 2, 32);
         m_WeaponLocateMinSpanS = Math.Clamp(m_WeaponLocateMinSpanS, 0.2, 30.0);

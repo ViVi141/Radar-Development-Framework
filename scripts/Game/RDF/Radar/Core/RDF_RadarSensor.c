@@ -231,6 +231,26 @@ class RDF_RadarSensor
         return s;
     }
 
+    // Pulse-Doppler search: MTD filter bank + optional 2-PRF stagger.
+    // Use from GBRS presets when tangential helis must survive CPA / vr≈0.
+    static RDF_RadarSettings CreatePulseDopplerSettings(int maxTargets)
+    {
+        RDF_RadarSettings s = CreateSearchSettings(maxTargets);
+        if (s.m_Hardware)
+        {
+            s.m_Hardware.m_EnableMti = true;
+            s.m_Hardware.m_MtiMode = ERDF_MtiMode.RDF_MTI_MTD_BANK;
+            s.m_Hardware.m_DopplerBinCount = 16;
+            s.m_Hardware.m_PrfStaggerRatio = 1.2;
+            s.m_Hardware.Validate();
+        }
+        s.m_EnableClutterMap = true;
+        s.m_TrackCoastOnMiss = true;
+        s.m_TrackCoastOnDopplerNull = true;
+        s.Validate();
+        return s;
+    }
+
     static RDF_RadarSettings CreateStareSettings(int maxTargets)
     {
         RDF_RadarSettings s = CreateSearchSettings(maxTargets);

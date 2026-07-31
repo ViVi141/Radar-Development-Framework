@@ -15,6 +15,14 @@ enum ERDF_CfarMode
     RDF_CFAR_SO
 }
 
+// MTI / MTD processing mode. TwoPulse = legacy sin² canceller (default).
+// MtdBank = DFT Doppler filter bank; clutter stays in the near-zero bin.
+enum ERDF_MtiMode
+{
+    RDF_MTI_TWOPULSE,
+    RDF_MTI_MTD_BANK
+}
+
 // Noise-jammer antenna coupling vs victim scan beam.
 // BEAM = instantaneous scanForward (stare / track fidelity).
 // SEARCH_AVG = beamwidth/360 duty blend (rotating search, playable soft).
@@ -51,6 +59,15 @@ class RDF_RadarTarget
     float m_ProcessedPowerW;
     float m_DopplerHz;
     float m_MtiGain;
+    // Winning Doppler filter index under MtdBank (-1 when unused / TwoPulse).
+    int m_DopplerBin = -1;
+    // Active PRF index when stagger / multi-PRF is enabled (0 = primary).
+    int m_PrfIndex;
+    // Optional rotor / micro-Doppler params (from signature; 0 = none).
+    float m_RotorTipSpeedMs;
+    int m_BladeCount;
+    float m_RotorRcsFraction;
+    float m_HubWidthMs;
     int m_DemSurfaceClass = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
     bool m_DemSampleValid;
     float m_ClutterPowerW;

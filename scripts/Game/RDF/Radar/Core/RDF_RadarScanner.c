@@ -17,6 +17,7 @@ class RDF_RadarScanner
     protected ref RDF_RadarCfarProcessor m_CfarProcessor;
     protected ref RDF_RadarLosCache m_LosCache;
     protected ref RDF_RadarScanReuseCache m_ScanReuseCache;
+    protected ref RDF_RadarClutterMap m_ClutterMap;
     protected bool m_SettingsValidated;
     protected int m_StatReuseHits;
     protected int m_StatFreshUpdates;
@@ -45,6 +46,7 @@ class RDF_RadarScanner
         m_CfarProcessor = new RDF_RadarCfarProcessor();
         m_LosCache = new RDF_RadarLosCache();
         m_ScanReuseCache = new RDF_RadarScanReuseCache();
+        m_ClutterMap = new RDF_RadarClutterMap();
         m_SettingsValidated = false;
         m_RegistryScanCursor = 0;
         m_ScanRainLossDbPerKm = 0.0;
@@ -510,6 +512,10 @@ class RDF_RadarScanner
             t.m_RcsM2 = instantRcs;
             t.m_MeanRcsM2 = entry.m_MeanRcsM2;
             t.m_SwerlingModel = entry.m_SwerlingModel;
+            t.m_RotorTipSpeedMs = entry.m_RotorTipSpeedMs;
+            t.m_BladeCount = entry.m_BladeCount;
+            t.m_RotorRcsFraction = entry.m_RotorRcsFraction;
+            t.m_HubWidthMs = entry.m_HubWidthMs;
             t.m_AglM = entry.m_AglM;
             if (isEmitter)
             {
@@ -551,7 +557,7 @@ class RDF_RadarScanner
             else
                 RDF_RadarPhysicalDetect.Process(
                     t, origin, forward, worldTime, world,
-                    m_Settings, m_DemCache, m_ScanRainLossDbPerKm);
+                    m_Settings, m_DemCache, m_ScanRainLossDbPerKm, m_ClutterMap);
 
             if (m_ScanReuseCache)
             {
@@ -776,7 +782,7 @@ class RDF_RadarScanner
             else
                 RDF_RadarPhysicalDetect.Process(
                     t, origin, forward, worldTime, world,
-                    m_Settings, m_DemCache, m_ScanRainLossDbPerKm);
+                    m_Settings, m_DemCache, m_ScanRainLossDbPerKm, m_ClutterMap);
 
             if (m_ScanReuseCache)
             {
@@ -930,7 +936,7 @@ class RDF_RadarScanner
             else
                 RDF_RadarPhysicalDetect.Process(
                     et, origin, forward, worldTime, world,
-                    m_Settings, m_DemCache, m_ScanRainLossDbPerKm);
+                    m_Settings, m_DemCache, m_ScanRainLossDbPerKm, m_ClutterMap);
 
             if (m_ScanReuseCache)
             {
@@ -1211,6 +1217,12 @@ class RDF_RadarScanner
         target.m_ProcessedPowerW = source.m_ProcessedPowerW;
         target.m_DopplerHz = source.m_DopplerHz;
         target.m_MtiGain = source.m_MtiGain;
+        target.m_DopplerBin = source.m_DopplerBin;
+        target.m_PrfIndex = source.m_PrfIndex;
+        target.m_RotorTipSpeedMs = source.m_RotorTipSpeedMs;
+        target.m_BladeCount = source.m_BladeCount;
+        target.m_RotorRcsFraction = source.m_RotorRcsFraction;
+        target.m_HubWidthMs = source.m_HubWidthMs;
         target.m_DemSurfaceClass = source.m_DemSurfaceClass;
         target.m_DemSampleValid = source.m_DemSampleValid;
         target.m_ClutterPowerW = source.m_ClutterPowerW;

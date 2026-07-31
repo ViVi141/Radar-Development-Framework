@@ -36,4 +36,17 @@ class RDF_RadarSignatureEntryConf
 
     [Attribute("0", UIWidgets.EditBox, "Target type hint")]
     int m_iTypeHint;
+
+    // Rotor / micro-Doppler (0 tip speed = no sidebands).
+    [Attribute("0", UIWidgets.EditBox, "Main-rotor tip speed [m/s]")]
+    float m_fRotorTipSpeedMs;
+
+    [Attribute("0", UIWidgets.EditBox, "Blade count")]
+    int m_iBladeCount;
+
+    [Attribute("0", UIWidgets.EditBox, "Rotor RCS fraction of mean [0..1]")]
+    float m_fRotorRcsFraction;
+
+    [Attribute("0", UIWidgets.EditBox, "Hub / flash radial width [m/s]")]
+    float m_fHubWidthMs;
 }

@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-07-31 — MTD 多普勒通道 + 旋翼微多普勒
+
+- `ERDF_MtiMode`：`TwoPulse`（默认，兼容旧 GBRS/demo）/ `MtdBank`
+- Hardware：`m_DopplerBinCount`、`m_MtdClutterLeakage`、`m_PrfSetHz` / `m_PrfStaggerRatio`
+- PhysicalDetect：目标取杂波加权最强多普勒 bin；杂波进零速 bin，非零 bin 仅泄漏
+- Signature / scatterer：旋翼字段（tip speed / blades / RCS fraction / hub）；`Helicopters/*` 缺省 UH-1/Mi-8 类默认
+- Clutter map EMA（`m_EnableClutterMap`）+ 航迹 miss coast（`m_TrackCoastOnMiss` / `m_TrackCoastOnDopplerNull`）
+- Sensor 预设：`CreatePulseDopplerSettings`；Python `test_rdf_radar_mtd.py`
+
 ## 2026-07-30 — tools 目录整理
 
 - 新增 [tools/README.md](../tools/README.md) 分类目录（Pack / 仿真库 / CLI / 测试）

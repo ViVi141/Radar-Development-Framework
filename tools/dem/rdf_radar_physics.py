@@ -9,7 +9,7 @@ Monostatic received RF power (watts) before processing:
 Processing chain (linear gains, not "display gain"):
   1) pulse compression gain ≈ B * τ  (chirp) or 1 (uncoded)
   2) coherent / non-coherent pulse integration over CPI
-  3) two-pulse MTI |sin(π f_d / PRF)|²
+  3) MTI: two-pulse |sin(π f_d / PRF)|² (default) or MTD DFT bank max_k |H_k|²
   4) CA-CFAR thresholding for detections
 
 Presets approximate open-literature Cold War search / AD radars.
@@ -94,9 +94,27 @@ class RadarHardware:
     # Preferred range bin for this waveform (m). 0 → derive from bandwidth.
     preferred_range_bin_m: float = 0.0
     mti_clutter_floor: float = 1.0e-4
+    mtd_clutter_leakage: float = 1.0e-6
     enable_mti: bool = True
+    # "twopulse" (legacy default) or "mtd_bank"
+    mti_mode: str = "twopulse"
+    doppler_bin_count: int = 16
+    # Optional multi-PRF list; empty → use prf_hz only.
+    prf_set_hz: list[float] = field(default_factory=list)
     enable_pulse_compression: bool = True
     notes: str = ""
+
+    def active_prf_hz(self, scan_number: int = 0) -> float:
+        if not self.prf_set_hz:
+            return self.prf_hz
+        n = len(self.prf_set_hz)
+        if n <= 0:
+            return self.prf_hz
+        idx = int(scan_number) % n
+        prf = float(self.prf_set_hz[idx])
+        if prf < 1.0:
+            return self.prf_hz
+        return prf
 
     def resolved_elevation_beams(self) -> list[ElevationBeam]:
         if self.elevation_beams:
@@ -536,15 +554,177 @@ def mti_two_pulse_gain(doppler_hz_value: float, prf_hz: float) -> float:
     return raw * raw
 
 
+def wrap_normalized_doppler(norm_fd: float) -> float:
+    x = float(norm_fd)
+    while x >= 0.5:
+        x -= 1.0
+    while x < -0.5:
+        x += 1.0
+    return x
+
+
+def mtd_bin_power_gain(
+    doppler_hz_value: float,
+    prf_hz: float,
+    bin_index: int,
+    bin_count: int,
+) -> float:
+    """Peak-normalized DFT / MTD bin response |H_k(fd)|²."""
+    if prf_hz <= 0.0:
+        return 1.0
+    if bin_count < 2:
+        return 1.0
+    if bin_index < 0 or bin_index >= bin_count:
+        return 0.0
+    norm_fd = wrap_normalized_doppler(doppler_hz_value / prf_hz)
+    bin_center = bin_index / float(bin_count)
+    if bin_center >= 0.5:
+        bin_center -= 1.0
+    delta = wrap_normalized_doppler(norm_fd - bin_center)
+    if abs(delta) < 1.0e-7:
+        return 1.0
+    n = float(bin_count)
+    num = abs(math.sin(math.pi * n * delta))
+    den = abs(n * math.sin(math.pi * delta))
+    if den < 1.0e-7:
+        return 0.0
+    h = num / den
+    return h * h
+
+
+def max_mtd_bin_gain(
+    doppler_hz_value: float,
+    prf_hz: float,
+    bin_count: int,
+) -> tuple[float, int]:
+    best = -1.0
+    best_bin = 0
+    for k in range(max(2, int(bin_count))):
+        g = mtd_bin_power_gain(doppler_hz_value, prf_hz, k, bin_count)
+        if g > best:
+            best = g
+            best_bin = k
+    if best < 0.0:
+        best = 0.0
+    return best, best_bin
+
+
+def max_mtd_spectrum_gain(
+    doppler_hz_lines: list[float],
+    powers: list[float],
+    prf_hz: float,
+    bin_count: int,
+    mti_clutter_floor: float = 1.0e-4,
+    mtd_clutter_leakage: float = 1.0e-6,
+) -> tuple[float, int, float]:
+    """Clutter-aware max over body + micro-Doppler lines.
+
+    Returns (power fraction in winning bin, bin index, peak fd).
+    Sidebands in non-zero bins win when body vr≈0 because clutter floor ≫ leakage.
+    """
+    if not doppler_hz_lines:
+        return 1.0, 0, 0.0
+    if prf_hz <= 0.0 or bin_count < 2:
+        return 1.0, 0, float(doppler_hz_lines[0])
+    n_lines = len(doppler_hz_lines)
+    weights = []
+    for i in range(n_lines):
+        if i < len(powers):
+            weights.append(max(0.0, float(powers[i])))
+        else:
+            weights.append(1.0)
+    power_sum = sum(weights)
+    if power_sum <= 0.0:
+        power_sum = 1.0
+
+    best_score = -1.0
+    best_norm = 0.0
+    best_bin = 0
+    best_fd = float(doppler_hz_lines[0])
+    for k in range(bin_count):
+        channel = 0.0
+        fd_acc = 0.0
+        fd_w = 0.0
+        for i, fd in enumerate(doppler_hz_lines):
+            w = weights[i]
+            if w <= 0.0:
+                continue
+            g = mtd_bin_power_gain(fd, prf_hz, k, bin_count)
+            contrib = w * g
+            channel += contrib
+            fd_acc += fd * contrib
+            fd_w += contrib
+        normalized = channel / power_sum
+        clutter_gain = mtd_clutter_bin_gain(
+            k, bin_count, mti_clutter_floor, mtd_clutter_leakage
+        )
+        score = normalized / (clutter_gain + 1.0e-7)
+        if score > best_score:
+            best_score = score
+            best_norm = normalized
+            best_bin = k
+            if fd_w > 0.0:
+                best_fd = fd_acc / fd_w
+    if best_norm < 0.0:
+        best_norm = 0.0
+    return best_norm, best_bin, best_fd
+
+
+def rotor_doppler_spectrum(
+    body_doppler_hz: float,
+    wavelength_m: float,
+    tip_speed_m_s: float = 0.0,
+    rotor_rcs_fraction: float = 0.0,
+    hub_width_m_s: float = 0.0,
+) -> tuple[list[float], list[float]]:
+    """Body line + tip sidebands (+ optional hub lines)."""
+    lines = [body_doppler_hz]
+    powers = [1.0]
+    if tip_speed_m_s <= 0.0 or rotor_rcs_fraction <= 0.0 or wavelength_m <= 0.0:
+        return lines, powers
+    body_frac = max(0.05, 1.0 - rotor_rcs_fraction)
+    powers[0] = body_frac
+    tip_fd = doppler_hz(tip_speed_m_s, wavelength_m)
+    side = rotor_rcs_fraction * 0.5
+    lines.extend([body_doppler_hz + tip_fd, body_doppler_hz - tip_fd])
+    powers.extend([side, side])
+    if hub_width_m_s > 0.0:
+        hub_fd = doppler_hz(hub_width_m_s, wavelength_m)
+        hub_p = rotor_rcs_fraction * 0.15
+        lines.extend([body_doppler_hz + hub_fd, body_doppler_hz - hub_fd])
+        powers.extend([hub_p, hub_p])
+    return lines, powers
+
+
+def mtd_clutter_bin_gain(
+    bin_index: int,
+    bin_count: int,
+    mti_clutter_floor: float,
+    mtd_clutter_leakage: float,
+) -> float:
+    if bin_count < 2 or bin_index == 0:
+        return max(1.0e-6, float(mti_clutter_floor))
+    return max(1.0e-9, float(mtd_clutter_leakage))
+
+
 def mti_apply_clutter(
     hardware: RadarHardware,
     clutter_power_w: float,
     clutter_radial_m_s: float = 0.0,
+    target_doppler_bin: int = 0,
 ) -> float:
     if not hardware.enable_mti:
         return clutter_power_w
+    if hardware.mti_mode == "mtd_bank":
+        gain = mtd_clutter_bin_gain(
+            target_doppler_bin,
+            hardware.doppler_bin_count,
+            hardware.mti_clutter_floor,
+            hardware.mtd_clutter_leakage,
+        )
+        return clutter_power_w * gain
     fd = doppler_hz(clutter_radial_m_s, hardware.wavelength_m)
-    gain = mti_two_pulse_gain(fd, hardware.prf_hz)
+    gain = mti_two_pulse_gain(fd, hardware.active_prf_hz())
     if gain < hardware.mti_clutter_floor:
         gain = hardware.mti_clutter_floor
     return clutter_power_w * gain
@@ -554,11 +734,32 @@ def mti_apply_target(
     hardware: RadarHardware,
     target_power_w: float,
     radial_speed_m_s: float,
+    tip_speed_m_s: float = 0.0,
+    rotor_rcs_fraction: float = 0.0,
+    hub_width_m_s: float = 0.0,
 ) -> float:
     if not hardware.enable_mti:
         return target_power_w
+    prf = hardware.active_prf_hz()
     fd = doppler_hz(radial_speed_m_s, hardware.wavelength_m)
-    gain = mti_two_pulse_gain(fd, hardware.prf_hz)
+    if hardware.mti_mode == "mtd_bank":
+        lines, powers = rotor_doppler_spectrum(
+            fd,
+            hardware.wavelength_m,
+            tip_speed_m_s=tip_speed_m_s,
+            rotor_rcs_fraction=rotor_rcs_fraction,
+            hub_width_m_s=hub_width_m_s,
+        )
+        gain, _bin, _peak = max_mtd_spectrum_gain(
+            lines,
+            powers,
+            prf,
+            hardware.doppler_bin_count,
+            hardware.mti_clutter_floor,
+            hardware.mtd_clutter_leakage,
+        )
+    else:
+        gain = mti_two_pulse_gain(fd, prf)
     if gain < 1.0e-6:
         gain = 1.0e-6
     return target_power_w * gain

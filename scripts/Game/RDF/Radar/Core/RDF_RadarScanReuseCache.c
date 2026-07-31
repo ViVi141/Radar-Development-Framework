@@ -248,6 +248,12 @@ class RDF_RadarScanReuseCache
         t.m_ProcessedPowerW = src.m_ProcessedPowerW;
         t.m_DopplerHz = src.m_DopplerHz;
         t.m_MtiGain = src.m_MtiGain;
+        t.m_DopplerBin = src.m_DopplerBin;
+        t.m_PrfIndex = src.m_PrfIndex;
+        t.m_RotorTipSpeedMs = src.m_RotorTipSpeedMs;
+        t.m_BladeCount = src.m_BladeCount;
+        t.m_RotorRcsFraction = src.m_RotorRcsFraction;
+        t.m_HubWidthMs = src.m_HubWidthMs;
         t.m_DemSurfaceClass = src.m_DemSurfaceClass;
         t.m_DemSampleValid = src.m_DemSampleValid;
         t.m_ClutterPowerW = src.m_ClutterPowerW;
