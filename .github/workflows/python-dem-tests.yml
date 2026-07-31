@@ -1,5 +1,5 @@
-# Minimal CI for RDF offline Python helpers (tools/dem).
-# Covers ballistics + CFAR + track golden unit tests (Sprint D).
+# CI for RDF offline Python helpers (tools/dem).
+# Covers ballistics / CFAR / track / MTD+rotor CPA / full_sim capability matrix.
 
 name: Python DEM tests
 
@@ -15,6 +15,7 @@ on:
 
 jobs:
   unittest:
+    name: unittest discover
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -28,8 +29,88 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install numpy
+      - name: Install dependencies
         run: pip install "numpy>=1.24"
 
       - name: Run golden unit tests
         run: python -m unittest discover -s . -p "test_rdf_*.py" -v
+
+      - name: Assert MTD / CPA suites are collected
+        run: |
+          python - <<'PY'
+          import unittest
+
+          def collect_ids(suite, out):
+              for item in suite:
+                  if isinstance(item, unittest.TestSuite):
+                      collect_ids(item, out)
+                  else:
+                      out.append(item.id())
+
+          suite = unittest.defaultTestLoader.discover(".", pattern="test_rdf_*.py")
+          ids = []
+          collect_ids(suite, ids)
+          names = sorted({i.split(".")[0] for i in ids})
+          required = {
+              "test_rdf_radar_mtd",
+              "test_rdf_radar_heli_cpa",
+              "test_rdf_radar_sig_pack",
+              "test_rdf_radar_systems",
+              "test_rdf_radar_track",
+          }
+          missing = sorted(required - set(names))
+          print("modules=", names)
+          if missing:
+              raise SystemExit(f"missing required test modules: {missing}")
+          print("required MTD/CPA modules present")
+          PY
+
+  full-sim:
+    name: full_sim smoke
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/dem
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install "numpy>=1.24"
+
+      - name: Run capability full_sim
+        run: python rdf_radar_full_sim.py --out out/full_sim_report.json
+
+      - name: Verify coverage tags
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("out/full_sim_report.json").read_text(encoding="utf-8"))
+          assert report["all_ok"], report
+          cov = set(report["coverage"])
+          need = {
+              "detection.mti_doppler",
+              "detection.mtd_bank",
+              "detection.rotor_microdoppler",
+              "detection.heli_cpa",
+              "detection.prf_stagger",
+          }
+          missing = sorted(need - cov)
+          if missing:
+              raise SystemExit(f"coverage missing: {missing}")
+          print("scenarios=", len(report["results"]), "coverage=", len(cov))
+          print("MTD coverage OK")
+          PY
+
+      - name: Upload full_sim report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-sim-report
+          path: tools/dem/out/full_sim_report.json

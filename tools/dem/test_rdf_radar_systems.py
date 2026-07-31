@@ -95,8 +95,12 @@ class TestFullSim(unittest.TestCase):
         report = run_full_sim()
         failed = [r.name for r in report.results if not r.ok]
         self.assertTrue(report.all_ok, f"failed={failed}")
-        self.assertGreaterEqual(len(report.coverage), 20)
-        self.assertEqual(len(report.results), 16)
+        self.assertGreaterEqual(len(report.coverage), 23)
+        self.assertEqual(len(report.results), 18)
+        self.assertIn("detection.mtd_bank", report.coverage)
+        self.assertIn("detection.rotor_microdoppler", report.coverage)
+        self.assertIn("detection.heli_cpa", report.coverage)
+        self.assertIn("detection.prf_stagger", report.coverage)
 
 
 if __name__ == "__main__":

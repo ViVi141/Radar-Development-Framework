@@ -89,6 +89,17 @@ class TestMtdBank(unittest.TestCase):
         hw.mti_mode = "twopulse"
         self.assertLess(mti_apply_target(hw, 1.0, 0.0), 1.0e-5)
 
+    def test_prf_stagger_cycles(self) -> None:
+        hw = get_preset("shorad")
+        hw.prf_hz = 4000.0
+        hw.prf_set_hz = [4000.0, 4800.0]
+        self.assertAlmostEqual(hw.active_prf_hz(0), 4000.0)
+        self.assertAlmostEqual(hw.active_prf_hz(1), 4800.0)
+        self.assertAlmostEqual(hw.active_prf_hz(2), 4000.0)
+        blind0 = hw.wavelength_m * 4000.0 / 2.0
+        blind1 = hw.wavelength_m * 4800.0 / 2.0
+        self.assertGreater(abs(blind0 - blind1), 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()

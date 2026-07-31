@@ -10,6 +10,7 @@
 - 产品模式：`RDF_RADAR_MODE_PULSE_DOPPLER` + `CreatePulseDopplerSettings` / `DemoConfig.CreatePulseDoppler`
 - NetCodec plot 同步 `m_DopplerBin` / `m_PrfIndex` / `m_DopplerHz`；SamEngage 改用 MTD
 - 离线验收：`test_rdf_radar_mtd.py` + `test_rdf_radar_heli_cpa.py`（UH-1 CPA Pd）
+- CI：`python-dem-tests.yml` 双 job（unittest discover + `full_sim` coverage）；`full_sim` 增 MTD/CPA/PRF 场景；`run_tools.sh`；sig-pack / track-coast 单测
 
 ## 2026-07-30 — tools 目录整理
 
