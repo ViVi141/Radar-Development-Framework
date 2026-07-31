@@ -41,18 +41,22 @@ def pack_csv(src: Path, out_path: Path) -> None:
         for parts in reader:
             if len(parts) < 8:
                 continue
-            entries.append(
-                {
-                    "key": parts[0],
-                    "size_x_m": float(parts[1]),
-                    "size_y_m": float(parts[2]),
-                    "size_z_m": float(parts[3]),
-                    "char_length_m": float(parts[4]),
-                    "mean_rcs_m2": float(parts[5]),
-                    "swerling": int(float(parts[6])),
-                    "type_hint": int(float(parts[7])),
-                }
-            )
+            entry = {
+                "key": parts[0],
+                "size_x_m": float(parts[1]),
+                "size_y_m": float(parts[2]),
+                "size_z_m": float(parts[3]),
+                "char_length_m": float(parts[4]),
+                "mean_rcs_m2": float(parts[5]),
+                "swerling": int(float(parts[6])),
+                "type_hint": int(float(parts[7])),
+            }
+            if len(parts) >= 12:
+                entry["rotor_tip_ms"] = float(parts[8] or 0.0)
+                entry["blade_count"] = int(float(parts[9] or 0.0))
+                entry["rotor_rcs_frac"] = float(parts[10] or 0.0)
+                entry["hub_width_ms"] = float(parts[11] or 0.0)
+            entries.append(entry)
 
     doc = {"magic": MAGIC, "version": VERSION, "entries": entries}
     out_path.parent.mkdir(parents=True, exist_ok=True)

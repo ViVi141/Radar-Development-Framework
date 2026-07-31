@@ -730,7 +730,7 @@ PPI Canvas: 210 × 210 (see LidarPPI.layout)
 
 - **首选** `RDF_RadarSensor`：`ConfigureMode` / `Tick` / `GetPlots` / `GetTracks` / `GetLockedTarget` / `GetArmAim` / `HasRwr*` / `ResetSession`。
 - **火控**：`RDF_RadarWeaponBridge` / `RDF_RadarWeaponComponent` → `RDF_RadarFireSolution`（`CanAuthorizeFire` / 中段瞄点 / `GuideRocket`）。
-- 模式：SEARCH / STARE / WLR / **ESM**；默认量测匿名（切断 `m_Entity`），跟踪为最近邻波门关联。
+- 模式：SEARCH / STARE / WLR / **ESM** / **PULSE_DOPPLER**（MTD + 旋翼边带）；默认量测匿名（切断 `m_Entity`），跟踪为最近邻波门关联。见 [RADAR_API.md](RADAR_API.md)。
 - 通道：理想档 / 逼真档（测量噪声、CFAR 热填空、大气/天气衰减）；可 override `RDF_RadarMeasurementModel`。
 - **联机**：`RDF_RadarNetworkComponent` — 类型化 Rpc；**Reliable** 航迹摘要 / **Unreliable** plots；`RplSave` JIP；规模旋钮见 RADAR_API。
 - **站间**：`RDF_RadarDatalinkHub` + `RDF_RadarFusionService`（轻量 IFF）；≠ WeaponBridge「datalink」中制导语义。

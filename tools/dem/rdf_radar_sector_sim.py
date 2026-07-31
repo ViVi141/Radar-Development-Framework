@@ -290,7 +290,21 @@ def simulate_sector(
         v_radial = radial_speed_toward_radar(
             tgt, float(radar_ix), float(radar_iz), radar_y, cell_m
         )
-        power_mti = mti_apply_target(hardware, power_proc, v_radial)
+        tip = float(getattr(tgt, "rotor_tip_m_s", 0.0) or 0.0)
+        rotor_frac = float(getattr(tgt, "rotor_rcs_fraction", 0.0) or 0.0)
+        hub = float(getattr(tgt, "hub_width_m_s", 0.0) or 0.0)
+        if tip <= 0.0 and str(getattr(tgt, "kind", "")) == "heli":
+            tip = 220.0
+            rotor_frac = 0.35
+            hub = 40.0
+        power_mti = mti_apply_target(
+            hardware,
+            power_proc,
+            v_radial,
+            tip_speed_m_s=tip,
+            rotor_rcs_fraction=rotor_frac,
+            hub_width_m_s=hub,
+        )
 
         bin_i = int(range_m / config.range_bin_m)
         if bin_i < 0:

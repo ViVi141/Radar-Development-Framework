@@ -7,7 +7,9 @@
 - PhysicalDetect：目标取杂波加权最强多普勒 bin；杂波进零速 bin，非零 bin 仅泄漏
 - Signature / scatterer：旋翼字段（tip speed / blades / RCS fraction / hub）；`Helicopters/*` 缺省 UH-1/Mi-8 类默认
 - Clutter map EMA（`m_EnableClutterMap`）+ 航迹 miss coast（`m_TrackCoastOnMiss` / `m_TrackCoastOnDopplerNull`）
-- Sensor 预设：`CreatePulseDopplerSettings`；Python `test_rdf_radar_mtd.py`
+- 产品模式：`RDF_RADAR_MODE_PULSE_DOPPLER` + `CreatePulseDopplerSettings` / `DemoConfig.CreatePulseDoppler`
+- NetCodec plot 同步 `m_DopplerBin` / `m_PrfIndex` / `m_DopplerHz`；SamEngage 改用 MTD
+- 离线验收：`test_rdf_radar_mtd.py` + `test_rdf_radar_heli_cpa.py`（UH-1 CPA Pd）
 
 ## 2026-07-30 — tools 目录整理
 

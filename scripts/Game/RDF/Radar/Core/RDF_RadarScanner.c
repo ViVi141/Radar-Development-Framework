@@ -235,6 +235,14 @@ class RDF_RadarScanner
         m_LastForward = forward;
         m_LastRange = range;
         RefreshEwScanStats(origin, forward, range);
+        if (m_ClutterMap && m_Settings.m_EnableClutterMap)
+        {
+            m_ClutterMap.Configure(
+                36,
+                m_Settings.m_RangeBinCount,
+                m_Settings.m_ClutterMapAlpha,
+                range);
+        }
         if (m_DemCache)
         {
             m_DemCache.SetPreloadAll(m_Settings.m_DemPreloadAll);
@@ -749,16 +757,22 @@ class RDF_RadarScanner
             t.m_MultipathFactor = 1.0;
             t.m_IsAnonymous = false;
             t.m_IsFalsePlot = false;
-            if (priorityType == ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER)
+            RDF_RadarScatterer worldEntry = RDF_RadarScattererRegistry.Find(ent);
+            if (worldEntry)
             {
-                RDF_RadarScatterer emitEntry = RDF_RadarScattererRegistry.Find(ent);
-                if (emitEntry)
+                t.m_ScattererId = worldEntry.m_ScattererId;
+                t.m_RotorTipSpeedMs = worldEntry.m_RotorTipSpeedMs;
+                t.m_BladeCount = worldEntry.m_BladeCount;
+                t.m_RotorRcsFraction = worldEntry.m_RotorRcsFraction;
+                t.m_HubWidthMs = worldEntry.m_HubWidthMs;
+                t.m_MeanRcsM2 = worldEntry.m_MeanRcsM2;
+                t.m_SwerlingModel = worldEntry.m_SwerlingModel;
+                if (priorityType == ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER)
                 {
-                    t.m_EmitFrequencyHz = emitEntry.m_EmitFrequencyHz;
-                    t.m_EmitPeakPowerW = emitEntry.m_EmitPeakPowerW;
-                    t.m_EmitAntennaGainDbi = emitEntry.m_EmitAntennaGainDbi;
-                    t.m_EmitStrength = emitEntry.m_EmitStrength;
-                    t.m_ScattererId = emitEntry.m_ScattererId;
+                    t.m_EmitFrequencyHz = worldEntry.m_EmitFrequencyHz;
+                    t.m_EmitPeakPowerW = worldEntry.m_EmitPeakPowerW;
+                    t.m_EmitAntennaGainDbi = worldEntry.m_EmitAntennaGainDbi;
+                    t.m_EmitStrength = worldEntry.m_EmitStrength;
                 }
             }
             bool reusedPhysical = false;

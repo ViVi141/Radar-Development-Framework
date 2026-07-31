@@ -48,6 +48,15 @@ def pack_csv(src: Path, out_conf: Path) -> None:
         for parts in reader:
             if len(parts) < 8:
                 continue
+            tip = 0.0
+            blades = 0
+            rotor_frac = 0.0
+            hub = 0.0
+            if len(parts) >= 12:
+                tip = float(parts[8] or 0.0)
+                blades = int(float(parts[9] or 0.0))
+                rotor_frac = float(parts[10] or 0.0)
+                hub = float(parts[11] or 0.0)
             rows.append(
                 (
                     parts[0],
@@ -58,6 +67,10 @@ def pack_csv(src: Path, out_conf: Path) -> None:
                     float(parts[5]),
                     int(float(parts[6])),
                     int(float(parts[7])),
+                    tip,
+                    blades,
+                    rotor_frac,
+                    hub,
                 )
             )
 
@@ -65,7 +78,9 @@ def pack_csv(src: Path, out_conf: Path) -> None:
     lines.append("RDF_RadarSignatureTableConf {")
     lines.append(" m_iVersion 1")
     lines.append(" m_aEntries {")
-    for i, (key, sx, sy, sz, cl, rcs, sw, th) in enumerate(rows):
+    for i, (key, sx, sy, sz, cl, rcs, sw, th, tip, blades, rotor_frac, hub) in enumerate(
+        rows
+    ):
         guid = make_entry_guid(i + 1)
         lines.append(f'  RDF_RadarSignatureEntryConf "{{{guid}}}" {{')
         lines.append(f'   m_sKey "{escape_conf_string(key)}"')
@@ -76,6 +91,11 @@ def pack_csv(src: Path, out_conf: Path) -> None:
         lines.append(f"   m_fMeanRcsM2 {rcs}")
         lines.append(f"   m_iSwerling {sw}")
         lines.append(f"   m_iTypeHint {th}")
+        if tip > 0.0 or blades > 0 or rotor_frac > 0.0 or hub > 0.0:
+            lines.append(f"   m_fRotorTipSpeedMs {tip}")
+            lines.append(f"   m_iBladeCount {blades}")
+            lines.append(f"   m_fRotorRcsFraction {rotor_frac}")
+            lines.append(f"   m_fHubWidthMs {hub}")
         lines.append("  }")
     lines.append(" }")
     lines.append("}")

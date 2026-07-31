@@ -15,7 +15,7 @@ class RDF_RadarPhysicalDetect
         RDF_RadarSettings settings,
         RDF_DemRuntimeCache demCache,
         float scanRainLossDbPerKm,
-        RDF_RadarClutterMap clutterMap = null)
+        RDF_RadarClutterMap clutterMap)
     {
         if (!target)
             return;
@@ -306,11 +306,6 @@ class RDF_RadarPhysicalDetect
                 demCache);
             if (settings.m_EnableClutterMap && clutterMap)
             {
-                clutterMap.Configure(
-                    36,
-                    settings.m_RangeBinCount,
-                    settings.m_ClutterMapAlpha,
-                    settings.m_Range);
                 clutterPower = clutterMap.UpdateAndGet(
                     distance,
                     target.m_AzimuthDeg,

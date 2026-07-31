@@ -3,9 +3,10 @@
 // Vectors are flattened as 3 floats. JIP uses ScriptBitWriter / ScriptBitReader.
 class RDF_RadarNetCodec
 {
-    // Plot: ints type,flags,scattererId | floats dist,snr,cfar,az,el,radial,posxyz,velxyz
-    static const int PLOT_INT_STRIDE = 3;
-    static const int PLOT_FLOAT_STRIDE = 12;
+    // Plot: ints type,flags,scattererId,dopplerBin,prfIndex
+    //     | floats dist,snr,cfar,az,el,radial,posxyz,velxyz,dopplerHz
+    static const int PLOT_INT_STRIDE = 5;
+    static const int PLOT_FLOAT_STRIDE = 13;
 
     // Track: ints id,type,confirmed,hit | floats range,az,el,rr,snr,posxyz,velxyz
     static const int TRACK_INT_STRIDE = 4;
@@ -143,6 +144,8 @@ class RDF_RadarNetCodec
                 plotInts.Insert(TargetTypeToInt(t.m_Type));
                 plotInts.Insert(PackBool4(t.m_Detected, t.m_IsAnonymous, t.m_IsFalsePlot, t.m_LosBlocked));
                 plotInts.Insert(t.m_ScattererId);
+                plotInts.Insert(t.m_DopplerBin);
+                plotInts.Insert(t.m_PrfIndex);
                 plotFloats.Insert(t.m_Distance);
                 plotFloats.Insert(t.m_SnrDb);
                 plotFloats.Insert(t.m_CfarPowerW);
@@ -151,6 +154,7 @@ class RDF_RadarNetCodec
                 plotFloats.Insert(t.m_RadialSpeedMs);
                 PushVector(plotFloats, t.m_Position);
                 PushVector(plotFloats, t.m_Velocity);
+                plotFloats.Insert(t.m_DopplerHz);
             }
         }
 
@@ -223,6 +227,8 @@ class RDF_RadarNetCodec
             t.m_IsFalsePlot = FlagBit(flags, 4);
             t.m_LosBlocked = FlagBit(flags, 8);
             t.m_ScattererId = plotInts.Get(ii + 2);
+            t.m_DopplerBin = plotInts.Get(ii + 3);
+            t.m_PrfIndex = plotInts.Get(ii + 4);
             t.m_Distance = plotFloats.Get(fi);
             t.m_SnrDb = plotFloats.Get(fi + 1);
             t.m_CfarPowerW = plotFloats.Get(fi + 2);
@@ -231,6 +237,7 @@ class RDF_RadarNetCodec
             t.m_RadialSpeedMs = plotFloats.Get(fi + 5);
             t.m_Position = ReadVectorAt(plotFloats, fi + 6);
             t.m_Velocity = ReadVectorAt(plotFloats, fi + 9);
+            t.m_DopplerHz = plotFloats.Get(fi + 12);
             t.m_Entity = null;
             t.m_LosHitFraction = 1.0;
             t.m_MultipathFactor = 1.0;

@@ -6,7 +6,8 @@
 // editor pauses AutoRunner's CallLater tick.
 //
 // Usage (Script Debugger):
-//   RDF_RadarManualDemo.Start();
+//   RDF_RadarManualDemo.Start();                 // SEARCH, MTI off
+//   RDF_RadarManualDemo.StartPulseDoppler();     // MTD bank for heli CPA
 //   // place vehicles / fire shells, then:
 //   RDF_RadarManualDemo.Probe();
 //   RDF_RadarManualDemo.Stop();
@@ -43,6 +44,34 @@ class RDF_RadarManualDemo
 
         Print("[RDF ManualDemo] started physical SEARCH (MTI off, wide beam, DEM clutter OFF, world search)");
         Print("[RDF ManualDemo] tip: keep Play running; close GM free-cam or possess a character; Probe() after placing targets");
+        ForceScanAndProbe();
+    }
+
+    // Pulse-Doppler MTD path for tangential heli / CPA verification.
+    static void StartPulseDoppler()
+    {
+        RDF_RadarSensor sensor = RDF_RadarAutoRunner.GetSensor();
+        s_PrevConfig = null;
+        if (sensor)
+            s_PrevConfig = sensor.GetSettings();
+        s_PrevDemo = RDF_RadarAutoRunner.IsDemoEnabled();
+        s_PrevHud = RDF_RadarAutoRunner.IsHudEnabled();
+        s_PrevForceLocal = RDF_RadarAutoRunner.IsForceLocalScan();
+
+        RDF_RadarSettings cfg = BuildPulseDopplerManualConfig();
+        RDF_RadarAutoRunner.SetForceLocalScan(true);
+        ApplySensorConfig(cfg);
+        if (sensor)
+            sensor.ResetSession();
+
+        RDF_RadarAutoRunner.SetDemoEnabled(true);
+        RDF_RadarAutoRunner.SetHudEnabled(true);
+        RDF_RadarAutoRunner.StartAutoRun();
+        RDF_RadarHUD.Show();
+        s_Active = true;
+
+        Print("[RDF ManualDemo] started PULSE_DOPPLER (MTD bank, rotor sidebands, DEM clutter OFF)");
+        Print("[RDF ManualDemo] tip: fly UH-1/Mi-8 across CPA; Probe() should keep paint near vr=0");
         ForceScanAndProbe();
     }
 
@@ -103,6 +132,42 @@ class RDF_RadarManualDemo
         hw.ClearElevationBeams();
         hw.AddElevationBeam("manual_low", 0.0, 30.0, 0.0);
         hw.AddElevationBeam("manual_mid", 15.0, 40.0, 0.0);
+        hw.Validate();
+        cfg.m_Hardware = hw;
+        cfg.Validate();
+        return cfg;
+    }
+
+    static RDF_RadarSettings BuildPulseDopplerManualConfig()
+    {
+        RDF_RadarSettings cfg = RDF_RadarSensor.CreatePulseDopplerSettings(128);
+        cfg.m_Range = 5000.0;
+        cfg.m_SectorHalfAngleDeg = 180.0;
+        cfg.m_UpdateInterval = 0.2;
+        cfg.m_IncludeVehicles = true;
+        cfg.m_IncludeProjectiles = false;
+        cfg.m_IncludeRadarEmitters = false;
+        cfg.m_EnablePhysicalDetection = true;
+        cfg.m_DetectionSnrDb = 8.0;
+        cfg.m_EnableDemClutter = false;
+        cfg.m_EnableCfarGate = false;
+        cfg.m_UseScattererRegistry = true;
+        cfg.m_MaxLosTracesPerScan = 128;
+        cfg.m_KeepUndetected = true;
+        cfg.m_KeepEntityTruth = true;
+        cfg.m_OriginOffset = Vector(0.0, 12.0, 0.0);
+
+        RDF_RadarHardware hw = cfg.m_Hardware;
+        if (!hw)
+            hw = RDF_RadarHardware.CreateShorad();
+        hw.m_AzimuthBeamwidthDeg = 30.0;
+        hw.m_ScanRpm = 12.0;
+        hw.m_EnableMti = true;
+        hw.m_MtiMode = ERDF_MtiMode.RDF_MTI_MTD_BANK;
+        hw.m_DopplerBinCount = 16;
+        hw.ClearElevationBeams();
+        hw.AddElevationBeam("pd_low", 2.0, 12.0, 0.0);
+        hw.AddElevationBeam("pd_high", 14.0, 16.0, 0.0);
         hw.Validate();
         cfg.m_Hardware = hw;
         cfg.Validate();

@@ -75,6 +75,11 @@ class RDF_RadarDemoConfig
         return RDF_RadarSensor.CreateEsmSettings(maxTargets);
     }
 
+    static RDF_RadarSettings CreatePulseDoppler(int maxTargets = 96)
+    {
+        return RDF_RadarSensor.CreatePulseDopplerSettings(maxTargets);
+    }
+
     static RDF_RadarSettings CreateWithDeceptionJammer(int maxTargets = 64)
     {
         RDF_RadarSettings s = CreateDefault(maxTargets);

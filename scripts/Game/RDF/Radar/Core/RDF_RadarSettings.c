@@ -101,9 +101,10 @@ class RDF_RadarSettings
     int m_TrackConfirmHits = 2;
     int m_TrackMaxMisses = 3;
     // On miss, coast filtered kinematics instead of only counting misses.
-    bool m_TrackCoastOnMiss = true;
+    // Default off so SEARCH/demo stay unchanged; PulseDoppler preset enables.
+    bool m_TrackCoastOnMiss = false;
     // Extra miss budget / wider gates when last hit used a near-zero Doppler bin.
-    bool m_TrackCoastOnDopplerNull = true;
+    bool m_TrackCoastOnDopplerNull = false;
     // Runtime clutter-map EMA over DEM σ⁰ (per range–az cell).
     bool m_EnableClutterMap = false;
     float m_ClutterMapAlpha = 0.15;

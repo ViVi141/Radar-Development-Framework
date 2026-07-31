@@ -4,7 +4,9 @@ enum ERDF_RadarSensorMode
     RDF_RADAR_MODE_SEARCH,
     RDF_RADAR_MODE_STARE,
     RDF_RADAR_MODE_WLR,
-    RDF_RADAR_MODE_ESM
+    RDF_RADAR_MODE_ESM,
+    // Pulse-Doppler search: MTD bank + rotor sidebands + PRF stagger + coast.
+    RDF_RADAR_MODE_PULSE_DOPPLER
 }
 
 // Last completed scan geometry (PPI / HUD / fusion consumers).
@@ -171,6 +173,13 @@ class RDF_RadarSensor
             else
                 settings = CreateEsmSettings(64);
         }
+        else if (mode == ERDF_RadarSensorMode.RDF_RADAR_MODE_PULSE_DOPPLER)
+        {
+            if (maxTargets > 0)
+                settings = CreatePulseDopplerSettings(maxTargets);
+            else
+                settings = CreatePulseDopplerSettings(96);
+        }
         else
         {
             if (mode == ERDF_RadarSensorMode.RDF_RADAR_MODE_STARE)
@@ -232,7 +241,9 @@ class RDF_RadarSensor
     }
 
     // Pulse-Doppler search: MTD filter bank + optional 2-PRF stagger.
-    // Use from GBRS presets when tangential helis must survive CPA / vr≈0.
+    // Use from GBRS / ConfigureMode(PULSE_DOPPLER) when tangential helis
+    // must survive CPA / vr≈0. Default SEARCH stays TwoPulse-compatible
+    // with MTI off for stationary vehicles.
     static RDF_RadarSettings CreatePulseDopplerSettings(int maxTargets)
     {
         RDF_RadarSettings s = CreateSearchSettings(maxTargets);
@@ -241,12 +252,17 @@ class RDF_RadarSensor
             s.m_Hardware.m_EnableMti = true;
             s.m_Hardware.m_MtiMode = ERDF_MtiMode.RDF_MTI_MTD_BANK;
             s.m_Hardware.m_DopplerBinCount = 16;
+            s.m_Hardware.m_MtiClutterFloor = 0.0001;
+            s.m_Hardware.m_MtdClutterLeakage = 0.000001;
             s.m_Hardware.m_PrfStaggerRatio = 1.2;
+            s.m_Hardware.m_CoherentIntegration = true;
             s.m_Hardware.Validate();
         }
         s.m_EnableClutterMap = true;
+        s.m_ClutterMapAlpha = 0.15;
         s.m_TrackCoastOnMiss = true;
         s.m_TrackCoastOnDopplerNull = true;
+        s.m_TrackMaxMisses = 6;
         s.Validate();
         return s;
     }
@@ -769,6 +785,8 @@ class RDF_RadarSensor
             modeName = "WLR";
         else if (m_Mode == ERDF_RadarSensorMode.RDF_RADAR_MODE_ESM)
             modeName = "ESM";
+        else if (m_Mode == ERDF_RadarSensorMode.RDF_RADAR_MODE_PULSE_DOPPLER)
+            modeName = "PD";
 
         string dem = GetDemStatusShort();
 

@@ -274,7 +274,21 @@ def simulate_scan(
                 radar_y,
                 cell_m,
             )
-            target_power = mti_apply_target(dwell_hw, proc_power, radial_speed)
+            tip = float(getattr(target, "rotor_tip_m_s", 0.0) or 0.0)
+            rotor_frac = float(getattr(target, "rotor_rcs_fraction", 0.0) or 0.0)
+            hub = float(getattr(target, "hub_width_m_s", 0.0) or 0.0)
+            if tip <= 0.0 and str(getattr(target, "kind", "")) == "heli":
+                tip = 220.0
+                rotor_frac = 0.35
+                hub = 40.0
+            target_power = mti_apply_target(
+                dwell_hw,
+                proc_power,
+                radial_speed,
+                tip_speed_m_s=tip,
+                rotor_rcs_fraction=rotor_frac,
+                hub_width_m_s=hub,
+            )
             range_i = int(np.argmin(np.abs(sector.range_centers_m - range_m)))
             dwell_power[0, range_i] = dwell_power[0, range_i] + target_power
 
