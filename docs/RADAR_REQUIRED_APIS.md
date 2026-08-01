@@ -126,7 +126,7 @@ Radar 规模旋钮（上限、降频、指纹跳过、兴趣半径）为组件 A
 ## 十、汇总与使用建议
 
 - **实体查询**：统一使用 **World（BaseWorld）** 的 `QueryEntitiesBySphere` / `QueryEntitiesByAABB` / `QueryEntitiesByOBB` + **QueryEntitiesCallback** 获取候选，再按类型过滤（载具、**Projectile**/ProjectileMoveComponent、自注册雷达）。
-- **可见性**：对候选做 **TraceMove**（雷达原点到目标代表点），用 **TraceParam**（Flags、Exclude、TraceEnt、SurfaceProps）判断是否被遮挡。
+- **可见性**：对候选做 **TraceMove**（`RDF_RadarScanGeometry.TraceLineOfSight`：原点→目标代表点；`Flags=WORLD|ENTS|ANY_CONTACT`；`ExcludeArray`=subject+target；复用 TraceParam；每次清 TraceEnt/SurfaceProps）。`hitFraction ≥ 0.999` 或 `GetRootParent` 同层级 → 通视。
 - **抛射物**：用 **Projectile**、**ProjectileMoveComponent.GetVelocity()** 及 **IEntity.GetID()** 做检测与多帧追踪；轨迹用 **GetWorldTime()** 打时间戳。
 - **雷达可被探测**：自维护“主动雷达”注册表 + 在对方扫描时合并进目标列表，无需新引擎 API。
 
@@ -258,7 +258,7 @@ Radar scale knobs (caps, throttle, fingerprint skip, interest radius) are compon
 ## 10. Summary & usage tips
 
 - **Entity query**: use **World (BaseWorld)** `QueryEntitiesBySphere` / `QueryEntitiesByAABB` / `QueryEntitiesByOBB` + **QueryEntitiesCallback**, then filter by type (vehicles, **Projectile**/ProjectileMoveComponent, self-registered radars).
-- **Visibility**: **TraceMove** from radar origin to a representative target point; use **TraceParam** (Flags, Exclude, TraceEnt, SurfaceProps) for occlusion.
+- **Visibility**: **TraceMove** via `RDF_RadarScanGeometry.TraceLineOfSight` (origin → representative aim point; `Flags=WORLD|ENTS|ANY_CONTACT`; `ExcludeArray`=subject+target; reused TraceParam; clear TraceEnt/SurfaceProps each cast). Clear when `hitFraction ≥ 0.999` or same `GetRootParent` hierarchy.
 - **Projectiles**: **Projectile**, **ProjectileMoveComponent.GetVelocity()**, and **IEntity.GetID()** for detect + multi-frame track; stamp tracks with **GetWorldTime()**.
 - **Radar detectable**: maintain an “active radar” registry and merge into the peer’s target list on scan — no new engine API.
 

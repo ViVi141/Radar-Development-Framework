@@ -208,20 +208,23 @@ RDF_RadarWeaponBridge.TryGetFireSolutionFromOwner(vehicle, sol, true);
 
 若只用**一条射线**从雷达打到目标**中心**，当目标只露出一部分（例如车体大半被墙/地形挡住，只有一小块朝向雷达）时，这条中心射线会先打到墙或地形，从而被判为“不可见”，产生**漏检**。现实中雷达只要能看到目标任意一块有效反射面，就可以检测到。
 
-做法：**对每个候选实体做多条射线**，而不是一条：
+**当前 RDF 雷达 LOS**（`RDF_RadarScanGeometry`）对齐官方 nametag 写法：一条射线打到几何中心，`ExcludeArray` 含 subject+目标，通视 ≈ `hitFraction ≥ 0.999`（目标本体不挡自己的端点）；同层级用 `GetRootParent` 回退。这覆盖「中心通视」主路径，**尚未**做 AABB 多点采样。
+
+若要覆盖「只露出一部分」的漏检，可对每个候选做多条射线：
 
 - **采样点**：在目标的 AABB 上取若干点，例如 8 个角点、或 6 个面心、或“中心 + 朝向雷达的若干面心”。从雷达原点向这些点各打一条射线。
-- **判定**：若**任意一条**射线先命中**该实体**（即 `TraceMove` 返回的命中实体等于当前候选），且命中点在该实体的几何上（或命中距离在合理范围内），则判为“可见”；取其中**最近一次命中**的 `hitPos`、`distance` 作为该目标的检测结果（或取中心射线若可见，否则取最近可见点）。
-- **成本**：每实体 3～8 条射线是常见折中（例如 4 条：中心 + 3 个面心，或 8 条：AABB 角点）。总 Trace 数 = 候选实体数 × 每实体射线数；例如 20 个候选 × 5 条 ≈ 100 次，仍远少于 512 条全扇区扫描，同时能覆盖“只露出一部分”的情况。
+- **判定**：若**任意一条**射线先命中**该实体**（或到达排除目标后的端点），则判为“可见”；取其中**最近一次命中**的 `hitPos`、`distance`。
+- **成本**：每实体 3～8 条射线是常见折中。总 Trace 数 = 候选实体数 × 每实体射线数；仍通常少于全扇区 LiDAR。
 
-若希望进一步省射线，可先打**一条射线到实体中心**；若已可见则不再多打；若被挡，再对同一实体补打若干条到 AABB 角点/面心（“先单射线、再按需多射线”）。
+若希望进一步省射线，可先打**一条射线到实体中心**；若已可见则不再多打；若被挡，再对同一实体补打若干条到 AABB 角点/面心。
 
 ### 5.3 与 RDF 的关系
 
-- 此方案**不依赖** RDF 的“多射线扫描”，可单独实现为**轻量扫描模块**（例如“实体优先”工具类或组件）。
-- 若希望复用 RDF 的 HUD 与锁定逻辑，只需让该模块输出与 `RDF_LidarSample` 兼容的列表（每条：`m_Entity`、`m_Hit`=true、`m_Distance`、`m_HitPos`、`m_Dir` 等），即可接入 `RDF_LidarHUD.FeedSamples()` 与同一套锁定管线。
+- **雷达主路径**已是「实体优先 + 每候选一次 TraceMove」（`RDF_RadarScanner` + `RDF_RadarScanGeometry`），不是 LiDAR 式全扇区多射线。
+- LiDAR（`RDF_LidarScanner`）仍是「先射线、后结果」；适合点云 / 近距备份。
+- 锁定 / HUD / 武器对接走 `RDF_RadarSensor` / `RDF_RadarLockManager`（见 [RADAR_API.md](RADAR_API.md)），不必再绕 LiDAR sample 格式。
 
-总结：**“扫描半径内引擎筛实体 + 按实体做射线判可见”** 即简化版检测：先知道“可能有什么”，再判断“谁真的被看到”，适合载具/武器锁定场景。
+总结：**“扫描半径内筛实体 + 按实体 Trace 判通视”** 已是游戏内雷达默认路径；AABB 多点可见性仍是可选加深项。
 
 ---
 
@@ -432,17 +435,20 @@ Then **ray count = candidates in range × rays per entity** (below); at modest v
 
 A **single ray** to the target **center** fails when only part of the target faces the radar (most of the hull behind wall/terrain) — the center ray hits wall/terrain first → **false miss**. Real radar detects any useful reflecting facet.
 
-Do **multiple rays per candidate**, not one:
+**Current RDF radar LOS** (`RDF_RadarScanGeometry`) follows stock nametag style: one ray to the geometric center, `ExcludeArray` = subject + target, clear when `hitFraction ≥ 0.999` (target does not block its own endpoint); `GetRootParent` as hierarchy fallback. That covers the main center-LOS path; **AABB multi-point sampling is not implemented yet**.
+
+To cover partial-exposure misses, fire multiple rays per candidate:
 
 - **Sample points**: several AABB points — 8 corners, or 6 face centers, or “center + faces toward the radar”. One ray from radar origin to each.
-- **Decision**: if **any** ray hits **that entity** first (`TraceMove` hit entity == candidate) and the hit is on its geometry (or range is sensible), mark visible; use the **nearest** hit’s `hitPos`/`distance` (or center ray if visible, else nearest visible point).
-- **Cost**: 3–8 rays/entity is a common tradeoff (e.g. 4: center + 3 faces, or 8 AABB corners). Total Trace = candidates × rays/entity; e.g. 20 × 5 ≈ 100, still far below a 512-ray sector scan, while covering partial exposure.
+- **Decision**: if **any** ray reaches the endpoint with the target excluded (or hits that entity first), mark visible; use the **nearest** hit’s `hitPos`/`distance`.
+- **Cost**: 3–8 rays/entity is a common tradeoff. Total Trace = candidates × rays/entity; still usually below a full-sector LiDAR scan.
 
-To save more rays: try **one center ray** first; if visible, stop; if blocked, fire extra AABB corner/face rays (“single ray first, multi-ray on demand”).
+To save more rays: try **one center ray** first; if visible, stop; if blocked, fire extra AABB corner/face rays.
 
 ### 5.3 Relation to RDF
 
-- This path **does not require** RDF multi-ray scanning; implement as a **lightweight scan module** (entity-first util/component).
-- To reuse RDF HUD and lock logic, emit lists compatible with `RDF_LidarSample` (`m_Entity`, `m_Hit`=true, `m_Distance`, `m_HitPos`, `m_Dir`, …) and feed `RDF_LidarHUD.FeedSamples()` plus the same lock pipeline.
+- The **radar main path** is already entity-first + one TraceMove per candidate (`RDF_RadarScanner` + `RDF_RadarScanGeometry`), not LiDAR-style sector rays.
+- LiDAR (`RDF_LidarScanner`) remains rays-first; use for point clouds / short-range backup.
+- Lock / HUD / weapons go through `RDF_RadarSensor` / `RDF_RadarLockManager` (see [RADAR_API.md](RADAR_API.md)); no need to route through LiDAR sample format.
 
-Summary: **engine entity query in scan radius + per-entity visibility rays** is simplified detection — know “what might be there”, then “who is actually seen” — a good fit for vehicle/weapon lock.
+Summary: **entity query in range + per-entity TraceMove LOS** is the in-game radar default; AABB multi-point visibility remains an optional deepening.

@@ -99,7 +99,7 @@ scripts/Game/RDF/Radar/
 ├── Core/
 │   ├── RDF_RadarSettings.c / RDF_RadarTypes.c / RDF_RadarHardware.c
 │   ├── RDF_RadarScanner.c              编排：Registry/Legacy 扫描 + Trace + 复用预算
-│   ├── RDF_RadarScanGeometry.c         LOS / 实体中心 / 速度几何辅助
+│   ├── RDF_RadarScanGeometry.c         LOS TraceMove（ANY_CONTACT / ExcludeArray / 出壳）+ 实体中心 / 速度
 │   ├── RDF_RadarPhysicalDetect.c       雷达方程 / NLOS bounce+刀刃绕射 / DEM 杂波 / SNR / ESM
 │   ├── RDF_RadarScattererRegistry.c    全局散射体/辐射源表（增量维护）
 │   ├── RDF_RadarEmitterRegistry.c      辐射标记门面（转发到散射体表）
@@ -426,7 +426,7 @@ scripts/Game/RDF/Radar/
 ├── Core/
 │   ├── RDF_RadarSettings.c / RDF_RadarTypes.c / RDF_RadarHardware.c
 │   ├── RDF_RadarScanner.c              编排：Registry/Legacy 扫描 + Trace + 复用预算
-│   ├── RDF_RadarScanGeometry.c         LOS / 实体中心 / 速度几何辅助
+│   ├── RDF_RadarScanGeometry.c         LOS TraceMove（ANY_CONTACT / ExcludeArray / 出壳）+ 实体中心 / 速度
 │   ├── RDF_RadarPhysicalDetect.c       雷达方程 / NLOS bounce+刀刃绕射 / DEM 杂波 / SNR / ESM
 │   ├── RDF_RadarScattererRegistry.c    全局散射体/辐射源表（增量维护）
 │   ├── RDF_RadarEmitterRegistry.c      辐射标记门面（转发到散射体表）

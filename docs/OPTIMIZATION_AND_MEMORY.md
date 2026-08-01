@@ -12,6 +12,10 @@ Radar 联机**不要**沿用 LiDAR CSV 分片缓冲思路。权威路径用类�
 **Reliable** 航迹摘要、**Unreliable** 有上限 plots，外加 `m_MaxSynced*` /
 降频 / 指纹跳过 / `m_InterestRadiusM`。契约见 [RADAR_API.md](RADAR_API.md) § Network。
 
+Radar **LOS TraceMove** 热路径（`RDF_RadarScanner` / `RDF_RadarScanGeometry`）：
+复用成员 `TraceParam` + `ExcludeArray`；`ANY_CONTACT`；起点出壳；单次扫描预算
+`m_MaxLosTracesPerScan`。细则见 [LESSONS_FROM_ENGINE.md](LESSONS_FROM_ENGINE.md) §6.5。
+
 ---
 
 ### 一、内存风险点概览
@@ -110,6 +114,10 @@ This document covers **LiDAR** module optimization and **memory overflow prevent
 Do **not** reuse LiDAR CSV shard-buffer patterns for Radar MP. Authority path uses typed Rpc:
 **Reliable** track summary, **Unreliable** capped plots, plus `m_MaxSynced*` /
 throttle / fingerprint skip / `m_InterestRadiusM`. Contract: [RADAR_API.md](RADAR_API.md) § Network.
+
+Radar **LOS TraceMove** hot path (`RDF_RadarScanner` / `RDF_RadarScanGeometry`):
+reuse member `TraceParam` + `ExcludeArray`; `ANY_CONTACT`; start clearance; per-scan
+budget `m_MaxLosTracesPerScan`. Details: [LESSONS_FROM_ENGINE.md](LESSONS_FROM_ENGINE.md) §6.5.
 
 ---
 

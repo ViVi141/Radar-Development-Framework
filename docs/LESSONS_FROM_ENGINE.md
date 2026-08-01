@@ -28,8 +28,9 @@ float hitFraction = world.TraceMove(param, TraceFilter);
 | `TraceFlags.WORLD` | 检测世界/地形 |
 | `TraceFlags.ENTS` | 检测实体 |
 | `TraceFlags.VISIBILITY` | 检测可见性遮挡物（粒子、烟雾等），用于视线/激光被遮蔽 |
+| `TraceFlags.ANY_CONTACT` | 遇任意接触即停；**最适可见性 / LOS 测试**（官方注释） |
 | `TraceParam.Exclude` | 排除单个实体 |
-| `TraceParam.ExcludeArray` | 排除实体数组 |
+| `TraceParam.ExcludeArray` | 排除实体数组（与 `Exclude` **二选一**，勿同时设） |
 | `TraceParam.TargetLayers` | 指定物理层（如 `EPhysicsLayerDefs.FireGeometry`） |
 | `TraceParam.SurfaceProps` | 命中表面材质 (GameMaterial) |
 | `TraceParam.TraceNorm` | 命中表面法线 |
@@ -202,31 +203,45 @@ if (parentEntityRay != parentEntityAct)
 
 | 字段 | 典型用途 |
 |------|----------|
-| Exclude | 排除扫描主体 |
-| ExcludeArray | 批量排除实体 |
+| Exclude | 排除单个实体（与 ExcludeArray 二选一） |
+| ExcludeArray | 批量排除（nametag：自身 + 目标） |
 | TargetLayers | 限定物理层 |
 | TraceNorm | 表面法线（地物 RCS、朝向计算） |
+
+### 6.5 官方 LOS 热路径惯例（雷达已对齐）
+
+| 惯例 | 官方示例 | 说明 |
+|------|----------|------|
+| 复用 `TraceParam` | `SCR_PlacedCommandInfoDisplay` / `SCR_NearbyContextDisplay` | 成员持有，勿每帧 `new` |
+| 每次清输出 | `SCR_PhysicsHelper` | `TraceEnt = null`；RDF 另清 `SurfaceProps` |
+| `ANY_CONTACT` | nametag / command HUD | 可见性测试首选 Flags |
+| `ExcludeArray` | nametag | 排除观察者 + 目标；通视 ≈ `percent == 1` |
+| `GetRootParent()` | `SCR_NearbyContextDisplay` | 同层级命中不算遮挡 |
+| 勿写 owned 字符串 | TraceParam 生成头 | 不要写 `ColliderName` / `TraceMaterial` |
+| 起点出壳 | LiDAR 教训 + TerrainHelper | 壳内 `Start` 可致 SEH；雷达 LOS 外推 `LOS_START_CLEARANCE_M` |
 
 ---
 
 ## 七、与 RDF 的对应关系
 
-| 引擎/示例做法 | RDF 中的对应或可借鉴点 |
-|---------------|------------------------|
-| TraceFilter 排除自身 | 可用 `Exclude = subject` 或自定义 TraceFilter |
-| 短射线复测材质 | 已用长射线取 SurfaceProps，可扩展用途 |
-| RPC 广播特效 | 参考 LiDAR 网络同步的服务器/客户端分工 |
-| Unreliable 通道 | 用于非关键可视化同步 |
-| hitFraction 校验 | 已有 0.9999 远平面过滤 |
-| ExcludeArray | 批量排除时可用 |
-| GetTerrainY / TraceNorm | 地物 RCS、地形散射计算 |
-| TargetLayers | 限定检测火线/碰撞几何 |
+| 引擎/示例做法 | RDF 中的对应 |
+|---------------|--------------|
+| nametag `ExcludeArray` + `percent==1` | `RDF_RadarScanGeometry.FillLosExclude` + `IsLineOfSightClear` |
+| `ANY_CONTACT` 可见性 | `ConfigureLosParam`：`WORLD \| ENTS \| ANY_CONTACT` |
+| 复用 TraceParam | `RDF_RadarScanner.m_TraceParam` / `RDF_LidarScanner.m_TraceParam` / DEM `s_TraceParam` |
+| `GetRootParent` 同层级 | `IsLineOfSightClear` 回退分支 |
+| 起点出壳 | LiDAR `ComputeStartClearanceM`；雷达 `TraceLineOfSight` 外推 |
+| hitFraction 校验 | LiDAR 0.9999 远平面；雷达 LOS `≥ 0.999` |
+| Unreliable / Reliable | 见 [RADAR_API.md](RADAR_API.md) § Network |
+| GetTerrainY / TraceNorm | DEM / 杂波路径 |
+
+实现入口：`RDF_RadarScanGeometry.TraceLineOfSight`（Scanner 三条 LOS 路径统一调用）。
 
 ---
 
 ## 八、可落地的改动建议
 
-1. 保持 `param.Exclude = subject`；必要时实现 `TraceFilter` 排除主体及其子实体。
+1. 新 Trace 热路径：复用 param、清输出、`Exclude`/`ExcludeArray` 二选一；LOS 优先 `ANY_CONTACT`。
 2. 地物散射/RCS 可结合 `GetTerrainY`、`TraceNorm` 判断命中类型与表面朝向。
 3. LiDAR/雷达网络：非关键帧用 Unreliable；Radar 关键检测用 Reliable **摘要**，plots 用 Unreliable + 上限（见 RADAR_API）。
 
@@ -258,7 +273,8 @@ RDF_LidarAutoRunner.StartWithConfig(cfg);
 RDF_LidarAutoRunner.SetDemoTraceTargetMode(0);
 ```
 
-雷达（`RDF_RadarSettings` 继承 `RDF_LidarSettings`）同样支持。
+雷达通视不走 `m_TraceTargetMode`；LOS 固定由 `RDF_RadarScanGeometry.ConfigureLosParam`
+（`WORLD | ENTS | ANY_CONTACT`）配置。
 
 ---
 
@@ -300,8 +316,9 @@ float hitFraction = world.TraceMove(param, TraceFilter);
 | `TraceFlags.WORLD` | World / terrain |
 | `TraceFlags.ENTS` | Entities |
 | `TraceFlags.VISIBILITY` | Visibility occluders (particles, smoke) — LOS / laser blocked |
+| `TraceFlags.ANY_CONTACT` | Stop on any contact; **best for visibility / LOS** (engine docs) |
 | `TraceParam.Exclude` | Exclude a single entity |
-| `TraceParam.ExcludeArray` | Exclude an entity array |
+| `TraceParam.ExcludeArray` | Exclude an entity array (**never with** `Exclude`) |
 | `TraceParam.TargetLayers` | Physics layers (e.g. `EPhysicsLayerDefs.FireGeometry`) |
 | `TraceParam.SurfaceProps` | Hit surface material (GameMaterial) |
 | `TraceParam.TraceNorm` | Hit surface normal |
@@ -474,31 +491,45 @@ if (parentEntityRay != parentEntityAct)
 
 | Field | Typical use |
 |-------|-------------|
-| Exclude | Exclude scan subject |
-| ExcludeArray | Batch exclude |
+| Exclude | Single exclude (mutually exclusive with ExcludeArray) |
+| ExcludeArray | Batch exclude (nametag: self + target) |
 | TargetLayers | Limit physics layers |
 | TraceNorm | Surface normal (clutter RCS, facing) |
+
+### 6.5 Stock LOS hot-path habits (radar aligned)
+
+| Habit | Stock sample | Note |
+|-------|--------------|------|
+| Reuse `TraceParam` | `SCR_PlacedCommandInfoDisplay` / `SCR_NearbyContextDisplay` | Member field; avoid per-frame `new` |
+| Clear outputs each cast | `SCR_PhysicsHelper` | `TraceEnt = null`; RDF also clears `SurfaceProps` |
+| `ANY_CONTACT` | nametag / command HUD | Preferred Flags for visibility |
+| `ExcludeArray` | nametag | Observer + target; clear LOS ≈ `percent == 1` |
+| `GetRootParent()` | `SCR_NearbyContextDisplay` | Same hierarchy ≠ obstruction |
+| Do not write owned strings | TraceParam generated header | Never assign `ColliderName` / `TraceMaterial` |
+| Start outside hull | LiDAR lesson + TerrainHelper | In-solid `Start` can SEH; radar LOS uses `LOS_START_CLEARANCE_M` |
 
 ---
 
 ## 7. Mapping to RDF
 
-| Engine / sample practice | RDF counterpart or takeaway |
-|--------------------------|-----------------------------|
-| TraceFilter exclude self | `Exclude = subject` or custom TraceFilter |
-| Short ray re-sample material | Long rays already read SurfaceProps; extend as needed |
-| RPC broadcast FX | Mirror LiDAR network server/client split |
-| Unreliable channel | Non-critical viz sync |
-| hitFraction check | Existing 0.9999 far-plane filter |
-| ExcludeArray | Batch exclude |
-| GetTerrainY / TraceNorm | Clutter RCS, terrain scatter |
-| TargetLayers | Limit to fire/collision geometry |
+| Engine / sample practice | RDF counterpart |
+|--------------------------|-----------------|
+| nametag `ExcludeArray` + `percent==1` | `FillLosExclude` + `IsLineOfSightClear` |
+| `ANY_CONTACT` visibility | `ConfigureLosParam`: `WORLD \| ENTS \| ANY_CONTACT` |
+| Reuse TraceParam | `RDF_RadarScanner.m_TraceParam` / LiDAR / DEM static param |
+| `GetRootParent` same hierarchy | `IsLineOfSightClear` fallback |
+| Start outside hull | LiDAR clearance; radar `TraceLineOfSight` push |
+| hitFraction check | LiDAR 0.9999 far-plane; radar LOS `≥ 0.999` |
+| Unreliable / Reliable | See [RADAR_API.md](RADAR_API.md) § Network |
+| GetTerrainY / TraceNorm | DEM / clutter path |
+
+Entry point: `RDF_RadarScanGeometry.TraceLineOfSight` (all three Scanner LOS paths).
 
 ---
 
 ## 8. Actionable suggestions
 
-1. Keep `param.Exclude = subject`; add `TraceFilter` for subject + children when needed.
+1. New Trace hot paths: reuse param, clear outs, Exclude XOR ExcludeArray; prefer `ANY_CONTACT` for LOS.
 2. Clutter/RCS can use `GetTerrainY` and `TraceNorm` for hit kind and surface facing.
 3. LiDAR/radar network: Unreliable for non-critical frames; Radar critical detects use Reliable **summary**, plots use Unreliable + caps (see RADAR_API).
 
@@ -530,7 +561,8 @@ RDF_LidarAutoRunner.StartWithConfig(cfg);
 RDF_LidarAutoRunner.SetDemoTraceTargetMode(0);
 ```
 
-Radar (`RDF_RadarSettings` extends `RDF_LidarSettings`) supports the same.
+Radar LOS does not use `m_TraceTargetMode`; it is fixed by
+`RDF_RadarScanGeometry.ConfigureLosParam` (`WORLD | ENTS | ANY_CONTACT`).
 
 ---
 

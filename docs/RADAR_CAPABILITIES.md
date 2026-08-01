@@ -30,7 +30,7 @@
 - **ESM 模式**（`RDF_RADAR_MODE_ESM`）：仅辐射源；单向 Friis 侦收功率；平台静默不登记发射
 - **反辐射瞄点 API**：`GetArmAim` / `LockArmTrackId`（关辐射丢锁）；不含导弹 prefab
 - **RWR**：被搜索 / 跟踪 / 锁定告警（`RDF_RadarRwr`）；无专用 UI，模组读 API
-- 通视用 `TraceMove`；遮挡时可选 **NLOS 地面反射弱检** + **单刃绕射**（DEM/`GetSurfaceY` 沿程，`/diff`）
+- 通视用 `TraceMove`（`RDF_RadarScanGeometry`：`ANY_CONTACT` + `ExcludeArray` + 复用 TraceParam + 起点出壳）；遮挡时可选 **NLOS 地面反射弱检** + **单刃绕射**（DEM/`GetSurfaceY` 沿程，`/diff`）
 - 硬件参数 → 雷达方程、多普勒、MTI、处理增益、SNR 门限（辐射源在 `m_EnableEsmReceive` 下用 ESM 方程）
 - DEM σ⁰ **地面杂波**进入噪声分母（ESM 路径跳过）
 - **测量合成**：距离门中心 + 波束角抖动 + 多普勒反解径向速度（SNR 越低越抖）
@@ -176,7 +176,7 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 - **ESM mode** (`RDF_RADAR_MODE_ESM`): emitters only; one-way Friis receive power; platform stays silent (no transmit registration)
 - **Anti-radiation aim API**: `GetArmAim` / `LockArmTrackId` (lock drops when emission stops); no missile prefab included
 - **RWR**: search / track / lock warnings (`RDF_RadarRwr`); no dedicated UI — mods read the API
-- LOS via `TraceMove`; optional **NLOS ground-bounce** + **single knife-edge diffraction** when occluded (DEM/`GetSurfaceY` samples, `/diff`)
+- LOS via `TraceMove` (`RDF_RadarScanGeometry`: `ANY_CONTACT` + `ExcludeArray` + reused TraceParam + start clearance); optional **NLOS ground-bounce** + **single knife-edge diffraction** when occluded (DEM/`GetSurfaceY` samples, `/diff`)
 - Hardware params → radar equation, Doppler, MTI / optional **MTD filter bank**, processing gain, SNR threshold (emitters use the ESM equation when `m_EnableEsmReceive` is on)
 - Default MTI remains two-pulse (`RDF_MTI_TWOPULSE`); `RDF_MTI_MTD_BANK` puts clutter in the near-zero bin and picks the best Doppler channel (rotor sidebands keep tangential helis alive)
 - DEM σ⁰ **ground clutter** enters the noise denominator (skipped on the ESM path); optional runtime clutter-map EMA

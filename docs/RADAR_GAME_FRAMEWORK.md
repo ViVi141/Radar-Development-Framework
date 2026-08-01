@@ -18,11 +18,13 @@ feasible): [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md).
    discovery sweep, amortized classification, round-robin kinematics refresh.
    Type and RCS are cached per entry, so scans never re-classify entities.
 3. Read candidates from the table, then apply range and azimuth dwell.
-4. `TraceMove` line-of-sight check. Clear path → direct detection.
-   Blocked path → optional NLOS (default on): ground-bounce (image-method +
-   `|Gamma|^2` + early-hit depth) **and/or** single knife-edge diffraction
-   (DEM/`GetSurfaceY` samples, Fresnel ν); factor = max of paths; tag
-   `m_LosBlocked` (`/nlos` vs `/diff` on beam name).
+4. `TraceMove` line-of-sight check via `RDF_RadarScanGeometry.TraceLineOfSight`
+   (`ANY_CONTACT`, reused `TraceParam`, `ExcludeArray` = subject + target,
+   start clearance, fraction remapped to origin→end). Clear path → direct
+   detection. Blocked path → optional NLOS (default on): ground-bounce
+   (image-method + `|Gamma|^2` + early-hit depth) **and/or** single knife-edge
+   diffraction (DEM/`GetSurfaceY` samples, Fresnel ν); factor = max of paths;
+   tag `m_LosBlocked` (`/nlos` vs `/diff` on beam name).
 5. Read projectile or rigid-body velocity (**truth, physics only**).
 6. Estimate entity RCS; scale received power by `m_MultipathFactor`.
 7. Select the strongest configured elevation beam.
@@ -383,7 +385,8 @@ Output report:
 ## Current boundaries
 
 - Target candidates remain entity-first (scatterer registry + sphere/active
-  fallback) and LOS still relies on `TraceMove`; NLOS may use ground-bounce
+  fallback) and LOS uses `RDF_RadarScanGeometry.TraceLineOfSight` (`ANY_CONTACT`,
+  reused TraceParam, ExcludeArray, start clearance); NLOS may use ground-bounce
   weak detection + **single knife-edge diffraction** (not multi-edge/UTD).
 - DEM / surface: prefer SURF JSON + live `GetSurfaceY`; CSV/BIN are fallbacks.
   Multiplayer parity for clutter still needs matching local SURF/DEM (or LIVE);
@@ -418,7 +421,9 @@ Enforce 实现现已遵循与离线原型相同的契约。游戏实体是物理
 2. 推进全局散射体表（`RDF_RadarScattererRegistry`）：周期发现扫描、摊销分类、轮询运动学刷新。
    类型与 RCS 按条目缓存，扫描不再重新分类实体。
 3. 从表中读取候选，再施加距离与方位驻留。
-4. `TraceMove` 通视检查。通畅 → 直接检测。
+4. `TraceMove` 通视检查（`RDF_RadarScanGeometry.TraceLineOfSight`：
+   `ANY_CONTACT`、复用 `TraceParam`、`ExcludeArray`=主体+目标、起点出壳、
+   分数映射回 origin→end）。通畅 → 直接检测。
    遮挡 → 可选 NLOS（默认开）：地面反射（镜像法 + `|Gamma|^2` + 前阻挡深度）
    **和/或** 单刃绕射（DEM/`GetSurfaceY` 沿程，Fresnel ν）；因子取较强路径；
    标记 `m_LosBlocked`（beam 名 `/nlos` 或 `/diff`）。
@@ -742,8 +747,9 @@ RDF_RadarAirborneScanTest.StartKeepTarget();
 
 ## 当前边界
 
-- 目标候选仍以实体优先（散射体表 + sphere/active 回退），通视仍依赖 `TraceMove`；
-  NLOS 可选地面反射弱检 + **单刃绕射**（非多刃/UTD）。
+- 目标候选仍以实体优先（散射体表 + sphere/active 回退），通视走
+  `RDF_RadarScanGeometry.TraceLineOfSight`（`ANY_CONTACT`、复用 TraceParam、
+  ExcludeArray、起点出壳）；NLOS 可选地面反射弱检 + **单刃绕射**（非多刃/UTD）。
 - DEM / 地表：优先 SURF JSON + 实时 `GetSurfaceY`；CSV/BIN 为回退。
   杂波多人一致仍需匹配的本地 SURF/DEM（或 LIVE）；
   检测**结果**经 `RDF_RadarNetworkComponent` 同步（不能替代本地地形数据）。

@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 2026-08-01 — 雷达 LOS TraceMove 对齐官方可见性写法
+
+- `RDF_RadarScanGeometry`：集中 LOS helper（`ConfigureLosParam` / `FillLosExclude` / `TraceLineOfSight` / `IsLineOfSightClear`）
+- Flags：`WORLD | ENTS | ANY_CONTACT`（引擎注释：最适 visibility testing；对齐 nametag / command HUD）
+- `ExcludeArray`：subject + 候选目标（不与 `Exclude` 混用）；通视 = `hitFraction ≥ 0.999`，回退用 `GetRootParent()` 同层级
+- `RDF_RadarScanner`：成员复用 `m_TraceParam` + `m_LosExclude`；每次清 `TraceEnt` / `SurfaceProps`；起点外推 `LOS_START_CLEARANCE_M`（防壳内起射线）；分数映射回 origin→end 供 NLOS/刀刃绕射
+- 对照：`SCR_NameTagRulesetBase`、`SCR_PlacedCommandInfoDisplay`、`SCR_NearbyContextDisplay`、`SCR_PhysicsHelper`
+
 ## 2026-07-31 — MTD 多普勒通道 + 旋翼微多普勒
 
 - `ERDF_MtiMode`：`TwoPulse`（默认，兼容旧 GBRS/demo）/ `MtdBank`
