@@ -18,6 +18,10 @@ class RDF_RadarScanner
     protected ref RDF_RadarLosCache m_LosCache;
     protected ref RDF_RadarScanReuseCache m_ScanReuseCache;
     protected ref RDF_RadarClutterMap m_ClutterMap;
+    // Reused TraceParam / ExcludeArray (SCR_PlacedCommandInfoDisplay / nametag style).
+    // Never write owned ColliderName / TraceMaterial in the hot loop.
+    protected ref TraceParam m_TraceParam;
+    protected ref array<IEntity> m_LosExclude;
     protected bool m_SettingsValidated;
     protected int m_StatReuseHits;
     protected int m_StatFreshUpdates;
@@ -47,6 +51,8 @@ class RDF_RadarScanner
         m_LosCache = new RDF_RadarLosCache();
         m_ScanReuseCache = new RDF_RadarScanReuseCache();
         m_ClutterMap = new RDF_RadarClutterMap();
+        m_TraceParam = new TraceParam();
+        m_LosExclude = new array<IEntity>();
         m_SettingsValidated = false;
         m_RegistryScanCursor = 0;
         m_ScanRainLossDbPerKm = 0.0;
@@ -281,10 +287,9 @@ class RDF_RadarScanner
         float cosHalfAngle = Math.Cos(halfAngleRad);
         int maxTargets = m_Settings.m_MaxTargets;
 
-        TraceParam param = new TraceParam();
-        param.LayerMask = EPhysicsLayerPresets.Projectile;
-        param.Exclude = subject;
-        param.Flags = TraceFlags.WORLD | TraceFlags.ENTS;
+        EnsureLosTrace();
+        RDF_RadarScanGeometry.FillLosExclude(m_LosExclude, subject, null);
+        RDF_RadarScanGeometry.ConfigureLosParam(m_TraceParam, m_LosExclude);
         int losBudget = m_Settings.m_MaxLosTracesPerScan;
         int freshBudget = ComputeFreshUpdateBudget();
         float rangeSq = range * range;
@@ -302,7 +307,7 @@ class RDF_RadarScanner
         passCtx.m_RangeSq = rangeSq;
         passCtx.m_CosHalfAngle = cosHalfAngle;
         passCtx.m_MaxTargets = maxTargets;
-        passCtx.m_Param = param;
+        passCtx.m_Param = m_TraceParam;
         passCtx.m_LosBudget = losBudget;
         passCtx.m_LosUsed = 0;
         passCtx.m_FreshBudget = freshBudget;
@@ -470,12 +475,16 @@ class RDF_RadarScanner
                         wallTime);
                     break;
                 }
-                param.Start = origin;
-                param.End = losEnd;
-                param.TraceEnt = null;
-                hitFraction = world.TraceMove(param, null);
+                RDF_RadarScanGeometry.FillLosExclude(m_LosExclude, subject, entry.m_Entity);
+                hitFraction = RDF_RadarScanGeometry.TraceLineOfSight(
+                    world,
+                    param,
+                    origin,
+                    losEnd,
+                    RDF_RadarScanGeometry.LOS_START_CLEARANCE_M);
                 losUsed = losUsed + 1;
-                losClear = RDF_RadarScanGeometry.IsLineOfSightClear(hitFraction, param.TraceEnt, entry.m_Entity);
+                losClear = RDF_RadarScanGeometry.IsLineOfSightClear(
+                    hitFraction, param.TraceEnt, entry.m_Entity);
                 if (m_LosCache)
                 {
                     m_LosCache.Store(
@@ -725,12 +734,16 @@ class RDF_RadarScanner
             {
                 if (losUsed >= losBudget)
                     break;
-                param.Start = origin;
-                param.End = pos;
-                param.TraceEnt = null;
-                hitFraction = world.TraceMove(param, null);
+                RDF_RadarScanGeometry.FillLosExclude(m_LosExclude, subject, ent);
+                hitFraction = RDF_RadarScanGeometry.TraceLineOfSight(
+                    world,
+                    param,
+                    origin,
+                    pos,
+                    RDF_RadarScanGeometry.LOS_START_CLEARANCE_M);
                 losUsed = losUsed + 1;
-                losClear = RDF_RadarScanGeometry.IsLineOfSightClear(hitFraction, param.TraceEnt, ent);
+                losClear = RDF_RadarScanGeometry.IsLineOfSightClear(
+                    hitFraction, param.TraceEnt, ent);
                 if (m_LosCache)
                 {
                     m_LosCache.Store(
@@ -903,12 +916,16 @@ class RDF_RadarScanner
             {
                 if (losUsed >= losBudget)
                     break;
-                param.Start = origin;
-                param.End = et.m_Position;
-                param.TraceEnt = null;
-                hitFractionE = world.TraceMove(param, null);
+                RDF_RadarScanGeometry.FillLosExclude(m_LosExclude, subject, et.m_Entity);
+                hitFractionE = RDF_RadarScanGeometry.TraceLineOfSight(
+                    world,
+                    param,
+                    origin,
+                    et.m_Position,
+                    RDF_RadarScanGeometry.LOS_START_CLEARANCE_M);
                 losUsed = losUsed + 1;
-                losClearE = RDF_RadarScanGeometry.IsLineOfSightClear(hitFractionE, param.TraceEnt, et.m_Entity);
+                losClearE = RDF_RadarScanGeometry.IsLineOfSightClear(
+                    hitFractionE, param.TraceEnt, et.m_Entity);
                 if (m_LosCache && et.m_Entity)
                 {
                     m_LosCache.Store(
@@ -975,6 +992,14 @@ class RDF_RadarScanner
         }
         ctx.m_LosUsed = losUsed;
         ctx.m_FreshBudget = freshBudget;
+    }
+
+    protected void EnsureLosTrace()
+    {
+        if (!m_TraceParam)
+            m_TraceParam = new TraceParam();
+        if (!m_LosExclude)
+            m_LosExclude = new array<IEntity>();
     }
 
     protected void SynthesizeAllMeasurements(

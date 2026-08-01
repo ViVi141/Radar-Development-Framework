@@ -1,33 +1,98 @@
 // Shared LOS / entity geometry helpers for RDF_RadarScanner passes.
+// TraceMove patterns follow stock Enfusion usage:
+//   SCR_NameTagRulesetBase (ExcludeArray + percent==1)
+//   SCR_NearbyContextDisplay (GetRootParent same-hierarchy = not obstructed)
+//   SCR_PlacedCommandInfoDisplay (reuse TraceParam, clear TraceEnt, ANY_CONTACT)
+//   TraceFlags.ANY_CONTACT docs: "The best for visibility testing"
 class RDF_RadarScanGeometry
 {
+    static const float LOS_CLEAR_FRACTION = 0.999;
+    // Push Start out of the subject hull (same SEH risk as LiDAR in-solid starts).
+    static const float LOS_START_CLEARANCE_M = 0.15;
+
+    //------------------------------------------------------------------------------------------------
+    // Configure a reusable TraceParam for radar LOS (call once per Scan).
+    static void ConfigureLosParam(
+        notnull TraceParam param,
+        notnull array<IEntity> excludeArray)
+    {
+        param.LayerMask = EPhysicsLayerPresets.Projectile;
+        param.Flags = TraceFlags.WORLD | TraceFlags.ENTS | TraceFlags.ANY_CONTACT;
+        // TraceParam: use Exclude OR ExcludeArray, never both.
+        param.Exclude = null;
+        param.ExcludeArray = excludeArray;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Fill ExcludeArray like nametag / command HUD: subject (+ optional target so a
+    // hit on the candidate itself counts as a clear path to the aim point).
+    static void FillLosExclude(
+        notnull array<IEntity> excludeArray,
+        IEntity subject,
+        IEntity target)
+    {
+        excludeArray.Clear();
+        if (subject)
+            excludeArray.Insert(subject);
+        if (target && target != subject)
+            excludeArray.Insert(target);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // One LOS TraceMove. Returns hit fraction remapped onto origin→losEnd [0,1]
+    // so NLOS / knife-edge keep a stable parameter after start clearance.
+    static float TraceLineOfSight(
+        notnull BaseWorld world,
+        notnull TraceParam param,
+        vector origin,
+        vector losEnd,
+        float startClearanceM)
+    {
+        vector delta = losEnd - origin;
+        float fullLen = delta.Length();
+        vector start = origin;
+        if (fullLen > 0.001 && startClearanceM > 0.0)
+        {
+            float clear = startClearanceM;
+            if (clear > fullLen * 0.25)
+                clear = fullLen * 0.05;
+            start = origin + (delta * (clear / fullLen));
+        }
+
+        param.Start = start;
+        param.End = losEnd;
+        // SCR_PhysicsHelper / SCR_PlacedCommandInfoDisplay: reset outs every cast.
+        param.TraceEnt = null;
+        param.SurfaceProps = null;
+
+        float segmentHit = world.TraceMove(param, null);
+
+        if (fullLen <= 0.001)
+            return segmentHit;
+
+        float startOffset = (start - origin).Length();
+        float segmentLen = fullLen - startOffset;
+        if (segmentLen < 0.001)
+            return segmentHit;
+
+        float along = startOffset + (segmentHit * segmentLen);
+        float remapped = along / fullLen;
+        if (remapped > 1.0)
+            remapped = 1.0;
+        return remapped;
+    }
+
+    //------------------------------------------------------------------------------------------------
     static bool IsLineOfSightClear(float hitFraction, IEntity traceEnt, IEntity target)
     {
-        // Reached the end point with no earlier blocker.
-        if (hitFraction >= 0.999)
+        // Nametag style: target excluded ⇒ clear path reaches the endpoint.
+        if (hitFraction >= LOS_CLEAR_FRACTION)
             return true;
         if (!traceEnt || !target)
             return false;
-        // Hit the target root, or any child collider under it (common for vehicles).
-        if (IsEntityOrChildOf(traceEnt, target))
+        // NearbyContextDisplay: same root hierarchy is not an obstruction.
+        if (traceEnt.GetRootParent() == target.GetRootParent())
             return true;
-        return false;
-    }
-
-    // True when hitEntity is target, or a descendant of target in the entity tree.
-    static bool IsEntityOrChildOf(IEntity hitEntity, IEntity target)
-    {
-        if (!hitEntity || !target)
-            return false;
-        IEntity cur = hitEntity;
-        int guard = 0;
-        while (cur && guard < 16)
-        {
-            if (cur == target)
-                return true;
-            cur = cur.GetParent();
-            guard = guard + 1;
-        }
         return false;
     }
 
