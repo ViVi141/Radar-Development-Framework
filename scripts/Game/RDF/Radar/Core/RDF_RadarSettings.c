@@ -105,6 +105,10 @@ class RDF_RadarSettings
     bool m_TrackCoastOnMiss = false;
     // Extra miss budget / wider gates when last hit used a near-zero Doppler bin.
     bool m_TrackCoastOnDopplerNull = false;
+    // Grow association gates by this fraction per consecutive miss while coasting.
+    float m_TrackCoastGateGrowPerMiss = 0.25;
+    // Drop coasting tracks after this many seconds (0 = disabled).
+    float m_TrackCoastMaxSec = 0.0;
     // Runtime clutter-map EMA over DEM σ⁰ (per range–az cell).
     bool m_EnableClutterMap = false;
     float m_ClutterMapAlpha = 0.15;
@@ -202,6 +206,8 @@ class RDF_RadarSettings
         m_TrackGateAzimuthDeg = Math.Clamp(m_TrackGateAzimuthDeg, 0.1, 90.0);
         m_TrackConfirmHits = Math.Clamp(m_TrackConfirmHits, 1, 16);
         m_TrackMaxMisses = Math.Clamp(m_TrackMaxMisses, 1, 32);
+        m_TrackCoastGateGrowPerMiss = Math.Clamp(m_TrackCoastGateGrowPerMiss, 0.0, 5.0);
+        m_TrackCoastMaxSec = Math.Clamp(m_TrackCoastMaxSec, 0.0, 120.0);
         m_ClutterMapAlpha = Math.Clamp(m_ClutterMapAlpha, 0.01, 1.0);
         m_RdCellsPerScan = Math.Clamp(m_RdCellsPerScan, 1, 512);
         m_RdMapAlpha = Math.Clamp(m_RdMapAlpha, 0.01, 1.0);

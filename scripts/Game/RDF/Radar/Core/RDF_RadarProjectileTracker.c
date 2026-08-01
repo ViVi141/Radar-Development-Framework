@@ -24,8 +24,15 @@ class RDF_RadarTrack
     float m_LastUpdateTime = -1.0;
     // Last associated plot Doppler bin (-1 unknown / TwoPulse).
     int m_LastDopplerBin = -1;
+    // Last associated PRF (stagger index + Hz) for multi-PRF de-blind coast.
+    int m_LastPrfIndex;
+    float m_LastPrfHz;
     // True while coasting on filtered velocity after a miss.
     bool m_Coasting;
+    // Seconds spent coasting since last association (FilterUpdate clears).
+    float m_CoastElapsedSec;
+    // Consecutive soft-miss coasts (Doppler-null / blind); hard-miss when exceeded.
+    int m_SoftMissStreak;
     ERDF_RadarTargetType m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_ANONYMOUS;
     // Ballistic prior (ShellMoveComponent.AirDrag). <=0 disables drag path.
     float m_AirDrag = RDF_RadarBallistics.AIR_DRAG_SHELL_82MM_HE;
@@ -86,13 +93,19 @@ class RDF_RadarTrack
             return m_FilteredPosition + m_FilteredVelocity * dt;
 
         RDF_RadarGlobalWind wind = RDF_RadarBallistics.SampleGlobalWind();
-        return RDF_RadarBallistics.IntegrateForDuration(
+        vector outP;
+        vector outV;
+        RDF_RadarBallistics.IntegrateForDurationEx(
             m_FilteredPosition,
             m_FilteredVelocity,
             dt,
             m_AirDrag,
             wind,
-            RDF_RadarBallistics.GRAVITY_M_S2);
+            outP,
+            outV,
+            RDF_RadarBallistics.GRAVITY_M_S2,
+            RDF_RadarBallistics.DEFAULT_DT_S);
+        return outP;
     }
 
     // Extrapolate polar range / azimuth relative to a radar origin.
@@ -104,7 +117,34 @@ class RDF_RadarTrack
         out float outElevationDeg,
         out float outRangeRateMs)
     {
-        vector pred = PredictAt(worldTimeSec);
+        float lastTime = GetLastTime();
+        float dt = 0.0;
+        if (lastTime >= 0.0)
+            dt = worldTimeSec - lastTime;
+        if (dt < 0.0)
+            dt = 0.0;
+
+        vector pred;
+        vector vel = m_FilteredVelocity;
+        if (!m_UseBallisticPrediction || !IsProjectileTrack() || m_AirDrag <= 0.0)
+        {
+            pred = m_FilteredPosition + m_FilteredVelocity * dt;
+        }
+        else
+        {
+            RDF_RadarGlobalWind wind = RDF_RadarBallistics.SampleGlobalWind();
+            RDF_RadarBallistics.IntegrateForDurationEx(
+                m_FilteredPosition,
+                m_FilteredVelocity,
+                dt,
+                m_AirDrag,
+                wind,
+                pred,
+                vel,
+                RDF_RadarBallistics.GRAVITY_M_S2,
+                RDF_RadarBallistics.DEFAULT_DT_S);
+        }
+
         vector delta = pred - radarOrigin;
         outRangeM = delta.Length();
         if (outRangeM < 0.001)
@@ -118,7 +158,8 @@ class RDF_RadarTrack
         outAzimuthDeg = Math.Atan2(delta[2], delta[0]) * 57.2957795;
         float horizontal = Math.Sqrt(delta[0] * delta[0] + delta[2] * delta[2]);
         outElevationDeg = Math.Atan2(delta[1], Math.Max(0.001, horizontal)) * 57.2957795;
-        outRangeRateMs = m_FilteredRangeRateMs;
+        vector los = delta * (1.0 / outRangeM);
+        outRangeRateMs = vector.Dot(vel, los);
     }
 
     // Real WLR-style: multi-point vacuum fit on track history, then AirDrag
@@ -234,7 +275,11 @@ class RDF_RadarTrack
         m_HitCount = m_HitCount + 1;
         m_MissCount = 0;
         m_Coasting = false;
+        m_CoastElapsedSec = 0.0;
+        m_SoftMissStreak = 0;
         m_LastDopplerBin = target.m_DopplerBin;
+        m_LastPrfIndex = target.m_PrfIndex;
+        m_LastPrfHz = 0.0;
         m_LastScanNumber = target.m_ScanNumber;
         m_LastUpdateTime = target.m_Time;
         if (m_HitCount >= confirmHits)
@@ -256,8 +301,29 @@ class RDF_RadarTrack
         if (dt <= 0.0)
             return;
 
-        vector pred = PredictAt(worldTimeSec);
+        vector pred;
+        vector vel = m_FilteredVelocity;
+        if (!m_UseBallisticPrediction || !IsProjectileTrack() || m_AirDrag <= 0.0)
+        {
+            pred = m_FilteredPosition + m_FilteredVelocity * dt;
+        }
+        else
+        {
+            RDF_RadarGlobalWind wind = RDF_RadarBallistics.SampleGlobalWind();
+            RDF_RadarBallistics.IntegrateForDurationEx(
+                m_FilteredPosition,
+                m_FilteredVelocity,
+                dt,
+                m_AirDrag,
+                wind,
+                pred,
+                vel,
+                RDF_RadarBallistics.GRAVITY_M_S2,
+                RDF_RadarBallistics.DEFAULT_DT_S);
+        }
+
         m_FilteredPosition = pred;
+        m_FilteredVelocity = vel;
 
         vector delta = pred - radarOrigin;
         float rangeM = delta.Length();
@@ -267,6 +333,8 @@ class RDF_RadarTrack
             m_FilteredAzimuthDeg = Math.Atan2(delta[2], delta[0]) * 57.2957795;
             float horizontal = Math.Sqrt(delta[0] * delta[0] + delta[2] * delta[2]);
             m_FilteredElevationDeg = Math.Atan2(delta[1], Math.Max(0.001, horizontal)) * 57.2957795;
+            vector los = delta * (1.0 / rangeM);
+            m_FilteredRangeRateMs = vector.Dot(vel, los);
         }
         else
         {
@@ -278,6 +346,7 @@ class RDF_RadarTrack
         // Do not Push coast samples — history stays measurement-only (WLR / fit).
         m_LastUpdateTime = worldTimeSec;
         m_Coasting = true;
+        m_CoastElapsedSec = m_CoastElapsedSec + dt;
     }
 
     static float NormalizeAngleDeg(float deg)
@@ -314,6 +383,16 @@ class RDF_RadarProjectileTracker
     protected float m_WeaponLocateSmoothAlpha = 0.35;
     protected bool m_CoastOnMiss = true;
     protected bool m_CoastOnDopplerNull = true;
+    protected float m_CoastGateGrowPerMiss = 0.25;
+    protected float m_CoastMaxSec = 0.0;
+    // Multi-PRF blind-speed association (λ·PRF/2 notches).
+    protected float m_WavelengthM = 0.0333;
+    protected float m_PrimaryPrfHz = 4000.0;
+    protected ref array<float> m_PrfSetHz;
+    protected float m_BlindSpeedTolMs = 8.0;
+    protected float m_BlindGateScale = 1.5;
+    protected int m_BlindExtraMisses = 2;
+    protected bool m_EnablePrfDeblind = true;
 
     void ConfigureFromSettings(RDF_RadarSettings settings)
     {
@@ -333,7 +412,107 @@ class RDF_RadarProjectileTracker
         m_WeaponLocateSmoothAlpha = settings.m_WeaponLocateSmoothAlpha;
         m_CoastOnMiss = settings.m_TrackCoastOnMiss;
         m_CoastOnDopplerNull = settings.m_TrackCoastOnDopplerNull;
+        m_CoastGateGrowPerMiss = settings.m_TrackCoastGateGrowPerMiss;
+        m_CoastMaxSec = settings.m_TrackCoastMaxSec;
         RDF_RadarBallistics.SetUseDemGround(settings.m_EnableDemGroundForWlr);
+        ConfigurePrfFromHardware(settings.m_Hardware);
+    }
+
+    void ConfigurePrfFromHardware(RDF_RadarHardware hardware)
+    {
+        if (!m_PrfSetHz)
+            m_PrfSetHz = new array<float>();
+        m_PrfSetHz.Clear();
+        if (!hardware)
+            return;
+        m_WavelengthM = hardware.GetWavelengthM();
+        m_PrimaryPrfHz = hardware.m_PrfHz;
+        if (hardware.m_PrfSetHz && hardware.m_PrfSetHz.Count() > 0)
+        {
+            for (int i = 0; i < hardware.m_PrfSetHz.Count(); i++)
+                m_PrfSetHz.Insert(hardware.m_PrfSetHz.Get(i));
+        }
+        else
+        {
+            m_PrfSetHz.Insert(m_PrimaryPrfHz);
+            if (hardware.m_PrfStaggerRatio > 1.001)
+                m_PrfSetHz.Insert(m_PrimaryPrfHz * hardware.m_PrfStaggerRatio);
+        }
+    }
+
+    float ResolvePrfHz(int prfIndex)
+    {
+        if (!m_PrfSetHz || m_PrfSetHz.Count() == 0)
+            return m_PrimaryPrfHz;
+        int count = m_PrfSetHz.Count();
+        int idx = prfIndex;
+        if (idx < 0)
+            idx = 0;
+        if (count > 0)
+            idx = idx % count;
+        float prf = m_PrfSetHz.Get(idx);
+        if (prf < 1.0)
+            prf = m_PrimaryPrfHz;
+        return prf;
+    }
+
+    // Blind speeds ≈ n · λ · PRF / 2 (incl. n=0).
+    bool IsNearBlindSpeed(float radialMs, float prfHz)
+    {
+        if (!m_EnablePrfDeblind)
+            return false;
+        if (prfHz < 1.0 || m_WavelengthM <= 0.0)
+            return false;
+        float step = 0.5 * m_WavelengthM * prfHz;
+        if (step < 0.001)
+            return false;
+        float tol = m_BlindSpeedTolMs;
+        if (tol < 0.5)
+            tol = 0.5;
+        float vr = radialMs;
+        if (vr < 0.0)
+            vr = -vr;
+        // Check |vr - n·step| for n = 0..4 (covers ± via abs).
+        for (int n = 0; n <= 4; n++)
+        {
+            float blind = step * n;
+            float d = vr - blind;
+            if (d < 0.0)
+                d = -d;
+            if (d <= tol)
+                return true;
+        }
+        return false;
+    }
+
+    bool IsNearAnyPrfBlind(float radialMs)
+    {
+        if (!m_EnablePrfDeblind)
+            return false;
+        if (!m_PrfSetHz || m_PrfSetHz.Count() == 0)
+            return IsNearBlindSpeed(radialMs, m_PrimaryPrfHz);
+        for (int i = 0; i < m_PrfSetHz.Count(); i++)
+        {
+            if (IsNearBlindSpeed(radialMs, m_PrfSetHz.Get(i)))
+                return true;
+        }
+        return false;
+    }
+
+    int EffectiveMaxMisses(RDF_RadarTrack track)
+    {
+        int maxMiss = m_MaxMisses;
+        if (!track || !m_EnablePrfDeblind)
+            return maxMiss;
+        float prfHz = track.m_LastPrfHz;
+        if (prfHz < 1.0)
+            prfHz = ResolvePrfHz(track.m_LastPrfIndex);
+        bool nearBlind = IsNearBlindSpeed(track.m_FilteredRangeRateMs, prfHz);
+        if (!nearBlind)
+            nearBlind = IsNearAnyPrfBlind(track.m_FilteredRangeRateMs);
+        if (nearBlind)
+            maxMiss = maxMiss + m_BlindExtraMisses;
+        return maxMiss;
     }
 
     void SetFilterGains(float alpha, float beta)
@@ -418,7 +597,7 @@ class RDF_RadarProjectileTracker
             RDF_RadarTrack track = m_Tracks.Get(ti);
             if (!track)
                 continue;
-            if (track.m_MissCount > m_MaxMisses)
+            if (track.m_MissCount > EffectiveMaxMisses(track))
                 continue;
 
             for (int pi = 0; pi < plots.Count(); pi++)
@@ -427,29 +606,45 @@ class RDF_RadarProjectileTracker
                 if (!plot)
                     continue;
 
-                float lastT = track.m_LastUpdateTime;
-                if (lastT < 0.0)
-                    lastT = track.GetLastTime();
-                float dt = plot.m_Time - lastT;
-                if (dt < 0.0)
-                    dt = 0.0;
                 float gateRange = m_GateRangeM;
                 float gateAz = m_GateAzimuthDeg;
-                // Widen association while coasting through MTI / zero-Doppler nulls.
+                float grow = 1.0 + m_CoastGateGrowPerMiss * track.m_MissCount;
+                if (grow < 1.0)
+                    grow = 1.0;
+                gateRange = gateRange * grow;
+                gateAz = gateAz * grow;
+                // Widen association while coasting through MTI / zero-Doppler / PRF blinds.
+                bool widen = false;
                 if (m_CoastOnDopplerNull)
                 {
-                    bool dopplerNull = false;
                     if (track.m_LastDopplerBin == 0)
-                        dopplerNull = true;
+                        widen = true;
                     if (track.m_Coasting)
-                        dopplerNull = true;
-                    if (dopplerNull)
-                    {
-                        gateRange = gateRange * 1.5;
-                        gateAz = gateAz * 1.5;
-                    }
+                        widen = true;
                 }
-                float predRange = track.m_FilteredRangeM + track.m_FilteredRangeRateMs * dt;
+                if (m_EnablePrfDeblind)
+                {
+                    float trackPrf = track.m_LastPrfHz;
+                    if (trackPrf < 1.0)
+                        trackPrf = ResolvePrfHz(track.m_LastPrfIndex);
+                    if (IsNearBlindSpeed(track.m_FilteredRangeRateMs, trackPrf))
+                        widen = true;
+                    float plotPrf = ResolvePrfHz(plot.m_PrfIndex);
+                    if (IsNearBlindSpeed(plot.m_RadialSpeedMs, plotPrf))
+                        widen = true;
+                }
+                if (widen)
+                {
+                    gateRange = gateRange * m_BlindGateScale;
+                    gateAz = gateAz * m_BlindGateScale;
+                }
+
+                float predRange;
+                float predAz;
+                float predEl;
+                float predRr;
+                track.PredictPolarAt(
+                    plot.m_Time, radarOrigin, predRange, predAz, predEl, predRr);
                 float dRange = plot.m_Distance - predRange;
                 if (dRange < 0.0)
                     dRange = -dRange;
@@ -457,7 +652,7 @@ class RDF_RadarProjectileTracker
                     continue;
 
                 float dAz = RDF_RadarTrack.NormalizeAngleDeg(
-                    plot.m_AzimuthDeg - track.m_FilteredAzimuthDeg);
+                    plot.m_AzimuthDeg - predAz);
                 if (dAz < 0.0)
                     dAz = -dAz;
                 if (dAz > gateAz)
@@ -508,6 +703,7 @@ class RDF_RadarProjectileTracker
             {
                 ApplyBallisticConfig(assigned);
                 assigned.FilterUpdate(hit, m_Alpha, m_Beta, m_ConfirmHits);
+                assigned.m_LastPrfHz = ResolvePrfHz(hit.m_PrfIndex);
             }
         }
 
@@ -518,7 +714,30 @@ class RDF_RadarProjectileTracker
             RDF_RadarTrack missed = m_Tracks.Get(tm);
             if (!missed)
                 continue;
-            missed.m_MissCount = missed.m_MissCount + 1;
+
+            bool softMiss = false;
+            if (m_CoastOnDopplerNull || m_EnablePrfDeblind)
+            {
+                if (missed.m_LastDopplerBin == 0)
+                    softMiss = true;
+                float prfHz = missed.m_LastPrfHz;
+                if (prfHz < 1.0)
+                    prfHz = ResolvePrfHz(missed.m_LastPrfIndex);
+                if (IsNearBlindSpeed(missed.m_FilteredRangeRateMs, prfHz))
+                    softMiss = true;
+                if (IsNearAnyPrfBlind(missed.m_FilteredRangeRateMs))
+                    softMiss = true;
+            }
+            if (softMiss && missed.m_SoftMissStreak < m_BlindExtraMisses)
+            {
+                missed.m_SoftMissStreak = missed.m_SoftMissStreak + 1;
+            }
+            else
+            {
+                missed.m_MissCount = missed.m_MissCount + 1;
+                missed.m_SoftMissStreak = 0;
+            }
+
             if (m_CoastOnMiss)
                 missed.CoastTo(worldTimeSec, m_LastRadarOrigin);
         }
@@ -537,6 +756,7 @@ class RDF_RadarProjectileTracker
                 born.m_Entity = seed.m_Entity;
             ApplyBallisticConfig(born);
             born.FilterUpdate(seed, m_Alpha, m_Beta, m_ConfirmHits);
+            born.m_LastPrfHz = ResolvePrfHz(seed.m_PrfIndex);
             m_Tracks.Insert(born);
         }
 
@@ -551,7 +771,9 @@ class RDF_RadarProjectileTracker
             bool ageOut = false;
             if (worldTimeSec - tr.GetLastTime() > m_PruneAgeSec)
                 ageOut = true;
-            if (tr.m_MissCount > m_MaxMisses)
+            if (tr.m_MissCount > EffectiveMaxMisses(tr))
+                ageOut = true;
+            if (m_CoastMaxSec > 0.0 && tr.m_Coasting && tr.m_CoastElapsedSec > m_CoastMaxSec)
                 ageOut = true;
             if (ageOut)
                 m_Tracks.Remove(j);

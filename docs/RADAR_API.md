@@ -82,18 +82,22 @@ Default `SEARCH` keeps MTI **off** so parked vehicles paint. For moving air targ
 sensor.ConfigureMode(ERDF_RadarSensorMode.RDF_RADAR_MODE_PULSE_DOPPLER, 96);
 // equivalent knobs on Hardware / Settings (Validate() clamps):
 //   hw.m_EnableMti = true;
-//   hw.m_MtiMode = ERDF_MtiMode.RDF_MTI_MTD_BANK;   // TwoPulse = legacy
-//   hw.m_DopplerBinCount = 16;                      // 8–32 typical
-//   hw.m_MtiClutterFloor = 1e-4;                    // zero-speed bin only
-//   hw.m_MtdClutterLeakage = 1e-6;                  // non-zero bins
+//   hw.m_MtiMode = ERDF_MtiMode.RDF_MTI_MTD_BANK;   // or TWOPULSE / THREE_PULSE
+//   hw.m_MtiStaggerDeblind = true;                  // classic: max over PRF set
+//   hw.m_DopplerBinCount = 16;                      // 8–32 typical (MTD)
+//   hw.m_MtiClutterFloor = 1e-4;                    // classic residue / MTD bin0
+//   hw.m_MtdClutterLeakage = 1e-6;                  // non-zero MTD bins
 //   hw.m_PrfStaggerRatio = 1.2;                     // or m_PrfSetHz[]
 //   settings.m_EnableClutterMap = true;
 //   settings.m_TrackCoastOnMiss = true;
 //   settings.m_TrackCoastOnDopplerNull = true;
+//   settings.m_TrackCoastGateGrowPerMiss = 0.25;
+//   settings.m_TrackCoastMaxSec = 8.0;
 ```
 
 Plots expose `m_DopplerHz`, `m_DopplerBin`, `m_PrfIndex`, `m_RadialSpeedMs` (network-synced).  
-Helicopter signatures auto-fill rotor tip / blade / RCS fraction when conf omits them (`Helicopters/*`).
+Helicopter signatures auto-fill rotor tip / blade / RCS fraction when conf omits them (`Helicopters/*`).  
+Classic TwoPulse / ThreePulse now also score rotor spectrum lines (not body-only).
 
 ### ESM + anti-radiation aim (no weapon prefab)
 
@@ -499,15 +503,20 @@ radar.SetMode(ERDF_RadarSensorMode.RDF_RADAR_MODE_SEARCH);
 ```c
 sensor.ConfigureMode(ERDF_RadarSensorMode.RDF_RADAR_MODE_PULSE_DOPPLER, 96);
 // 等价旋钮（Validate 会钳位）：
-//   hw.m_MtiMode = ERDF_MtiMode.RDF_MTI_MTD_BANK;
+//   hw.m_MtiMode = ERDF_MtiMode.RDF_MTI_MTD_BANK;   // 亦可 TWOPULSE / THREE_PULSE
+//   hw.m_MtiStaggerDeblind = true;                  // 经典 canceller：多 PRF 取 max
 //   hw.m_DopplerBinCount = 16;
 //   hw.m_PrfStaggerRatio = 1.2;
 //   settings.m_EnableClutterMap = true;
 //   settings.m_TrackCoastOnMiss = true;
+//   settings.m_TrackCoastOnDopplerNull = true;
+//   settings.m_TrackCoastGateGrowPerMiss = 0.25;
+//   settings.m_TrackCoastMaxSec = 8.0;
 ```
 
 Plot 带 `m_DopplerHz` / `m_DopplerBin` / `m_PrfIndex` / `m_RadialSpeedMs`（网络同步）。  
-直升机 signature 缺旋翼字段时，运行时对 `Helicopters/*` 自动填 UH-1/Mi-8 类默认。
+直升机 signature 缺旋翼字段时，运行时对 `Helicopters/*` 自动填 UH-1/Mi-8 类默认。  
+经典 TwoPulse / ThreePulse 也会对旋翼谱线取 max（不再只吃机身 Doppler）。
 
 ### ESM + 反辐射瞄点（不含武器 prefab）
 

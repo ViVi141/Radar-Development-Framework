@@ -230,6 +230,93 @@ class RDF_RadarClutterModel
     }
 
     //------------------------------------------------------------------------------------------------
+    // Three-pulse binomial canceller, peak-normalized: sin^4(π fd/PRF).
+    static float MtiThreePulseGain(float dopplerHz, float prfHz)
+    {
+        float g2 = MtiTwoPulseGain(dopplerHz, prfHz);
+        return g2 * g2;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Classic canceller gain for TwoPulse / ThreePulse (MTD returns 1 — use bank path).
+    static float MtiCancellerGain(ERDF_MtiMode mode, float dopplerHz, float prfHz)
+    {
+        if (mode == ERDF_MtiMode.RDF_MTI_THREE_PULSE)
+            return MtiThreePulseGain(dopplerHz, prfHz);
+        return MtiTwoPulseGain(dopplerHz, prfHz);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Power-weighted max canceller gain over Doppler spectrum lines and PRF list.
+    // outPeakFd is the fd of the winning line (first PRF that achieves the max).
+    static float MaxMtiCancellerSpectrumGain(
+        array<float> dopplerHzLines,
+        array<float> powers,
+        array<float> prfHzList,
+        ERDF_MtiMode mode,
+        out float outPeakFd)
+    {
+        outPeakFd = 0.0;
+        if (!dopplerHzLines || dopplerHzLines.Count() == 0)
+            return 1.0;
+        if (!prfHzList || prfHzList.Count() == 0)
+            return 1.0;
+
+        float powerSum = 0.0;
+        int nLines = dopplerHzLines.Count();
+        for (int i = 0; i < nLines; i++)
+        {
+            float w = 1.0;
+            if (powers && i < powers.Count())
+                w = powers.Get(i);
+            if (w < 0.0)
+                w = 0.0;
+            powerSum = powerSum + w;
+        }
+        if (powerSum <= 0.0)
+            powerSum = 1.0;
+
+        float best = -1.0;
+        float bestFd = dopplerHzLines.Get(0);
+        for (int p = 0; p < prfHzList.Count(); p++)
+        {
+            float prf = prfHzList.Get(p);
+            if (prf < 1.0)
+                continue;
+            float channel = 0.0;
+            float fdAcc = 0.0;
+            float fdW = 0.0;
+            for (int j = 0; j < nLines; j++)
+            {
+                float fd = dopplerHzLines.Get(j);
+                float wj = 1.0;
+                if (powers && j < powers.Count())
+                    wj = powers.Get(j);
+                if (wj < 0.0)
+                    wj = 0.0;
+                float g = MtiCancellerGain(mode, fd, prf);
+                float contrib = wj * g;
+                channel = channel + contrib;
+                fdAcc = fdAcc + fd * contrib;
+                fdW = fdW + contrib;
+            }
+            float normalized = channel / powerSum;
+            if (normalized > best)
+            {
+                best = normalized;
+                if (fdW > 0.0)
+                    bestFd = fdAcc / fdW;
+                else
+                    bestFd = dopplerHzLines.Get(0);
+            }
+        }
+        outPeakFd = bestFd;
+        if (best < 0.0)
+            best = 0.0;
+        return best;
+    }
+
+    //------------------------------------------------------------------------------------------------
     // Wrap normalized Doppler (fd/PRF) into [-0.5, 0.5).
     static float WrapNormalizedDoppler(float normFd)
     {

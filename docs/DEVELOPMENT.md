@@ -28,7 +28,7 @@ License: Apache-2.0
 scripts/Game/RDF/
 ├── Common/    RDF_DebugShapeManager（世界空间 Shape 托管）
 ├── Lidar/     点云扫描、可视化、网络、HUD
-├── Radar/     实体扫描、物理检测、EW、CFAR、网络同步、PPI、自动化测试
+├── Radar/     实体扫描、物理检测（MTI/MTD）、航迹 coast、EW、CFAR、网络、PPI、AutoTest
 └── DEM/       Workbench 烘焙 + Runtime 加载
 UI/layouts/RDF/
 ├── RadarPPI.layout   雷达 PPI（右下角，绿磷光）
@@ -100,22 +100,23 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarSettings.c / RDF_RadarTypes.c / RDF_RadarHardware.c
 │   ├── RDF_RadarScanner.c              编排：Registry/Legacy 扫描 + Trace + 复用预算
 │   ├── RDF_RadarScanGeometry.c         LOS TraceMove（ANY_CONTACT / ExcludeArray / 出壳）+ 实体中心 / 速度
-│   ├── RDF_RadarPhysicalDetect.c       雷达方程 / NLOS bounce+刀刃绕射 / DEM 杂波 / SNR / ESM
+│   ├── RDF_RadarPhysicalDetect.c       雷达方程 / MTI·MTD / NLOS bounce+刀刃 / DEM 杂波 / SNR / ESM
 │   ├── RDF_RadarScattererRegistry.c    全局散射体/辐射源表（增量维护；多雷达 focus 合并）
 │   ├── RDF_RadarEmitterRegistry.c      辐射标记门面（转发到散射体表）
 │   ├── RDF_RadarCandidateCollect.c     候选收集辅助
 │   ├── RDF_RadarLosCache.c / RDF_RadarScanReuseCache.c / RDF_RadarScanPassContext.c
 │   ├── RDF_RadarCfarProcessor.c        扫描侧 CFAR 编排（热填空等）
-│   ├── RDF_RadarProjectileTracker.c    量测关联 / α-β / 弹道 PredictAt / WLR fix
+│   ├── RDF_RadarProjectileTracker.c    量测关联 / α-β / 弹道 coast / PredictPolarAt / WLR
 │   ├── RDF_RadarLockManager.c          锁定层 SEARCH/ACQUIRING/TRACKING/COAST + ARM
 │   ├── RDF_RadarWeaponBridge.c         火控桥 FireSolution / 发射门控 / 中段上行
 │   ├── RDF_RadarWeaponComponent.c      载具挂载入口 GuideRocket
 │   ├── RDF_RadarRwr.c                  被搜索/跟踪/锁定告警
-│   └── RDF_RadarSensor.c               公共门面 SEARCH/STARE/WLR/ESM → Plots/Tracks/Lock/ARM/RWR
+│   └── RDF_RadarSensor.c               公共门面 SEARCH/STARE/WLR/ESM/PULSE_DOPPLER → Plots/Tracks/Lock/ARM/RWR
 ├── Physics/
 │   ├── RDF_RadarRcsModel.c / RDF_RadarBallistics.c / RDF_RadarSignatureLibrary.c
 │   ├── RDF_RadarSignatureTableConf.c / RDF_RadarSurfaceTable.c / RDF_RadarSurfaceTableConf.c
-│   ├── RDF_RadarClutterModel.c         DEM σ⁰ → 杂波功率
+│   ├── RDF_RadarClutterModel.c         DEM σ⁰ + Two/ThreePulse / MTD bank 传递函数
+│   ├── RDF_RadarHwCalib.c              σ_vr → leakage/floor；HwCalib.json 回灌
 │   ├── RDF_RadarClutterMap.c           range–az 杂波 EMA
 │   ├── RDF_RadarCoarseRdMap.c          粗 RD 分帧图（默认关）
 │   ├── RDF_RadarMeasurement.c          距离门/波束量化 + SNR 噪声
@@ -357,7 +358,7 @@ Entry points: [README.md](../README.md) · Radar public API: [RADAR_API.md](RADA
 scripts/Game/RDF/
 ├── Common/    RDF_DebugShapeManager（世界空间 Shape 托管）
 ├── Lidar/     点云扫描、可视化、网络、HUD
-├── Radar/     实体扫描、物理检测、EW、CFAR、网络同步、PPI、自动化测试
+├── Radar/     实体扫描、物理检测（MTI/MTD）、航迹 coast、EW、CFAR、网络、PPI、AutoTest
 └── DEM/       Workbench 烘焙 + Runtime 加载
 UI/layouts/RDF/
 ├── RadarPPI.layout   雷达 PPI（右下角，绿磷光）
@@ -429,22 +430,23 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarSettings.c / RDF_RadarTypes.c / RDF_RadarHardware.c
 │   ├── RDF_RadarScanner.c              编排：Registry/Legacy 扫描 + Trace + 复用预算
 │   ├── RDF_RadarScanGeometry.c         LOS TraceMove（ANY_CONTACT / ExcludeArray / 出壳）+ 实体中心 / 速度
-│   ├── RDF_RadarPhysicalDetect.c       雷达方程 / NLOS bounce+刀刃绕射 / DEM 杂波 / SNR / ESM
+│   ├── RDF_RadarPhysicalDetect.c       雷达方程 / MTI·MTD / NLOS bounce+刀刃 / DEM 杂波 / SNR / ESM
 │   ├── RDF_RadarScattererRegistry.c    全局散射体/辐射源表（增量维护；多雷达 focus 合并）
 │   ├── RDF_RadarEmitterRegistry.c      辐射标记门面（转发到散射体表）
 │   ├── RDF_RadarCandidateCollect.c     候选收集辅助
 │   ├── RDF_RadarLosCache.c / RDF_RadarScanReuseCache.c / RDF_RadarScanPassContext.c
 │   ├── RDF_RadarCfarProcessor.c        扫描侧 CFAR 编排（热填空等）
-│   ├── RDF_RadarProjectileTracker.c    量测关联 / α-β / 弹道 PredictAt / WLR fix
+│   ├── RDF_RadarProjectileTracker.c    量测关联 / α-β / 弹道 coast / PredictPolarAt / WLR
 │   ├── RDF_RadarLockManager.c          锁定层 SEARCH/ACQUIRING/TRACKING/COAST + ARM
 │   ├── RDF_RadarWeaponBridge.c         火控桥 FireSolution / 发射门控 / 中段上行
 │   ├── RDF_RadarWeaponComponent.c      载具挂载入口 GuideRocket
 │   ├── RDF_RadarRwr.c                  被搜索/跟踪/锁定告警
-│   └── RDF_RadarSensor.c               公共门面 SEARCH/STARE/WLR/ESM → Plots/Tracks/Lock/ARM/RWR
+│   └── RDF_RadarSensor.c               公共门面 SEARCH/STARE/WLR/ESM/PULSE_DOPPLER → Plots/Tracks/Lock/ARM/RWR
 ├── Physics/
 │   ├── RDF_RadarRcsModel.c / RDF_RadarBallistics.c / RDF_RadarSignatureLibrary.c
 │   ├── RDF_RadarSignatureTableConf.c / RDF_RadarSurfaceTable.c / RDF_RadarSurfaceTableConf.c
-│   ├── RDF_RadarClutterModel.c         DEM σ⁰ → 杂波功率
+│   ├── RDF_RadarClutterModel.c         DEM σ⁰ + Two/ThreePulse / MTD bank 传递函数
+│   ├── RDF_RadarHwCalib.c              σ_vr → leakage/floor；HwCalib.json 回灌
 │   ├── RDF_RadarClutterMap.c           range–az 杂波 EMA
 │   ├── RDF_RadarCoarseRdMap.c          粗 RD 分帧图（默认关）
 │   ├── RDF_RadarMeasurement.c          距离门/波束量化 + SNR 噪声

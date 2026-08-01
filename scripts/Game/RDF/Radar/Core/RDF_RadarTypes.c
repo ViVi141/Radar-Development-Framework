@@ -17,10 +17,12 @@ enum ERDF_CfarMode
 
 // MTI / MTD processing mode. TwoPulse = legacy sin² canceller (default).
 // MtdBank = DFT Doppler filter bank; clutter stays in the near-zero bin.
+// ThreePulse appended (value 2) so existing saved MtdBank=1 stays valid.
 enum ERDF_MtiMode
 {
     RDF_MTI_TWOPULSE,
-    RDF_MTI_MTD_BANK
+    RDF_MTI_MTD_BANK,
+    RDF_MTI_THREE_PULSE
 }
 
 // Noise-jammer antenna coupling vs victim scan beam.
@@ -68,6 +70,8 @@ class RDF_RadarTarget
     int m_BladeCount;
     float m_RotorRcsFraction;
     float m_HubWidthMs;
+    // True when MTD win bin is non-zero and rotor tip lines contributed (observability).
+    bool m_RotorSidebandUsed;
     int m_DemSurfaceClass = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
     bool m_DemSampleValid;
     float m_ClutterPowerW;

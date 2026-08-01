@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""End-to-end UH-1 CPA flyby: TwoPulse vs MtdBank paint probability.
+"""End-to-end UH-1 CPA flyby: body-null vs spectrum-aware / MtdBank paint.
 
-Simulates a constant-speed tangential flyby past a SHORAD site. At CPA the
-body radial speed is ~0; TwoPulse MTI nulls the fuselage while MtdBank keeps
-rotor sidebands in a clear Doppler bin.
+At CPA the body radial speed is ~0. Classic body-only TwoPulse nulls the
+fuselage; spectrum-aware TwoPulse / ThreePulse and MtdBank keep rotor
+sidebands alive.
 """
 
 from __future__ import annotations
@@ -112,11 +112,15 @@ def _detect_fraction(
 
 
 class TestHeliCpaPaint(unittest.TestCase):
-    def test_twopulse_collapses_near_cpa(self) -> None:
+    def test_body_only_twopulse_collapses_near_cpa(self) -> None:
+        pd = _detect_fraction("twopulse", tip_m_s=0.0, rotor_frac=0.0, hub_m_s=0.0)
+        self.assertLess(pd, 0.15)
+
+    def test_spectrum_twopulse_keeps_usable_paint(self) -> None:
         pd = _detect_fraction(
             "twopulse", tip_m_s=220.0, rotor_frac=0.35, hub_m_s=40.0
         )
-        self.assertLess(pd, 0.15)
+        self.assertGreater(pd, 0.45)
 
     def test_mtd_bank_keeps_usable_paint(self) -> None:
         pd = _detect_fraction(
@@ -124,14 +128,14 @@ class TestHeliCpaPaint(unittest.TestCase):
         )
         self.assertGreater(pd, 0.45)
 
-    def test_mtd_beats_twopulse_on_same_flyby(self) -> None:
-        pd_tp = _detect_fraction(
+    def test_rotor_spectrum_beats_body_only_twopulse(self) -> None:
+        pd_body = _detect_fraction(
+            "twopulse", tip_m_s=0.0, rotor_frac=0.0, hub_m_s=0.0
+        )
+        pd_rotor = _detect_fraction(
             "twopulse", tip_m_s=220.0, rotor_frac=0.35, hub_m_s=40.0
         )
-        pd_mtd = _detect_fraction(
-            "mtd_bank", tip_m_s=220.0, rotor_frac=0.35, hub_m_s=40.0
-        )
-        self.assertGreater(pd_mtd, pd_tp + 0.30)
+        self.assertGreater(pd_rotor, pd_body + 0.30)
 
     def test_stationary_truck_still_clutter_limited(self) -> None:
         hw = get_preset("shorad")

@@ -9,11 +9,14 @@ from rdf_radar_physics import (
     get_preset,
     max_mtd_bin_gain,
     max_mtd_spectrum_gain,
+    max_mti_canceller_spectrum_gain,
     mti_apply_clutter,
     mti_apply_target,
+    mti_three_pulse_gain,
     mti_two_pulse_gain,
     mtd_bin_power_gain,
     rotor_doppler_spectrum,
+    suggest_mti_clutter_floor,
 )
 
 
@@ -51,11 +54,12 @@ class TestMtdBank(unittest.TestCase):
             tip_speed_m_s=220.0,
             rotor_rcs_fraction=0.35,
             hub_width_m_s=40.0,
+            blade_count=2,
         )
         self.assertGreater(tgt, 0.05)
 
         lines, powers = rotor_doppler_spectrum(
-            0.0, hw.wavelength_m, 220.0, 0.35, 40.0
+            0.0, hw.wavelength_m, 220.0, 0.35, 40.0, blade_count=2
         )
         gain, bin_i, _fd = max_mtd_spectrum_gain(
             lines,
@@ -74,6 +78,19 @@ class TestMtdBank(unittest.TestCase):
         # Sideband fraction is smaller than body, but SINR wins in clear bins.
         self.assertGreater(tgt, clut * 10.0)
 
+    def test_blade_harmonics_add_interior_lines(self) -> None:
+        from rdf_radar_physics import rotor_disk_aspect_scale
+
+        lines2, _ = rotor_doppler_spectrum(
+            0.0, 0.03, 220.0, 0.35, 40.0, blade_count=2
+        )
+        lines5, _ = rotor_doppler_spectrum(
+            0.0, 0.03, 220.0, 0.35, 40.0, blade_count=5
+        )
+        self.assertGreater(len(lines5), len(lines2))
+        self.assertAlmostEqual(rotor_disk_aspect_scale(0.0), 1.0, places=3)
+        self.assertLess(rotor_disk_aspect_scale(80.0), 0.45)
+
     def test_stationary_vehicle_stays_clutter_limited(self) -> None:
         hw = get_preset("shorad")
         hw.enable_mti = True
@@ -88,6 +105,37 @@ class TestMtdBank(unittest.TestCase):
         hw.enable_mti = True
         hw.mti_mode = "twopulse"
         self.assertLess(mti_apply_target(hw, 1.0, 0.0), 1.0e-5)
+
+    def test_three_pulse_deeper_null_near_zero(self) -> None:
+        # At small fd, three-pulse (sin^4) is much smaller than two-pulse (sin^2).
+        prf = 4000.0
+        fd = 40.0
+        g2 = mti_two_pulse_gain(fd, prf)
+        g3 = mti_three_pulse_gain(fd, prf)
+        self.assertAlmostEqual(g3, g2 * g2, places=9)
+        self.assertLess(g3, g2 * 0.1)
+
+    def test_stagger_max_deblinds_classic(self) -> None:
+        lam = 0.03
+        prf0 = 4000.0
+        prf1 = 4800.0
+        blind0 = 0.5 * lam * prf0
+        fd = 2.0 * blind0 / lam  # body on PRF0 blind
+        lines = [fd]
+        powers = [1.0]
+        g0, _ = max_mti_canceller_spectrum_gain(lines, powers, [prf0], "twopulse")
+        g_max, _ = max_mti_canceller_spectrum_gain(
+            lines, powers, [prf0, prf1], "twopulse"
+        )
+        self.assertLess(g0, 1.0e-4)
+        self.assertGreater(g_max, 0.05)
+
+    def test_suggest_mti_clutter_floor_order(self) -> None:
+        f2 = suggest_mti_clutter_floor(0.5, 0.03, 4000.0, 1)
+        f3 = suggest_mti_clutter_floor(0.5, 0.03, 4000.0, 2)
+        self.assertGreater(f2, f3)
+        self.assertGreaterEqual(f2, 1.0e-6)
+        self.assertLessEqual(f2, 0.5)
 
     def test_prf_stagger_cycles(self) -> None:
         hw = get_preset("shorad")

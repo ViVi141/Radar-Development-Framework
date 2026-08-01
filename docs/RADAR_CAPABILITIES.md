@@ -32,8 +32,9 @@
 - **RWR**：被搜索 / 跟踪 / 锁定告警（`RDF_RadarRwr`）；无专用 UI，模组读 API
 - 通视用 `TraceMove`（`RDF_RadarScanGeometry`：`ANY_CONTACT` + `ExcludeArray` + 复用 TraceParam + 起点出壳）；遮挡时可选 **NLOS 地面反射弱检** + **单刃绕射**（DEM/`GetSurfaceY` 沿程，`/diff`）；可选 **DEM 柱 span 顶**（`m_EnableDemSpanOcclusion`，默认关，非 SURF）
 - 可选粗 RD 图（`m_EnableCoarseRd`，默认关）与多雷达共用 discovery focus 调度
-- 硬件参数 → 雷达方程、多普勒、MTI、处理增益、SNR 门限（辐射源在 `m_EnableEsmReceive` 下用 ESM 方程）
-- DEM σ⁰ **地面杂波**进入噪声分母（ESM 路径跳过）
+- 硬件参数 → 雷达方程、多普勒、MTI（Two/ThreePulse + 可选参差消盲 / MTD bank）、处理增益、SNR 门限（辐射源在 `m_EnableEsmReceive` 下用 ESM 方程）
+- DEM σ⁰ **地面杂波**进入噪声分母（ESM 路径跳过）；可选 clutter-map EMA
+- **航迹 coast**：弹道速度更新 + 门限随 miss 增长 + Doppler-null/盲速软 miss
 - **测量合成**：距离门中心 + 波束角抖动 + 多普勒反解径向速度（SNR 越低越抖）
 - **测量噪声/偏差可调**：理想档 vs 逼真档（`MeasNoiseScale` 等）；下游可 override `RDF_RadarMeasurementModel`
 - **大气 / 降雨 / 天气驱动损耗**：简化模型，可关；逼真档可开天气雨雾衰
@@ -78,7 +79,7 @@
 
 - 训练级 RD 图 / 全脉冲 CFAR（当前为粗栅格 CA/GO/SO + 热填空）
 - 完整方向图、副瓣、距离/速度模糊
-- STAP 等更认真的杂波抑制（现仅简化 MTI）
+- STAP 等更认真的杂波抑制（现有经典 Two/ThreePulse + 参差消盲 + MTD bank；非自适应阵列）
 
 #### 跟踪与系统
 
@@ -180,7 +181,7 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 - LOS via `TraceMove` (`RDF_RadarScanGeometry`: `ANY_CONTACT` + `ExcludeArray` + reused TraceParam + start clearance); optional **NLOS ground-bounce** + **single knife-edge diffraction** when occluded (DEM/`GetSurfaceY` samples, `/diff`); optional **DEM column-span tops** (`m_EnableDemSpanOcclusion`, default off, non-SURF)
 - Optional coarse RD map (`m_EnableCoarseRd`, default off) and shared multi-radar discovery focus scheduling
 - Hardware params → radar equation, Doppler, MTI / optional **MTD filter bank**, processing gain, SNR threshold (emitters use the ESM equation when `m_EnableEsmReceive` is on)
-- Default MTI remains two-pulse (`RDF_MTI_TWOPULSE`); `RDF_MTI_MTD_BANK` puts clutter in the near-zero bin and picks the best Doppler channel (rotor sidebands keep tangential helis alive)
+- Default MTI remains two-pulse (`RDF_MTI_TWOPULSE`); `RDF_MTI_THREE_PULSE` uses sin⁴; classic paths score rotor spectrum + optional PRF-set max de-blind; `RDF_MTI_MTD_BANK` puts clutter in the near-zero bin and picks the best Doppler channel
 - DEM σ⁰ **ground clutter** enters the noise denominator (skipped on the ESM path); optional runtime clutter-map EMA
 - **Measurement synthesis**: range-gate center + beam-angle jitter + Doppler-derived radial velocity (more jitter at lower SNR)
 - **Tunable measurement noise / bias**: ideal vs realistic profiles (`MeasNoiseScale`, etc.); downstream can override `RDF_RadarMeasurementModel`
@@ -226,7 +227,7 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 
 - Training-grade RD maps / full-pulse CFAR (currently coarse-grid CA/GO/SO + thermal fill)
 - Full antenna pattern, sidelobes, range/velocity ambiguity
-- More serious clutter rejection such as STAP (currently only simplified MTI)
+- More serious clutter rejection such as STAP (classic Two/ThreePulse + stagger de-blind + MTD bank are present; not adaptive array)
 
 #### Tracking & systems
 

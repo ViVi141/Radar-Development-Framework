@@ -254,7 +254,11 @@ class RDF_RadarSensor
             s.m_Hardware.m_DopplerBinCount = 16;
             s.m_Hardware.m_MtiClutterFloor = 0.0001;
             s.m_Hardware.m_MtdClutterLeakage = 0.000001;
+            s.m_Hardware.m_ClutterSigmaVrMs = 0.5;
+            s.m_Hardware.m_DeriveMtdLeakageFromSigmaVr = true;
+            s.m_Hardware.m_LoadHwCalibFromProfile = true;
             s.m_Hardware.m_PrfStaggerRatio = 1.2;
+            s.m_Hardware.m_MtiStaggerDeblind = true;
             s.m_Hardware.m_CoherentIntegration = true;
             s.m_Hardware.Validate();
         }
@@ -264,6 +268,8 @@ class RDF_RadarSensor
         s.m_EnableCoarseRd = false;
         s.m_TrackCoastOnMiss = true;
         s.m_TrackCoastOnDopplerNull = true;
+        s.m_TrackCoastGateGrowPerMiss = 0.25;
+        s.m_TrackCoastMaxSec = 8.0;
         s.m_TrackMaxMisses = 6;
         s.Validate();
         return s;
@@ -796,6 +802,10 @@ class RDF_RadarSensor
         if (m_Scanner)
             reuse = " | " + m_Scanner.GetScanReuseStatsShort();
 
+        string mtd = "";
+        if (m_Scanner)
+            mtd = " | " + m_Scanner.GetMtdStatsShort();
+
         string ew = "";
         if (m_Scanner)
             ew = " | " + m_Scanner.GetEwStatsShort();
@@ -810,6 +820,7 @@ class RDF_RadarSensor
             + " wlr=" + CountWlrFixes().ToString()
             + " scanMs=" + (Math.Round(m_LastScanDurationMs * 10.0) * 0.1).ToString()
             + reuse
+            + mtd
             + ew
             + lock;
     }

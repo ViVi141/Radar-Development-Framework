@@ -46,6 +46,11 @@ class RDF_RadarSignatureLibrary
     static const int DEFAULT_HELI_BLADES = 2;
     static const float DEFAULT_HELI_ROTOR_FRAC = 0.35;
     static const float DEFAULT_HELI_HUB_MS = 40.0;
+    // Explicit family table (used when tip==0); Mi-8 tip slightly higher / 5 blades.
+    static const float MI8_HELI_TIP_MS = 230.0;
+    static const int MI8_HELI_BLADES = 5;
+    static const float MI8_HELI_ROTOR_FRAC = 0.40;
+    static const float MI8_HELI_HUB_MS = 45.0;
 
     // Newly measured unknown models (runtime) flushed at most this often.
     static const float AUTO_EXPORT_INTERVAL_S = 30.0;
@@ -695,7 +700,7 @@ class RDF_RadarSignatureLibrary
     }
 
     //------------------------------------------------------------------------------------------------
-    // Prefab path under Helicopters/ with no rotor columns → UH-1-class defaults.
+    // Prefab path under Helicopters/ with no rotor columns → family table / UH-1-class defaults.
     protected static void MaybeApplyHelicopterRotorDefaults(RDF_RadarSignature sig)
     {
         if (!sig)
@@ -713,6 +718,10 @@ class RDF_RadarSignatureLibrary
             isHeli = true;
         if (!isHeli && key.IndexOf("Mi8") >= 0)
             isHeli = true;
+        if (!isHeli && key.IndexOf("SP01_Mi8") >= 0)
+            isHeli = true;
+        if (!isHeli && key.IndexOf("Cinematic_Flying_Mi8") >= 0)
+            isHeli = true;
         if (!isHeli)
             return;
 
@@ -724,10 +733,18 @@ class RDF_RadarSignatureLibrary
         if (key.IndexOf("cockpit") >= 0)
             return;
 
+        // Explicit family values (also mirrored into packaged .conf by patch tool).
+        if (key.IndexOf("Mi8") >= 0 || key.IndexOf("SP01_Mi8") >= 0)
+        {
+            sig.m_RotorTipSpeedMs = MI8_HELI_TIP_MS;
+            sig.m_BladeCount = MI8_HELI_BLADES;
+            sig.m_RotorRcsFraction = MI8_HELI_ROTOR_FRAC;
+            sig.m_HubWidthMs = MI8_HELI_HUB_MS;
+            return;
+        }
+
         sig.m_RotorTipSpeedMs = DEFAULT_HELI_TIP_MS;
         sig.m_BladeCount = DEFAULT_HELI_BLADES;
-        if (key.IndexOf("Mi8") >= 0)
-            sig.m_BladeCount = 5;
         sig.m_RotorRcsFraction = DEFAULT_HELI_ROTOR_FRAC;
         sig.m_HubWidthMs = DEFAULT_HELI_HUB_MS;
     }

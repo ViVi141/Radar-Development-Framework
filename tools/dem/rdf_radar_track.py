@@ -37,7 +37,17 @@ class TrackState:
     last_target_name: str = ""
     elevation_deg: float = 0.0
     last_doppler_bin: int = -1
+    last_prf_index: int = 0
+    last_prf_hz: float = 0.0
     coasting: bool = False
+    coast_elapsed_s: float = 0.0
+    soft_miss_streak: int = 0
+    x_m: float = 0.0
+    y_m: float = 0.0
+    z_m: float = 0.0
+    vx_m_s: float = 0.0
+    vy_m_s: float = 0.0
+    vz_m_s: float = 0.0
     # (time_s, range_m, azimuth_deg, elevation_deg)
     history: list[tuple[float, float, float, float]] = field(default_factory=list)
 
@@ -58,6 +68,81 @@ class TrackerConfig:
     # Widen association gates while coasting / after near-zero Doppler hit.
     coast_on_doppler_null: bool = False
     coast_gate_scale: float = 1.5
+    coast_gate_grow_per_miss: float = 0.25
+    coast_max_s: float = 0.0
+    soft_miss_on_blind: bool = True
+    # Multi-PRF blind-speed de-blind (λ·PRF/2 notches).
+    enable_prf_deblind: bool = False
+    wavelength_m: float = 0.0333
+    primary_prf_hz: float = 4000.0
+    prf_set_hz: list[float] = field(default_factory=list)
+    blind_speed_tol_ms: float = 8.0
+    blind_extra_misses: int = 2
+
+
+def near_blind_speed(
+    radial_ms: float,
+    prf_hz: float,
+    wavelength_m: float,
+    tol_ms: float = 8.0,
+    harmonics: int = 4,
+) -> bool:
+    """True when |vr| is near n·λ·PRF/2 for n = 0..harmonics."""
+    if prf_hz < 1.0 or wavelength_m <= 0.0:
+        return False
+    step = 0.5 * wavelength_m * prf_hz
+    if step < 0.001:
+        return False
+    tol = tol_ms
+    if tol < 0.5:
+        tol = 0.5
+    vr = abs(float(radial_ms))
+    for n in range(0, harmonics + 1):
+        if abs(vr - step * n) <= tol:
+            return True
+    return False
+
+
+def _resolve_prf_hz(config: TrackerConfig, prf_index: int) -> float:
+    prfs = list(config.prf_set_hz) if config.prf_set_hz else []
+    if not prfs:
+        prfs = [config.primary_prf_hz]
+    idx = int(prf_index)
+    if idx < 0:
+        idx = 0
+    prf = float(prfs[idx % len(prfs)])
+    if prf < 1.0:
+        prf = config.primary_prf_hz
+    return prf
+
+
+def _near_any_prf_blind(config: TrackerConfig, radial_ms: float) -> bool:
+    if not config.enable_prf_deblind:
+        return False
+    prfs = list(config.prf_set_hz) if config.prf_set_hz else [config.primary_prf_hz]
+    for prf in prfs:
+        if near_blind_speed(
+            radial_ms, float(prf), config.wavelength_m, config.blind_speed_tol_ms
+        ):
+            return True
+    return False
+
+
+def _effective_max_misses(track: TrackState, config: TrackerConfig) -> int:
+    max_miss = config.max_misses
+    if not config.enable_prf_deblind:
+        return max_miss
+    prf_hz = track.last_prf_hz
+    if prf_hz < 1.0:
+        prf_hz = _resolve_prf_hz(config, track.last_prf_index)
+    near = near_blind_speed(
+        track.range_rate_m_s, prf_hz, config.wavelength_m, config.blind_speed_tol_ms
+    )
+    if not near:
+        near = _near_any_prf_blind(config, track.range_rate_m_s)
+    if near:
+        max_miss = max_miss + config.blind_extra_misses
+    return max_miss
 
 
 @dataclass
@@ -72,6 +157,66 @@ def _angle_diff_deg(a: float, b: float) -> float:
 
 def _plot_elevation_deg(plot: DetectionLike) -> float:
     return float(getattr(plot, "elevation_deg", 0.0))
+
+
+def _sync_polar_from_cart(track: TrackState) -> None:
+    r, az, el = cartesian_to_polar(track.x_m, track.y_m, track.z_m)
+    track.range_m = r
+    track.azimuth_deg = az
+    track.elevation_deg = el
+    if r > 1.0e-3:
+        los_x = track.x_m / r
+        los_y = track.y_m / r
+        los_z = track.z_m / r
+        track.range_rate_m_s = (
+            track.vx_m_s * los_x + track.vy_m_s * los_y + track.vz_m_s * los_z
+        )
+
+
+def _predict_polar(
+    track: TrackState, time_s: float
+) -> tuple[float, float, float, float]:
+    dt = time_s - track.time_s
+    if dt < 0.0:
+        dt = 0.0
+    x = track.x_m + track.vx_m_s * dt
+    y = track.y_m + track.vy_m_s * dt
+    z = track.z_m + track.vz_m_s * dt
+    r, az, el = cartesian_to_polar(x, y, z)
+    rr = track.range_rate_m_s
+    if r > 1.0e-3:
+        rr = (track.vx_m_s * x + track.vy_m_s * y + track.vz_m_s * z) / r
+    return r, az, el, rr
+
+
+def _set_cart_from_polar(
+    track: TrackState,
+    range_m: float,
+    azimuth_deg: float,
+    elevation_deg: float,
+    range_rate_m_s: float,
+) -> None:
+    x, y, z = polar_to_cartesian(range_m, azimuth_deg, elevation_deg)
+    track.x_m = x
+    track.y_m = y
+    track.z_m = z
+    r = max(range_m, 1.0e-3)
+    track.vx_m_s = range_rate_m_s * (x / r)
+    track.vy_m_s = range_rate_m_s * (y / r)
+    track.vz_m_s = range_rate_m_s * (z / r)
+
+
+def _coast_track(track: TrackState, coast_time: float) -> None:
+    dt = coast_time - track.time_s
+    if dt <= 0.0:
+        return
+    track.x_m = track.x_m + track.vx_m_s * dt
+    track.y_m = track.y_m + track.vy_m_s * dt
+    track.z_m = track.z_m + track.vz_m_s * dt
+    _sync_polar_from_cart(track)
+    track.time_s = coast_time
+    track.coasting = True
+    track.coast_elapsed_s = track.coast_elapsed_s + dt
 
 
 def associate_and_filter(
@@ -96,27 +241,61 @@ def associate_and_filter(
 
         pairs: list[tuple[float, int, int]] = []
         for ti, track in enumerate(tracks):
-            if track.miss_count > config.max_misses:
+            if track.miss_count > _effective_max_misses(track, config):
                 continue
-            gate_range = config.gate_range_m
-            gate_az = config.gate_azimuth_deg
+            if (
+                config.coast_max_s > 0.0
+                and track.coasting
+                and track.coast_elapsed_s > config.coast_max_s
+            ):
+                continue
+            grow = 1.0 + config.coast_gate_grow_per_miss * track.miss_count
+            if grow < 1.0:
+                grow = 1.0
+            gate_range = config.gate_range_m * grow
+            gate_az = config.gate_azimuth_deg * grow
+            widen = False
             if config.coast_on_doppler_null:
-                doppler_null = track.last_doppler_bin == 0 or track.coasting
-                if doppler_null:
-                    gate_range = gate_range * config.coast_gate_scale
-                    gate_az = gate_az * config.coast_gate_scale
+                if track.last_doppler_bin == 0 or track.coasting:
+                    widen = True
+            if config.enable_prf_deblind:
+                track_prf = track.last_prf_hz
+                if track_prf < 1.0:
+                    track_prf = _resolve_prf_hz(config, track.last_prf_index)
+                if near_blind_speed(
+                    track.range_rate_m_s,
+                    track_prf,
+                    config.wavelength_m,
+                    config.blind_speed_tol_ms,
+                ):
+                    widen = True
+            if widen:
+                gate_range = gate_range * config.coast_gate_scale
+                gate_az = gate_az * config.coast_gate_scale
             for pi, plot in enumerate(scan_plots):
-                dt = plot.time_s - track.time_s
-                if dt < 0.0:
-                    dt = 0.0
-                pred_range = track.range_m + track.range_rate_m_s * dt
+                plot_prf = _resolve_prf_hz(
+                    config, int(getattr(plot, "prf_index", 0) or 0)
+                )
+                gate_r = gate_range
+                gate_a = gate_az
+                if config.enable_prf_deblind and near_blind_speed(
+                    plot.radial_speed_m_s,
+                    plot_prf,
+                    config.wavelength_m,
+                    config.blind_speed_tol_ms,
+                ):
+                    gate_r = gate_r * config.coast_gate_scale
+                    gate_a = gate_a * config.coast_gate_scale
+                pred_range, pred_az, _pred_el, _pred_rr = _predict_polar(
+                    track, plot.time_s
+                )
                 d_range = abs(plot.measured_range_m - pred_range)
-                d_az = abs(_angle_diff_deg(plot.azimuth_deg, track.azimuth_deg))
-                if d_range > gate_range:
+                d_az = abs(_angle_diff_deg(plot.azimuth_deg, pred_az))
+                if d_range > gate_r:
                     continue
-                if d_az > gate_az:
+                if d_az > gate_a:
                     continue
-                cost = d_range / max(gate_range, 1.0) + d_az / max(gate_az, 0.1)
+                cost = d_range / max(gate_r, 1.0) + d_az / max(gate_a, 0.1)
                 pairs.append((cost, ti, pi))
         pairs.sort(key=lambda item: item[0])
 
@@ -133,22 +312,33 @@ def associate_and_filter(
             dt = plot.time_s - track.time_s
             if dt < 1e-6:
                 dt = 1e-6
-            pred_range = track.range_m + track.range_rate_m_s * dt
+            pred_range, pred_az, pred_el, pred_rr = _predict_polar(track, plot.time_s)
             residual = plot.measured_range_m - pred_range
             track.range_m = pred_range + config.alpha * residual
-            track.range_rate_m_s = track.range_rate_m_s + (config.beta / dt) * residual
-            az_err = _angle_diff_deg(plot.azimuth_deg, track.azimuth_deg)
-            track.azimuth_deg = (track.azimuth_deg + config.alpha * az_err) % 360.0
+            track.range_rate_m_s = pred_rr + (config.beta / dt) * residual
+            az_err = _angle_diff_deg(plot.azimuth_deg, pred_az)
+            track.azimuth_deg = (pred_az + config.alpha * az_err) % 360.0
             el_meas = _plot_elevation_deg(plot)
-            el_err = el_meas - track.elevation_deg
-            track.elevation_deg = track.elevation_deg + config.alpha * el_err
+            el_err = el_meas - pred_el
+            track.elevation_deg = pred_el + config.alpha * el_err
             track.time_s = plot.time_s
             track.snr_db = plot.snr_db
             track.hit_count = track.hit_count + 1
             track.miss_count = 0
             track.coasting = False
+            track.coast_elapsed_s = 0.0
+            track.soft_miss_streak = 0
             track.last_doppler_bin = int(getattr(plot, "doppler_bin", -1))
+            track.last_prf_index = int(getattr(plot, "prf_index", 0) or 0)
+            track.last_prf_hz = _resolve_prf_hz(config, track.last_prf_index)
             track.last_target_name = plot.target_name
+            _set_cart_from_polar(
+                track,
+                track.range_m,
+                track.azimuth_deg,
+                track.elevation_deg,
+                track.range_rate_m_s,
+            )
             track.history.append(
                 (plot.time_s, track.range_m, track.azimuth_deg, track.elevation_deg)
             )
@@ -159,20 +349,38 @@ def associate_and_filter(
         for ti, track in enumerate(tracks):
             if ti in assigned_tracks:
                 continue
-            track.miss_count = track.miss_count + 1
+            soft = False
+            if config.coast_on_doppler_null or (
+                config.soft_miss_on_blind and config.enable_prf_deblind
+            ):
+                if track.last_doppler_bin == 0:
+                    soft = True
+                prf_hz = track.last_prf_hz
+                if prf_hz < 1.0:
+                    prf_hz = _resolve_prf_hz(config, track.last_prf_index)
+                if near_blind_speed(
+                    track.range_rate_m_s,
+                    prf_hz,
+                    config.wavelength_m,
+                    config.blind_speed_tol_ms,
+                ):
+                    soft = True
+                if _near_any_prf_blind(config, track.range_rate_m_s):
+                    soft = True
+            if soft and track.soft_miss_streak < config.blind_extra_misses:
+                track.soft_miss_streak = track.soft_miss_streak + 1
+            else:
+                track.miss_count = track.miss_count + 1
+                track.soft_miss_streak = 0
             if config.coast_on_miss and coast_time > track.time_s:
-                dt_coast = coast_time - track.time_s
-                track.range_m = track.range_m + track.range_rate_m_s * dt_coast
-                if track.range_m < 0.0:
-                    track.range_m = 0.0
-                track.time_s = coast_time
-                track.coasting = True
+                _coast_track(track, coast_time)
 
         for pi, plot in enumerate(scan_plots):
             if pi in used:
                 continue
             el0 = _plot_elevation_deg(plot)
             az0 = plot.azimuth_deg % 360.0
+            prf_idx = int(getattr(plot, "prf_index", 0) or 0)
             track = TrackState(
                 track_id=next_id,
                 time_s=plot.time_s,
@@ -184,7 +392,16 @@ def associate_and_filter(
                 miss_count=0,
                 last_target_name=plot.target_name,
                 elevation_deg=el0,
+                last_prf_index=prf_idx,
+                last_prf_hz=_resolve_prf_hz(config, prf_idx),
                 history=[(plot.time_s, plot.measured_range_m, az0, el0)],
+            )
+            _set_cart_from_polar(
+                track,
+                plot.measured_range_m,
+                az0,
+                el0,
+                plot.radial_speed_m_s,
             )
             next_id = next_id + 1
             tracks.append(track)
@@ -193,12 +410,20 @@ def associate_and_filter(
     alive = []
     for track in tracks:
         confirmed = track.hit_count >= config.confirm_hits
+        max_miss = _effective_max_misses(track, config)
+        if (
+            config.coast_max_s > 0.0
+            and track.coasting
+            and track.coast_elapsed_s > config.coast_max_s
+        ):
+            if not (config.keep_confirmed_dead and confirmed):
+                continue
         if config.keep_confirmed_dead and confirmed:
             alive.append(track)
             continue
-        if track.miss_count > config.max_misses and not confirmed:
+        if track.miss_count > max_miss and not confirmed:
             continue
-        if track.miss_count > config.max_misses + 2:
+        if track.miss_count > max_miss + 2:
             continue
         alive.append(track)
 

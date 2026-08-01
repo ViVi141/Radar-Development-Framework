@@ -155,8 +155,40 @@
 3. **调参**：`rdf_radar_hw_calibrate.py` 产出回灌 Hardware；粗 RD 仅 Perf 对照后显式打开。  
 4. **工程**：本地 Play + `RunAutoTestSuite.flag` 批跑（非无头 CI）。
 
+#### 6 — MTD 深化（补简化实现，2026-08-01）
+
+原则：仍目标级近似；让已有字段真干活；离线标定可回灌局内；不做训练级 RD。
+
+| 档 | 项 | 收益 | 成本 | 状态 |
+|----|----|------|------|------|
+| **P1** | 旋翼谱吃 `blade_count` + 仰角盘面姿态缩放 | 切向/俯视差异可信 | 低 | **已完成** |
+| **P1** | `σ_vr` 推导 / `HwCalib.json` 回灌 `m_MtdClutterLeakage` | 标定不再悬空 | 低中 | **已完成** |
+| **P1** | 状态行：win bin / PRF / 旋翼边带助检计数 | 可观测调参 | 低 | **已完成** |
+| **P2** | 航迹多 PRF 消盲速关联 | PD 航迹更稳 | 中 | **已完成** |
+| **P2** | 主要直升机 signature 显式填 tip/blades/hub | 少靠路径默认 | 内容 | **已完成** |
+
+- [x] **P1** 旋翼微多普勒：`blade_count` 谐波间隔 + LOS 仰角盘面因子（Enforce + Python 对齐）
+- [x] **P1** Hardware：`m_ClutterSigmaVrMs` / `m_DeriveMtdLeakageFromSigmaVr` + `$profile:RDF/RadarData/HwCalib.json` 回灌
+- [x] **P1** `GetStatusShort` / Scanner：MTD win bin、旋翼边带助检
+- [x] **P2** 航迹侧双 PRF 消盲速（门限加宽 + 盲速额外 miss 配额；Python `near_blind_speed` 对齐）
+- [x] **P2** 直升机 signature 表显式旋翼列（`.conf` 28 机架 + `rdf_sig_patch_heli_rotors.py` + Mi-8/UH-1 家族表）
+
 Ideal：`RDF_RadarAutoTestSuite.StartAll()`  
 Realistic：`RDF_RadarAutoTestSuite.StartAllRealistic()`
+
+#### 7 — 经典 MTI + Track coast 完整（2026-08-01）
+
+目标级近似边界内补全；不做 STAP / Kalman。
+
+| 档 | 项 | 状态 |
+|----|----|------|
+| **MTI** | 三脉冲 + 参差 max 消盲 + 谱线 canceller + σ_vr 杂波地板 | **已完成** |
+| **Coast** | 速度/Rdot 更新、PredictPolarAt 关联、门限增长、软 miss、coast 时限 | **已完成** |
+
+- [x] `RDF_MTI_THREE_PULSE` + `MaxMtiCancellerSpectrumGain` + `m_MtiStaggerDeblind`
+- [x] `SuggestMtiClutterFloor` / derive 与 HwCalib `three_pulse`
+- [x] Track `CoastTo` 弹道速度 + LOS Rdot；门限 grow；软 miss；`m_TrackCoastMaxSec`
+- [x] Python golden + heli CPA / full_sim 对齐
 
 ---
 
@@ -365,8 +397,40 @@ Context: realistic channel, Network, fusion, MTD/rotor/coast, and dual-job Pytho
 3. **Tuning**: bake Hardware via `rdf_radar_hw_calibrate.py`; turn coarse RD on only after Perf checks.  
 4. **Engineering**: local Play + `RunAutoTestSuite.flag` (not headless CI).
 
+#### 6 — MTD deepen (fill simplified stubs, 2026-08-01)
+
+Stay target-level: make rotor fields real, bake calib into leakage, observability; no training RD.
+
+| Tier | Item | Status |
+|------|------|--------|
+| **P1** | Rotor spectrum: `blade_count` harmonics + elevation disk aspect | **done** |
+| **P1** | `σ_vr` / `HwCalib.json` → `m_MtdClutterLeakage` | **done** |
+| **P1** | Status: win bin / rotor-aided counts | **done** |
+| **P2** | Track multi-PRF blind-speed association | **done** |
+| **P2** | Explicit heli signature rotor columns | **done** |
+
+- [x] **P1** Rotor micro-Doppler: blade harmonics + elevation aspect (Enforce + Python)
+- [x] **P1** Hardware σ_vr derive + profile `HwCalib.json` bake-back
+- [x] **P1** `GetStatusShort` / Scanner MTD stats
+- [x] **P2** Track dual-PRF de-blind (wider gates + blind-speed extra misses)
+- [x] **P2** Explicit heli signature rotor columns (conf + patch tool + family table)
+
 Ideal: `RDF_RadarAutoTestSuite.StartAll()`  
 Realistic: `RDF_RadarAutoTestSuite.StartAllRealistic()`
+
+#### 7 — Classic MTI + Track coast complete (2026-08-01)
+
+Target-level approx only; no STAP / Kalman.
+
+| Tier | Item | Status |
+|------|------|--------|
+| **MTI** | Three-pulse + stagger max de-blind + spectrum canceller + σ_vr floor | **done** |
+| **Coast** | Velocity/Rdot update, PredictPolarAt assoc, gate grow, soft miss, coast max time | **done** |
+
+- [x] `RDF_MTI_THREE_PULSE` + `MaxMtiCancellerSpectrumGain` + `m_MtiStaggerDeblind`
+- [x] `SuggestMtiClutterFloor` / derive + HwCalib `three_pulse`
+- [x] Track coast kinematics + soft miss + `m_TrackCoastMaxSec`
+- [x] Python golden + heli CPA / full_sim aligned
 
 ---
 

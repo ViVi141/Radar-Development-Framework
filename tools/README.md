@@ -29,7 +29,9 @@ chmod +x run_tools.sh   # once
 
 CI: `.github/workflows/python-dem-tests.yml` runs unittest discover + `full_sim` coverage checks (`detection.mtd_bank`, rotor CPA, PRF stagger).
 
-Offline HW bake-back (not in-game): `python rdf_radar_hw_calibrate.py --preset shorad` → `calib/prf_clutter_*.json`.  
+Offline HW bake-back: `python rdf_radar_hw_calibrate.py --preset shorad` → `calib/prf_clutter_*.json`.
+Copy to `$profile:RDF/RadarData/HwCalib.json` (PulseDoppler loads it) or rely on `m_DeriveMtdLeakageFromSigmaVr`.  
+Heli rotor conf fill: `python rdf_sig_patch_heli_rotors.py` (UH-1 / Mi-8 airframes; skips VehParts).  
 Mass-battle sim: `rdf_radar_mass_battle_sim.py` (facade) + `mass_battle/` package
 (`_impl.py` holds the logic; thematic modules are re-exports — see
 `mass_battle/README.md`).  

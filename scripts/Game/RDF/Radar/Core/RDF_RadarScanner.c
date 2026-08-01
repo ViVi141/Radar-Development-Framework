@@ -28,6 +28,10 @@ class RDF_RadarScanner
     protected int m_StatFreshUpdates;
     protected int m_StatBudgetSkips;
     protected int m_StatLosCacheHits;
+    protected int m_StatMtdRotorAided;
+    protected int m_StatMtdDetected;
+    protected int m_LastMtdWinBin;
+    protected int m_LastMtdPrfIndex;
     // Last-dwell EW noise observability (RF domain, before processing gain).
     protected float m_LastEwNoiseRfW;
     protected float m_LastThermalNoiseW;
@@ -137,6 +141,43 @@ class RDF_RadarScanner
             + " losHit=" + m_StatLosCacheHits.ToString();
     }
 
+    string GetMtdStatsShort()
+    {
+        if (!m_Settings || !m_Settings.m_Hardware)
+            return "mtd=off";
+        if (m_Settings.m_Hardware.m_MtiMode != ERDF_MtiMode.RDF_MTI_MTD_BANK)
+        {
+            if (m_Settings.m_Hardware.m_MtiMode == ERDF_MtiMode.RDF_MTI_THREE_PULSE)
+                return "mtd=three_pulse";
+            return "mtd=twopulse";
+        }
+
+        string leak = m_Settings.m_Hardware.m_MtdClutterLeakage.ToString();
+        string calib = "0";
+        if (m_Settings.m_Hardware.m_HwCalibApplied)
+            calib = "1";
+        return "mtd bin=" + m_LastMtdWinBin.ToString()
+            + " prf=" + m_LastMtdPrfIndex.ToString()
+            + " rotor=" + m_StatMtdRotorAided.ToString()
+            + "/" + m_StatMtdDetected.ToString()
+            + " leak=" + leak
+            + " calib=" + calib;
+    }
+
+    protected void NoteMtdPlot(RDF_RadarTarget target)
+    {
+        if (!target || !target.m_Detected)
+            return;
+        if (target.m_DopplerBin < 0)
+            return;
+
+        m_StatMtdDetected = m_StatMtdDetected + 1;
+        m_LastMtdWinBin = target.m_DopplerBin;
+        m_LastMtdPrfIndex = target.m_PrfIndex;
+        if (target.m_RotorSidebandUsed)
+            m_StatMtdRotorAided = m_StatMtdRotorAided + 1;
+    }
+
     float GetLastEwNoiseRfW()
     {
         return m_LastEwNoiseRfW;
@@ -211,6 +252,10 @@ class RDF_RadarScanner
         m_StatFreshUpdates = 0;
         m_StatBudgetSkips = 0;
         m_StatLosCacheHits = 0;
+        m_StatMtdRotorAided = 0;
+        m_StatMtdDetected = 0;
+        m_LastMtdWinBin = -1;
+        m_LastMtdPrfIndex = 0;
         m_ScanRainLossDbPerKm = 0.0;
         if (!m_SettingsValidated)
         {
@@ -587,10 +632,13 @@ class RDF_RadarScanner
             if (reusedPhysical)
                 ApplyPhysicalReuse(t, physicalSource);
             else
+            {
                 RDF_RadarPhysicalDetect.Process(
                     t, origin, forward, worldTime, world,
                     m_Settings, m_DemCache, m_ScanRainLossDbPerKm, m_ClutterMap, m_CoarseRdMap);
-                DepositCoarseRd(t);
+            }
+            DepositCoarseRd(t);
+            NoteMtdPlot(t);
 
             if (m_ScanReuseCache)
             {
@@ -823,10 +871,13 @@ class RDF_RadarScanner
             if (reusedPhysical)
                 ApplyPhysicalReuse(t, physicalSource);
             else
+            {
                 RDF_RadarPhysicalDetect.Process(
                     t, origin, forward, worldTime, world,
                     m_Settings, m_DemCache, m_ScanRainLossDbPerKm, m_ClutterMap, m_CoarseRdMap);
-                DepositCoarseRd(t);
+            }
+            DepositCoarseRd(t);
+            NoteMtdPlot(t);
 
             if (m_ScanReuseCache)
             {
@@ -982,10 +1033,13 @@ class RDF_RadarScanner
             if (reusedEmitterPhysical)
                 ApplyPhysicalReuse(et, emitterPhysicalSource);
             else
+            {
                 RDF_RadarPhysicalDetect.Process(
                     et, origin, forward, worldTime, world,
                     m_Settings, m_DemCache, m_ScanRainLossDbPerKm, m_ClutterMap, m_CoarseRdMap);
-                DepositCoarseRd(et);
+            }
+            DepositCoarseRd(et);
+            NoteMtdPlot(et);
 
             if (m_ScanReuseCache)
             {
@@ -1292,6 +1346,7 @@ class RDF_RadarScanner
         target.m_BladeCount = source.m_BladeCount;
         target.m_RotorRcsFraction = source.m_RotorRcsFraction;
         target.m_HubWidthMs = source.m_HubWidthMs;
+        target.m_RotorSidebandUsed = source.m_RotorSidebandUsed;
         target.m_DemSurfaceClass = source.m_DemSurfaceClass;
         target.m_DemSampleValid = source.m_DemSampleValid;
         target.m_ClutterPowerW = source.m_ClutterPowerW;

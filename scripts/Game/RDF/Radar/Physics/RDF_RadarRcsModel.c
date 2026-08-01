@@ -273,8 +273,36 @@ class RDF_RadarRcsModel
     }
 
     //------------------------------------------------------------------------------------------------
+    // Scale rotor sidebands by main-rotor disk aspect vs LOS elevation.
+    // Horizon (edge-on disk) → 1; steep look-down/up (face-on) → ~0.2.
+    static float RotorDiskAspectScale(float losElevationDeg)
+    {
+        float el = losElevationDeg;
+        if (el < 0.0)
+            el = -el;
+        if (el > 90.0)
+            el = 180.0 - el;
+        if (el < 0.0)
+            el = 0.0;
+        if (el > 90.0)
+            el = 90.0;
+
+        float rad = el * 0.0174532925199;
+        float edgeOn = Math.Cos(rad);
+        if (edgeOn < 0.0)
+            edgeOn = -edgeOn;
+        float scale = 0.2 + 0.8 * edgeOn;
+        if (scale < 0.2)
+            scale = 0.2;
+        if (scale > 1.0)
+            scale = 1.0;
+        return scale;
+    }
+
+    //------------------------------------------------------------------------------------------------
     // Doppler spectrum lines for MTD: body radial line (+ optional rotor sidebands).
     // powers are relative RCS weights (sum need not be 1; MaxMtdSpectrumGain normalizes).
+    // blade_count drives interior harmonics at tip*(h/blades); elevation scales sidebands.
     static void FillDopplerSpectrum(
         RDF_RadarTarget target,
         float wavelengthM,
@@ -302,6 +330,11 @@ class RDF_RadarRcsModel
             return;
         if (blades < 2)
             blades = 2;
+        if (blades > 8)
+            blades = 8;
+
+        float aspectScale = RotorDiskAspectScale(target.m_ElevationDeg);
+        float sideScale = aspectScale;
 
         float bodyFrac = 1.0 - rotorFrac;
         if (bodyFrac < 0.05)
@@ -310,18 +343,56 @@ class RDF_RadarRcsModel
 
         // Tip Doppler extremes ±2·v_tip/λ about the body line (approaching / receding).
         float tipDopplerHz = RDF_RadarClutterModel.DopplerHz(tipMs, wavelengthM);
-        float sidePower = rotorFrac * 0.5;
+        float tipShare = 0.55;
+        float harmShare = 0.30;
+        float hubShare = 0.15;
+        float tipPower = rotorFrac * tipShare * 0.5 * sideScale;
         outDopplerHz.Insert(bodyDopplerHz + tipDopplerHz);
-        outPowers.Insert(sidePower);
+        outPowers.Insert(tipPower);
         outDopplerHz.Insert(bodyDopplerHz - tipDopplerHz);
-        outPowers.Insert(sidePower);
+        outPowers.Insert(tipPower);
+
+        // Interior blade harmonics at tip*(h/N), h=1..floor(N/2)-omit tip.
+        int maxHarm = blades / 2;
+        if (maxHarm > 3)
+            maxHarm = 3;
+        int harmLines = 0;
+        for (int h = 1; h <= maxHarm; h++)
+        {
+            if (h >= blades)
+                break;
+            float harmMs = tipMs * (h * 1.0 / blades);
+            if (harmMs < tipMs * 0.12)
+                continue;
+            if (harmMs > tipMs * 0.92)
+                continue;
+            harmLines = harmLines + 1;
+        }
+        if (harmLines < 1)
+            harmLines = 1;
+        float harmPowerEach = rotorFrac * harmShare * sideScale / (harmLines * 2.0);
+        for (int h2 = 1; h2 <= maxHarm; h2++)
+        {
+            if (h2 >= blades)
+                break;
+            float harmMs2 = tipMs * (h2 * 1.0 / blades);
+            if (harmMs2 < tipMs * 0.12)
+                continue;
+            if (harmMs2 > tipMs * 0.92)
+                continue;
+            float harmFd = RDF_RadarClutterModel.DopplerHz(harmMs2, wavelengthM);
+            outDopplerHz.Insert(bodyDopplerHz + harmFd);
+            outPowers.Insert(harmPowerEach);
+            outDopplerHz.Insert(bodyDopplerHz - harmFd);
+            outPowers.Insert(harmPowerEach);
+        }
 
         // Optional hub / blade-flash mid line (weaker, near body + hub width).
         float hubMs = target.m_HubWidthMs;
         if (hubMs > 0.0)
         {
             float hubFd = RDF_RadarClutterModel.DopplerHz(hubMs, wavelengthM);
-            float hubPower = rotorFrac * 0.15;
+            float hubPower = rotorFrac * hubShare * 0.5 * sideScale;
             outDopplerHz.Insert(bodyDopplerHz + hubFd);
             outPowers.Insert(hubPower);
             outDopplerHz.Insert(bodyDopplerHz - hubFd);

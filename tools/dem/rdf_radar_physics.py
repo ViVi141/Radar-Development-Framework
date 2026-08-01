@@ -96,11 +96,14 @@ class RadarHardware:
     mti_clutter_floor: float = 1.0e-4
     mtd_clutter_leakage: float = 1.0e-6
     enable_mti: bool = True
-    # "twopulse" (legacy default) or "mtd_bank"
+    # "twopulse" | "three_pulse" | "mtd_bank"
     mti_mode: str = "twopulse"
+    # Classic canceller: max gain over prf_set_hz when True.
+    mti_stagger_deblind: bool = False
     doppler_bin_count: int = 16
     # Optional multi-PRF list; empty → use prf_hz only.
     prf_set_hz: list[float] = field(default_factory=list)
+    clutter_sigma_vr_m_s: float = 0.5
     enable_pulse_compression: bool = True
     notes: str = ""
 
@@ -554,6 +557,89 @@ def mti_two_pulse_gain(doppler_hz_value: float, prf_hz: float) -> float:
     return raw * raw
 
 
+def mti_three_pulse_gain(doppler_hz_value: float, prf_hz: float) -> float:
+    g2 = mti_two_pulse_gain(doppler_hz_value, prf_hz)
+    return g2 * g2
+
+
+def mti_canceller_gain(mode: str, doppler_hz_value: float, prf_hz: float) -> float:
+    mode_l = (mode or "twopulse").lower()
+    if "three" in mode_l:
+        return mti_three_pulse_gain(doppler_hz_value, prf_hz)
+    return mti_two_pulse_gain(doppler_hz_value, prf_hz)
+
+
+def max_mti_canceller_spectrum_gain(
+    doppler_hz_lines: list[float],
+    powers: list[float],
+    prf_hz_list: list[float],
+    mode: str = "twopulse",
+) -> tuple[float, float]:
+    """Power-weighted max canceller gain over lines × PRFs. Returns (gain, peak_fd)."""
+    if not doppler_hz_lines:
+        return 1.0, 0.0
+    if not prf_hz_list:
+        return 1.0, float(doppler_hz_lines[0])
+    weights = []
+    for i in range(len(doppler_hz_lines)):
+        if i < len(powers):
+            weights.append(max(0.0, float(powers[i])))
+        else:
+            weights.append(1.0)
+    power_sum = sum(weights)
+    if power_sum <= 0.0:
+        power_sum = 1.0
+    best = -1.0
+    best_fd = float(doppler_hz_lines[0])
+    for prf in prf_hz_list:
+        prf_f = float(prf)
+        if prf_f < 1.0:
+            continue
+        channel = 0.0
+        fd_acc = 0.0
+        fd_w = 0.0
+        for i, fd in enumerate(doppler_hz_lines):
+            w = weights[i]
+            g = mti_canceller_gain(mode, float(fd), prf_f)
+            contrib = w * g
+            channel += contrib
+            fd_acc += float(fd) * contrib
+            fd_w += contrib
+        normalized = channel / power_sum
+        if normalized > best:
+            best = normalized
+            if fd_w > 0.0:
+                best_fd = fd_acc / fd_w
+    if best < 0.0:
+        best = 0.0
+    return best, best_fd
+
+
+def suggest_mti_clutter_floor(
+    sigma_vr_m_s: float,
+    wavelength_m: float,
+    prf_hz: float,
+    canceller_order: int = 1,
+) -> float:
+    """Classic MTI residue ≈ (σ_f/PRF)^{2N}; N=1 two-pulse, N=2 three-pulse."""
+    if wavelength_m <= 0.0 or prf_hz <= 0.0:
+        return 1.0e-4
+    sigma_vr = max(0.05, float(sigma_vr_m_s))
+    order = int(canceller_order)
+    if order < 1:
+        order = 1
+    if order > 2:
+        order = 2
+    sigma_fd = 2.0 * sigma_vr / wavelength_m
+    x = abs(sigma_fd / prf_hz)
+    residue = x ** (2 * order)
+    if residue < 1.0e-6:
+        residue = 1.0e-6
+    if residue > 0.5:
+        residue = 0.5
+    return residue
+
+
 def wrap_normalized_doppler(norm_fd: float) -> float:
     x = float(norm_fd)
     while x >= 0.5:
@@ -670,27 +756,67 @@ def max_mtd_spectrum_gain(
     return best_norm, best_bin, best_fd
 
 
+def rotor_disk_aspect_scale(los_elevation_deg: float) -> float:
+    """Horizon (edge-on disk) → 1; steep look-down/up → ~0.2."""
+    el = abs(float(los_elevation_deg))
+    if el > 90.0:
+        el = 180.0 - el
+    el = max(0.0, min(90.0, el))
+    edge_on = abs(math.cos(math.radians(el)))
+    return float(max(0.2, min(1.0, 0.2 + 0.8 * edge_on)))
+
+
 def rotor_doppler_spectrum(
     body_doppler_hz: float,
     wavelength_m: float,
     tip_speed_m_s: float = 0.0,
     rotor_rcs_fraction: float = 0.0,
     hub_width_m_s: float = 0.0,
+    blade_count: int = 2,
+    los_elevation_deg: float = 0.0,
 ) -> tuple[list[float], list[float]]:
-    """Body line + tip sidebands (+ optional hub lines)."""
+    """Body line + tip sidebands + blade harmonics (+ optional hub lines)."""
     lines = [body_doppler_hz]
     powers = [1.0]
     if tip_speed_m_s <= 0.0 or rotor_rcs_fraction <= 0.0 or wavelength_m <= 0.0:
         return lines, powers
+    blades = int(blade_count)
+    if blades < 2:
+        blades = 2
+    if blades > 8:
+        blades = 8
+    aspect = rotor_disk_aspect_scale(los_elevation_deg)
     body_frac = max(0.05, 1.0 - rotor_rcs_fraction)
     powers[0] = body_frac
     tip_fd = doppler_hz(tip_speed_m_s, wavelength_m)
-    side = rotor_rcs_fraction * 0.5
+    tip_share = 0.55
+    harm_share = 0.30
+    hub_share = 0.15
+    tip_p = rotor_rcs_fraction * tip_share * 0.5 * aspect
     lines.extend([body_doppler_hz + tip_fd, body_doppler_hz - tip_fd])
-    powers.extend([side, side])
+    powers.extend([tip_p, tip_p])
+
+    max_harm = min(3, blades // 2)
+    harm_candidates = []
+    for h in range(1, max_harm + 1):
+        if h >= blades:
+            break
+        harm_ms = tip_speed_m_s * (h / blades)
+        if harm_ms < tip_speed_m_s * 0.12:
+            continue
+        if harm_ms > tip_speed_m_s * 0.92:
+            continue
+        harm_candidates.append(harm_ms)
+    harm_n = max(1, len(harm_candidates))
+    harm_each = rotor_rcs_fraction * harm_share * aspect / (harm_n * 2.0)
+    for harm_ms in harm_candidates:
+        harm_fd = doppler_hz(harm_ms, wavelength_m)
+        lines.extend([body_doppler_hz + harm_fd, body_doppler_hz - harm_fd])
+        powers.extend([harm_each, harm_each])
+
     if hub_width_m_s > 0.0:
         hub_fd = doppler_hz(hub_width_m_s, wavelength_m)
-        hub_p = rotor_rcs_fraction * 0.15
+        hub_p = rotor_rcs_fraction * hub_share * 0.5 * aspect
         lines.extend([body_doppler_hz + hub_fd, body_doppler_hz - hub_fd])
         powers.extend([hub_p, hub_p])
     return lines, powers
@@ -737,18 +863,23 @@ def mti_apply_target(
     tip_speed_m_s: float = 0.0,
     rotor_rcs_fraction: float = 0.0,
     hub_width_m_s: float = 0.0,
+    blade_count: int = 2,
+    los_elevation_deg: float = 0.0,
 ) -> float:
     if not hardware.enable_mti:
         return target_power_w
     prf = hardware.active_prf_hz()
     fd = doppler_hz(radial_speed_m_s, hardware.wavelength_m)
-    if hardware.mti_mode == "mtd_bank":
+    mode = (hardware.mti_mode or "twopulse").lower()
+    if mode == "mtd_bank" or "mtd" in mode:
         lines, powers = rotor_doppler_spectrum(
             fd,
             hardware.wavelength_m,
             tip_speed_m_s=tip_speed_m_s,
             rotor_rcs_fraction=rotor_rcs_fraction,
             hub_width_m_s=hub_width_m_s,
+            blade_count=blade_count,
+            los_elevation_deg=los_elevation_deg,
         )
         gain, _bin, _peak = max_mtd_spectrum_gain(
             lines,
@@ -759,7 +890,24 @@ def mti_apply_target(
             hardware.mtd_clutter_leakage,
         )
     else:
-        gain = mti_two_pulse_gain(fd, prf)
+        lines, powers = rotor_doppler_spectrum(
+            fd,
+            hardware.wavelength_m,
+            tip_speed_m_s=tip_speed_m_s,
+            rotor_rcs_fraction=rotor_rcs_fraction,
+            hub_width_m_s=hub_width_m_s,
+            blade_count=blade_count,
+            los_elevation_deg=los_elevation_deg,
+        )
+        prf_list = [prf]
+        if hardware.mti_stagger_deblind and hardware.prf_set_hz:
+            prf_list = [float(p) for p in hardware.prf_set_hz if float(p) >= 1.0]
+            if not prf_list:
+                prf_list = [prf]
+        cancel_mode = "three_pulse" if "three" in mode else "twopulse"
+        gain, _peak = max_mti_canceller_spectrum_gain(
+            lines, powers, prf_list, cancel_mode
+        )
     if gain < 1.0e-6:
         gain = 1.0e-6
     return target_power_w * gain

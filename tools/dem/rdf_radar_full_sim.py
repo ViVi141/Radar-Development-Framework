@@ -154,7 +154,7 @@ def scenario_detection_physics(cov: FeatureCoverage) -> ScenarioResult:
 
 
 def scenario_mtd_rotor_cpa(cov: FeatureCoverage) -> ScenarioResult:
-    """Tangential heli (vr≈0): TwoPulse nulls; MtdBank keeps rotor sidebands."""
+    """Tangential heli (vr≈0): body TwoPulse nulls; spectrum / MTD keep sidebands."""
     cov.add("detection.mtd_bank")
     cov.add("detection.rotor_microdoppler")
     cov.add("detection.heli_cpa")
@@ -165,7 +165,8 @@ def scenario_mtd_rotor_cpa(cov: FeatureCoverage) -> ScenarioResult:
     hub = 40.0
 
     hw.mti_mode = "twopulse"
-    tp = mti_apply_target(
+    tp_body = mti_apply_target(hw, 1.0, 0.0)
+    tp_rotor = mti_apply_target(
         hw, 1.0, 0.0, tip_speed_m_s=tip, rotor_rcs_fraction=rotor_frac, hub_width_m_s=hub
     )
 
@@ -185,8 +186,14 @@ def scenario_mtd_rotor_cpa(cov: FeatureCoverage) -> ScenarioResult:
     )
     clut = mti_apply_clutter(hw, 1.0, 0.0, target_doppler_bin=bin_i)
 
-    if tp >= 1.0e-4:
-        return _fail("mtd_rotor_cpa", "two-pulse should null vr=0", {"tp": tp})
+    if tp_body >= 1.0e-4:
+        return _fail("mtd_rotor_cpa", "body two-pulse should null vr=0", {"tp": tp_body})
+    if tp_rotor <= 0.05:
+        return _fail(
+            "mtd_rotor_cpa",
+            "spectrum two-pulse should keep rotor",
+            {"tp_rotor": tp_rotor},
+        )
     if bin_i == 0:
         return _fail("mtd_rotor_cpa", "sideband should leave zero bin", {"bin": bin_i})
     if mtd <= 0.05:
@@ -200,7 +207,8 @@ def scenario_mtd_rotor_cpa(cov: FeatureCoverage) -> ScenarioResult:
     return _ok(
         "mtd_rotor_cpa",
         {
-            "twopulse_gain": tp,
+            "twopulse_body_gain": tp_body,
+            "twopulse_rotor_gain": tp_rotor,
             "mtd_gain": mtd,
             "doppler_bin": bin_i,
             "peak_fd_hz": peak_fd,

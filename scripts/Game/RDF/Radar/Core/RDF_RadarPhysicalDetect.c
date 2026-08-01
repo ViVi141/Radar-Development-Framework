@@ -236,6 +236,7 @@ class RDF_RadarPhysicalDetect
         target.m_DopplerHz = bodyDopplerHz;
         target.m_MtiGain = 1.0;
         target.m_DopplerBin = -1;
+        target.m_RotorSidebandUsed = false;
 
         float scanPeriodPre = hardware.GetScanPeriodS();
         int scanNumberPre = 0;
@@ -275,14 +276,45 @@ class RDF_RadarPhysicalDetect
                     target.m_RadialSpeedMs = peakFd * wavelength * 0.5;
                 if (target.m_MtiGain < 0.000001)
                     target.m_MtiGain = 0.000001;
+                if (target.m_RotorTipSpeedMs > 0.0 && winBin != 0)
+                    target.m_RotorSidebandUsed = true;
             }
             else
             {
-                target.m_MtiGain = RDF_RadarClutterModel.MtiTwoPulseGain(
-                    bodyDopplerHz,
-                    activePrfHz);
+                array<float> prfList = new array<float>();
+                if (hardware.m_MtiStaggerDeblind && hardware.m_PrfSetHz
+                    && hardware.m_PrfSetHz.Count() >= 2)
+                {
+                    for (int pi = 0; pi < hardware.m_PrfSetHz.Count(); pi++)
+                        prfList.Insert(hardware.m_PrfSetHz.Get(pi));
+                }
+                else
+                {
+                    prfList.Insert(activePrfHz);
+                }
+
+                ERDF_MtiMode cancelMode = ERDF_MtiMode.RDF_MTI_TWOPULSE;
+                if (hardware.m_MtiMode == ERDF_MtiMode.RDF_MTI_THREE_PULSE)
+                    cancelMode = ERDF_MtiMode.RDF_MTI_THREE_PULSE;
+
+                float peakFdCancel = bodyDopplerHz;
+                target.m_MtiGain = RDF_RadarClutterModel.MaxMtiCancellerSpectrumGain(
+                    dopplerLines,
+                    dopplerPowers,
+                    prfList,
+                    cancelMode,
+                    peakFdCancel);
+                target.m_DopplerBin = -1;
+                target.m_DopplerHz = peakFdCancel;
+                if (wavelength > 0.0)
+                    target.m_RadialSpeedMs = peakFdCancel * wavelength * 0.5;
                 if (target.m_MtiGain < 0.000001)
                     target.m_MtiGain = 0.000001;
+                if (target.m_RotorTipSpeedMs > 0.0
+                    && Math.AbsFloat(peakFdCancel - bodyDopplerHz) > 1.0)
+                {
+                    target.m_RotorSidebandUsed = true;
+                }
             }
         }
 

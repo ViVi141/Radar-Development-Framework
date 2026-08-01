@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Offline clutter Doppler PSD + multi-PRF ambiguity calibration.
 
-Writes JSON under tools/dem/calib/ for manual bake-back into RDF_RadarHardware
-fields. Does NOT drive in-game detection at runtime.
+Writes JSON under tools/dem/calib/ for bake-back into RDF_RadarHardware
+(copy to $profile:RDF/RadarData/HwCalib.json, or set m_DeriveMtdLeakageFromSigmaVr).
 """
 
 from __future__ import annotations
@@ -156,6 +156,7 @@ def build_calib(
         "mtd_clutter_leakage": leakage,
         "doppler_bin_count": hardware.doppler_bin_count,
         "mti_mode": mode,
+        "clutter_sigma_vr_m_s": sigma_vr_m_s,
         "clutter_psd": {
             "fd_hz": [float(x) for x in fd.tolist()],
             "fd_norm": [float(x) for x in fd_norm.tolist()],
@@ -164,7 +165,7 @@ def build_calib(
             "sigma_vr_m_s": sigma_vr_m_s,
         },
         "ambiguity": ambiguity,
-        "notes": "Offline bake-back only; does not drive in-game detects",
+        "notes": "Bake-back for Hardware via $profile:RDF/RadarData/HwCalib.json or σ_vr derive",
     }
 
 

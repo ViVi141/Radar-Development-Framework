@@ -252,17 +252,21 @@ class RDF_RadarBallistics
         outVel = vel + accelMid * stepS;
     }
 
-    static vector IntegrateForDuration(
+    static void IntegrateForDurationEx(
         vector pos,
         vector vel,
         float durationS,
         float airDrag,
         RDF_RadarGlobalWind wind,
-        float gravityMs2 = GRAVITY_M_S2,
-        float dtS = DEFAULT_DT_S)
+        out vector outPos,
+        out vector outVel,
+        float gravityMs2,
+        float dtS)
     {
+        outPos = pos;
+        outVel = vel;
         if (durationS <= 0.0)
-            return pos;
+            return;
         if (dtS < 0.0001)
             dtS = 0.0001;
         float t = 0.0;
@@ -280,7 +284,24 @@ class RDF_RadarBallistics
             v = nextV;
             t = t + step;
         }
-        return p;
+        outPos = p;
+        outVel = v;
+    }
+
+    static vector IntegrateForDuration(
+        vector pos,
+        vector vel,
+        float durationS,
+        float airDrag,
+        RDF_RadarGlobalWind wind,
+        float gravityMs2 = GRAVITY_M_S2,
+        float dtS = DEFAULT_DT_S)
+    {
+        vector outP;
+        vector outV;
+        IntegrateForDurationEx(
+            pos, vel, durationS, airDrag, wind, outP, outV, gravityMs2, dtS);
+        return outP;
     }
 
     static RDF_RadarGroundHit FindGroundIntersection(

@@ -30,9 +30,18 @@ class RDF_RadarHardware
     float m_MtiClutterFloor = 0.0001;
     // Non-zero MTD bins: DEM clutter × this leakage (not the global TwoPulse floor).
     float m_MtdClutterLeakage = 0.000001;
+    // Clutter radial velocity spread used when deriving leakage (m/s).
+    float m_ClutterSigmaVrMs = 0.5;
+    // When true, Validate() sets m_MtdClutterLeakage from σ_vr (unless calib applied).
+    bool m_DeriveMtdLeakageFromSigmaVr = false;
+    // Prefer $profile:RDF/RadarData/HwCalib.json scalars when present.
+    bool m_LoadHwCalibFromProfile = false;
+    bool m_HwCalibApplied;
     bool m_EnableMti = true;
     // Default TwoPulse keeps legacy / GBRS demos unchanged.
     ERDF_MtiMode m_MtiMode = ERDF_MtiMode.RDF_MTI_TWOPULSE;
+    // Classic canceller: max gain over m_PrfSetHz (de-blind). MTD ignores this.
+    bool m_MtiStaggerDeblind = false;
     // DFT / filter-bank length when m_MtiMode == MtdBank (8–32 typical).
     int m_DopplerBinCount = 16;
     ref array<ref RDF_RadarElevationBeam> m_ElevationBeams;
@@ -181,8 +190,31 @@ class RDF_RadarHardware
         m_PulsesIntegrated = Math.Max(1, m_PulsesIntegrated);
         m_ScanRpm = Math.Max(0.0, m_ScanRpm);
         m_MtiClutterFloor = Math.Clamp(m_MtiClutterFloor, 0.000001, 1.0);
-        m_MtdClutterLeakage = Math.Clamp(m_MtdClutterLeakage, 0.000000001, 1.0);
+        m_ClutterSigmaVrMs = Math.Clamp(m_ClutterSigmaVrMs, 0.05, 8.0);
         m_DopplerBinCount = Math.Clamp(m_DopplerBinCount, 4, 64);
+
+        if (m_LoadHwCalibFromProfile && !m_HwCalibApplied)
+            RDF_RadarHwCalib.TryApplyFromProfile(this);
+
+        if (m_DeriveMtdLeakageFromSigmaVr && !m_HwCalibApplied)
+        {
+            m_MtdClutterLeakage = RDF_RadarHwCalib.SuggestMtdLeakage(
+                m_ClutterSigmaVrMs,
+                GetWavelengthM(),
+                m_PrfHz,
+                129);
+            int cancellerOrder = 1;
+            if (m_MtiMode == ERDF_MtiMode.RDF_MTI_THREE_PULSE)
+                cancellerOrder = 2;
+            m_MtiClutterFloor = RDF_RadarHwCalib.SuggestMtiClutterFloor(
+                m_ClutterSigmaVrMs,
+                GetWavelengthM(),
+                m_PrfHz,
+                cancellerOrder);
+        }
+
+        m_MtdClutterLeakage = Math.Clamp(m_MtdClutterLeakage, 0.000000001, 1.0);
+        m_MtiClutterFloor = Math.Clamp(m_MtiClutterFloor, 0.000001, 1.0);
         if (!m_ElevationBeams)
             m_ElevationBeams = new array<ref RDF_RadarElevationBeam>();
         if (m_ElevationBeams.Count() == 0)

@@ -14,6 +14,7 @@ from rdf_radar_track import (
     cartesian_to_polar,
     confirmed_tracks,
     fit_ballistic_vacuum,
+    near_blind_speed,
     polar_to_cartesian,
     predict_ballistic,
 )
@@ -31,6 +32,17 @@ class FakeDetection:
     detected: bool = True
     elevation_deg: float = 0.0
     doppler_bin: int = -1
+    prf_index: int = 0
+
+
+class TestNearBlindSpeed(unittest.TestCase):
+    def test_zero_and_first_blind(self) -> None:
+        lam = 0.03
+        prf = 4000.0
+        step = 0.5 * lam * prf
+        self.assertTrue(near_blind_speed(0.0, prf, lam, tol_ms=8.0))
+        self.assertTrue(near_blind_speed(step, prf, lam, tol_ms=8.0))
+        self.assertFalse(near_blind_speed(step * 0.5, prf, lam, tol_ms=8.0))
 
 
 class TestPolarCartesian(unittest.TestCase):
@@ -242,6 +254,69 @@ class TestAssociateAndFilter(unittest.TestCase):
         track = max(coasted, key=lambda t: t.hit_count)
         self.assertGreaterEqual(track.hit_count, 3)
         self.assertFalse(track.coasting)
+
+    def test_prf_blind_extra_misses_keeps_track(self) -> None:
+        # Blind for PRF0 (λ·4000/2); stagger PRF1 is clear. Misses during
+        # blind PRF scans should not drop the track immediately.
+        lam = 0.03
+        prf0 = 4000.0
+        prf1 = 4800.0
+        blind0 = 0.5 * lam * prf0
+        dets = [
+            FakeDetection(
+                0.0, 1, "B", 3000.0, 20.0, blind0, 16.0, prf_index=0
+            ),
+            FakeDetection(
+                1.0, 2, "B", 3000.0 + blind0, 20.0, blind0, 16.0, prf_index=1
+            ),
+            # Three empty-ish scans: only far noise plots (force miss).
+            FakeDetection(2.0, 3, "N", 9000.0, 90.0, 0.0, 4.0, prf_index=0),
+            FakeDetection(3.0, 4, "N", 9100.0, 90.0, 0.0, 4.0, prf_index=1),
+            FakeDetection(4.0, 5, "N", 9200.0, 90.0, 0.0, 4.0, prf_index=0),
+            FakeDetection(
+                5.0, 6, "B", 3000.0 + 5.0 * blind0, 20.0, blind0, 16.0, prf_index=1
+            ),
+        ]
+        cfg = TrackerConfig(
+            confirm_hits=2,
+            max_misses=2,
+            coast_on_miss=True,
+            enable_prf_deblind=True,
+            soft_miss_on_blind=True,
+            wavelength_m=lam,
+            primary_prf_hz=prf0,
+            prf_set_hz=[prf0, prf1],
+            blind_extra_misses=3,
+            gate_range_m=500.0,
+            gate_azimuth_deg=10.0,
+        )
+        result = associate_and_filter(dets, cfg)
+        kept = [t for t in result.tracks if t.last_target_name == "B" or t.hit_count >= 2]
+        self.assertTrue(kept)
+        best = max(kept, key=lambda t: t.hit_count)
+        self.assertGreaterEqual(best.hit_count, 3)
+
+    def test_coast_gate_grow_allows_reacquire(self) -> None:
+        # After misses, prediction drifts; gate growth should still reacquire.
+        dets = [
+            FakeDetection(0.0, 1, "G", 2000.0, 0.0, 40.0, 15.0),
+            FakeDetection(1.0, 2, "G", 2040.0, 0.0, 40.0, 15.0),
+            FakeDetection(2.0, 3, "N", 9000.0, 90.0, 0.0, 3.0),
+            FakeDetection(3.0, 4, "N", 9100.0, 90.0, 0.0, 3.0),
+            # Reappear farther than base gate but within grown gate.
+            FakeDetection(4.0, 5, "G", 2200.0, 2.0, 40.0, 15.0),
+        ]
+        cfg = TrackerConfig(
+            confirm_hits=2,
+            max_misses=5,
+            coast_on_miss=True,
+            gate_range_m=80.0,
+            gate_azimuth_deg=1.0,
+            coast_gate_grow_per_miss=1.0,
+        )
+        result = associate_and_filter(dets, cfg)
+        kept = [t for t in result.tracks if t.hit_count >= 3]
+        self.assertTrue(kept)
 
 
 class TestBallisticFit(unittest.TestCase):

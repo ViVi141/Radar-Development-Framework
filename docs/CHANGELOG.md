@@ -1,5 +1,26 @@
 # CHANGELOG
 
+## 2026-08-01 — 经典 MTI 完整 + Track coast 运动学完整
+
+- **MTI**：`RDF_MTI_THREE_PULSE`（sin⁴）；经典路径吃旋翼谱线；`m_MtiStaggerDeblind` 对 PRF 集取 max 消盲；`SuggestMtiClutterFloor(σ_vr)` 与 derive 回灌；PulseDoppler 开 stagger deblind
+- **Coast**：`CoastTo` / `PredictPolarAt` 更新速度与 LOS 径向速；关联用 `PredictPolarAt`；门限随 miss 增长；Doppler-null/盲速软 miss；`m_TrackCoastMaxSec`
+- **Python**：`mti_three_pulse_gain` / `max_mti_canceller_spectrum_gain`；笛卡尔 coast；CPA 单测改为 body-null vs 谱线存活
+- TODO §7 落地
+
+## 2026-08-01 — MTD P2：航迹多 PRF 消盲速 + 直升机旋翼签名填数
+
+- **航迹**：`RDF_RadarProjectileTracker` 从 Hardware 取 λ / PRF 集；近盲速（n·λ·PRF/2）加宽关联门限，并放宽 miss 淘汰配额；plot 写入 `m_LastPrfHz`
+- **离线对齐**：`rdf_radar_track.near_blind_speed` + `enable_prf_deblind`；单测覆盖盲速保活
+- **签名内容**：`Signatures/rdf_radar_signatures.conf` 28 个机架空气动力体写入 tip/blades/hub（UH-1 / Mi-8 家族）；`rdf_sig_patch_heli_rotors.py`；`MaybeApplyHelicopterRotorDefaults` 同步家族表
+- TODO §6 MTD 深化 P2 项落地
+
+## 2026-08-01 — MTD 深化：旋翼谱字段 + 标定回灌 + 可观测
+
+- **旋翼微多普勒**：`blade_count` 驱动 tip·(h/N) 谐波；LOS 仰角盘面因子缩放边带（Enforce `FillDopplerSpectrum` + Python `rotor_doppler_spectrum`）
+- **标定回灌**：`RDF_RadarHwCalib`（`$profile:RDF/RadarData/HwCalib.json`）+ `m_DeriveMtdLeakageFromSigmaVr` / `m_ClutterSigmaVrMs`；PulseDoppler 默认开启推导与 profile 加载
+- **可观测**：`m_RotorSidebandUsed`；`GetMtdStatsShort`（win bin / PRF / rotor 助检 / leak / calib）并入 `GetStatusShort`
+- TODO §6 MTD 深化 P1 项落地；P2（航迹多 PRF、签名填数）随后补齐
+
 ## 2026-08-01 — 代码质量剩余 Medium/Low 一次性修复
 
 - **多雷达**：focus 窗口改为「打开直到 Flush」+ 50ms 陈旧恢复，不再靠 1ms wall 切帧

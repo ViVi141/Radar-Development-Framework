@@ -254,6 +254,7 @@ class RDF_RadarScanReuseCache
         t.m_BladeCount = src.m_BladeCount;
         t.m_RotorRcsFraction = src.m_RotorRcsFraction;
         t.m_HubWidthMs = src.m_HubWidthMs;
+        t.m_RotorSidebandUsed = src.m_RotorSidebandUsed;
         t.m_DemSurfaceClass = src.m_DemSurfaceClass;
         t.m_DemSampleValid = src.m_DemSampleValid;
         t.m_ClutterPowerW = src.m_ClutterPowerW;
