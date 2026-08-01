@@ -52,49 +52,8 @@ class RDF_DemRuntimeLoader
                 return true;
         }
 
-        // 4) Profile full DEM JSON
-        if (RDF_DemJsonPack.TryLoadManifest(profileRoot, worldKey, outManifest))
-        {
-            Print("[RDF DEM Runtime] using profile JSON DEM: " + profileRoot, LogLevel.NORMAL);
-            return true;
-        }
-
-        // 5) Profile binary pack
-        string profileBin = RDF_DemBinPack.BuildPackPath(profileRoot, worldKey);
-        if (RDF_DemBinPack.TryLoadManifest(profileBin, worldKey, outManifest))
-        {
-            Print("[RDF DEM Runtime] using profile binary DEM: " + profileBin, LogLevel.NORMAL);
-            return true;
-        }
-
-        // 6) Packaged full DEM JSON
-        if (RDF_DemJsonPack.TryLoadManifest(packagedRoot, worldKey, outManifest))
-        {
-            Print("[RDF DEM Runtime] using packaged JSON DEM: " + packagedRoot, LogLevel.NORMAL);
-            return true;
-        }
-
-        // 7) Packaged binary (legacy)
-        string packagedBin = RDF_DemBinPack.BuildPackPath(packagedRoot, worldKey);
-        if (RDF_DemBinPack.TryLoadManifest(packagedBin, worldKey, outManifest))
-        {
-            Print("[RDF DEM Runtime] using packaged binary DEM: " + packagedBin, LogLevel.NORMAL);
-            return true;
-        }
-
-        // 8) Packaged V3 CSV fallback
-        string packagedManifest = packagedRoot + "manifest.csv";
-        if (FileIO.FileExists(packagedManifest))
-        {
-            if (LoadManifestCsv(packagedRoot, worldKey, outManifest))
-            {
-                Print("[RDF DEM Runtime] using packaged DEM root: " + packagedRoot, LogLevel.NORMAL);
-                return true;
-            }
-        }
-
         Warn("DEM/SURF missing for " + worldKey
-            + " (profile/packaged SURF JSON, then CSV/JSON/bin DEM)");
+            + " (profile/packaged SURF JSON, then profile V3 CSV)");
         return false;
     }
 
@@ -198,8 +157,6 @@ class RDF_DemRuntimeLoader
             return false;
         }
 
-        manifest.m_IsBinaryPack = false;
-        manifest.m_IsJsonPack = false;
         manifest.m_IsSurfacePack = false;
         manifest.m_PreferLiveTerrainY = true;
         manifest.m_RootDir = rootDir;
@@ -226,12 +183,6 @@ class RDF_DemRuntimeLoader
 
         if (manifest.m_IsSurfacePack)
             return RDF_DemSurfaceJsonPack.LoadTile(manifest, tileIx, tileIz, outTile);
-
-        if (manifest.m_IsJsonPack)
-            return RDF_DemJsonPack.LoadTile(manifest, tileIx, tileIz, outTile);
-
-        if (manifest.m_IsBinaryPack)
-            return RDF_DemBinPack.LoadTile(manifest, tileIx, tileIz, outTile);
 
         return LoadTileCsv(manifest, tileIx, tileIz, outTile);
     }

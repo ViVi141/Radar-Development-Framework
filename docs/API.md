@@ -164,7 +164,6 @@
 - `bool IsNetworkAvailable()` — 网络层是否可用
 - `void SetEnabled(bool enabled)` — 设置启用状态（服务器权威；组件 override）
 - `void SetConfig(RDF_LidarDemoConfig config)` — 设置配置（服务器权威；组件 override）
-- `void SetDemoEnabled(bool enabled)` / `SetDemoConfig(...)` — 兼容别名，内部转发到 `SetEnabled` / `SetConfig`
 - `void RequestScan()` — 请求服务器执行扫描（客户端调用，无参数，服务器使用组件所属实体作为扫描主体）
 - `bool HasSyncedSamples()` — 是否已有同步样本
 - `array<ref RDF_LidarSample> GetLastScanResults()` — 获取最后扫描结果
@@ -565,7 +564,6 @@ Static statistics & filters for sample arrays:
 Network sync API base (intentional no-op defaults):
 - `bool IsNetworkAvailable()`
 - `void SetEnabled(bool enabled)` / `void SetConfig(RDF_LidarDemoConfig config)` — preferred
-- `void SetDemoEnabled` / `SetDemoConfig` — legacy aliases forwarding to SetEnabled/SetConfig
 - `void RequestScan()`
 - `bool HasSyncedSamples()`
 - `array<ref RDF_LidarSample> GetLastScanResults()`

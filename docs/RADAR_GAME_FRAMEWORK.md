@@ -56,10 +56,8 @@ feasible): [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md).
 - `m_DemCacheMaxTiles`
 - `m_DemTileLoadsPerScan`
 - `m_DemClutterScale`
-- `m_UseScattererRegistry` (default true), `m_ScattererDiscoveryRangeScale`,
-  `m_ScattererDiscoveryIntervalS`, `m_ScattererClassifyPerTick`,
-  `m_ScattererRefreshPerTick`, `m_ScattererMaxEntries`
-- `m_UseSphereQuery`, `m_SphereQueryAlsoActive` (legacy search path only)
+- `m_ScattererDiscoveryRangeScale`, `m_ScattererDiscoveryIntervalS`,
+  `m_ScattererClassifyPerTick`, `m_ScattererRefreshPerTick`, `m_ScattererMaxEntries`
 - `m_MaxLosTracesPerScan` (default 48; bounds TraceMove hitch)
 - `m_EnableNlosMultipath` (default true)
 - `m_NlosReflectionAbs`, `m_NlosMinFactor`, `m_NlosMaxTargetAglM`
@@ -149,9 +147,8 @@ Preferred runtime path (see [DEM.md](DEM.md)):
   `$profile` or mod `DemData/<world>/surf_manifest.json` + `surf_chunks/`
 - Electromagnetic params: `RadarData/SurfaceTable.conf` (workshop) with JSON fallback
 
-Legacy / development fallbacks: V3 CSV tiles (`manifest.csv` + `tiles/tile_*.csv`),
-full DEM JSON / `.dem.data`. If nothing is available → `mode=LIVE` (height only,
-surface class UNKNOWN).
+Development fallback: V3 CSV tiles (`manifest.csv` + `tiles/tile_*.csv`).
+If nothing is available → `mode=LIVE` (height only, surface class UNKNOWN).
 
 The scanner initializes a bounded LRU cache (`RDF_DemRuntimeCache`) and
 loads tiles/chunks on demand near sampled targets. Current defaults:
@@ -384,11 +381,11 @@ Output report:
 
 ## Current boundaries
 
-- Target candidates remain entity-first (scatterer registry + sphere/active
-  fallback) and LOS uses `RDF_RadarScanGeometry.TraceLineOfSight` (`ANY_CONTACT`,
+- Target candidates remain entity-first (scatterer registry) and LOS uses
+  `RDF_RadarScanGeometry.TraceLineOfSight` (`ANY_CONTACT`,
   reused TraceParam, ExcludeArray, start clearance); NLOS may use ground-bounce
   weak detection + **single knife-edge diffraction** (not multi-edge/UTD).
-- DEM / surface: prefer SURF JSON + live `GetSurfaceY`; CSV/BIN are fallbacks.
+- DEM / surface: prefer SURF JSON + live `GetSurfaceY`; V3 CSV is the dev fallback.
   Multiplayer parity for clutter still needs matching local SURF/DEM (or LIVE);
   detection **results** sync via `RDF_RadarNetworkComponent` (not a substitute
   for local terrain data). Bandwidth: Reliable track summary / Unreliable plots
@@ -452,10 +449,8 @@ Enforce 实现现已遵循与离线原型相同的契约。游戏实体是物理
 - `m_DemCacheMaxTiles`
 - `m_DemTileLoadsPerScan`
 - `m_DemClutterScale`
-- `m_UseScattererRegistry`（默认 true）、`m_ScattererDiscoveryRangeScale`、
-  `m_ScattererDiscoveryIntervalS`、`m_ScattererClassifyPerTick`、
-  `m_ScattererRefreshPerTick`、`m_ScattererMaxEntries`
-- `m_UseSphereQuery`、`m_SphereQueryAlsoActive`（仅旧搜索路径）
+- `m_ScattererDiscoveryRangeScale`、`m_ScattererDiscoveryIntervalS`、
+  `m_ScattererClassifyPerTick`、`m_ScattererRefreshPerTick`、`m_ScattererMaxEntries`
 - `m_MaxLosTracesPerScan`（默认 48；限制 TraceMove 卡顿）
 - `m_EnableNlosMultipath`（默认 true）
 - `m_NlosReflectionAbs`、`m_NlosMinFactor`、`m_NlosMaxTargetAglM`
@@ -542,8 +537,8 @@ settings.m_EwStack.Add(burst);
 - 地表类别：`$profile` 或模组 `DemData/<world>/surf_manifest.json` + `surf_chunks/` 下的 `RDF_SURF_JSON_V1`
 - 电磁参数：`RadarData/SurfaceTable.conf`（工坊），JSON 回退
 
-遗留 / 开发回退：V3 CSV 瓦片（`manifest.csv` + `tiles/tile_*.csv`）、
-全量 DEM JSON / `.dem.data`。皆无 → `mode=LIVE`（仅高程，地表类 UNKNOWN）。
+开发回退：V3 CSV 瓦片（`manifest.csv` + `tiles/tile_*.csv`）。
+皆无 → `mode=LIVE`（仅高程，地表类 UNKNOWN）。
 
 扫描器初始化有界 LRU 缓存（`RDF_DemRuntimeCache`），并在采样目标附近按需加载瓦片/块。当前默认：
 
@@ -747,10 +742,10 @@ RDF_RadarAirborneScanTest.StartKeepTarget();
 
 ## 当前边界
 
-- 目标候选仍以实体优先（散射体表 + sphere/active 回退），通视走
+- 目标候选仍以实体优先（散射体表），通视走
   `RDF_RadarScanGeometry.TraceLineOfSight`（`ANY_CONTACT`、复用 TraceParam、
   ExcludeArray、起点出壳）；NLOS 可选地面反射弱检 + **单刃绕射**（非多刃/UTD）。
-- DEM / 地表：优先 SURF JSON + 实时 `GetSurfaceY`；CSV/BIN 为回退。
+- DEM / 地表：优先 SURF JSON + 实时 `GetSurfaceY`；V3 CSV 为开发回退。
   杂波多人一致仍需匹配的本地 SURF/DEM（或 LIVE）；
   检测**结果**经 `RDF_RadarNetworkComponent` 同步（不能替代本地地形数据）。
   带宽：Reliable 航迹摘要 / Unreliable plots + 上限降频 / 兴趣半径。

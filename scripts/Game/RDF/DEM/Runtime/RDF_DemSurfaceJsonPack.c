@@ -115,17 +115,13 @@ class RDF_DemSurfaceJsonPack
         manifest.m_TileCountX = doc.tile_count_x;
         manifest.m_TileCountZ = doc.tile_count_z;
         manifest.m_MaxSpans = 1;
-        manifest.m_IsBinaryPack = false;
-        manifest.m_IsJsonPack = false;
         manifest.m_IsSurfacePack = true;
         manifest.m_PreferLiveTerrainY = true;
-        manifest.m_BinYScale = 0.0;
         manifest.m_RootDir = rootDir;
         string chunks = doc.chunks_dir;
         if (chunks.IsEmpty())
             chunks = CHUNKS_DIR_NAME;
         manifest.m_TilesDir = rootDir + chunks;
-        manifest.m_BinPackPath = string.Empty;
         outManifest = manifest;
         return true;
     }

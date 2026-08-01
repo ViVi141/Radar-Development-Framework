@@ -98,7 +98,7 @@ scripts/Game/RDF/
 scripts/Game/RDF/Radar/
 ├── Core/
 │   ├── RDF_RadarSettings.c / RDF_RadarTypes.c / RDF_RadarHardware.c
-│   ├── RDF_RadarScanner.c              编排：Registry/Legacy 扫描 + Trace + 复用预算
+│   ├── RDF_RadarScanner.c              编排：Registry 扫描 + Trace + 复用预算
 │   ├── RDF_RadarScanGeometry.c         LOS TraceMove（ANY_CONTACT / ExcludeArray / 出壳）+ 实体中心 / 速度
 │   ├── RDF_RadarPhysicalDetect.c       雷达方程 / MTI·MTD / NLOS bounce+刀刃 / DEM 杂波 / SNR / ESM
 │   ├── RDF_RadarScattererRegistry.c    全局散射体/辐射源表（增量维护；多雷达 focus 合并）
@@ -125,7 +125,7 @@ scripts/Game/RDF/Radar/
 ├── EW/
 │   └── RDF_RadarEwModel.c              噪声（SEARCH_AVG/BEAM/MAINLOBE）+ 欺骗（假点/拖距/角闪烁/间歇）
 ├── Network/
-│   ├── RDF_RadarNetworkAPI.c           基类（含 intentional no-op；SetEnabled 别名 SetDemoEnabled）
+│   ├── RDF_RadarNetworkAPI.c           基类（含 intentional no-op；SetEnabled/SetConfig）
 │   ├── RDF_RadarNetworkComponent.c     服务器权威同步（挂 Sensor；发布到 DatalinkHub）
 │   ├── RDF_RadarDatalinkTypes.c        IFF 枚举 / 航迹摘要 / IffResolver
 │   ├── RDF_RadarDatalinkAPI.c          数据链 API 基类
@@ -173,8 +173,6 @@ scripts/Game/RDF/DEM/
     ├── RDF_DemRuntimeLoader.c          查找顺序编排
     ├── RDF_DemRuntimeCache.c           世界坐标采样 + LRU
     ├── RDF_DemSurfaceJsonPack.c        SURF JSON（工坊推荐）
-    ├── RDF_DemJsonPack.c               全量 DEM JSON
-    └── RDF_DemBinPack.c                .dem.data 二进制包
 ```
 
 烘焙与 `$profile` / 工坊路径见 [DEM.md](DEM.md)。
@@ -428,7 +426,7 @@ scripts/Game/RDF/
 scripts/Game/RDF/Radar/
 ├── Core/
 │   ├── RDF_RadarSettings.c / RDF_RadarTypes.c / RDF_RadarHardware.c
-│   ├── RDF_RadarScanner.c              编排：Registry/Legacy 扫描 + Trace + 复用预算
+│   ├── RDF_RadarScanner.c              编排：Registry 扫描 + Trace + 复用预算
 │   ├── RDF_RadarScanGeometry.c         LOS TraceMove（ANY_CONTACT / ExcludeArray / 出壳）+ 实体中心 / 速度
 │   ├── RDF_RadarPhysicalDetect.c       雷达方程 / MTI·MTD / NLOS bounce+刀刃 / DEM 杂波 / SNR / ESM
 │   ├── RDF_RadarScattererRegistry.c    全局散射体/辐射源表（增量维护；多雷达 focus 合并）
@@ -455,7 +453,7 @@ scripts/Game/RDF/Radar/
 ├── EW/
 │   └── RDF_RadarEwModel.c              噪声（SEARCH_AVG/BEAM/MAINLOBE）+ 欺骗（假点/拖距/角闪烁/间歇）
 ├── Network/
-│   ├── RDF_RadarNetworkAPI.c           基类（含 intentional no-op；SetEnabled 别名 SetDemoEnabled）
+│   ├── RDF_RadarNetworkAPI.c           基类（含 intentional no-op；SetEnabled/SetConfig）
 │   ├── RDF_RadarNetworkComponent.c     服务器权威同步（挂 Sensor；发布到 DatalinkHub）
 │   ├── RDF_RadarDatalinkTypes.c        IFF 枚举 / 航迹摘要 / IffResolver
 │   ├── RDF_RadarDatalinkAPI.c          数据链 API 基类
@@ -500,8 +498,6 @@ scripts/Game/RDF/DEM/
     ├── RDF_DemRuntimeLoader.c          查找顺序编排
     ├── RDF_DemRuntimeCache.c           世界坐标采样 + LRU
     ├── RDF_DemSurfaceJsonPack.c        SURF JSON（工坊推荐）
-    ├── RDF_DemJsonPack.c               全量 DEM JSON
-    └── RDF_DemBinPack.c                .dem.data 二进制包
 ```
 
 Bake and `$profile` / Workshop paths: [DEM.md](DEM.md).

@@ -59,13 +59,11 @@ Workbench 中可直接编辑 `.conf`；改完后确保 Resource Browser 仍已 R
 1. `$profile:.../DemData/<world>/surf_manifest.json`
 2. 模组 `DemData/<world>/surf_manifest.json`（**工坊推荐**）
 3. `$profile` V3 CSV（开发全量 DEM）
-4. `$profile` 全量 DEM JSON / `.dem.data`
-5. 模组全量 DEM JSON / `.dem.data` / CSV
-6. 皆无 → `mode=LIVE`（仅 `GetSurfaceY`，地表类 = UNKNOWN）
+4. 皆无 → `mode=LIVE`（仅 `GetSurfaceY`，地表类 = UNKNOWN）
 
 采样时：只要世界已加载，**一律优先用 `GetSurfaceY` 覆盖**烘焙高度（含全量 DEM 回退路径）。
 
-日志：`mode=SURF|LIVE|CSV|JSON|BIN`，`liveY=1`。  
+日志：`mode=SURF|LIVE|CSV`，`liveY=1`。  
 HUD：`SURF` / `SURF RAM` / `LIVE` / `DEM OK` / `DEM RAM` / `DEM OFF`。  
 默认 `m_DemPreloadAll=true`：权威端把整图 SURF 解码进扁平 RAM（约数十 MB）。  
 开局约 2s 后自动异步预热（约 6ms/帧，不卡死）；纯客户端跳过。  
@@ -78,8 +76,7 @@ Workbench Play + BakeDemFull.flag
     → RDF_DemTileBake 写出 V3 CSV
     → $profile:RDF/DemData/<world>/manifest.csv + tiles/*.csv
          ├─ 游戏内优先 SURF JSON；否则可读 CSV
-         ├─ python tools/dem/rdf_dem_pack_surface_json.py → surf_*.json（工坊）
-         ├─ python tools/dem/rdf_dem_pack_bin.py → .dem.data（遗留/离线）
+         ├─ python tools/dem/rdf_dem_pack_surface_json.py --from-bin → surf_*.json（工坊）
          └─ python tools/dem/rdf_dem_pack.py → TrainData/*.npz（离线仿真）
 ```
 
@@ -101,16 +98,14 @@ python tools\dem\rdf_dem_bake_help.py
 - 每格：`terrain_y`、坡度、水深、密度、`surface_class`、`n_spans`…
 - **游戏内杂波**：实时高度 + 地表类；span 主要给离线仿真
 
-### 遗留：全量 DEM 包
+### 发布格式
 
 | 格式 | 路径 | 说明 |
 |------|------|------|
-| `RDF_DEM_BIN_V1` | `<world>.dem.data` | 含量化高度；工坊曾不稳定 |
-| `RDF_DEM_JSON_V1` | `manifest.json` + `jchunks/` | 全量 hex；体积大 |
 | `RDF_SURF_JSON_V1` | `surf_manifest.json` + `surf_chunks/` | **推荐发布** |
 
 `DemData/` 默认不进 Git；模组内仅保留 SURF JSON（已无 `.dem.data`）。
-离线仿真仍用 `$profile` CSV 或自行 `rdf_dem_pack_bin.py`。
+`.dem.data` 仅作离线中间格式（`rdf_dem_pack_surface_json.py --from-bin`），游戏运行时不再加载。
 
 ### 离线 npz 仿真
 
@@ -186,13 +181,11 @@ You can edit `.conf` directly in Workbench; after changes, ensure Resource Brows
 1. `$profile:.../DemData/<world>/surf_manifest.json`
 2. Mod `DemData/<world>/surf_manifest.json` (**workshop recommended**)
 3. `$profile` V3 CSV (full DEM for development)
-4. `$profile` full DEM JSON / `.dem.data`
-5. Mod full DEM JSON / `.dem.data` / CSV
-6. None of the above → `mode=LIVE` (`GetSurfaceY` only; surface class = UNKNOWN)
+4. None of the above → `mode=LIVE` (`GetSurfaceY` only; surface class = UNKNOWN)
 
 When sampling: once the world is loaded, **always prefer `GetSurfaceY` to override** baked height (including full-DEM fallback paths).
 
-Logs: `mode=SURF|LIVE|CSV|JSON|BIN`, `liveY=1`.  
+Logs: `mode=SURF|LIVE|CSV`, `liveY=1`.  
 HUD: `SURF` / `LIVE` / `DEM OK` / `DEM OFF`.
 
 ### Data flow (dev bake)
@@ -202,8 +195,7 @@ Workbench Play + BakeDemFull.flag
     → RDF_DemTileBake 写出 V3 CSV
     → $profile:RDF/DemData/<world>/manifest.csv + tiles/*.csv
          ├─ 游戏内优先 SURF JSON；否则可读 CSV
-         ├─ python tools/dem/rdf_dem_pack_surface_json.py → surf_*.json（工坊）
-         ├─ python tools/dem/rdf_dem_pack_bin.py → .dem.data（遗留/离线）
+         ├─ python tools/dem/rdf_dem_pack_surface_json.py --from-bin → surf_*.json（工坊）
          └─ python tools/dem/rdf_dem_pack.py → TrainData/*.npz（离线仿真）
 ```
 
@@ -225,16 +217,14 @@ python tools\dem\rdf_dem_bake_help.py
 - Per cell: `terrain_y`, slope, water depth, density, `surface_class`, `n_spans`, …
 - **In-game clutter**: live height + surface class; spans are mainly for offline simulation
 
-### Legacy: full DEM packs
+### Publish format
 
 | Format | Path | Notes |
 |--------|------|-------|
-| `RDF_DEM_BIN_V1` | `<world>.dem.data` | Quantized height; workshop historically unstable |
-| `RDF_DEM_JSON_V1` | `manifest.json` + `jchunks/` | Full hex; large |
 | `RDF_SURF_JSON_V1` | `surf_manifest.json` + `surf_chunks/` | **Recommended for publish** |
 
-`DemData/` is not in Git by default; the mod keeps only SURF JSON (no `.dem.data`).  
-Offline simulation still uses `$profile` CSV or run `rdf_dem_pack_bin.py` yourself.
+`DemData/` is not in Git by default; the mod keeps only SURF JSON (no `.dem.data`).
+`.dem.data` remains only as an offline intermediate (`rdf_dem_pack_surface_json.py --from-bin`); the game runtime no longer loads it.
 
 ### Offline npz simulation
 

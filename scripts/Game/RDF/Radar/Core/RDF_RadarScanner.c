@@ -1,5 +1,5 @@
 // Radar scanner: scatterers feed the physics chain; published plots are measurements.
-// Candidates from sphere query + active fallback; Trace LOS + optional NLOS;
+// Candidates come from the global scatterer registry; Trace LOS + optional NLOS;
 // SNR / CFAR gates; optional measurement synthesis (quantize + noise, no entity truth).
 class RDF_RadarScanner
 {
@@ -13,7 +13,6 @@ class RDF_RadarScanner
     protected vector m_LastForward = "1 0 0";
     protected float m_LastRange = 2000.0;
     protected ref array<ref RDF_RadarScatterer> m_ScattererCandidates;
-    protected ref RDF_RadarCandidateCollect m_CandidateCollect;
     protected ref RDF_RadarCfarProcessor m_CfarProcessor;
     protected ref RDF_RadarLosCache m_LosCache;
     protected ref RDF_RadarScanReuseCache m_ScanReuseCache;
@@ -51,7 +50,6 @@ class RDF_RadarScanner
 
         m_DemCache = new RDF_DemRuntimeCache();
         m_ScattererCandidates = new array<ref RDF_RadarScatterer>();
-        m_CandidateCollect = new RDF_RadarCandidateCollect();
         m_CfarProcessor = new RDF_RadarCfarProcessor();
         m_LosCache = new RDF_RadarLosCache();
         m_ScanReuseCache = new RDF_RadarScanReuseCache();
@@ -321,23 +319,19 @@ class RDF_RadarScanner
             if (m_Settings.m_DemPreloadAll)
                 m_DemCache.EnsurePreloaded();
             RDF_RadarBallistics.SetDemCache(m_DemCache);
-            if (m_Settings.m_UseScattererRegistry)
-                RDF_RadarScattererRegistry.SetDemCache(m_DemCache);
+            RDF_RadarScattererRegistry.SetDemCache(m_DemCache);
         }
-        if (m_Settings.m_UseScattererRegistry)
-        {
-            RDF_RadarScattererRegistry.Configure(
+        RDF_RadarScattererRegistry.Configure(
                 m_Settings.m_ScattererDiscoveryIntervalS,
                 m_Settings.m_ScattererClassifyPerTick,
                 m_Settings.m_ScattererRefreshPerTick,
                 m_Settings.m_ScattererMaxEntries,
                 true);
-            RDF_RadarScattererRegistry.Tick(
-                world,
-                worldTime,
-                origin,
-                range * m_Settings.m_ScattererDiscoveryRangeScale);
-        }
+        RDF_RadarScattererRegistry.Tick(
+            world,
+            worldTime,
+            origin,
+            range * m_Settings.m_ScattererDiscoveryRangeScale);
 
         float minDist = m_Settings.m_MinDistance;
         float minDistSq = minDist * minDist;
@@ -377,10 +371,7 @@ class RDF_RadarScanner
         if (m_ScanReuseCache)
             m_ScanReuseCache.MaybePrune(wallTime);
 
-        if (m_Settings.m_UseScattererRegistry)
-            ScanFromRegistry(outTargets, passCtx);
-        else
-            ScanFromWorldSearch(outTargets, passCtx);
+        ScanFromRegistry(outTargets, passCtx);
 
         AddDeceptionFalsePlots(outTargets, origin, forward, worldTime, maxTargets);
         ApplyCfarGate(outTargets, origin, forward, halfAngleRad);
@@ -677,394 +668,6 @@ class RDF_RadarScanner
         ctx.m_FreshBudget = freshBudget;
     }
 
-    // Legacy pass: search the world every scan (kept for comparison / fallback).
-    protected void ScanFromWorldSearch(
-        notnull array<ref RDF_RadarTarget> outTargets,
-        notnull RDF_RadarScanPassContext ctx)
-    {
-        IEntity subject = ctx.m_Subject;
-        BaseWorld world = ctx.m_World;
-        vector origin = ctx.m_Origin;
-        vector forward = ctx.m_Forward;
-        float range = ctx.m_Range;
-        float worldTime = ctx.m_WorldTime;
-        float wallTime = ctx.m_WallTime;
-        float minDist = ctx.m_MinDist;
-        float minDistSq = ctx.m_MinDistSq;
-        float rangeSq = ctx.m_RangeSq;
-        float cosHalfAngle = ctx.m_CosHalfAngle;
-        int maxTargets = ctx.m_MaxTargets;
-        TraceParam param = ctx.m_Param;
-        int losBudget = ctx.m_LosBudget;
-        int losUsed = ctx.m_LosUsed;
-        int freshBudget = ctx.m_FreshBudget;
-
-        array<IEntity> candidates = new array<IEntity>();
-        CollectCandidateEntities(world, subject, origin, range, candidates);
-        // Trace budget is small; process nearest first so nearby vehicles are not
-        // starved by distant characters / clutter entities earlier in the dump.
-        SortEntitiesByDistance(candidates, origin);
-
-        for (int i = 0; i < candidates.Count() && outTargets.Count() < maxTargets; i++)
-        {
-            IEntity ent = candidates.Get(i);
-            if (!ent || ent == subject)
-                continue;
-
-            vector pos = RDF_RadarScanGeometry.GetEntityLosEnd(ent);
-            vector toTarget = pos - origin;
-            float distSq = toTarget.LengthSq();
-            if (distSq < minDistSq || distSq > rangeSq)
-                continue;
-
-            float dist = Math.Sqrt(distSq);
-            vector toTargetNorm = toTarget;
-            if (dist > 0.001)
-                toTargetNorm = toTarget / dist;
-            float dot = forward[0] * toTargetNorm[0] + forward[1] * toTargetNorm[1] + forward[2] * toTargetNorm[2];
-            if (dot < cosHalfAngle)
-                continue;
-
-            bool isProjectile = RDF_RadarEntityClassifier.IsProjectile(ent);
-            bool isVehicle = RDF_RadarEntityClassifier.IsVehicleOrCharacter(ent);
-            if (isProjectile && !m_Settings.m_IncludeProjectiles)
-                continue;
-            if (isVehicle && !m_Settings.m_IncludeVehicles)
-                continue;
-            if (!isProjectile && !isVehicle)
-                continue;
-
-            vector entityVelocity = RDF_RadarScanGeometry.GetEntityVelocity(ent);
-            float speedMs = entityVelocity.Length();
-            ERDF_RadarTargetType priorityType = ERDF_RadarTargetType.RDF_RADAR_TARGET_VEHICLE;
-            if (isProjectile)
-                priorityType = ERDF_RadarTargetType.RDF_RADAR_TARGET_PROJECTILE;
-            int priorityBand = 2;
-            if (m_ScanReuseCache)
-            {
-                priorityBand = m_ScanReuseCache.ClassifyPriorityBand(
-                    priorityType,
-                    dist,
-                    speedMs,
-                    m_Settings);
-            }
-            bool highPriority = priorityBand <= 0;
-            bool runFullUpdate = true;
-            if (m_ScanReuseCache)
-                runFullUpdate = m_ScanReuseCache.ShouldRunFullUpdate(ent, priorityBand, wallTime, m_Settings);
-            if (!runFullUpdate || (!highPriority && freshBudget <= 0))
-            {
-                m_StatBudgetSkips = m_StatBudgetSkips + 1;
-                RDF_RadarTarget reusedTarget;
-                if (m_ScanReuseCache
-                    && m_ScanReuseCache.TryGetReusedTarget(
-                        ent,
-                        wallTime,
-                        m_Settings.m_TargetReuseMaxAgeS,
-                        reusedTarget))
-                {
-                    m_StatReuseHits = m_StatReuseHits + 1;
-                    reusedTarget.m_Entity = ent;
-                    reusedTarget.m_Position = pos;
-                    reusedTarget.m_Distance = dist;
-                    reusedTarget.m_Velocity = entityVelocity;
-                    reusedTarget.m_Type = priorityType;
-                    reusedTarget.m_Time = worldTime;
-                    if (reusedTarget.m_Detected || m_Settings.m_KeepUndetected)
-                        outTargets.Insert(reusedTarget);
-                }
-                continue;
-            }
-
-            float hitFraction = 1.0;
-            bool losClear = false;
-            bool reusedLos = false;
-            if (m_LosCache)
-            {
-                reusedLos = m_LosCache.TryReuse(
-                    ent,
-                    origin,
-                    pos,
-                    wallTime,
-                    m_Settings.m_LosCacheMaxAgeS,
-                    m_Settings.m_LosCacheMaxOriginShiftM,
-                    m_Settings.m_LosCacheMaxTargetShiftM,
-                    hitFraction,
-                    losClear);
-            }
-            if (reusedLos)
-                m_StatLosCacheHits = m_StatLosCacheHits + 1;
-            if (!reusedLos)
-            {
-                if (losUsed >= losBudget)
-                    break;
-                RDF_RadarScanGeometry.FillLosExclude(m_LosExclude, subject, ent);
-                hitFraction = RDF_RadarScanGeometry.TraceLineOfSight(
-                    world,
-                    param,
-                    origin,
-                    pos,
-                    RDF_RadarScanGeometry.LOS_START_CLEARANCE_M);
-                losUsed = losUsed + 1;
-                losClear = RDF_RadarScanGeometry.IsLineOfSightClear(
-                    hitFraction, param.TraceEnt, ent);
-                if (m_LosCache)
-                {
-                    m_LosCache.Store(
-                        ent,
-                        origin,
-                        pos,
-                        hitFraction,
-                        losClear,
-                        wallTime);
-                }
-            }
-            if (!losClear && !m_Settings.m_EnableNlosMultipath)
-                continue;
-
-            RDF_RadarTarget t = new RDF_RadarTarget();
-            t.m_Entity = ent;
-            t.m_Position = pos;
-            t.m_Distance = dist;
-            t.m_Velocity = entityVelocity;
-            t.m_Type = priorityType;
-            t.m_Time = worldTime;
-            t.m_LosBlocked = !losClear;
-            t.m_LosHitFraction = hitFraction;
-            t.m_MultipathFactor = 1.0;
-            t.m_IsAnonymous = false;
-            t.m_IsFalsePlot = false;
-            RDF_RadarScatterer worldEntry = RDF_RadarScattererRegistry.Find(ent);
-            if (worldEntry)
-            {
-                t.m_ScattererId = worldEntry.m_ScattererId;
-                t.m_RotorTipSpeedMs = worldEntry.m_RotorTipSpeedMs;
-                t.m_BladeCount = worldEntry.m_BladeCount;
-                t.m_RotorRcsFraction = worldEntry.m_RotorRcsFraction;
-                t.m_HubWidthMs = worldEntry.m_HubWidthMs;
-                t.m_MeanRcsM2 = worldEntry.m_MeanRcsM2;
-                t.m_SwerlingModel = worldEntry.m_SwerlingModel;
-                if (priorityType == ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER)
-                {
-                    t.m_EmitFrequencyHz = worldEntry.m_EmitFrequencyHz;
-                    t.m_EmitPeakPowerW = worldEntry.m_EmitPeakPowerW;
-                    t.m_EmitAntennaGainDbi = worldEntry.m_EmitAntennaGainDbi;
-                    t.m_EmitStrength = worldEntry.m_EmitStrength;
-                }
-            }
-            bool reusedPhysical = false;
-            RDF_RadarTarget physicalSource;
-            if (m_ScanReuseCache)
-            {
-                reusedPhysical = m_ScanReuseCache.TryGetPhysicalReuse(
-                    ent,
-                    origin,
-                    pos,
-                    speedMs,
-                    wallTime,
-                    m_Settings.m_PhysicalReuseMaxAgeS,
-                    m_Settings.m_PhysicalReuseMaxOriginShiftM,
-                    m_Settings.m_PhysicalReuseMaxTargetShiftM,
-                    m_Settings.m_PhysicalReuseMaxSpeedMs,
-                    physicalSource);
-            }
-            if (reusedPhysical)
-                ApplyPhysicalReuse(t, physicalSource);
-            else
-            {
-                RDF_RadarPhysicalDetect.Process(
-                    t, origin, forward, worldTime, world,
-                    m_Settings, m_DemCache, m_ScanRainLossDbPerKm, m_ClutterMap, m_CoarseRdMap);
-            }
-            DepositCoarseRd(t);
-            NoteMtdPlot(t);
-
-            if (m_ScanReuseCache)
-            {
-                m_ScanReuseCache.StoreResult(
-                    ent,
-                    t,
-                    origin,
-                    pos,
-                    wallTime,
-                    priorityBand,
-                    true,
-                    !reusedPhysical);
-            }
-            m_StatFreshUpdates = m_StatFreshUpdates + 1;
-            if (!highPriority && freshBudget > 0)
-                freshBudget = freshBudget - 1;
-            if (t.m_Detected || m_Settings.m_KeepUndetected)
-                outTargets.Insert(t);
-        }
-
-        if (!m_Settings.m_IncludeRadarEmitters || outTargets.Count() >= maxTargets)
-            return;
-
-        array<ref RDF_RadarTarget> emitterTargets = new array<ref RDF_RadarTarget>();
-        RDF_RadarEmitterRegistry.GetEmittingInSphere(origin, range, emitterTargets, worldTime);
-        for (int j = 0; j < emitterTargets.Count() && outTargets.Count() < maxTargets; j++)
-        {
-            RDF_RadarTarget et = emitterTargets.Get(j);
-            if (et.m_Entity == subject)
-                continue;
-            vector toE = et.m_Position - origin;
-            float distE = toE.Length();
-            if (distE < minDist)
-                continue;
-            vector toENorm = toE / distE;
-            float dotE = forward[0] * toENorm[0] + forward[1] * toENorm[1] + forward[2] * toENorm[2];
-            if (dotE < cosHalfAngle)
-                continue;
-
-            vector emitterVelocity = RDF_RadarScanGeometry.GetEntityVelocity(et.m_Entity);
-            float emitterSpeedMs = emitterVelocity.Length();
-            int emitterPriorityBand = 2;
-            if (m_ScanReuseCache)
-            {
-                emitterPriorityBand = m_ScanReuseCache.ClassifyPriorityBand(
-                    ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER,
-                    distE,
-                    emitterSpeedMs,
-                    m_Settings);
-            }
-            bool emitterHighPriority = emitterPriorityBand <= 0;
-            bool emitterRunFull = true;
-            if (m_ScanReuseCache)
-            {
-                emitterRunFull = m_ScanReuseCache.ShouldRunFullUpdate(
-                    et.m_Entity, emitterPriorityBand, wallTime, m_Settings);
-            }
-            if (!emitterRunFull || (!emitterHighPriority && freshBudget <= 0))
-            {
-                m_StatBudgetSkips = m_StatBudgetSkips + 1;
-                RDF_RadarTarget reusedEmitter;
-                if (m_ScanReuseCache
-                    && m_ScanReuseCache.TryGetReusedTarget(
-                        et.m_Entity,
-                        wallTime,
-                        m_Settings.m_TargetReuseMaxAgeS,
-                        reusedEmitter))
-                {
-                    m_StatReuseHits = m_StatReuseHits + 1;
-                    reusedEmitter.m_Entity = et.m_Entity;
-                    reusedEmitter.m_Position = et.m_Position;
-                    reusedEmitter.m_Distance = distE;
-                    reusedEmitter.m_Velocity = emitterVelocity;
-                    reusedEmitter.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER;
-                    reusedEmitter.m_Time = worldTime;
-                    if (reusedEmitter.m_Detected || m_Settings.m_KeepUndetected)
-                    {
-                        if (!ContainsTargetEntity(outTargets, reusedEmitter.m_Entity))
-                            outTargets.Insert(reusedEmitter);
-                    }
-                }
-                continue;
-            }
-
-            float hitFractionE = 1.0;
-            bool losClearE = false;
-            bool reusedLosE = false;
-            if (m_LosCache && et.m_Entity)
-            {
-                reusedLosE = m_LosCache.TryReuse(
-                    et.m_Entity,
-                    origin,
-                    et.m_Position,
-                    wallTime,
-                    m_Settings.m_LosCacheMaxAgeS,
-                    m_Settings.m_LosCacheMaxOriginShiftM,
-                    m_Settings.m_LosCacheMaxTargetShiftM,
-                    hitFractionE,
-                    losClearE);
-            }
-            if (reusedLosE)
-                m_StatLosCacheHits = m_StatLosCacheHits + 1;
-            if (!reusedLosE)
-            {
-                if (losUsed >= losBudget)
-                    break;
-                RDF_RadarScanGeometry.FillLosExclude(m_LosExclude, subject, et.m_Entity);
-                hitFractionE = RDF_RadarScanGeometry.TraceLineOfSight(
-                    world,
-                    param,
-                    origin,
-                    et.m_Position,
-                    RDF_RadarScanGeometry.LOS_START_CLEARANCE_M);
-                losUsed = losUsed + 1;
-                losClearE = RDF_RadarScanGeometry.IsLineOfSightClear(
-                    hitFractionE, param.TraceEnt, et.m_Entity);
-                if (m_LosCache && et.m_Entity)
-                {
-                    m_LosCache.Store(
-                        et.m_Entity,
-                        origin,
-                        et.m_Position,
-                        hitFractionE,
-                        losClearE,
-                        wallTime);
-                }
-            }
-            if (!losClearE && !m_Settings.m_EnableNlosMultipath)
-                continue;
-
-            et.m_Velocity = emitterVelocity;
-            et.m_LosBlocked = !losClearE;
-            et.m_LosHitFraction = hitFractionE;
-            et.m_MultipathFactor = 1.0;
-            et.m_IsAnonymous = false;
-            et.m_IsFalsePlot = false;
-            bool reusedEmitterPhysical = false;
-            RDF_RadarTarget emitterPhysicalSource;
-            if (m_ScanReuseCache)
-            {
-                reusedEmitterPhysical = m_ScanReuseCache.TryGetPhysicalReuse(
-                    et.m_Entity,
-                    origin,
-                    et.m_Position,
-                    emitterSpeedMs,
-                    wallTime,
-                    m_Settings.m_PhysicalReuseMaxAgeS,
-                    m_Settings.m_PhysicalReuseMaxOriginShiftM,
-                    m_Settings.m_PhysicalReuseMaxTargetShiftM,
-                    m_Settings.m_PhysicalReuseMaxSpeedMs,
-                    emitterPhysicalSource);
-            }
-            if (reusedEmitterPhysical)
-                ApplyPhysicalReuse(et, emitterPhysicalSource);
-            else
-            {
-                RDF_RadarPhysicalDetect.Process(
-                    et, origin, forward, worldTime, world,
-                    m_Settings, m_DemCache, m_ScanRainLossDbPerKm, m_ClutterMap, m_CoarseRdMap);
-            }
-            DepositCoarseRd(et);
-            NoteMtdPlot(et);
-
-            if (m_ScanReuseCache)
-            {
-                m_ScanReuseCache.StoreResult(
-                    et.m_Entity,
-                    et,
-                    origin,
-                    et.m_Position,
-                    wallTime,
-                    emitterPriorityBand,
-                    true,
-                    !reusedEmitterPhysical);
-            }
-            m_StatFreshUpdates = m_StatFreshUpdates + 1;
-            if (!emitterHighPriority && freshBudget > 0)
-                freshBudget = freshBudget - 1;
-            if (et.m_Detected || m_Settings.m_KeepUndetected)
-            {
-                if (!ContainsTargetEntity(outTargets, et.m_Entity))
-                    outTargets.Insert(et);
-            }
-        }
-        ctx.m_LosUsed = losUsed;
-        ctx.m_FreshBudget = freshBudget;
-    }
 
     protected void DepositCoarseRd(RDF_RadarTarget target)
     {
@@ -1110,31 +713,6 @@ class RDF_RadarScanner
                 continue;
             RDF_RadarMeasurement.Synthesize(t, origin, m_Settings.m_Hardware, m_Settings);
         }
-    }
-
-    protected void CollectCandidateEntities(
-        BaseWorld world,
-        IEntity subject,
-        vector origin,
-        float range,
-        notnull array<IEntity> outCandidates)
-    {
-        if (!m_CandidateCollect)
-            m_CandidateCollect = new RDF_RadarCandidateCollect();
-        m_CandidateCollect.CollectCandidateEntities(
-            world,
-            subject,
-            origin,
-            range,
-            m_Settings,
-            outCandidates);
-    }
-
-    protected void SortEntitiesByDistance(notnull array<IEntity> entities, vector origin)
-    {
-        if (!m_CandidateCollect)
-            m_CandidateCollect = new RDF_RadarCandidateCollect();
-        m_CandidateCollect.SortEntitiesByDistance(entities, origin);
     }
 
     protected bool IsDirtyRegistryCandidate(

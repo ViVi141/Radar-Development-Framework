@@ -25,7 +25,7 @@ class RDF_LidarNetworkSetupExample : ScriptComponent
         }
 
         // Set the network component in the auto runner
-        RDF_LidarAutoRunner.SetNetworkComponent(m_NetworkComponent);
+        RDF_LidarAutoRunner.SetNetworkAPI(m_NetworkComponent);
 
         // Example: Set up a basic demo configuration
         RDF_LidarDemoConfig config = RDF_LidarDemoConfig.CreateDefault(128);

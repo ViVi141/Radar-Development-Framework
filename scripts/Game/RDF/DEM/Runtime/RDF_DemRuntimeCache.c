@@ -446,10 +446,6 @@ class RDF_DemRuntimeCache
             string mode = "CSV";
             if (manifest.m_IsSurfacePack)
                 mode = "SURF";
-            else if (manifest.m_IsJsonPack)
-                mode = "JSON";
-            else if (manifest.m_IsBinaryPack)
-                mode = "BIN";
             Print(string.Format(
                 "[RDF DEM Runtime] ready world=%1 cell=%2 tile=%3 count=%4x%5 cache=%6 mode=%7 liveY=%8",
                 worldKey,

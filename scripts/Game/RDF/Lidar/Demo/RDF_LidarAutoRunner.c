@@ -60,12 +60,6 @@ class RDF_LidarAutoRunner
             s_NetworkAPI = null;
     }
 
-    // Backward-compatible alias
-    static void SetNetworkComponent(RDF_LidarNetworkAPI networkAPI)
-    {
-        SetNetworkAPI(networkAPI);
-    }
-
     // Internal helper: validate and clear stale network API
     static bool IsNetworkAPIValid()
     {

@@ -325,7 +325,6 @@ class RDF_RadarStressAutoTest
         cfg.m_EnablePhysicalDetection = true;
         cfg.m_KeepUndetected = true;
         cfg.m_KeepEntityTruth = true;
-        cfg.m_UseScattererRegistry = true;
         cfg.m_OriginOffset = Vector(0.0, 12.0, 0.0);
         cfg.m_FreshUpdateBudgetMin = 48;
         cfg.m_FreshUpdateBudgetMax = 128;

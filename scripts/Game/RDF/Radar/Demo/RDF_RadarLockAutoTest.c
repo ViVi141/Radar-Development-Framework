@@ -380,7 +380,6 @@ class RDF_RadarLockAutoTest
         cfg.m_EnableDemClutter = false;
         cfg.m_EnableCfarGate = false;
         cfg.m_EnableNlosMultipath = true;
-        cfg.m_UseScattererRegistry = true;
         // Spawned target must be discovered by the sweep, so drain the classify
         // queue fast and leave room for a populated world in the table.
         cfg.m_ScattererClassifyPerTick = 256;

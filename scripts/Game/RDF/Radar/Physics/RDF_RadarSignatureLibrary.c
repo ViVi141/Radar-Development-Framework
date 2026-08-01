@@ -29,16 +29,10 @@ class RDF_RadarSignatureLibrary
 {
     static const string SIG_DIR = "$profile:RDF/Signatures";
     static const string SIG_FILE = "$profile:RDF/Signatures/rdf_radar_signatures.csv";
-    static const string SIG_BIN_FILE = "$profile:RDF/Signatures/rdf_radar_signatures.sig.data";
-    static const string SIG_BIN_PACKAGED = "Signatures/rdf_radar_signatures.sig.data";
     static const ResourceName SIG_CONF_PACKAGED =
         "{C8A3F15E902B47D1}Signatures/rdf_radar_signatures.conf";
     static const string SIG_MAGIC = "RDF_RADAR_SIG_V2";
-    static const string SIG_BIN_MAGIC = "RDFSIG1";
-    static const int SIG_BIN_VERSION = 1;
-    // Trailing rotor columns are optional for backward-compatible CSV loads.
     static const string SIG_HEADER = "key,size_x_m,size_y_m,size_z_m,char_length_m,mean_rcs_m2,swerling,type_hint,rotor_tip_ms,blade_count,rotor_rcs_frac,hub_width_ms";
-    static const string SIG_HEADER_LEGACY = "key,size_x_m,size_y_m,size_z_m,char_length_m,mean_rcs_m2,swerling,type_hint";
     static const string FIELD_SEP = ",";
 
     // UH-1 / Mi-8 class defaults when conf omits rotor columns.
@@ -307,12 +301,6 @@ class RDF_RadarSignatureLibrary
         if (LoadBakedCsv(SIG_FILE))
             return true;
 
-        // 3) Legacy binary (removed from package; keep for old local files)
-        if (LoadBakedBinary(SIG_BIN_FILE))
-            return true;
-        if (LoadBakedBinary(SIG_BIN_PACKAGED))
-            return true;
-
         return false;
     }
 
@@ -368,101 +356,6 @@ class RDF_RadarSignatureLibrary
     }
 
     //------------------------------------------------------------------------------------------------
-    protected static bool LoadBakedBinary(string path)
-    {
-        if (!FileIO.FileExists(path))
-            return false;
-
-        FileHandle file = FileIO.OpenFile(path, FileMode.READ);
-        if (!file)
-            return false;
-
-        string magic;
-        file.Read(magic, 7);
-        int nul;
-        file.Read(nul, 1);
-        if (magic != SIG_BIN_MAGIC)
-        {
-            file.Close();
-            Print("[RDF Radar Sig] bin magic mismatch: " + path, LogLevel.WARNING);
-            return false;
-        }
-
-        int version;
-        file.Read(version, 4);
-        if (version != SIG_BIN_VERSION)
-        {
-            file.Close();
-            Print("[RDF Radar Sig] bin version mismatch: " + path, LogLevel.WARNING);
-            return false;
-        }
-
-        int count;
-        file.Read(count, 4);
-        if (count < 0 || count > 100000)
-        {
-            file.Close();
-            return false;
-        }
-
-        int loaded = 0;
-        for (int i = 0; i < count; i++)
-        {
-            int keyLen;
-            file.Read(keyLen, 2);
-            if (keyLen <= 0 || keyLen > 4096)
-            {
-                file.Close();
-                Print("[RDF Radar Sig] bad key length in " + path, LogLevel.WARNING);
-                return false;
-            }
-
-            string key;
-            file.Read(key, keyLen);
-
-            float sizeX;
-            float sizeY;
-            float sizeZ;
-            float charLen;
-            float meanRcs;
-            int swerling;
-            int typeHint;
-            file.Read(sizeX, 4);
-            file.Read(sizeY, 4);
-            file.Read(sizeZ, 4);
-            file.Read(charLen, 4);
-            file.Read(meanRcs, 4);
-            file.Read(swerling, 4);
-            file.Read(typeHint, 4);
-
-            if (key == "")
-                continue;
-
-            RDF_RadarSignature sig = new RDF_RadarSignature();
-            sig.m_Key = key;
-            sig.m_SizeX = sizeX;
-            sig.m_SizeY = sizeY;
-            sig.m_SizeZ = sizeZ;
-            sig.m_CharacteristicLengthM = charLen;
-            sig.m_MeanRcsM2 = meanRcs;
-            sig.m_SwerlingModel = swerling;
-            sig.m_TypeHint = typeHint;
-            sig.m_Baked = true;
-            if (sig.m_CharacteristicLengthM < 0.1)
-                sig.m_CharacteristicLengthM = 0.1;
-            MaybeApplyHelicopterRotorDefaults(sig);
-
-            s_ByKey.Set(sig.m_Key, sig);
-            loaded = loaded + 1;
-        }
-
-        file.Close();
-        s_StatBakedLoaded = loaded;
-        Print("[RDF Radar Sig] baked binary loaded: " + loaded.ToString() + " from " + path, LogLevel.NORMAL);
-        return loaded > 0;
-    }
-
-    //------------------------------------------------------------------------------------------------
     protected static bool LoadBakedCsv(string path)
     {
         if (!FileIO.FileExists(path))
@@ -477,7 +370,7 @@ class RDF_RadarSignatureLibrary
             return false;
         }
         string header = lines.Get(1);
-        if (header != SIG_HEADER && header != SIG_HEADER_LEGACY)
+        if (header != SIG_HEADER)
         {
             Print("[RDF Radar Sig] header mismatch: " + path, LogLevel.WARNING);
             return false;
@@ -493,7 +386,7 @@ class RDF_RadarSignatureLibrary
             array<string> f = new array<string>();
             if (!ParseCsvRow(row, f))
                 continue;
-            if (f.Count() < 8)
+            if (f.Count() < 12)
                 continue;
 
             RDF_RadarSignature sig = new RDF_RadarSignature();
@@ -505,13 +398,10 @@ class RDF_RadarSignatureLibrary
             sig.m_MeanRcsM2 = f.Get(5).ToFloat();
             sig.m_SwerlingModel = f.Get(6).ToInt();
             sig.m_TypeHint = f.Get(7).ToInt();
-            if (f.Count() >= 12)
-            {
-                sig.m_RotorTipSpeedMs = f.Get(8).ToFloat();
-                sig.m_BladeCount = f.Get(9).ToInt();
-                sig.m_RotorRcsFraction = f.Get(10).ToFloat();
-                sig.m_HubWidthMs = f.Get(11).ToFloat();
-            }
+            sig.m_RotorTipSpeedMs = f.Get(8).ToFloat();
+            sig.m_BladeCount = f.Get(9).ToInt();
+            sig.m_RotorRcsFraction = f.Get(10).ToFloat();
+            sig.m_HubWidthMs = f.Get(11).ToFloat();
             sig.m_Baked = true;
             if (sig.m_Key == "")
                 continue;

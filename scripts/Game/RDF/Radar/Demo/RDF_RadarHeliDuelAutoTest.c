@@ -579,7 +579,6 @@ class RDF_RadarHeliDuelAutoTest
         cfg.m_KeepUndetected = true;
         cfg.m_EnableDemClutter = false;
         cfg.m_EnableCfarGate = false;
-        cfg.m_UseScattererRegistry = true;
         cfg.m_ScattererClassifyPerTick = 256;
         cfg.m_ScattererRefreshPerTick = 512;
         cfg.m_ScattererMaxEntries = 2048;

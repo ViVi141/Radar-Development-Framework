@@ -15,20 +15,12 @@ class RDF_RadarSettings
     bool m_EnableEsmReceive = false;
     // After each dwell, report SEARCH/TRACK/LOCK threats into RDF_RadarRwr.
     bool m_EnableRwrReporting = true;
-    // Read candidates from the global scatterer table (incremental discovery)
-    // instead of searching the world on every scan.
-    bool m_UseScattererRegistry = true;
     // Discovery sweep radius = m_Range * this factor.
     float m_ScattererDiscoveryRangeScale = 1.25;
     float m_ScattererDiscoveryIntervalS = 3.0;
     int m_ScattererClassifyPerTick = 24;
     int m_ScattererRefreshPerTick = 96;
     int m_ScattererMaxEntries = 512;
-    // Legacy per-scan search path; only used when the registry is disabled.
-    bool m_UseSphereQuery = true;
-    // Only call GetActiveEntities when sphere query is off, or when sphere
-    // returned nothing (fallback). Do NOT merge both every scan — that hitch.
-    bool m_SphereQueryAlsoActive = false;
     int m_MaxTargets = 64;
     // Cap TraceMove calls per scan to bound hitch size in dense scenes.
     int m_MaxLosTracesPerScan = 48;

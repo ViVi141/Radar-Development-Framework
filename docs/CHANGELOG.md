@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 2026-08-01 — 清理遗留兼容层（无外部用户）
+
+- **DEM 运行时**：删除 `.dem.data` 二进制包与全量 JSON 包的 Enforce 加载路径（`RDF_DemBinPack.c` / `RDF_DemJsonPack.c`、manifest 的 `m_IsBinaryPack` / `m_IsJsonPack` / `m_Bin*` 字段、`DEM_BIN_*` 常量）；回退链 8 级 → 3 级（profile SURF → packaged SURF → profile V3 CSV）
+- **雷达特征库**：删除 V1 二进制签名加载（`LoadBakedBinary` / `SIG_BIN_*`）与 8 列旧 CSV 头兼容（`SIG_HEADER_LEGACY`）；CSV 仅接受 12 列 `SIG_HEADER`
+- **雷达扫描**：删除 legacy world-search pass（`ScanFromWorldSearch` / `RDF_RadarCandidateCollect.c`）；ScattererRegistry 为唯一候选源；`RDF_RadarSettings` 移除 `m_UseScattererRegistry` / `m_UseSphereQuery` / `m_SphereQueryAlsoActive`；演示与测试同步清理
+- **API 别名**：`RDF_RadarNetworkAPI` / `RDF_LidarNetworkAPI` 移除 `SetDemoEnabled` / `SetDemoConfig`（基类 no-op alias）；`RDF_LidarAutoRunner.SetNetworkComponent` → `SetNetworkAPI`；`RDF_LidarNetworkComponent.OnDemoConfigChanged` 移除
+- 注意：`tools/dem/rdf_dem_pack_bin.py` 仍保留（`--from-bin` 转 SURF JSON 的中间格式），仅删游戏运行时加载
+
 ## 2026-08-01 — 经典 MTI 完整 + Track coast 运动学完整
 
 - **MTI**：`RDF_MTI_THREE_PULSE`（sin⁴）；经典路径吃旋翼谱线；`m_MtiStaggerDeblind` 对 PRF 集取 max 消盲；`SuggestMtiClutterFloor(σ_vr)` 与 derive 回灌；PulseDoppler 开 stagger deblind

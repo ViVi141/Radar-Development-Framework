@@ -455,12 +455,6 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
         ApplyReplicatedConfigToRunner();
     }
 
-    // Legacy hook kept for compatibility
-    void OnDemoConfigChanged()
-    {
-        ApplyReplicatedConfigToRunner();
-    }
-
     //------------------------------------------------------------------------------------------------
     void OnScanResultsChanged()
     {

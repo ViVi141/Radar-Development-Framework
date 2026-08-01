@@ -116,10 +116,6 @@ class RDF_RadarManualDemo
         // Clutter has its own AutoTest; this demo is for PPI visibility.
         cfg.m_EnableDemClutter = false;
         cfg.m_EnableCfarGate = false;
-        cfg.m_UseScattererRegistry = false;
-        cfg.m_UseSphereQuery = true;
-        // Editor-placed vehicles are often missing from DYNAMIC sphere results.
-        cfg.m_SphereQueryAlsoActive = true;
         cfg.m_MaxLosTracesPerScan = 128;
         cfg.m_KeepUndetected = true;
         cfg.m_KeepEntityTruth = true;
@@ -151,7 +147,6 @@ class RDF_RadarManualDemo
         cfg.m_DetectionSnrDb = 8.0;
         cfg.m_EnableDemClutter = false;
         cfg.m_EnableCfarGate = false;
-        cfg.m_UseScattererRegistry = true;
         cfg.m_MaxLosTracesPerScan = 128;
         cfg.m_KeepUndetected = true;
         cfg.m_KeepEntityTruth = true;

@@ -7,15 +7,6 @@ class RDF_DemBakeConstants
     static const string DEM_DATA_DIR = "$profile:RDF/DemData/";
     static const string PACKAGED_DEM_DATA_DIR = "DemData/";
 
-    // Workshop-packable binary DEM (RDF_DEM_BIN_V1). File: DemData/<world>/<world>.dem.data
-    static const string DEM_BIN_MAGIC = "RDFDEM1";
-    static const int DEM_BIN_VERSION = 1;
-    static const int DEM_BIN_HEADER_BYTES = 120;
-    static const int DEM_BIN_WORLD_KEY_BYTES = 64;
-    static const int DEM_BIN_TABLE_ENTRY_BYTES = 16;
-    static const int DEM_BIN_CELL_BYTES = 6;
-    static const float DEM_BIN_Y_SCALE = 0.1;
-
     // Surface-class JSON (RDF_SURF_JSON_V1): live GetSurfaceY + packaged surface map.
     static const string DEM_SURF_MANIFEST_NAME = "surf_manifest.json";
     static const string DEM_SURF_CHUNKS_DIR = "surf_chunks/";

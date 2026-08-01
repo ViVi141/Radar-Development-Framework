@@ -1,6 +1,5 @@
 // Network API for radar synchronization and server authority.
 // Default methods are intentional no-ops; override in a network component.
-// Prefer SetEnabled / SetConfig; SetDemo* names are legacy aliases for AutoRunner.
 [ComponentEditorProps(category: "GameScripted/RDF", description: "Base network API component for Radar synchronization")]
 class RDF_RadarNetworkAPIClass : ScriptComponentClass
 {
@@ -31,18 +30,6 @@ class RDF_RadarNetworkAPI : ScriptComponent
     bool IsEmitting()
     {
         return false;
-    }
-
-    //! Legacy alias used by AutoRunner demos; prefer SetEnabled.
-    void SetDemoEnabled(bool enabled)
-    {
-        SetEnabled(enabled);
-    }
-
-    //! Legacy alias used by AutoRunner demos; prefer SetConfig.
-    void SetDemoConfig(RDF_RadarSettings config)
-    {
-        SetConfig(config);
     }
 
     void RequestScan()
