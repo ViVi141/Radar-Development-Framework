@@ -97,12 +97,12 @@
 | **P2 已完成** | 刀刃绕射近似 | 山地半遮挡弱检 | 中 | 单刃 Fresnel + DEM 采样；非多刃/UTD |
 | **P2 已完成** | 数据链 + 多雷达融合 | 战役组网 | 高 | Hub + Fusion；轻量 IFF |
 | **P2 已完成** | LiDAR Sensor / Showcase / RECT FOV | LiDAR UX | 中 | DiagMenu 受引擎槽位限制已禁用 |
-| **P2 可选** | 粗 RD 近似（少距离门 × 少 Doppler，**分帧摊销**） | 更像 PD 体感 | 中高 | 仍目标/粗单元级；**禁止**训练级每 dwell 满立方体 |
-| **P2 可选** | 多雷达共用 discovery / focus 调度 | 减重复球查询 | 中 | Registry 已全局；再抠调度与 refresh |
-| **P2 场景驱动** | DEM span 遮挡 / 多径 | 城区/林冠 | 高 | SURF 发布路径故意不带 — 勿轻易重开 |
-| **P2 离线** | 拆分 `rdf_radar_mass_battle_sim.py`（~1.8k LOC） | 可维护 | 中 | 不挡游戏内路线 |
-| **P2 离线优先** | 杂波 Doppler PSD / 多 PRF 模糊标定表 → 回灌硬件参数 | 可信度 | 中 | 用 Python，不进对局实时环 |
-| **P3 工程** | 游戏内 AutoTest 无 Debugger 批跑 | CI 完整 | 中高 | 依赖 Workbench 自动化；Python CI 已顶住物理回归 |
+| **P2 可选** | 粗 RD 近似（少距离门 × 少 Doppler，**分帧摊销**） | 更像 PD 体感 | 中高 | **已完成**（默认关；Ideal 强制关） |
+| **P2 可选** | 多雷达共用 discovery / focus 调度 | 减重复球查询 | 中 | **已完成**（RegisterFocus + 轮转） |
+| **P2 场景驱动** | DEM span 遮挡 / 多径 | 城区/林冠 | 高 | **门控完成**（默认关；SURF 仍不带） |
+| **P2 离线** | 拆分 `rdf_radar_mass_battle_sim.py`（~1.8k LOC） | 可维护 | 中 | **已完成**（`mass_battle/`） |
+| **P2 离线优先** | 杂波 Doppler PSD / 多 PRF 模糊标定表 → 回灌硬件参数 | 可信度 | 中 | **已完成**（`rdf_radar_hw_calibrate.py`） |
+| **P3 工程** | 游戏内 AutoTest 无 Debugger 批跑 | CI 完整 | 中高 | **flag 批跑已完成**；无头 Workbench CI 仍不做 |
 | **停车场** | ~~远程计算全链路~~ | — | 很高 | 见 §5：对局内玩法鸡肋；非教研/专用服不排期 |
 
 - [x] Network：权威结果（Reliable 航迹摘要 + 可选 Unreliable plots）+ 关键 Settings RplProp + 发射态
@@ -116,12 +116,12 @@
 - [x] **P2** 多雷达 plots 融合 / 交叉定位（`RDF_RadarFusionService` + DatalinkHub）
 - [x] **P2** LiDAR：Showcase / Sensor / RECT FOV（DiagMenu 禁用）
 - [x] **P2/P3** 轻量 IFF + 站间 Hub（非密码学 IFF）
-- [ ] **P2 可选** 粗 RD 分帧近似（默认关；有 Perf 预算与 dual-tier 护栏再合入）
-- [ ] **P2 可选** 多雷达 discovery / focus 调度合并
-- [ ] **P2 场景** DEM span 遮挡 / 多径（明确城区/林冠需求且接受发布包变重时）
-- [ ] **P2 离线** 拆分 `rdf_radar_mass_battle_sim.py`
-- [ ] **P2 离线** 杂波谱 / 多 PRF 标定 → 参数回灌（不驱动游戏内检出）
-- [ ] **P3** 游戏内 AutoTest 无 Debugger 批跑 / 完整 CI
+- [x] **P2 可选** 粗 RD 分帧近似（默认关；Ideal 强制关；`RDF_RadarCoarseRdMap` + Settings）
+- [x] **P2 可选** 多雷达 discovery / focus 调度合并（Registry RegisterFocus + 轮转 discovery + 多 focus 剪枝）
+- [x] **P2 场景** DEM span 遮挡 / 多径（`m_EnableDemSpanOcclusion` 默认关；非 SURF 柱顶；SURF 仍不发布 span）
+- [x] **P2 离线** 拆分 `rdf_radar_mass_battle_sim.py` → `mass_battle/` 包
+- [x] **P2 离线** 杂波谱 / 多 PRF 标定 → `rdf_radar_hw_calibrate.py` + `calib/*.json`（不驱动局内检出）
+- [x] **P3** 游戏内 AutoTest 无 Debugger 批跑（`RunAutoTestSuite.flag` + `RDF_RadarAutoTestBatch`）；完整无头 CI 仍不做 — 见 [AUTOTEST_CI_LIMITS.md](docs/AUTOTEST_CI_LIMITS.md)
 - [ ] ~~**P3** 远程计算全链路~~ → **移入停车场**
 
 #### 5 — 停车场（低收益或高风险，默认不做）
@@ -146,14 +146,14 @@
 **刀刃绕射（已完成）**：单刃 Fresnel + DEM 沿程；与 NLOS bounce 取 max。  
 **数据链/融合（已完成）**：Hub + FusionService + 轻量 IFF。  
 **MTD Sprint（已完成）**：MTD bank、旋翼微多普勒、clutter map、coast、`PULSE_DOPPLER`、Python/CI 护栏。  
+**P2 可选/离线（已完成）**：粗 RD（默认关）、多雷达 focus 调度、DEM span 门控、mass_battle 拆分、HW 标定 JSON、AutoTest flag 批跑。
 
 **下一步（择一，按体感）**
 
 1. **产品**：模组侧武器 prefab 接 `WeaponBridge`（框架外）。  
-2. **局内可选**：粗 RD 分帧（先 PerfAutoTest 预算，再默认关合入）。  
-3. **工程**：多雷达 discovery 调度合并；或 Workbench 批跑 CI。  
-4. **离线**：mass_battle_sim 拆分；或杂波谱/PRF 标定回灌。  
-5. **场景**：仅当有城区/林冠明确需求时重开 DEM span。
+2. **场景**：有城区/林冠数据时打开 `m_EnableDemSpanOcclusion`（需非 SURF V3/CSV）。  
+3. **调参**：`rdf_radar_hw_calibrate.py` 产出回灌 Hardware；粗 RD 仅 Perf 对照后显式打开。  
+4. **工程**：本地 Play + `RunAutoTestSuite.flag` 批跑（非无头 CI）。
 
 Ideal：`RDF_RadarAutoTestSuite.StartAll()`  
 Realistic：`RDF_RadarAutoTestSuite.StartAllRealistic()`
@@ -307,12 +307,12 @@ Context: realistic channel, Network, fusion, MTD/rotor/coast, and dual-job Pytho
 | **P2 done** | Knife-edge diffraction approx | Mountain partial LOS | Med | Single-edge Fresnel + DEM samples; not multi-edge/UTD |
 | **P2 done** | Datalink + multi-radar fusion | Campaign net | High | Hub + Fusion; light IFF |
 | **P2 done** | LiDAR Sensor / Showcase / RECT FOV | LiDAR UX | Medium | DiagMenu disabled (engine slot cap) |
-| **P2 optional** | Coarse RD approx (few range × Doppler bins, **amortized**) | More PD-like feel | Med–high | Still target/coarse-cell level; **no** training-grade full cube per dwell |
-| **P2 optional** | Shared multi-radar discovery / focus scheduling | Fewer duplicate sphere queries | Med | Registry already global; polish scheduler/refresh |
-| **P2 scenario** | DEM span occlusion / multipath | Urban / canopy | High | SURF publish path omits on purpose — don’t reopen lightly |
-| **P2 offline** | Split `rdf_radar_mass_battle_sim.py` (~1.8k LOC) | Maintainability | Medium | Does not block in-game roadmap |
-| **P2 offline-first** | Clutter Doppler PSD / multi-PRF ambiguity tables → hardware params | Credibility | Med | Python only; does not drive in-game detections |
-| **P3 eng** | In-game AutoTest without Debugger | Full CI | Med–high | Needs Workbench automation; Python CI already covers physics |
+| **P2 optional** | Coarse RD approx (few range × Doppler bins, **amortized**) | More PD-like feel | Med–high | **Done** (default off; Ideal forces off) |
+| **P2 optional** | Shared multi-radar discovery / focus scheduling | Fewer duplicate sphere queries | Med | **Done** (RegisterFocus + round-robin) |
+| **P2 scenario** | DEM span occlusion / multipath | Urban / canopy | High | **Gated** (default off; SURF still omits) |
+| **P2 offline** | Split `rdf_radar_mass_battle_sim.py` (~1.8k LOC) | Maintainability | Medium | **Done** (`mass_battle/`) |
+| **P2 offline-first** | Clutter Doppler PSD / multi-PRF ambiguity tables → hardware params | Credibility | Med | **Done** (`rdf_radar_hw_calibrate.py`) |
+| **P3 eng** | In-game AutoTest without Debugger | Full CI | Med–high | **Flag batch done**; headless Workbench CI still out |
 | **Parking** | ~~Remote compute full chain~~ | — | Very high | See §5: chicken-rib for match play; revisit only for training twin / dedicated batch servers |
 
 - [x] Network: authoritative results (Reliable track summary + optional Unreliable plots) + key Settings RplProp + emit state
@@ -326,12 +326,12 @@ Context: realistic channel, Network, fusion, MTD/rotor/coast, and dual-job Pytho
 - [x] **P2** Multi-radar plots fusion / cross-fix (`RDF_RadarFusionService` + DatalinkHub)
 - [x] **P2** LiDAR: Showcase / Sensor / RECT FOV (DiagMenu disabled)
 - [x] **P2/P3** Light IFF + station Hub (not crypto IFF)
-- [ ] **P2 optional** Coarse amortized RD (default off; Perf budget + dual-tier guards before merge)
-- [ ] **P2 optional** Merge multi-radar discovery / focus scheduling
-- [ ] **P2 scenario** DEM span occlusion / multipath (urban/canopy need + accept heavier packs)
-- [ ] **P2 offline** Split `rdf_radar_mass_battle_sim.py`
-- [ ] **P2 offline** Clutter spectrum / multi-PRF calibration → param bake-back (does not drive in-game detects)
-- [ ] **P3** In-game AutoTest without Debugger / full CI
+- [x] **P2 optional** Coarse amortized RD (default off; Ideal forces off; `RDF_RadarCoarseRdMap`)
+- [x] **P2 optional** Merge multi-radar discovery / focus scheduling (RegisterFocus + round-robin + multi-focus prune)
+- [x] **P2 scenario** DEM span occlusion / multipath (`m_EnableDemSpanOcclusion` default off; non-SURF column top)
+- [x] **P2 offline** Split `rdf_radar_mass_battle_sim.py` → `mass_battle/` package
+- [x] **P2 offline** Clutter spectrum / multi-PRF calibration → `rdf_radar_hw_calibrate.py` (does not drive in-game detects)
+- [x] **P3** In-game AutoTest without Debugger (`RunAutoTestSuite.flag` + `RDF_RadarAutoTestBatch`); headless CI still out — see [AUTOTEST_CI_LIMITS.md](docs/AUTOTEST_CI_LIMITS.md)
 - [ ] ~~**P3** Remote compute full chain~~ → **moved to parking lot**
 
 #### 5 — Parking lot (low benefit or high risk; default skip)
@@ -356,14 +356,14 @@ Context: realistic channel, Network, fusion, MTD/rotor/coast, and dual-job Pytho
 **Knife-edge (done)**: single-edge Fresnel + DEM samples; max with NLOS bounce.  
 **Datalink/fusion (done)**: Hub + FusionService + light IFF.  
 **MTD Sprint (done)**: MTD bank, rotor micro-Doppler, clutter map, coast, `PULSE_DOPPLER`, Python/CI guards.  
+**P2 optional/offline (done)**: coarse RD (default off), multi-radar focus sched, DEM span gate, mass_battle split, HW calib JSON, AutoTest flag batch.
 
 **Next (pick one by feel)**
 
 1. **Product**: mod-side weapon prefabs on `WeaponBridge` (outside framework).  
-2. **In-game optional**: coarse amortized RD (PerfAutoTest budget first; default off).  
-3. **Engineering**: merge multi-radar discovery scheduling; or Workbench batch CI.  
-4. **Offline**: split mass_battle_sim; or clutter-spectrum / PRF calibration bake-back.  
-5. **Scenario**: reopen DEM span only with a clear urban/canopy need.
+2. **Scenario**: enable `m_EnableDemSpanOcclusion` when non-SURF V3/CSV canopy data exists.  
+3. **Tuning**: bake Hardware via `rdf_radar_hw_calibrate.py`; turn coarse RD on only after Perf checks.  
+4. **Engineering**: local Play + `RunAutoTestSuite.flag` (not headless CI).
 
 Ideal: `RDF_RadarAutoTestSuite.StartAll()`  
 Realistic: `RDF_RadarAutoTestSuite.StartAllRealistic()`

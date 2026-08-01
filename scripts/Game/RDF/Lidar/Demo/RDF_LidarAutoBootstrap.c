@@ -35,6 +35,8 @@ modded class SCR_BaseGameMode
                 RdfTryStartDemBake, RDF_DemBakeConstants.START_DELAY_MS, false);
         }
 
+        RDF_RadarAutoTestBatch.ArmPoll();
+
         if (RDF_DemBakeConstants.RUNTIME_DEM_PRELOAD_AT_GAME_START
             && RDF_DemBakeConstants.RUNTIME_DEM_PRELOAD_ALL)
         {
@@ -49,6 +51,7 @@ modded class SCR_BaseGameMode
     {
         super.EOnFrame(owner, timeSlice);
         RDF_DemTileBake.OnFrame(timeSlice);
+        RDF_RadarAutoTestBatch.OnFrame(timeSlice);
     }
 
     protected void RdfTryStartDemBake()

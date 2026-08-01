@@ -90,6 +90,13 @@ class RDF_RadarScattererRegistry
     protected static float s_DemResampleIntervalS = 2.0;
     protected static float s_DemResampleMoveM = 25.0;
 
+    // Multi-radar focus merge: each Scanner registers; one Tick/frame serves all.
+    protected static ref array<vector> s_FocusOrigins;
+    protected static ref array<float> s_FocusRadiiM;
+    protected static float s_FocusFrameWallS = -1000.0;
+    protected static bool s_ConfigSetThisFrame;
+    protected static int s_DiscoveryFocusCursor;
+
     // Tuning.
     protected static float s_DiscoveryIntervalS = 3.0;
     protected static int s_ClassifyPerTick = 24;
@@ -104,6 +111,8 @@ class RDF_RadarScattererRegistry
     protected static int s_StatPruned;
 
     //------------------------------------------------------------------------------------------------
+    // Merge budgets across radars in the same wall-clock frame: shorter discovery
+    // interval, larger classify/refresh/maxEntries, sphere OR across callers.
     static void Configure(
         float discoveryIntervalS,
         int classifyPerTick,
@@ -111,11 +120,51 @@ class RDF_RadarScattererRegistry
         int maxEntries,
         bool useSphereDiscovery)
     {
-        s_DiscoveryIntervalS = Math.Max(0.25, discoveryIntervalS);
-        s_ClassifyPerTick = Math.Clamp(classifyPerTick, 1, 256);
-        s_RefreshPerTick = Math.Clamp(refreshPerTick, 1, 1024);
-        s_MaxEntries = Math.Clamp(maxEntries, 8, 4096);
-        s_UseSphereDiscovery = useSphereDiscovery;
+        float wallS = System.GetTickCount() * 0.001;
+        BeginFocusFrame(wallS);
+
+        float interval = Math.Max(0.25, discoveryIntervalS);
+        int classify = Math.Clamp(classifyPerTick, 1, 256);
+        int refresh = Math.Clamp(refreshPerTick, 1, 1024);
+        int maxEnt = Math.Clamp(maxEntries, 8, 4096);
+
+        if (!s_ConfigSetThisFrame)
+        {
+            s_DiscoveryIntervalS = interval;
+            s_ClassifyPerTick = classify;
+            s_RefreshPerTick = refresh;
+            s_MaxEntries = maxEnt;
+            s_UseSphereDiscovery = useSphereDiscovery;
+            s_ConfigSetThisFrame = true;
+            return;
+        }
+
+        if (interval < s_DiscoveryIntervalS)
+            s_DiscoveryIntervalS = interval;
+        if (classify > s_ClassifyPerTick)
+            s_ClassifyPerTick = classify;
+        if (refresh > s_RefreshPerTick)
+            s_RefreshPerTick = refresh;
+        if (maxEnt > s_MaxEntries)
+            s_MaxEntries = maxEnt;
+        if (useSphereDiscovery)
+            s_UseSphereDiscovery = true;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Register this radar's discovery focus for the current frame (before Tick).
+    static void RegisterFocus(vector focusOrigin, float radiusHintM)
+    {
+        float wallS = System.GetTickCount() * 0.001;
+        BeginFocusFrame(wallS);
+        EnsureContainers();
+
+        float radiusM = radiusHintM;
+        if (radiusM <= 0.0)
+            radiusM = s_DiscoveryRadiusM;
+        radiusM = Math.Clamp(radiusM, 100.0, 60000.0);
+        s_FocusOrigins.Insert(focusOrigin);
+        s_FocusRadiiM.Insert(radiusM);
     }
 
     //------------------------------------------------------------------------------------------------
@@ -326,6 +375,13 @@ class RDF_RadarScattererRegistry
         s_LastDiscoveryWallS = -1000.0;
         s_LastSeenPruneWallS = -1000.0;
         s_LastTickWallS = -1000.0;
+        s_FocusFrameWallS = -1000.0;
+        s_ConfigSetThisFrame = false;
+        s_DiscoveryFocusCursor = 0;
+        if (s_FocusOrigins)
+            s_FocusOrigins.Clear();
+        if (s_FocusRadiiM)
+            s_FocusRadiiM.Clear();
     }
 
     //------------------------------------------------------------------------------------------------
@@ -348,8 +404,8 @@ class RDF_RadarScattererRegistry
 
     //------------------------------------------------------------------------------------------------
     // Advance the table. Guarded so N radars in one frame cost the same as one.
-    // Frame / discovery cadence uses wall clock so GM editor (frozen world time)
-    // still classifies and refreshes entries for AutoTests.
+    // Each caller still RegisterFocus so discovery round-robins and prune keeps
+    // entries near ANY radar. Wall clock keeps GM editor (frozen world time) alive.
     static void Tick(
         BaseWorld world,
         float worldTimeS,
@@ -360,6 +416,8 @@ class RDF_RadarScattererRegistry
             return;
 
         EnsureContainers();
+        RegisterFocus(focusOrigin, radiusHintM);
+
         float wallS = System.GetTickCount() * 0.001;
         // Collapse multiple callers in the same ~frame without relying on world time.
         if (wallS - s_LastTickWallS < 0.001)
@@ -367,9 +425,7 @@ class RDF_RadarScattererRegistry
         s_LastTickWallS = wallS;
         s_LastTickTime = worldTimeS;
 
-        s_FocusOrigin = focusOrigin;
-        if (radiusHintM > 0.0)
-            s_DiscoveryRadiusM = Math.Clamp(radiusHintM, 100.0, 60000.0);
+        SelectActiveDiscoveryFocus();
 
         bool intervalElapsed = wallS - s_LastDiscoveryWallS >= s_DiscoveryIntervalS;
         if (intervalElapsed && s_Pending.Count() == 0)
@@ -378,11 +434,65 @@ class RDF_RadarScattererRegistry
             s_LastDiscoveryTime = worldTimeS;
             MaybePruneSeen(wallS);
             RunDiscovery(world);
+            s_DiscoveryFocusCursor = s_DiscoveryFocusCursor + 1;
         }
 
         ProcessPending();
         RefreshKinematics(world, worldTimeS);
         RDF_RadarSignatureLibrary.MaybeAutoExport(worldTimeS);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    protected static void BeginFocusFrame(float wallS)
+    {
+        EnsureContainers();
+        if (wallS - s_FocusFrameWallS < 0.001)
+            return;
+        s_FocusFrameWallS = wallS;
+        s_FocusOrigins.Clear();
+        s_FocusRadiiM.Clear();
+        s_ConfigSetThisFrame = false;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    protected static void SelectActiveDiscoveryFocus()
+    {
+        int focusCount = s_FocusOrigins.Count();
+        if (focusCount <= 0)
+            return;
+
+        int index = s_DiscoveryFocusCursor;
+        while (index < 0)
+            index = index + focusCount;
+        while (index >= focusCount)
+            index = index - focusCount;
+
+        s_FocusOrigin = s_FocusOrigins.Get(index);
+        s_DiscoveryRadiusM = s_FocusRadiiM.Get(index);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // True when position is within 2× discovery radius of any registered focus.
+    protected static bool IsNearAnyFocus(vector position)
+    {
+        int focusCount = s_FocusOrigins.Count();
+        if (focusCount <= 0)
+        {
+            vector delta = position - s_FocusOrigin;
+            float pruneRadius = s_DiscoveryRadiusM * 2.0;
+            return delta.LengthSq() <= pruneRadius * pruneRadius;
+        }
+
+        for (int i = 0; i < focusCount; i++)
+        {
+            vector focus = s_FocusOrigins.Get(i);
+            float radiusM = s_FocusRadiiM.Get(i);
+            float pruneRadius = radiusM * 2.0;
+            vector delta = position - focus;
+            if (delta.LengthSq() <= pruneRadius * pruneRadius)
+                return true;
+        }
+        return false;
     }
 
     //------------------------------------------------------------------------------------------------
@@ -609,9 +719,6 @@ class RDF_RadarScattererRegistry
             return;
         }
 
-        float pruneRadius = s_DiscoveryRadiusM * 2.0;
-        float pruneRadiusSq = pruneRadius * pruneRadius;
-
         int budget = s_RefreshPerTick;
         if (budget > count)
             budget = count;
@@ -642,8 +749,8 @@ class RDF_RadarScattererRegistry
             ReadPose(entry.m_Entity, entry);
             RefreshDemAndAgl(entry, world, worldTimeS);
 
-            vector delta = entry.m_Position - s_FocusOrigin;
-            if (delta.LengthSq() > pruneRadiusSq)
+            // Keep if near ANY registered radar focus (multi-radar merge).
+            if (!IsNearAnyFocus(entry.m_Position))
             {
                 entry.m_Alive = false;
                 // Out of range now, but a later sweep must be able to re-add it.
@@ -920,6 +1027,10 @@ class RDF_RadarScattererRegistry
             s_SeenPruneScratch = new array<IEntity>();
         if (!s_CellBuckets)
             s_CellBuckets = new map<string, ref array<ref RDF_RadarScatterer>>();
+        if (!s_FocusOrigins)
+            s_FocusOrigins = new array<vector>();
+        if (!s_FocusRadiiM)
+            s_FocusRadiiM = new array<float>();
     }
 
     //------------------------------------------------------------------------------------------------

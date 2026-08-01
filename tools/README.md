@@ -29,6 +29,10 @@ chmod +x run_tools.sh   # once
 
 CI: `.github/workflows/python-dem-tests.yml` runs unittest discover + `full_sim` coverage checks (`detection.mtd_bank`, rotor CPA, PRF stagger).
 
+Offline HW bake-back (not in-game): `python rdf_radar_hw_calibrate.py --preset shorad` → `calib/prf_clutter_*.json`.  
+Mass-battle sim: `rdf_radar_mass_battle_sim.py` (facade) + `mass_battle/` package.  
+In-game AutoTest without Debugger: see [docs/AUTOTEST_CI_LIMITS.md](../docs/AUTOTEST_CI_LIMITS.md).
+
 Generated files go to `tools/dem/out/` (gitignored except `.gitkeep`). Do not commit.
 
 ---

@@ -260,6 +260,8 @@ class RDF_RadarSensor
         }
         s.m_EnableClutterMap = true;
         s.m_ClutterMapAlpha = 0.15;
+        // Coarse RD stays opt-in; enable explicitly for Perf / PD experiments.
+        s.m_EnableCoarseRd = false;
         s.m_TrackCoastOnMiss = true;
         s.m_TrackCoastOnDopplerNull = true;
         s.m_TrackMaxMisses = 6;

@@ -101,7 +101,7 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarScanner.c              编排：Registry/Legacy 扫描 + Trace + 复用预算
 │   ├── RDF_RadarScanGeometry.c         LOS TraceMove（ANY_CONTACT / ExcludeArray / 出壳）+ 实体中心 / 速度
 │   ├── RDF_RadarPhysicalDetect.c       雷达方程 / NLOS bounce+刀刃绕射 / DEM 杂波 / SNR / ESM
-│   ├── RDF_RadarScattererRegistry.c    全局散射体/辐射源表（增量维护）
+│   ├── RDF_RadarScattererRegistry.c    全局散射体/辐射源表（增量维护；多雷达 focus 合并）
 │   ├── RDF_RadarEmitterRegistry.c      辐射标记门面（转发到散射体表）
 │   ├── RDF_RadarCandidateCollect.c     候选收集辅助
 │   ├── RDF_RadarLosCache.c / RDF_RadarScanReuseCache.c / RDF_RadarScanPassContext.c
@@ -116,6 +116,8 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarRcsModel.c / RDF_RadarBallistics.c / RDF_RadarSignatureLibrary.c
 │   ├── RDF_RadarSignatureTableConf.c / RDF_RadarSurfaceTable.c / RDF_RadarSurfaceTableConf.c
 │   ├── RDF_RadarClutterModel.c         DEM σ⁰ → 杂波功率
+│   ├── RDF_RadarClutterMap.c           range–az 杂波 EMA
+│   ├── RDF_RadarCoarseRdMap.c          粗 RD 分帧图（默认关）
 │   ├── RDF_RadarMeasurement.c          距离门/波束量化 + SNR 噪声
 │   ├── RDF_RadarMeasurementModel.c     CFAR 后 / Tracker 前可扩展测量误差
 │   └── RDF_RadarCfarGate.c             粗栅格 CA/GO/SO-CFAR 判检
@@ -428,7 +430,7 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarScanner.c              编排：Registry/Legacy 扫描 + Trace + 复用预算
 │   ├── RDF_RadarScanGeometry.c         LOS TraceMove（ANY_CONTACT / ExcludeArray / 出壳）+ 实体中心 / 速度
 │   ├── RDF_RadarPhysicalDetect.c       雷达方程 / NLOS bounce+刀刃绕射 / DEM 杂波 / SNR / ESM
-│   ├── RDF_RadarScattererRegistry.c    全局散射体/辐射源表（增量维护）
+│   ├── RDF_RadarScattererRegistry.c    全局散射体/辐射源表（增量维护；多雷达 focus 合并）
 │   ├── RDF_RadarEmitterRegistry.c      辐射标记门面（转发到散射体表）
 │   ├── RDF_RadarCandidateCollect.c     候选收集辅助
 │   ├── RDF_RadarLosCache.c / RDF_RadarScanReuseCache.c / RDF_RadarScanPassContext.c
@@ -443,6 +445,8 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarRcsModel.c / RDF_RadarBallistics.c / RDF_RadarSignatureLibrary.c
 │   ├── RDF_RadarSignatureTableConf.c / RDF_RadarSurfaceTable.c / RDF_RadarSurfaceTableConf.c
 │   ├── RDF_RadarClutterModel.c         DEM σ⁰ → 杂波功率
+│   ├── RDF_RadarClutterMap.c           range–az 杂波 EMA
+│   ├── RDF_RadarCoarseRdMap.c          粗 RD 分帧图（默认关）
 │   ├── RDF_RadarMeasurement.c          距离门/波束量化 + SNR 噪声
 │   ├── RDF_RadarMeasurementModel.c     CFAR 后 / Tracker 前可扩展测量误差
 │   └── RDF_RadarCfarGate.c             粗栅格 CA/GO/SO-CFAR 判检

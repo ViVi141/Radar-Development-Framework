@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 2026-08-01 — P2/P3 TODO：粗 RD / 多雷达调度 / span 门控 / 离线拆分与标定 / AutoTest flag
+
+- **粗 RD**：`RDF_RadarCoarseRdMap` + `m_EnableCoarseRd`（默认关；Ideal 强制关）；分帧衰减 + 目标功率沉积
+- **多雷达调度**：`ScattererRegistry` 同帧 `RegisterFocus`、预算合并、discovery 轮转、按任一 focus 剪枝
+- **DEM span**：`m_EnableDemSpanOcclusion`（默认关）；刀刃/NLOS 可用柱顶 Y；SURF 仍不发布 span
+- **离线**：`rdf_radar_mass_battle_sim` → `mass_battle/` 包；`rdf_radar_hw_calibrate.py` + `calib/prf_clutter_*.json`
+- **AutoTest**：`$profile:RDF/RunAutoTestSuite.flag` → `RDF_RadarAutoTestBatch`；文档 [AUTOTEST_CI_LIMITS.md](AUTOTEST_CI_LIMITS.md)
+
 ## 2026-08-01 — 雷达 LOS TraceMove 对齐官方可见性写法
 
 - `RDF_RadarScanGeometry`：集中 LOS helper（`ConfigureLosParam` / `FillLosExclude` / `TraceLineOfSight` / `IsLineOfSightClear`）

@@ -15,7 +15,8 @@ class RDF_RadarPhysicalDetect
         RDF_RadarSettings settings,
         RDF_DemRuntimeCache demCache,
         float scanRainLossDbPerKm,
-        RDF_RadarClutterMap clutterMap)
+        RDF_RadarClutterMap clutterMap,
+        RDF_RadarCoarseRdMap coarseRdMap)
     {
         if (!target)
             return;
@@ -310,6 +311,15 @@ class RDF_RadarPhysicalDetect
                     distance,
                     target.m_AzimuthDeg,
                     clutterPower);
+            }
+            if (settings.m_EnableCoarseRd && coarseRdMap)
+            {
+                int peekBin = target.m_DopplerBin;
+                if (peekBin < 0)
+                    peekBin = 0;
+                float rdW = coarseRdMap.Peek(distance, peekBin, 0.0);
+                if (rdW > clutterPower)
+                    clutterPower = clutterPower * 0.65 + rdW * 0.35;
             }
         }
         target.m_ClutterPowerW = clutterPower;
@@ -664,8 +674,62 @@ class RDF_RadarPhysicalDetect
         float yLos = origin[1] + (targetPos[1] - origin[1]) * u;
         float z = origin[2] + (targetPos[2] - origin[2]) * u;
         float terrainY = SampleTerrainY(x, z, world, settings, demCache);
+        if (settings && settings.m_EnableDemSpanOcclusion)
+        {
+            float columnTopY = terrainY;
+            if (TrySampleColumnTopY(x, z, demCache, columnTopY))
+            {
+                if (columnTopY > terrainY)
+                    terrainY = columnTopY;
+            }
+        }
         // Slack reduces obstacle height (less false block from DEM noise).
         return terrainY - slackM - yLos;
+    }
+
+    // Column top from DEM spans (V3/CSV). SURF packs typically nSpans<=1 stub.
+    protected static bool TrySampleColumnTopY(
+        float worldX,
+        float worldZ,
+        RDF_DemRuntimeCache demCache,
+        out float outTopY)
+    {
+        outTopY = 0.0;
+        if (!demCache)
+            return false;
+
+        RDF_DemRuntimeCellSample demSample;
+        if (!demCache.TrySampleAt(worldX, worldZ, demSample))
+            return false;
+        if (!demSample || !demSample.m_Valid)
+            return false;
+
+        float top = demSample.m_TerrainY;
+        int n = demSample.m_NSpans;
+        if (n <= 0 || !demSample.m_SpanHi || !demSample.m_SpanLo)
+        {
+            outTopY = top;
+            return true;
+        }
+
+        int hiCount = demSample.m_SpanHi.Count();
+        int loCount = demSample.m_SpanLo.Count();
+        int count = n;
+        if (count > hiCount)
+            count = hiCount;
+        if (count > loCount)
+            count = loCount;
+        for (int i = 0; i < count; i++)
+        {
+            float hi = demSample.m_SpanHi.Get(i);
+            float lo = demSample.m_SpanLo.Get(i);
+            if (hi <= lo)
+                continue;
+            if (hi > top)
+                top = hi;
+        }
+        outTopY = top;
+        return true;
     }
 
     // ITU-R P.526-ish approximate diffraction loss → linear power factor.

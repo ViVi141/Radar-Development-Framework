@@ -108,6 +108,16 @@ class RDF_RadarSettings
     // Runtime clutter-map EMA over DEM σ⁰ (per range–az cell).
     bool m_EnableClutterMap = false;
     float m_ClutterMapAlpha = 0.15;
+    // Coarse range–Doppler map (default OFF). Amortized deposits only — not a
+    // full RD cube. Ideal channel / StartAll keep this off.
+    bool m_EnableCoarseRd = false;
+    int m_RdCellsPerScan = 32;
+    float m_RdMapAlpha = 0.2;
+    float m_RdDecayPerScan = 0.97;
+    // When true and DEM cell has column spans (non-SURF V3/CSV), knife-edge /
+    // NLOS obstacle height uses column top Y (canopy / urban slabs).
+    // SURF packs stay surface-only; leave false unless scene needs span data.
+    bool m_EnableDemSpanOcclusion = false;
     // Projectile tracks: AirDrag + global wind extrapolation / WLR fixes.
     bool m_EnableBallisticPrediction = true;
     // Prefab prior (82mm HE O832DU). Override per ammo family later if needed.
@@ -190,6 +200,9 @@ class RDF_RadarSettings
         m_TrackConfirmHits = Math.Clamp(m_TrackConfirmHits, 1, 16);
         m_TrackMaxMisses = Math.Clamp(m_TrackMaxMisses, 1, 32);
         m_ClutterMapAlpha = Math.Clamp(m_ClutterMapAlpha, 0.01, 1.0);
+        m_RdCellsPerScan = Math.Clamp(m_RdCellsPerScan, 1, 512);
+        m_RdMapAlpha = Math.Clamp(m_RdMapAlpha, 0.01, 1.0);
+        m_RdDecayPerScan = Math.Clamp(m_RdDecayPerScan, 0.5, 1.0);
         m_ShellAirDrag = Math.Clamp(m_ShellAirDrag, 0.0, 1.0);
         m_WeaponLocateMinHits = Math.Clamp(m_WeaponLocateMinHits, 2, 32);
         m_WeaponLocateMinSpanS = Math.Clamp(m_WeaponLocateMinSpanS, 0.2, 30.0);
@@ -253,6 +266,8 @@ class RDF_RadarSettings
         m_EnableWeatherDrivenRainLoss = false;
         m_AtmLossDbPerKmOneWay = -1.0;
         m_RainLossDbPerKmOneWay = 0.0;
+        m_EnableCoarseRd = false;
+        m_EnableDemSpanOcclusion = false;
     }
 
     //------------------------------------------------------------------------------------------------

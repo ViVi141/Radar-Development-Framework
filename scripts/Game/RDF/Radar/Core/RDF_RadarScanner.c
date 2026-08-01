@@ -18,6 +18,7 @@ class RDF_RadarScanner
     protected ref RDF_RadarLosCache m_LosCache;
     protected ref RDF_RadarScanReuseCache m_ScanReuseCache;
     protected ref RDF_RadarClutterMap m_ClutterMap;
+    protected ref RDF_RadarCoarseRdMap m_CoarseRdMap;
     // Reused TraceParam / ExcludeArray (SCR_PlacedCommandInfoDisplay / nametag style).
     // Never write owned ColliderName / TraceMaterial in the hot loop.
     protected ref TraceParam m_TraceParam;
@@ -51,6 +52,7 @@ class RDF_RadarScanner
         m_LosCache = new RDF_RadarLosCache();
         m_ScanReuseCache = new RDF_RadarScanReuseCache();
         m_ClutterMap = new RDF_RadarClutterMap();
+        m_CoarseRdMap = new RDF_RadarCoarseRdMap();
         m_TraceParam = new TraceParam();
         m_LosExclude = new array<IEntity>();
         m_SettingsValidated = false;
@@ -248,6 +250,19 @@ class RDF_RadarScanner
                 m_Settings.m_RangeBinCount,
                 m_Settings.m_ClutterMapAlpha,
                 range);
+        }
+        if (m_CoarseRdMap && m_Settings.m_EnableCoarseRd)
+        {
+            int dopplerBins = 16;
+            if (m_Settings.m_Hardware)
+                dopplerBins = m_Settings.m_Hardware.m_DopplerBinCount;
+            m_CoarseRdMap.Configure(
+                m_Settings.m_RangeBinCount,
+                dopplerBins,
+                range,
+                m_Settings.m_RdMapAlpha,
+                m_Settings.m_RdCellsPerScan);
+            m_CoarseRdMap.AmortizeDecay(m_Settings.m_RdDecayPerScan);
         }
         if (m_DemCache)
         {
@@ -574,7 +589,8 @@ class RDF_RadarScanner
             else
                 RDF_RadarPhysicalDetect.Process(
                     t, origin, forward, worldTime, world,
-                    m_Settings, m_DemCache, m_ScanRainLossDbPerKm, m_ClutterMap);
+                    m_Settings, m_DemCache, m_ScanRainLossDbPerKm, m_ClutterMap, m_CoarseRdMap);
+                DepositCoarseRd(t);
 
             if (m_ScanReuseCache)
             {
@@ -809,7 +825,8 @@ class RDF_RadarScanner
             else
                 RDF_RadarPhysicalDetect.Process(
                     t, origin, forward, worldTime, world,
-                    m_Settings, m_DemCache, m_ScanRainLossDbPerKm, m_ClutterMap);
+                    m_Settings, m_DemCache, m_ScanRainLossDbPerKm, m_ClutterMap, m_CoarseRdMap);
+                DepositCoarseRd(t);
 
             if (m_ScanReuseCache)
             {
@@ -967,7 +984,8 @@ class RDF_RadarScanner
             else
                 RDF_RadarPhysicalDetect.Process(
                     et, origin, forward, worldTime, world,
-                    m_Settings, m_DemCache, m_ScanRainLossDbPerKm, m_ClutterMap);
+                    m_Settings, m_DemCache, m_ScanRainLossDbPerKm, m_ClutterMap, m_CoarseRdMap);
+                DepositCoarseRd(et);
 
             if (m_ScanReuseCache)
             {
@@ -992,6 +1010,18 @@ class RDF_RadarScanner
         }
         ctx.m_LosUsed = losUsed;
         ctx.m_FreshBudget = freshBudget;
+    }
+
+    protected void DepositCoarseRd(RDF_RadarTarget target)
+    {
+        if (!target || !m_Settings || !m_Settings.m_EnableCoarseRd)
+            return;
+        if (!m_CoarseRdMap)
+            return;
+        int bin = target.m_DopplerBin;
+        if (bin < 0)
+            bin = 0;
+        m_CoarseRdMap.Deposit(target.m_Distance, bin, target.m_ProcessedPowerW);
     }
 
     protected void EnsureLosTrace()
