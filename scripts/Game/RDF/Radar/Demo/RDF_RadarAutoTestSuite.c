@@ -13,6 +13,10 @@ class RDF_RadarAutoTestSuite
     protected static float s_StepStartWallS;
     protected static float s_StepTimeoutS = 120.0;
     protected static bool s_RealisticChannel;
+    protected static bool s_LastSuitePassed;
+    protected static bool s_LastSuiteTimedOut;
+    protected static int s_FailCount;
+    protected static string s_FailSummary;
 
     static void StartAll()
     {
@@ -42,6 +46,28 @@ class RDF_RadarAutoTestSuite
     static bool IsRunning()
     {
         return s_Running;
+    }
+
+    static bool DidLastSuitePass()
+    {
+        return s_LastSuitePassed;
+    }
+
+    static bool DidLastSuiteTimeOut()
+    {
+        return s_LastSuiteTimedOut;
+    }
+
+    static int GetLastFailCount()
+    {
+        return s_FailCount;
+    }
+
+    static string GetLastFailSummary()
+    {
+        if (!s_FailSummary)
+            return "";
+        return s_FailSummary;
     }
 
     protected static void StopChildTests()
@@ -95,6 +121,10 @@ class RDF_RadarAutoTestSuite
 
         s_RealisticChannel = realistic;
         s_Running = true;
+        s_LastSuitePassed = true;
+        s_LastSuiteTimedOut = false;
+        s_FailCount = 0;
+        s_FailSummary = "";
         if (realistic)
             Print("[RDF Radar AutoTestSuite] begin (sequential, REALISTIC channel)");
         else
@@ -127,6 +157,9 @@ class RDF_RadarAutoTestSuite
             RDF_RadarAutoRunner.SetDemoEnabled(false);
             RDF_RadarAutoRunner.SetHudEnabled(false);
             RDF_RadarAutoRunner.StopAutoRun();
+            s_LastSuiteTimedOut = true;
+            s_LastSuitePassed = false;
+            RecordFail(StepName(s_Step) + "_timeout");
             s_Running = false;
             s_Step = -1;
             Print("[RDF Radar AutoTestSuite] aborted by timeout.", LogLevel.ERROR);
@@ -135,6 +168,8 @@ class RDF_RadarAutoTestSuite
 
         if (IsStepRunning(s_Step))
             return;
+
+        RecordStepResult(s_Step);
 
         int next = s_Step + 1;
         if (next > 6)
@@ -155,7 +190,83 @@ class RDF_RadarAutoTestSuite
         RDF_RadarAutoRunner.StopAutoRun();
         s_Running = false;
         s_Step = -1;
-        Print("[RDF Radar AutoTestSuite] done (demo/HUD OFF)");
+        string verdict = "PASS";
+        if (!s_LastSuitePassed)
+            verdict = "FAIL";
+        Print("[RDF Radar AutoTestSuite] done ("
+            + verdict
+            + " fails="
+            + s_FailCount.ToString()
+            + "; demo/HUD OFF)");
+    }
+
+    protected static void RecordStepResult(int step)
+    {
+        // Sync steps 0/5 are recorded inside RunStep before chaining.
+        if (step == 0 || step == 5)
+            return;
+
+        bool ok = DidStepPass(step);
+        if (ok)
+            return;
+        s_LastSuitePassed = false;
+        RecordFail(StepName(step));
+    }
+
+    protected static void RecordSyncStepResult(int step)
+    {
+        bool ok = DidStepPass(step);
+        if (ok)
+            return;
+        s_LastSuitePassed = false;
+        RecordFail(StepName(step));
+    }
+
+    protected static void RecordFail(string name)
+    {
+        s_FailCount = s_FailCount + 1;
+        if (s_FailSummary == "")
+            s_FailSummary = name;
+        else
+            s_FailSummary = s_FailSummary + "," + name;
+    }
+
+    protected static string StepName(int step)
+    {
+        if (step == 0)
+            return "ballistics";
+        if (step == 1)
+            return "dem";
+        if (step == 2)
+            return "lock";
+        if (step == 3)
+            return "airborne";
+        if (step == 4)
+            return "shellfire";
+        if (step == 5)
+            return "perf";
+        if (step == 6)
+            return "play";
+        return "step" + step.ToString();
+    }
+
+    protected static bool DidStepPass(int step)
+    {
+        if (step == 0)
+            return RDF_RadarBallisticsAutoTest.DidLastPass();
+        if (step == 1)
+            return RDF_RadarAutoTest.DidLastPass();
+        if (step == 2)
+            return RDF_RadarLockAutoTest.DidLastPass();
+        if (step == 3)
+            return RDF_RadarAirborneScanTest.DidLastPass();
+        if (step == 4)
+            return RDF_RadarShellFireAutoTest.DidLastPass();
+        if (step == 5)
+            return RDF_RadarPerfAutoTest.DidLastPass();
+        if (step == 6)
+            return RDF_RadarPlayAutoTest.DidLastPass();
+        return false;
     }
 
     protected static bool IsStepRunning(int step)
@@ -186,6 +297,7 @@ class RDF_RadarAutoTestSuite
         {
             Print("[RDF Radar AutoTestSuite] step 1/7 Ballistics");
             RDF_RadarBallisticsAutoTest.Start();
+            RecordSyncStepResult(0);
             RunStep(1);
             return;
         }
@@ -223,6 +335,7 @@ class RDF_RadarAutoTestSuite
             Print("[RDF Radar AutoTestSuite] step 6/7 Perf");
             // Perf is fully synchronous; continue to Play without waiting CallLater.
             RDF_RadarPerfAutoTest.Start();
+            RecordSyncStepResult(5);
             RunStep(6);
             return;
         }

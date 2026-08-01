@@ -312,14 +312,21 @@ class RDF_RadarPhysicalDetect
                     target.m_AzimuthDeg,
                     clutterPower);
             }
-            if (settings.m_EnableCoarseRd && coarseRdMap)
+        }
+        if (settings.m_EnableCoarseRd && coarseRdMap)
+        {
+            int peekBin = target.m_DopplerBin;
+            if (peekBin < 0)
+                peekBin = 0;
+            float rdW = coarseRdMap.Peek(distance, peekBin, 0.0);
+            if (rdW > clutterPower)
             {
-                int peekBin = target.m_DopplerBin;
-                if (peekBin < 0)
-                    peekBin = 0;
-                float rdW = coarseRdMap.Peek(distance, peekBin, 0.0);
-                if (rdW > clutterPower)
-                    clutterPower = clutterPower * 0.65 + rdW * 0.35;
+                float blend = settings.m_RdClutterBlend;
+                if (blend < 0.0)
+                    blend = 0.0;
+                if (blend > 1.0)
+                    blend = 1.0;
+                clutterPower = clutterPower * (1.0 - blend) + rdW * blend;
             }
         }
         target.m_ClutterPowerW = clutterPower;
@@ -673,18 +680,47 @@ class RDF_RadarPhysicalDetect
         float x = origin[0] + (targetPos[0] - origin[0]) * u;
         float yLos = origin[1] + (targetPos[1] - origin[1]) * u;
         float z = origin[2] + (targetPos[2] - origin[2]) * u;
-        float terrainY = SampleTerrainY(x, z, world, settings, demCache);
+        float terrainY;
+        float columnTopY;
+        SampleTerrainAndColumnTop(
+            x, z, world, settings, demCache, terrainY, columnTopY);
         if (settings && settings.m_EnableDemSpanOcclusion)
         {
-            float columnTopY = terrainY;
-            if (TrySampleColumnTopY(x, z, demCache, columnTopY))
-            {
-                if (columnTopY > terrainY)
-                    terrainY = columnTopY;
-            }
+            if (columnTopY > terrainY)
+                terrainY = columnTopY;
         }
         // Slack reduces obstacle height (less false block from DEM noise).
         return terrainY - slackM - yLos;
+    }
+
+    // Column top from an already-sampled DEM cell (avoids a second TrySampleAt).
+    protected static float ColumnTopFromSample(RDF_DemRuntimeCellSample demSample)
+    {
+        if (!demSample || !demSample.m_Valid)
+            return 0.0;
+
+        float top = demSample.m_TerrainY;
+        int n = demSample.m_NSpans;
+        if (n <= 0 || !demSample.m_SpanHi || !demSample.m_SpanLo)
+            return top;
+
+        int hiCount = demSample.m_SpanHi.Count();
+        int loCount = demSample.m_SpanLo.Count();
+        int count = n;
+        if (count > hiCount)
+            count = hiCount;
+        if (count > loCount)
+            count = loCount;
+        for (int i = 0; i < count; i++)
+        {
+            float hi = demSample.m_SpanHi.Get(i);
+            float lo = demSample.m_SpanLo.Get(i);
+            if (hi <= lo)
+                continue;
+            if (hi > top)
+                top = hi;
+        }
+        return top;
     }
 
     // Column top from DEM spans (V3/CSV). SURF packs typically nSpans<=1 stub.
@@ -704,31 +740,7 @@ class RDF_RadarPhysicalDetect
         if (!demSample || !demSample.m_Valid)
             return false;
 
-        float top = demSample.m_TerrainY;
-        int n = demSample.m_NSpans;
-        if (n <= 0 || !demSample.m_SpanHi || !demSample.m_SpanLo)
-        {
-            outTopY = top;
-            return true;
-        }
-
-        int hiCount = demSample.m_SpanHi.Count();
-        int loCount = demSample.m_SpanLo.Count();
-        int count = n;
-        if (count > hiCount)
-            count = hiCount;
-        if (count > loCount)
-            count = loCount;
-        for (int i = 0; i < count; i++)
-        {
-            float hi = demSample.m_SpanHi.Get(i);
-            float lo = demSample.m_SpanLo.Get(i);
-            if (hi <= lo)
-                continue;
-            if (hi > top)
-                top = hi;
-        }
-        outTopY = top;
+        outTopY = ColumnTopFromSample(demSample);
         return true;
     }
 
@@ -754,6 +766,47 @@ class RDF_RadarPhysicalDetect
         return factor;
     }
 
+    // One DEM sample → terrainY + columnTop. Reads DEM when clutter OR span is on.
+    protected static void SampleTerrainAndColumnTop(
+        float worldX,
+        float worldZ,
+        BaseWorld world,
+        RDF_RadarSettings settings,
+        RDF_DemRuntimeCache demCache,
+        out float outTerrainY,
+        out float outColumnTopY)
+    {
+        outTerrainY = 0.0;
+        outColumnTopY = 0.0;
+
+        bool wantDem = false;
+        if (demCache && settings)
+        {
+            if (settings.m_EnableDemClutter)
+                wantDem = true;
+            else if (settings.m_EnableDemSpanOcclusion)
+                wantDem = true;
+        }
+
+        if (wantDem)
+        {
+            RDF_DemRuntimeCellSample demSample;
+            if (demCache.TrySampleAt(worldX, worldZ, demSample))
+            {
+                if (demSample && demSample.m_Valid)
+                {
+                    outTerrainY = demSample.m_TerrainY;
+                    outColumnTopY = ColumnTopFromSample(demSample);
+                    return;
+                }
+            }
+        }
+
+        if (world)
+            outTerrainY = world.GetSurfaceY(worldX, worldZ);
+        outColumnTopY = outTerrainY;
+    }
+
     protected static float SampleTerrainY(
         float worldX,
         float worldZ,
@@ -761,19 +814,11 @@ class RDF_RadarPhysicalDetect
         RDF_RadarSettings settings,
         RDF_DemRuntimeCache demCache)
     {
-        RDF_DemRuntimeCellSample demSample;
-        if (demCache && settings && settings.m_EnableDemClutter)
-        {
-            if (demCache.TrySampleAt(worldX, worldZ, demSample))
-            {
-                if (demSample && demSample.m_Valid)
-                    return demSample.m_TerrainY;
-            }
-        }
-
-        if (world)
-            return world.GetSurfaceY(worldX, worldZ);
-        return 0.0;
+        float terrainY;
+        float columnTopY;
+        SampleTerrainAndColumnTop(
+            worldX, worldZ, world, settings, demCache, terrainY, columnTopY);
+        return terrainY;
     }
 
     protected static float EstimateRangeResolutionM(RDF_RadarHardware hardware)

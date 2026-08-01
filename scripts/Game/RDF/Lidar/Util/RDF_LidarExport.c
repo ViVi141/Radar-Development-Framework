@@ -67,7 +67,7 @@ class RDF_LidarExport
     {
         if (!samples || !path || path == "")
             return false;
-        bool exists = FileIO.FileExist(path);
+        bool exists = FileIO.FileExists(path);
         FileMode mode;
         if (exists)
             mode = FileMode.APPEND;
@@ -133,7 +133,7 @@ class RDF_LidarExport
     {
         if (!samples || !path || path == "")
             return false;
-        bool exists = FileIO.FileExist(path);
+        bool exists = FileIO.FileExists(path);
         FileMode mode;
         if (exists)
             mode = FileMode.APPEND;

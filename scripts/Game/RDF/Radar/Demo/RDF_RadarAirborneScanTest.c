@@ -13,6 +13,7 @@ class RDF_RadarAirborneScanTest
     protected static ref RDF_RadarAirborneScanTest s_Instance;
     protected static bool s_TickRegistered;
     protected static bool s_KeepSpawnedTargetAfterTest;
+    protected static bool s_LastPass;
 
     protected static const ResourceName AIR_TARGET_PREFAB =
         "{6BDF7D3E72D31F29}Prefabs/Scenarios/SP01/SP01_Mi8MT_unarmed_transport.et";
@@ -60,6 +61,7 @@ class RDF_RadarAirborneScanTest
     static void Start()
     {
         s_KeepSpawnedTargetAfterTest = false;
+        s_LastPass = false;
         GetInstance().StartInternal();
     }
 
@@ -67,6 +69,7 @@ class RDF_RadarAirborneScanTest
     static void StartKeepTarget()
     {
         s_KeepSpawnedTargetAfterTest = true;
+        s_LastPass = false;
         GetInstance().StartInternal();
     }
 
@@ -85,6 +88,11 @@ class RDF_RadarAirborneScanTest
         if (!inst)
             return false;
         return inst.m_Running;
+    }
+
+    static bool DidLastPass()
+    {
+        return s_LastPass;
     }
 
     protected static void StaticTick()
@@ -537,6 +545,7 @@ class RDF_RadarAirborneScanTest
         bool passDiscovery = m_TargetDiscovered;
         bool allPass = passScans && passSeen && passDetected && passClassified
             && passNoEmitterAid && passDiscovery;
+        s_LastPass = allPass;
 
         array<string> lines = new array<string>();
         lines.Insert("RDF Radar Airborne Scan Test");

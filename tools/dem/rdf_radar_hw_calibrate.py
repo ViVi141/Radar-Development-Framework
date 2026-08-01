@@ -46,8 +46,16 @@ def gaussian_clutter_psd(
     return psd
 
 
-def suggest_mtd_leakage(psd: np.ndarray, bin_centers_norm: np.ndarray) -> float:
-    """Estimate non-zero-bin leakage from PSD mass away from dc."""
+def suggest_mtd_leakage(
+    psd: np.ndarray,
+    bin_centers_norm: np.ndarray,
+    sigma_vr_m_s: float | None = None,
+) -> float:
+    """Estimate non-zero-bin leakage from PSD mass away from dc.
+
+    Upper clamp widens with clutter velocity spread so wide σ_vr spectra are
+    not forced into an unrealistically tiny leakage floor.
+    """
     if psd.size == 0:
         return 1.0e-6
     dc_mask = np.abs(bin_centers_norm) < 0.08
@@ -63,7 +71,15 @@ def suggest_mtd_leakage(psd: np.ndarray, bin_centers_norm: np.ndarray) -> float:
     if total <= 1e-30:
         return 1.0e-6
     leakage = side_power / total
-    return float(max(1.0e-9, min(1.0e-2, leakage)))
+    hi = 5.0e-2
+    if sigma_vr_m_s is not None:
+        if sigma_vr_m_s >= 2.0:
+            hi = 0.25
+        elif sigma_vr_m_s >= 1.0:
+            hi = 0.10
+        elif sigma_vr_m_s >= 0.5:
+            hi = 0.05
+    return float(max(1.0e-9, min(hi, leakage)))
 
 
 def prf_coverage_score(
@@ -111,7 +127,7 @@ def build_calib(
     fd = np.linspace(-fd_max, fd_max, fd_samples)
     psd = gaussian_clutter_psd(fd, sigma_vr_m_s, wavelength)
     fd_norm = fd / max(1e-9, prf)
-    leakage = suggest_mtd_leakage(psd, fd_norm)
+    leakage = suggest_mtd_leakage(psd, fd_norm, sigma_vr_m_s)
 
     speed_grid = np.linspace(
         -hardware.unambiguous_velocity_m_s,

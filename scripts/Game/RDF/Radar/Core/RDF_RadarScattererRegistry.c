@@ -90,12 +90,19 @@ class RDF_RadarScattererRegistry
     protected static float s_DemResampleIntervalS = 2.0;
     protected static float s_DemResampleMoveM = 25.0;
 
-    // Multi-radar focus merge: each Scanner registers; one Tick/frame serves all.
+    // Multi-radar focus merge: each Scanner registers; one deferred flush/frame
+    // serves all (so late radars' foci participate in prune/discovery).
     protected static ref array<vector> s_FocusOrigins;
     protected static ref array<float> s_FocusRadiiM;
     protected static float s_FocusFrameWallS = -1000.0;
     protected static bool s_ConfigSetThisFrame;
     protected static int s_DiscoveryFocusCursor;
+    protected static bool s_FlushScheduled;
+    protected static BaseWorld s_PendingTickWorld;
+    protected static float s_PendingTickWorldTimeS;
+    // Open until FlushTickDeferred closes — avoids 1ms wall-clock false splits.
+    protected static bool s_FocusWindowOpen;
+    protected static const float FOCUS_WINDOW_STALE_S = 0.05;
 
     // Tuning.
     protected static float s_DiscoveryIntervalS = 3.0;
@@ -377,6 +384,9 @@ class RDF_RadarScattererRegistry
         s_LastTickWallS = -1000.0;
         s_FocusFrameWallS = -1000.0;
         s_ConfigSetThisFrame = false;
+        s_FocusWindowOpen = false;
+        s_FlushScheduled = false;
+        s_PendingTickWorld = null;
         s_DiscoveryFocusCursor = 0;
         if (s_FocusOrigins)
             s_FocusOrigins.Clear();
@@ -403,9 +413,9 @@ class RDF_RadarScattererRegistry
     }
 
     //------------------------------------------------------------------------------------------------
-    // Advance the table. Guarded so N radars in one frame cost the same as one.
-    // Each caller still RegisterFocus so discovery round-robins and prune keeps
-    // entries near ANY radar. Wall clock keeps GM editor (frozen world time) alive.
+    // Phase 1: register this radar's focus. Phase 2 (FlushTickDeferred) runs once
+    // after the call queue drains so every same-frame RegisterFocus is visible to
+    // prune / discovery / kinematics. N radars still cost one flush per ~frame.
     static void Tick(
         BaseWorld world,
         float worldTimeS,
@@ -417,9 +427,44 @@ class RDF_RadarScattererRegistry
 
         EnsureContainers();
         RegisterFocus(focusOrigin, radiusHintM);
+        s_PendingTickWorld = world;
+        s_PendingTickWorldTimeS = worldTimeS;
+        ScheduleFlush();
+    }
 
+    //------------------------------------------------------------------------------------------------
+    protected static void ScheduleFlush()
+    {
+        if (s_FlushScheduled)
+            return;
+
+        if (!GetGame() || !GetGame().GetCallqueue())
+        {
+            FlushTickDeferred();
+            return;
+        }
+
+        s_FlushScheduled = true;
+        GetGame().GetCallqueue().CallLater(FlushTickDeferred, 0, false);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Phase 2: consume all foci registered since the last flush.
+    static void FlushTickDeferred()
+    {
+        s_FlushScheduled = false;
+
+        BaseWorld world = s_PendingTickWorld;
+        if (!world)
+        {
+            CloseFocusWindow();
+            return;
+        }
+
+        float worldTimeS = s_PendingTickWorldTimeS;
         float wallS = System.GetTickCount() * 0.001;
-        // Collapse multiple callers in the same ~frame without relying on world time.
+        // Collapse duplicate flushes in the same ~ms (re-entrant / double schedule).
+        // Do not CloseFocusWindow here — a sibling flush already owns the cycle.
         if (wallS - s_LastTickWallS < 0.001)
             return;
         s_LastTickWallS = wallS;
@@ -440,17 +485,41 @@ class RDF_RadarScattererRegistry
         ProcessPending();
         RefreshKinematics(world, worldTimeS);
         RDF_RadarSignatureLibrary.MaybeAutoExport(worldTimeS);
+        CloseFocusWindow();
     }
 
     //------------------------------------------------------------------------------------------------
+    // Focus collection window stays open across the whole deferred flush cycle
+    // (not a 1ms wall tick), so multi-radar Configure/Tick never mid-clear.
     protected static void BeginFocusFrame(float wallS)
     {
         EnsureContainers();
-        if (wallS - s_FocusFrameWallS < 0.001)
-            return;
+        if (s_FocusWindowOpen)
+        {
+            // Stale open window (CallLater delayed): force consume then reopen.
+            if (wallS - s_FocusFrameWallS < FOCUS_WINDOW_STALE_S)
+                return;
+            if (s_FlushScheduled)
+                FlushTickDeferred();
+            else
+                CloseFocusWindow();
+        }
+
+        s_FocusWindowOpen = true;
         s_FocusFrameWallS = wallS;
         s_FocusOrigins.Clear();
         s_FocusRadiiM.Clear();
+        s_ConfigSetThisFrame = false;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    protected static void CloseFocusWindow()
+    {
+        s_FocusWindowOpen = false;
+        if (s_FocusOrigins)
+            s_FocusOrigins.Clear();
+        if (s_FocusRadiiM)
+            s_FocusRadiiM.Clear();
         s_ConfigSetThisFrame = false;
     }
 

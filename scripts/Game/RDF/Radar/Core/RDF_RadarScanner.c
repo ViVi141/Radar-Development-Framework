@@ -303,7 +303,7 @@ class RDF_RadarScanner
         int maxTargets = m_Settings.m_MaxTargets;
 
         EnsureLosTrace();
-        RDF_RadarScanGeometry.FillLosExclude(m_LosExclude, subject, null);
+        m_LosExclude.Clear();
         RDF_RadarScanGeometry.ConfigureLosParam(m_TraceParam, m_LosExclude);
         int losBudget = m_Settings.m_MaxLosTracesPerScan;
         int freshBudget = ComputeFreshUpdateBudget();

@@ -4,6 +4,7 @@ class RDF_RadarBallisticsAutoTest
 {
     protected static int s_Pass;
     protected static int s_Fail;
+    protected static bool s_LastPass;
 
     static void Start()
     {
@@ -27,12 +28,18 @@ class RDF_RadarBallisticsAutoTest
             "[RDF Ballistics AutoTest] done: pass=%1 fail=%2",
             s_Pass.ToString(),
             s_Fail.ToString()));
-        if (s_Fail == 0)
+        s_LastPass = s_Fail == 0;
+        if (s_LastPass)
             Print("[RDF Ballistics AutoTest] PASS");
         else
             Print("[RDF Ballistics AutoTest] FAIL", LogLevel.ERROR);
 
         WriteReport();
+    }
+
+    static bool DidLastPass()
+    {
+        return s_LastPass;
     }
 
     protected static void ExpectTrue(string name, bool ok)

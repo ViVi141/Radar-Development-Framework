@@ -30,9 +30,19 @@ class TestHwCalibrate(unittest.TestCase):
         fd = np.linspace(-1.0, 1.0, 101)
         psd = np.exp(-0.5 * (fd / 0.05) ** 2)
         psd = psd / np.max(psd)
-        leak = suggest_mtd_leakage(psd, fd)
+        leak = suggest_mtd_leakage(psd, fd, sigma_vr_m_s=0.5)
         self.assertGreater(leak, 0.0)
         self.assertLess(leak, 0.5)
+
+    def test_leakage_hi_widens_with_sigma(self):
+        fd = np.linspace(-1.0, 1.0, 101)
+        # Broad spectrum → large side-bin mass.
+        psd = np.exp(-0.5 * (fd / 0.4) ** 2)
+        psd = psd / np.max(psd)
+        narrow = suggest_mtd_leakage(psd, fd, sigma_vr_m_s=0.3)
+        wide = suggest_mtd_leakage(psd, fd, sigma_vr_m_s=2.5)
+        self.assertGreaterEqual(wide, narrow)
+        self.assertLessEqual(wide, 0.25)
 
     def test_build_calib_schema(self):
         hw = get_preset("shorad")

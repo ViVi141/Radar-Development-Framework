@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 2026-08-01 — 代码质量剩余 Medium/Low 一次性修复
+
+- **多雷达**：focus 窗口改为「打开直到 Flush」+ 50ms 陈旧恢复，不再靠 1ms wall 切帧
+- **LOS**：`FillLosExclude` 追加 `GetRootParent`；近距收缩 clearance；clearance 段先短 Trace；去掉 Scan 开头 subject-only Fill
+- **粗 RD**：Peek 移出 DemClutter 分支；`m_RdClutterBlend`（默认 0.35）
+- **DEM span**：一次 `TrySampleAt` 取 terrainY+columnTop；span 开时可单独读 DEM
+- **AutoTestBatch**：Suite 结束后同 Play 可再消费 flag
+- **离线**：`suggest_mtd_leakage` 按 σ_vr 放宽上夹；`mass_battle/README.md` 标明 facade-only
+
+## 2026-08-01 — 代码质量 High 项修复
+
+- **多雷达 focus**：`ScattererRegistry.Tick` 只 `RegisterFocus` + 调度；`CallLater(0)` 统一 `FlushTickDeferred`，同帧后到雷达的 focus 参与 prune/discovery；新 wall 帧 `BeginFocusFrame` 前若 flush 仍挂起则先消费
+- **AutoTest 结果**：各 Suite 步骤暴露 `DidLastPass`；`AutoTestSuite` 聚合 `DidLastSuitePass` / timeout / fail_steps；`AutoTestBatch` 按真实结果写 `ok=0|1`（含 start_failed）
+
 ## 2026-08-01 — P2/P3 TODO：粗 RD / 多雷达调度 / span 门控 / 离线拆分与标定 / AutoTest flag
 
 - **粗 RD**：`RDF_RadarCoarseRdMap` + `m_EnableCoarseRd`（默认关；Ideal 强制关）；分帧衰减 + 目标功率沉积

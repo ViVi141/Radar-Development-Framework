@@ -114,9 +114,12 @@ class RDF_RadarSettings
     int m_RdCellsPerScan = 32;
     float m_RdMapAlpha = 0.2;
     float m_RdDecayPerScan = 0.97;
+    // Blend weight for coarse RD Peek into clutter noise (0 = ignore RD, 1 = RD only).
+    float m_RdClutterBlend = 0.35;
     // When true and DEM cell has column spans (non-SURF V3/CSV), knife-edge /
     // NLOS obstacle height uses column top Y (canopy / urban slabs).
     // SURF packs stay surface-only; leave false unless scene needs span data.
+    // Span sampling may read DEM even when m_EnableDemClutter is false.
     bool m_EnableDemSpanOcclusion = false;
     // Projectile tracks: AirDrag + global wind extrapolation / WLR fixes.
     bool m_EnableBallisticPrediction = true;

@@ -9,6 +9,8 @@ class RDF_RadarScanGeometry
     static const float LOS_CLEAR_FRACTION = 0.999;
     // Push Start out of the subject hull (same SEH risk as LiDAR in-solid starts).
     static const float LOS_START_CLEARANCE_M = 0.15;
+    // Below this path length, clearance shrinks aggressively (near-target LOS).
+    static const float LOS_NEAR_PATH_M = 2.0;
 
     //------------------------------------------------------------------------------------------------
     // Configure a reusable TraceParam for radar LOS (call once per Scan).
@@ -24,23 +26,60 @@ class RDF_RadarScanGeometry
     }
 
     //------------------------------------------------------------------------------------------------
+    // Insert entity and its GetRootParent (vehicles: child colliders ≠ root).
+    protected static void InsertEntityWithRoot(
+        notnull array<IEntity> excludeArray,
+        IEntity ent)
+    {
+        if (!ent)
+            return;
+        excludeArray.Insert(ent);
+        IEntity root = ent.GetRootParent();
+        if (root && root != ent)
+            excludeArray.Insert(root);
+    }
+
+    //------------------------------------------------------------------------------------------------
     // Fill ExcludeArray like nametag / command HUD: subject (+ optional target so a
     // hit on the candidate itself counts as a clear path to the aim point).
+    // Also excludes GetRootParent so vehicle child hulls do not self-block.
     static void FillLosExclude(
         notnull array<IEntity> excludeArray,
         IEntity subject,
         IEntity target)
     {
         excludeArray.Clear();
-        if (subject)
-            excludeArray.Insert(subject);
+        InsertEntityWithRoot(excludeArray, subject);
         if (target && target != subject)
-            excludeArray.Insert(target);
+            InsertEntityWithRoot(excludeArray, target);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Cap start clearance for short paths so near occluders stay visible.
+    static float EffectiveStartClearanceM(float fullLenM, float requestedClearanceM)
+    {
+        if (requestedClearanceM <= 0.0 || fullLenM <= 0.001)
+            return 0.0;
+
+        float clear = requestedClearanceM;
+        if (fullLenM < LOS_NEAR_PATH_M)
+        {
+            float nearCap = fullLenM * 0.05;
+            if (clear > nearCap)
+                clear = nearCap;
+            return clear;
+        }
+
+        if (clear > fullLenM * 0.25)
+            clear = fullLenM * 0.05;
+        return clear;
     }
 
     //------------------------------------------------------------------------------------------------
     // One LOS TraceMove. Returns hit fraction remapped onto origin→losEnd [0,1]
     // so NLOS / knife-edge keep a stable parameter after start clearance.
+    // Clearance segment is traced first so obstacles between origin and the
+    // pushed Start are not silently skipped.
     static float TraceLineOfSight(
         notnull BaseWorld world,
         notnull TraceParam param,
@@ -51,12 +90,26 @@ class RDF_RadarScanGeometry
         vector delta = losEnd - origin;
         float fullLen = delta.Length();
         vector start = origin;
-        if (fullLen > 0.001 && startClearanceM > 0.0)
-        {
-            float clear = startClearanceM;
-            if (clear > fullLen * 0.25)
-                clear = fullLen * 0.05;
+        float clear = EffectiveStartClearanceM(fullLen, startClearanceM);
+        if (fullLen > 0.001 && clear > 0.0)
             start = origin + (delta * (clear / fullLen));
+
+        float startOffset = (start - origin).Length();
+        if (startOffset > 0.001)
+        {
+            param.Start = origin;
+            param.End = start;
+            param.TraceEnt = null;
+            param.SurfaceProps = null;
+            float clearHit = world.TraceMove(param, null);
+            if (clearHit < LOS_CLEAR_FRACTION)
+            {
+                float alongClear = clearHit * startOffset;
+                float remappedClear = alongClear / fullLen;
+                if (remappedClear > 1.0)
+                    remappedClear = 1.0;
+                return remappedClear;
+            }
         }
 
         param.Start = start;
@@ -70,7 +123,6 @@ class RDF_RadarScanGeometry
         if (fullLen <= 0.001)
             return segmentHit;
 
-        float startOffset = (start - origin).Length();
         float segmentLen = fullLen - startOffset;
         if (segmentLen < 0.001)
             return segmentHit;

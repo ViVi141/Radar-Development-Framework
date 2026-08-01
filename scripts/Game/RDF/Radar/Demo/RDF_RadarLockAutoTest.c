@@ -14,6 +14,7 @@ class RDF_RadarLockAutoTest
     protected static ref RDF_RadarLockAutoTest s_Instance;
     protected static bool s_TickRegistered;
     protected static bool s_KeepTargetAfterTest;
+    protected static bool s_LastPass;
 
     protected static const ResourceName AIR_TARGET_PREFAB =
         "{6BDF7D3E72D31F29}Prefabs/Scenarios/SP01/SP01_Mi8MT_unarmed_transport.et";
@@ -76,12 +77,14 @@ class RDF_RadarLockAutoTest
     static void Start()
     {
         s_KeepTargetAfterTest = false;
+        s_LastPass = false;
         GetInstance().StartInternal();
     }
 
     static void StartKeepTarget()
     {
         s_KeepTargetAfterTest = true;
+        s_LastPass = false;
         GetInstance().StartInternal();
     }
 
@@ -100,6 +103,11 @@ class RDF_RadarLockAutoTest
         if (!inst)
             return false;
         return inst.m_Running;
+    }
+
+    static bool DidLastPass()
+    {
+        return s_LastPass;
     }
 
     protected static void StaticTick()
@@ -630,6 +638,7 @@ class RDF_RadarLockAutoTest
         bool allPass = passScans && passAlive && passPlots && passTracks
             && passAcquire && passTrack && passLockedPoint && passPhysicalSnr
             && passDiscovery && passRwrSearch && passRwrLock;
+        s_LastPass = allPass;
 
         array<string> lines = new array<string>();
         lines.Insert("RDF Radar Lock Test (physical Mi-8 orbit)");

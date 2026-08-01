@@ -30,7 +30,9 @@ chmod +x run_tools.sh   # once
 CI: `.github/workflows/python-dem-tests.yml` runs unittest discover + `full_sim` coverage checks (`detection.mtd_bank`, rotor CPA, PRF stagger).
 
 Offline HW bake-back (not in-game): `python rdf_radar_hw_calibrate.py --preset shorad` → `calib/prf_clutter_*.json`.  
-Mass-battle sim: `rdf_radar_mass_battle_sim.py` (facade) + `mass_battle/` package.  
+Mass-battle sim: `rdf_radar_mass_battle_sim.py` (facade) + `mass_battle/` package
+(`_impl.py` holds the logic; thematic modules are re-exports — see
+`mass_battle/README.md`).  
 In-game AutoTest without Debugger: see [docs/AUTOTEST_CI_LIMITS.md](../docs/AUTOTEST_CI_LIMITS.md).
 
 Generated files go to `tools/dem/out/` (gitignored except `.gitkeep`). Do not commit.
@@ -89,7 +91,7 @@ Generated files go to `tools/dem/out/` (gitignored except `.gitkeep`). Do not co
 | `rdf_radar_framework_demo.py` | Clean / EW PPI demo + CSV |
 | `rdf_radar_sector_preview.py` | Sector preview plots |
 | `rdf_radar_shellfire_offline.py` | ShellFire / WLR offline mirror |
-| `rdf_radar_mass_battle_sim.py` | Multi-radar DEM battle (large; split in TODO) |
+| `rdf_radar_mass_battle_sim.py` | Multi-radar DEM battle (facade; logic in `mass_battle/_impl.py`) |
 | `rdf_knife_edge_eden_validate.py` | Eden knife-edge validation helper |
 
 ### Golden tests
@@ -184,7 +186,7 @@ cd tools\dem
 | `rdf_radar_framework_demo.py` | 干净 / EW PPI Demo + CSV |
 | `rdf_radar_sector_preview.py` | 扇区预览图 |
 | `rdf_radar_shellfire_offline.py` | ShellFire / WLR 离线镜像 |
-| `rdf_radar_mass_battle_sim.py` | 多雷达 DEM 战场（大体量；拆分见 TODO） |
+| `rdf_radar_mass_battle_sim.py` | 多雷达 DEM 战场（facade；逻辑在 `mass_battle/_impl.py`） |
 | `rdf_knife_edge_eden_validate.py` | Eden 刀刃绕射校验 |
 
 ### Golden 测试

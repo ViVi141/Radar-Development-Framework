@@ -23,6 +23,7 @@ class RDF_RadarShellFireAutoTest
 {
     protected static ref RDF_RadarShellFireAutoTest s_Instance;
     protected static bool s_TickRegistered;
+    protected static bool s_LastPass;
 
     protected static const ResourceName SHELL_PREFAB =
         "{98EC9C526AFBA282}Prefabs/Weapons/Ammo/Ammo_Shell_82mm_HE_O832DU.et";
@@ -77,6 +78,7 @@ class RDF_RadarShellFireAutoTest
 
     static void Start()
     {
+        s_LastPass = false;
         GetInstance().StartInternal();
     }
 
@@ -95,6 +97,11 @@ class RDF_RadarShellFireAutoTest
         if (!inst)
             return false;
         return inst.m_Running;
+    }
+
+    static bool DidLastPass()
+    {
+        return s_LastPass;
     }
 
     protected static void StaticTick()
@@ -780,6 +787,7 @@ class RDF_RadarShellFireAutoTest
         bool passDiscovery = m_ShellDiscovered;
         bool allPass = passFired && passMoving && passScans && passPlots && passTrack
             && passWlr && passDiscovery;
+        s_LastPass = allPass;
 
         array<string> lines = new array<string>();
         lines.Insert("RDF Radar Shell Fire AutoTest");

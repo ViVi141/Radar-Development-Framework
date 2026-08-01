@@ -13,6 +13,7 @@ class RDF_RadarPlayAutoTest
 {
     protected static ref RDF_RadarPlayAutoTest s_Instance;
     protected static bool s_TickRegistered;
+    protected static bool s_LastPass;
 
     protected static const ResourceName GROUND_PREFAB =
         "{259EE7B78C51B624}Prefabs/Vehicles/Wheeled/UAZ469/UAZ469.et";
@@ -75,6 +76,7 @@ class RDF_RadarPlayAutoTest
 
     static void Start()
     {
+        s_LastPass = false;
         GetInstance().StartInternal();
     }
 
@@ -93,6 +95,11 @@ class RDF_RadarPlayAutoTest
         if (!inst)
             return false;
         return inst.m_Running;
+    }
+
+    static bool DidLastPass()
+    {
+        return s_LastPass;
     }
 
     protected static void StaticTick()
@@ -736,6 +743,7 @@ class RDF_RadarPlayAutoTest
          bool passTickP95 = tickP95 <= PASS_TICK_P95_MS;
          bool allPass = passScans && passAir && passGround && passDiscover
              && passScanAvg && passScanP95 && passTickAvg && passTickP95;
+         s_LastPass = allPass;
 
          array<string> lines = new array<string>();
          lines.Insert("RDF Radar Play AutoTest");

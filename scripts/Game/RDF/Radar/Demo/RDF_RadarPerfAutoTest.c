@@ -8,6 +8,7 @@
 class RDF_RadarPerfAutoTest
 {
     protected static ref RDF_RadarPerfAutoTest s_Instance;
+    protected static bool s_LastPass;
 
     // Ground vehicles avoid Mi-8 rotor damage CallLater (NULL root after delete).
     protected static const ResourceName LOAD_TARGET_PREFAB =
@@ -56,6 +57,7 @@ class RDF_RadarPerfAutoTest
 
     static void Start()
     {
+        s_LastPass = false;
         GetInstance().StartInternal();
     }
 
@@ -74,6 +76,11 @@ class RDF_RadarPerfAutoTest
         if (!inst)
             return false;
         return inst.m_Running;
+    }
+
+    static bool DidLastPass()
+    {
+        return s_LastPass;
     }
 
     protected void StartInternal()
@@ -591,6 +598,7 @@ class RDF_RadarPerfAutoTest
         bool passHeavyP95 = heavyP95 <= PASS_HEAVY_P95_MS;
         bool allPass = passBallistics && passLightN && passHeavyN
             && passLightAvg && passHeavyAvg && passHeavyP95;
+        s_LastPass = allPass;
 
         array<string> lines = new array<string>();
         lines.Insert("RDF Radar Perf AutoTest");

@@ -18,8 +18,11 @@ That is the regression backbone for radar **physics**. It does **not** spawn ent
 2. Create `$profile:RDF/RunAutoTestSuite.flag`
    - empty / `ideal` → `RDF_RadarAutoTestSuite.StartAll()`
    - contents containing `realistic` → `StartAllRealistic()`
-3. `RDF_RadarAutoTestBatch` (armed from `SCR_BaseGameMode.OnGameStart`) consumes the flag once per Play session and starts the suite.
+3. `RDF_RadarAutoTestBatch` (armed from `SCR_BaseGameMode.OnGameStart`) consumes the flag once, runs the suite, then **re-arms** so another flag can be written in the same Play session.
 4. When finished, writes `$profile:RDF/RadarTests/radar_autotest_suite_result.txt`
+   - `ok=1` only when every suite step passed
+   - `ok=0` on step FAIL, step timeout, or suite start failure
+   - also: `timed_out=`, `fail_count=`, `fail_steps=` (comma-separated step names)
 
 Manual Debugger still works: `RDF_RadarAutoTestSuite.StartAll()` / `StartAllRealistic()` / `Stop()`.
 
