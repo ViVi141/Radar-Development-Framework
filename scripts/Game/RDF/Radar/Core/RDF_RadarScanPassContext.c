@@ -12,7 +12,9 @@ class RDF_RadarScanPassContext
     float m_MinDist;
     float m_MinDistSq;
     float m_RangeSq;
-    float m_CosHalfAngle;
+    // Horizontal scan sector (radians). Azimuth is world Atan2(Z, X).
+    float m_HalfAngleRad;
+    float m_ScanAzimuthRad;
     int m_MaxTargets;
     ref TraceParam m_Param;
     int m_LosBudget;

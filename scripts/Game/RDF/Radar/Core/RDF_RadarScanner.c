@@ -338,8 +338,18 @@ class RDF_RadarScanner
         float halfAngleRad = m_Settings.m_SectorHalfAngleDeg * 0.01745329;
         if (m_Settings.m_EnableMechanicalScan && m_Settings.m_Hardware)
             halfAngleRad = m_Settings.m_Hardware.m_AzimuthBeamwidthDeg * 0.5 * 0.01745329;
-        float cosHalfAngle = Math.Cos(halfAngleRad);
         int maxTargets = m_Settings.m_MaxTargets;
+
+        // Sector gate is azimuth-only. Flatten pitch so a nose-up platform
+        // does not shrink the horizontal acceptance cone.
+        float scanAzimuthRad = 0.0;
+        float fwdHorizX = forward[0];
+        float fwdHorizZ = forward[2];
+        float fwdHorizLen = Math.Sqrt(fwdHorizX * fwdHorizX + fwdHorizZ * fwdHorizZ);
+        if (fwdHorizLen > 0.001)
+            scanAzimuthRad = Math.Atan2(fwdHorizZ, fwdHorizX);
+        else
+            scanAzimuthRad = Math.Atan2(forward[2], forward[0]);
 
         EnsureLosTrace();
         m_LosExclude.Clear();
@@ -359,7 +369,8 @@ class RDF_RadarScanner
         passCtx.m_MinDist = minDist;
         passCtx.m_MinDistSq = minDistSq;
         passCtx.m_RangeSq = rangeSq;
-        passCtx.m_CosHalfAngle = cosHalfAngle;
+        passCtx.m_HalfAngleRad = halfAngleRad;
+        passCtx.m_ScanAzimuthRad = scanAzimuthRad;
         passCtx.m_MaxTargets = maxTargets;
         passCtx.m_Param = m_TraceParam;
         passCtx.m_LosBudget = losBudget;
@@ -392,7 +403,8 @@ class RDF_RadarScanner
         float wallTime = ctx.m_WallTime;
         float minDistSq = ctx.m_MinDistSq;
         float rangeSq = ctx.m_RangeSq;
-        float cosHalfAngle = ctx.m_CosHalfAngle;
+        float halfAngleRad = ctx.m_HalfAngleRad;
+        float scanAzimuthRad = ctx.m_ScanAzimuthRad;
         int maxTargets = ctx.m_MaxTargets;
         TraceParam param = ctx.m_Param;
         int losBudget = ctx.m_LosBudget;
@@ -456,8 +468,19 @@ class RDF_RadarScanner
             vector toTargetNorm = toTarget;
             if (dist > 0.001)
                 toTargetNorm = toTarget / dist;
-            float dot = forward[0] * toTargetNorm[0] + forward[1] * toTargetNorm[1] + forward[2] * toTargetNorm[2];
-            if (dot < cosHalfAngle)
+
+            // Azimuth-only hard gate (search sector / dwell beam). Elevation is
+            // owned by PhysicalDetect Gaussian beams — do not 3D-cone here.
+            float horizontalRange = Math.Sqrt(
+                toTarget[0] * toTarget[0] + toTarget[2] * toTarget[2]);
+            if (horizontalRange < 0.001)
+                continue;
+
+            float targetAzimuthRad = Math.Atan2(toTarget[2], toTarget[0]);
+            float azDiffRad = NormalizeAngleRad(targetAzimuthRad - scanAzimuthRad);
+            if (azDiffRad < 0.0)
+                azDiffRad = -azDiffRad;
+            if (azDiffRad > halfAngleRad)
                 continue;
 
             ERDF_RadarTargetType priorityType = entry.m_Type;
