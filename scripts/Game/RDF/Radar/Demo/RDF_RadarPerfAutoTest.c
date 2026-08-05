@@ -359,7 +359,7 @@ class RDF_RadarPerfAutoTest
         cfg.m_OriginOffset = Vector(0.0, 12.0, 0.0);
         cfg.m_FreshUpdateBudgetMin = 8;
         cfg.m_FreshUpdateBudgetMax = 16;
-        cfg.ApplyIdealChannel();
+        cfg.StabilizeForRegression();
         cfg.Validate();
         ApplySensorConfig(cfg);
     }
@@ -385,10 +385,7 @@ class RDF_RadarPerfAutoTest
         cfg.m_ScattererDiscoveryIntervalS = 0.5;
         cfg.m_ScattererClassifyPerTick = 128;
         cfg.m_ScattererRefreshPerTick = 256;
-        if (RDF_RadarAutoTestSuite.IsRealisticChannel())
-            cfg.ApplyRealisticChannel();
-        else
-            cfg.ApplyIdealChannel();
+        cfg.StabilizeForRegression();
         cfg.Validate();
         ApplySensorConfig(cfg);
     }

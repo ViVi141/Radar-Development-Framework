@@ -62,9 +62,9 @@ class RDF_RadarSettings
     bool m_EnableMeasurementSynthesis = true;
     // Debug only: keep m_Entity / soft type tags (cheats identity into the PPI).
     bool m_KeepEntityTruth = false;
-    // Channel fidelity. Ideal = logic-loop validation; Realistic = plausible errors.
-    bool m_RealisticChannel = false;
     // Measurement synthesis extras (applied when synthesis is on).
+    // 0 = quantized / bias-only (or clean when biases are 0). Opt into noise via
+    // SetMeasurementNoise(...); there is no ideal/realistic mega-preset.
     float m_MeasNoiseScale = 1.0;
     float m_MeasRangeBiasM = 0.0;
     float m_MeasAzimuthBiasDeg = 0.0;
@@ -87,6 +87,26 @@ class RDF_RadarSettings
     float m_RainLossDbPerKmAtFullIntensity = 0.5;
     // Extra one-way dB/km when GetFogAmount() == 1 (weak; fog is not rain).
     float m_FogLossDbPerKmAtFullFog = 0.05;
+    // Clear-LOS two-ray multipath (power lobes). Not waveform simulation.
+    // Default off — call EnableLosTwoRayMultipath(). Skipped for projectiles.
+    bool m_EnableLosTwoRayMultipath = false;
+    // Fixed Γ when surface dielectric is unavailable (negative = phase inversion).
+    float m_LosTwoRayReflectionCoeff = -0.5;
+    // Skip two-ray when target AGL exceeds this (m).
+    float m_LosTwoRayMaxTargetAglM = 600.0;
+    // Clamp two-ray power factor into [min, max].
+    float m_LosTwoRayMinFactor = 0.08;
+    float m_LosTwoRayMaxFactor = 4.0;
+    // Prefer SurfaceTable dielectric → Fresnel Γ when DEM class is known.
+    bool m_LosTwoRayUseSurfaceDielectric = true;
+    // 4/3-Earth refraction: radio-horizon soft factor + elevation bias.
+    bool m_EnableAtmosphericRefraction = false;
+    // Effective-earth multiplier (4/3 ≈ standard tropospheric refraction).
+    float m_EarthRadiusFactor = 1.333333;
+    // Fold measured range into PRF unambiguous interval.
+    bool m_EnableRangeAmbiguityFold = false;
+    // Fold measured Doppler into ±PRF/2. Skipped when weapon-locate is on.
+    bool m_EnableDopplerAmbiguityFold = false;
     // Plot-to-track association gates (meters / degrees).
     float m_TrackGateRangeM = 400.0;
     float m_TrackGateAzimuthDeg = 4.0;
@@ -105,7 +125,7 @@ class RDF_RadarSettings
     bool m_EnableClutterMap = false;
     float m_ClutterMapAlpha = 0.15;
     // Coarse range–Doppler map (default OFF). Amortized deposits only — not a
-    // full RD cube. Ideal channel / StartAll keep this off.
+    // full RD cube. Enable explicitly when needed.
     bool m_EnableCoarseRd = false;
     int m_RdCellsPerScan = 32;
     float m_RdMapAlpha = 0.2;
@@ -241,6 +261,11 @@ class RDF_RadarSettings
         m_RainLossDbPerKmAtFullIntensity = Math.Clamp(
             m_RainLossDbPerKmAtFullIntensity, 0.0, 20.0);
         m_FogLossDbPerKmAtFullFog = Math.Clamp(m_FogLossDbPerKmAtFullFog, 0.0, 5.0);
+        m_LosTwoRayReflectionCoeff = Math.Clamp(m_LosTwoRayReflectionCoeff, -1.0, 1.0);
+        m_LosTwoRayMaxTargetAglM = Math.Clamp(m_LosTwoRayMaxTargetAglM, 10.0, 5000.0);
+        m_LosTwoRayMinFactor = Math.Clamp(m_LosTwoRayMinFactor, 0.01, 1.0);
+        m_LosTwoRayMaxFactor = Math.Clamp(m_LosTwoRayMaxFactor, 1.0, 8.0);
+        m_EarthRadiusFactor = Math.Clamp(m_EarthRadiusFactor, 0.5, 4.0);
         if (!m_Hardware)
             m_Hardware = RDF_RadarHardware.CreateShorad();
         if (!m_EwStack)
@@ -251,47 +276,103 @@ class RDF_RadarSettings
     }
 
     //------------------------------------------------------------------------------------------------
-    // Deterministic / logic-loop profile: no random measurement noise, no thermal
-    // CFAR fill, no atmospheric loss. Suite default so regressions stay over-accurate.
-    void ApplyIdealChannel()
+    // Opt-in: measurement noise / bias. scale=0 clears random noise (biases remain
+    // unless zeroed via ClearMeasurementNoise).
+    void SetMeasurementNoise(
+        float scale,
+        float rangeBiasM,
+        float azBiasDeg,
+        float elBiasDeg)
     {
-        m_RealisticChannel = false;
-        m_EnableCfarGate = false;
+        m_EnableMeasurementSynthesis = true;
+        m_MeasNoiseScale = scale;
+        m_MeasRangeBiasM = rangeBiasM;
+        m_MeasAzimuthBiasDeg = azBiasDeg;
+        m_MeasElevationBiasDeg = elBiasDeg;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    void ClearMeasurementNoise()
+    {
         m_MeasNoiseScale = 0.0;
         m_MeasRangeBiasM = 0.0;
         m_MeasAzimuthBiasDeg = 0.0;
         m_MeasElevationBiasDeg = 0.0;
         m_MeasDopplerBiasHz = 0.0;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Opt-in: clear-air (+ optional weather rain/fog) path loss on received power.
+    void EnableAtmosphericPathLoss(bool weatherDriven)
+    {
+        m_EnableAtmosphericLoss = true;
+        m_EnableWeatherDrivenRainLoss = weatherDriven;
+        m_AtmLossDbPerKmOneWay = -1.0;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    void DisableAtmosphericPathLoss()
+    {
+        m_EnableAtmosphericLoss = false;
+        m_EnableWeatherDrivenRainLoss = false;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Opt-in: CFAR thermal fill of empty range cells (real Pfa behaviour).
+    void EnableCfarThermalFill(bool enable)
+    {
+        m_EnableCfarThermalFill = enable;
+        if (enable)
+            m_EnableCfarGate = true;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Opt-in: clear-LOS two-ray multipath power lobes (not waveform sim).
+    void EnableLosTwoRayMultipath()
+    {
+        m_EnableLosTwoRayMultipath = true;
+        m_LosTwoRayReflectionCoeff = -0.5;
+        m_LosTwoRayMaxTargetAglM = 600.0;
+        m_LosTwoRayMinFactor = 0.08;
+        m_LosTwoRayMaxFactor = 4.0;
+        m_LosTwoRayUseSurfaceDielectric = true;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Opt-in: 4/3-Earth refraction (horizon soft factor + elevation bias).
+    void EnableAtmosphericRefraction()
+    {
+        m_EnableAtmosphericRefraction = true;
+        m_EarthRadiusFactor = 1.333333;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Opt-in: fold measured range / Doppler into PRF unambiguous intervals.
+    // Weapon-locate paths still skip Doppler fold at synthesize time.
+    void EnablePrfAmbiguityFolds(bool foldRange, bool foldDoppler)
+    {
+        m_EnableRangeAmbiguityFold = foldRange;
+        m_EnableDopplerAmbiguityFold = foldDoppler;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // AutoTest / Debugger helper: turn OFF optional fidelity extras that make
+    // logic-loop assertions flaky. Not a gameplay "ideal tier" — mods should
+    // Enable* only what they need. Does not force CFAR on/off.
+    void StabilizeForRegression()
+    {
+        ClearMeasurementNoise();
         m_EnableCfarThermalFill = false;
         m_EnableAtmosphericLoss = false;
         m_EnableWeatherDrivenRainLoss = false;
         m_AtmLossDbPerKmOneWay = -1.0;
         m_RainLossDbPerKmOneWay = 0.0;
+        m_EnableLosTwoRayMultipath = false;
+        m_EnableAtmosphericRefraction = false;
+        m_EnableRangeAmbiguityFold = false;
+        m_EnableDopplerAmbiguityFold = false;
         m_EnableCoarseRd = false;
         m_EnableDemSpanOcclusion = false;
-    }
-
-    //------------------------------------------------------------------------------------------------
-    // Gameplay / fidelity profile: louder measurement noise, thermal CFAR fill,
-    // clear-air atmosphere + weather-driven rain/fog loss.
-    // Tests that enable this must use wider error bands.
-    void ApplyRealisticChannel()
-    {
-        m_RealisticChannel = true;
-        m_EnableMeasurementSynthesis = true;
-        m_EnableCfarGate = true;
-        m_MeasNoiseScale = 3.5;
-        m_MeasRangeBiasM = 5.0;
-        m_MeasAzimuthBiasDeg = 0.2;
-        m_MeasElevationBiasDeg = 0.15;
-        m_MeasDopplerBiasHz = 0.0;
-        m_EnableCfarThermalFill = true;
-        m_EnableAtmosphericLoss = true;
-        m_EnableWeatherDrivenRainLoss = true;
-        m_AtmLossDbPerKmOneWay = -1.0;
-        m_RainLossDbPerKmOneWay = 0.0;
-        m_RainLossDbPerKmAtFullIntensity = 0.5;
-        m_FogLossDbPerKmAtFullFog = 0.05;
     }
 
     //------------------------------------------------------------------------------------------------

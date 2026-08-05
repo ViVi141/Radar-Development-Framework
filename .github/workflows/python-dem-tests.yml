@@ -57,6 +57,7 @@ jobs:
               "test_rdf_radar_sig_pack",
               "test_rdf_radar_systems",
               "test_rdf_radar_track",
+              "test_rdf_radar_propagation",
           }
           missing = sorted(required - set(names))
           print("modules=", names)
@@ -100,6 +101,8 @@ jobs:
               "detection.rotor_microdoppler",
               "detection.heli_cpa",
               "detection.prf_stagger",
+              "propagation.refraction_horizon",
+              "propagation.ambiguity_fold",
           }
           missing = sorted(need - cov)
           if missing:

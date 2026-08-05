@@ -518,4 +518,193 @@ class RDF_RadarClutterModel
             return 0.0;
         return 2.0 * radialSpeedMs / wavelengthM;
     }
+
+    //------------------------------------------------------------------------------------------------
+    // Horizontal-pol Fresnel reflection coefficient at grazing angle (radians).
+    // epsR = relative permittivity from SurfaceTable (≈15 land, ≈80 sea).
+    static float FresnelReflectionCoeffH(float epsR, float grazingRad)
+    {
+        float eps = epsR;
+        if (eps < 1.0)
+            eps = 1.0;
+        float theta = grazingRad;
+        if (theta < 0.001)
+            theta = 0.001;
+        if (theta > (Math.PI * 0.5))
+            theta = Math.PI * 0.5;
+
+        float s = Math.Sin(theta);
+        float c = Math.Cos(theta);
+        float inside = eps - c * c;
+        if (inside < 0.000001)
+            inside = 0.000001;
+        float root = Math.Sqrt(inside);
+        float denom = s + root;
+        if (denom < 0.000001)
+            denom = 0.000001;
+        return (s - root) / denom;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Roughness damping on |Γ| (no Math.Exp: exp(-x) = 0.5^(x/ln2)).
+    static float RoughnessDampReflectionAbs(float gammaAbs, float roughness, float grazingRad)
+    {
+        float g = gammaAbs;
+        if (g < 0.0)
+            g = -g;
+        float r = roughness;
+        if (r < 0.0)
+            r = 0.0;
+        float s = Math.Sin(grazingRad);
+        if (s < 0.0)
+            s = 0.0;
+        float x = 8.0 * r * s;
+        if (x <= 0.0)
+            return g;
+        // ln(2) ≈ 0.693147
+        float damp = Math.Pow(0.5, x / 0.693147);
+        if (damp < 0.05)
+            damp = 0.05;
+        if (damp > 1.0)
+            damp = 1.0;
+        return g * damp;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Clear-LOS two-ray multipath power factor (direct + specular ground bounce).
+    // Aligns with tools/dem/rdf_radar_channel.MultipathModel — not a waveform sim.
+    static float TwoRayMultipathFactor(
+        float wavelengthM,
+        float rangeM,
+        float radarHeightAglM,
+        float targetHeightAglM,
+        float reflectionCoeff,
+        float maxHeightM,
+        float minFactor,
+        float maxFactor)
+    {
+        if (wavelengthM <= 0.0)
+            return 1.0;
+        if (rangeM < 1.0)
+            return 1.0;
+        if (radarHeightAglM < 1.0)
+            return 1.0;
+        if (targetHeightAglM < 1.0)
+            return 1.0;
+        if (maxHeightM > 0.0)
+        {
+            if (targetHeightAglM > maxHeightM)
+                return 1.0;
+        }
+
+        float delta = 2.0 * radarHeightAglM * targetHeightAglM / rangeM;
+        float phase = 2.0 * Math.PI * delta / wavelengthM;
+        float real = 1.0 + reflectionCoeff * Math.Cos(phase);
+        float imag = reflectionCoeff * Math.Sin(phase);
+        float factor = real * real + imag * imag;
+
+        float lo = minFactor;
+        if (lo < 0.01)
+            lo = 0.01;
+        float hi = maxFactor;
+        if (hi < lo)
+            hi = lo;
+        if (factor < lo)
+            factor = lo;
+        if (factor > hi)
+            factor = hi;
+        return factor;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Effective earth radius (m): k * 6371000. k=4/3 ≈ standard refraction.
+    static float EffectiveEarthRadiusM(float earthRadiusFactor)
+    {
+        float k = earthRadiusFactor;
+        if (k < 0.5)
+            k = 0.5;
+        if (k > 4.0)
+            k = 4.0;
+        return k * 6371000.0;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Geometric radio horizon for two terminals over smooth k-Earth (m).
+    static float RadioHorizonRangeM(
+        float radarHeightAglM,
+        float targetHeightAglM,
+        float earthRadiusFactor)
+    {
+        float re = EffectiveEarthRadiusM(earthRadiusFactor);
+        float hr = radarHeightAglM;
+        if (hr < 0.0)
+            hr = 0.0;
+        float ht = targetHeightAglM;
+        if (ht < 0.0)
+            ht = 0.0;
+        return Math.Sqrt(2.0 * re * hr) + Math.Sqrt(2.0 * re * ht);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Soft power factor beyond radio horizon (1 inside, rolls off outside).
+    static float HorizonSoftFactor(float rangeM, float horizonM)
+    {
+        if (horizonM <= 1.0)
+            return 1.0;
+        if (rangeM <= horizonM)
+            return 1.0;
+        float over = (rangeM - horizonM) / horizonM;
+        if (over < 0.0)
+            over = 0.0;
+        // 1 / (1 + 4*over^2) — smooth, no hard cliff.
+        float denom = 1.0 + 4.0 * over * over;
+        float f = 1.0 / denom;
+        if (f < 0.02)
+            f = 0.02;
+        return f;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Apparent elevation bias (deg) from k-Earth ray vs flat geometry.
+    // Positive = target appears higher than geometric head-up angle.
+    static float RefractionElevationBiasDeg(float rangeM, float earthRadiusFactor)
+    {
+        if (rangeM < 1.0)
+            return 0.0;
+        float re = EffectiveEarthRadiusM(earthRadiusFactor);
+        if (re < 1.0)
+            return 0.0;
+        // δ ≈ R / (2 Re) rad for standard curved-earth correction remnant.
+        float biasRad = rangeM / (2.0 * re);
+        return biasRad * 57.2957795;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Fold true range into [0, R_unamb).
+    static float FoldRangeAmbiguous(float rangeM, float unambiguousRangeM)
+    {
+        if (unambiguousRangeM <= 1.0)
+            return rangeM;
+        if (rangeM < 0.0)
+            return 0.0;
+        float folded = rangeM - Math.Floor(rangeM / unambiguousRangeM) * unambiguousRangeM;
+        if (folded < 0.0)
+            folded = folded + unambiguousRangeM;
+        return folded;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Fold Doppler into [-PRF/2, PRF/2).
+    static float FoldDopplerAmbiguous(float dopplerHz, float prfHz)
+    {
+        if (prfHz <= 0.0)
+            return dopplerHz;
+        float half = prfHz * 0.5;
+        float x = dopplerHz;
+        while (x >= half)
+            x = x - prfHz;
+        while (x < -half)
+            x = x + prfHz;
+        return x;
+    }
 }

@@ -148,6 +148,23 @@
 **MTD Sprint（已完成）**：MTD bank、旋翼微多普勒、clutter map、coast、`PULSE_DOPPLER`、Python/CI 护栏。  
 **P2 可选/离线（已完成）**：粗 RD（默认关）、多雷达 focus 调度、DEM span 门控、mass_battle 拆分、HW 标定 JSON、AutoTest flag 批跑。
 
+#### 8 — 传播数学拟真（无波形，2026-08-05）
+
+原则：加深目标级方程 / 测量层；**不做**波形 → RD / 全脉冲。
+
+| 档 | 项 | 状态 |
+|----|----|------|
+| **P1** | LOS 双射线多径（Fresnel Γ + 粗糙度） | **已完成** |
+| **P1** | 4/3 地球折射（地平线软衰减 + 俯仰偏置） | **已完成** |
+| **P1** | PRF 距离/多普勒模糊折叠（WLR 跳过多普勒） | **已完成** |
+| **P1** | 极化失配标量 | **已完成** |
+| **护栏** | Python `test_rdf_radar_propagation` + full_sim 标签 | **已完成** |
+| **API** | 取消理想/逼真双档 → 按需 Enable* | **已完成** |
+
+- [x] Enforce：`TwoRay` / refraction / ambiguity helpers（默认关，按需 Enable*）
+- [x] 删除 `ApplyIdeal/Realistic` + `StartAllRealistic`；测试用 `StabilizeForRegression()`
+- [x] Python channel 对齐 + CI 收集 propagation 单测
+
 **下一步（择一，按体感）**
 
 1. **产品**：模组侧武器 prefab 接 `WeaponBridge`（框架外）。  
@@ -173,8 +190,7 @@
 - [x] **P2** 航迹侧双 PRF 消盲速（门限加宽 + 盲速额外 miss 配额；Python `near_blind_speed` 对齐）
 - [x] **P2** 直升机 signature 表显式旋翼列（`.conf` 28 机架 + `rdf_sig_patch_heli_rotors.py` + Mi-8/UH-1 家族表）
 
-Ideal：`RDF_RadarAutoTestSuite.StartAll()`  
-Realistic：`RDF_RadarAutoTestSuite.StartAllRealistic()`
+套件：`RDF_RadarAutoTestSuite.StartAll()`（各测试 `StabilizeForRegression()` / 按需 Enable*）
 
 #### 7 — 经典 MTI + Track coast 完整（2026-08-01）
 
@@ -390,6 +406,23 @@ Context: realistic channel, Network, fusion, MTD/rotor/coast, and dual-job Pytho
 **MTD Sprint (done)**: MTD bank, rotor micro-Doppler, clutter map, coast, `PULSE_DOPPLER`, Python/CI guards.  
 **P2 optional/offline (done)**: coarse RD (default off), multi-radar focus sched, DEM span gate, mass_battle split, HW calib JSON, AutoTest flag batch.
 
+#### 8 — Propagation math fidelity (no waveform, 2026-08-05)
+
+Deepen target-level equations / measurement layer; **no** waveform → RD / full-pulse.
+
+| Tier | Item | Status |
+|------|------|--------|
+| **P1** | LOS two-ray multipath (Fresnel Γ + roughness) | **done** |
+| **P1** | 4/3-Earth refraction (horizon soft + elevation bias) | **done** |
+| **P1** | PRF range/Doppler ambiguity fold (WLR skips Doppler) | **done** |
+| **P1** | Polarization mismatch scalar | **done** |
+| **Guard** | Python `test_rdf_radar_propagation` + full_sim tags | **done** |
+| **API** | Drop ideal/realistic tiers → opt-in Enable* | **done** |
+
+- [x] Enforce two-ray / refraction / ambiguity (default off; Enable*)
+- [x] Remove `ApplyIdeal/Realistic` + `StartAllRealistic`; tests use `StabilizeForRegression()`
+- [x] Python channel parity + CI collects propagation tests
+
 **Next (pick one by feel)**
 
 1. **Product**: mod-side weapon prefabs on `WeaponBridge` (outside framework).  
@@ -415,8 +448,7 @@ Stay target-level: make rotor fields real, bake calib into leakage, observabilit
 - [x] **P2** Track dual-PRF de-blind (wider gates + blind-speed extra misses)
 - [x] **P2** Explicit heli signature rotor columns (conf + patch tool + family table)
 
-Ideal: `RDF_RadarAutoTestSuite.StartAll()`  
-Realistic: `RDF_RadarAutoTestSuite.StartAllRealistic()`
+Suite: `RDF_RadarAutoTestSuite.StartAll()` (tests use `StabilizeForRegression()` / opt-in Enable*)
 
 #### 7 — Classic MTI + Track coast complete (2026-08-01)
 

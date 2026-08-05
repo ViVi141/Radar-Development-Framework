@@ -1,6 +1,6 @@
 // Flag-driven AutoTest suite starter (no Script Debugger paste required).
-// Create $profile:RDF/RunAutoTestSuite.flag (optional line: "realistic")
-// while Workbench Play is running. Polled from SCR_BaseGameMode OnGameStart /
+// Create $profile:RDF/RunAutoTestSuite.flag (any content / empty) while
+// Workbench Play is running. Polled from SCR_BaseGameMode OnGameStart /
 // EOnFrame via RDF_RadarAutoTestBatch.OnFrame.
 class RDF_RadarAutoTestBatch
 {
@@ -10,7 +10,6 @@ class RDF_RadarAutoTestBatch
     protected static bool s_PollRegistered;
     protected static bool s_ConsumedThisPlay;
     protected static bool s_WaitingForSuite;
-    protected static bool s_RequestedRealistic;
     protected static float s_SuiteStartWallS;
 
     //------------------------------------------------------------------------------------------------
@@ -20,16 +19,13 @@ class RDF_RadarAutoTestBatch
     }
 
     //------------------------------------------------------------------------------------------------
-    static void WriteFlag(bool realistic)
+    static void WriteFlag()
     {
         if (!FileIO.FileExists("$profile:RDF"))
             FileIO.MakeDirectory("$profile:RDF");
 
         array<string> lines = new array<string>();
-        if (realistic)
-            lines.Insert("realistic");
-        else
-            lines.Insert("ideal");
+        lines.Insert("run");
         SCR_FileIOHelper.WriteFileContent(FLAG_FILE, lines);
     }
 
@@ -70,18 +66,13 @@ class RDF_RadarAutoTestBatch
         if (RDF_RadarAutoTestGate.IsBusy())
             return;
 
-        s_RequestedRealistic = ReadRealisticFromFlag();
         ClearFlag();
         s_ConsumedThisPlay = true;
         s_WaitingForSuite = true;
         s_SuiteStartWallS = System.GetTickCount() * 0.001;
 
-        Print("[RDF AutoTestBatch] flag consumed → starting suite"
-            + " realistic=" + s_RequestedRealistic.ToString());
-        if (s_RequestedRealistic)
-            RDF_RadarAutoTestSuite.StartAllRealistic();
-        else
-            RDF_RadarAutoTestSuite.StartAll();
+        Print("[RDF AutoTestBatch] flag consumed → starting suite");
+        RDF_RadarAutoTestSuite.StartAll();
 
         if (!RDF_RadarAutoTestSuite.IsRunning())
         {
@@ -100,39 +91,14 @@ class RDF_RadarAutoTestBatch
         if (!FileIO.FileExists("$profile:RDF/RadarTests"))
             FileIO.MakeDirectory("$profile:RDF/RadarTests");
 
-        string channel = "ideal";
-        if (s_RequestedRealistic)
-            channel = "realistic";
-
         array<string> lines = new array<string>();
         lines.Insert("ok=0");
-        lines.Insert("channel=" + channel);
         lines.Insert("elapsed_s=0");
         lines.Insert("timed_out=false");
         lines.Insert("fail_count=1");
         lines.Insert("fail_steps=start_failed");
         lines.Insert("note=Suite did not enter running state (gate busy or already running)");
         SCR_FileIOHelper.WriteFileContent(RESULT_FILE, lines);
-    }
-
-    //------------------------------------------------------------------------------------------------
-    protected static bool ReadRealisticFromFlag()
-    {
-        array<string> lines = SCR_FileIOHelper.ReadFileContent(FLAG_FILE, false);
-        if (!lines)
-            return false;
-        for (int i = 0; i < lines.Count(); i++)
-        {
-            string line = lines.Get(i);
-            if (!line)
-                continue;
-            line.ToLower();
-            if (line.Contains("realistic"))
-                return true;
-            if (line.Contains("real"))
-                return true;
-        }
-        return false;
     }
 
     //------------------------------------------------------------------------------------------------
@@ -160,10 +126,6 @@ class RDF_RadarAutoTestBatch
         if (!FileIO.FileExists("$profile:RDF/RadarTests"))
             FileIO.MakeDirectory("$profile:RDF/RadarTests");
 
-        string channel = "ideal";
-        if (s_RequestedRealistic)
-            channel = "realistic";
-
         bool ok = RDF_RadarAutoTestSuite.DidLastSuitePass();
         bool timedOut = RDF_RadarAutoTestSuite.DidLastSuiteTimeOut();
         int failCount = RDF_RadarAutoTestSuite.GetLastFailCount();
@@ -175,12 +137,10 @@ class RDF_RadarAutoTestBatch
 
         array<string> lines = new array<string>();
         lines.Insert("ok=" + okValue);
-        lines.Insert("channel=" + channel);
         lines.Insert("elapsed_s=" + elapsedS.ToString());
         lines.Insert("timed_out=" + timedOut.ToString());
         lines.Insert("fail_count=" + failCount.ToString());
         lines.Insert("fail_steps=" + failSummary);
-        lines.Insert("note=Play-mode batch; not headless Workbench CI");
         SCR_FileIOHelper.WriteFileContent(RESULT_FILE, lines);
     }
 }

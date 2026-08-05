@@ -2,9 +2,11 @@
 // and must never overlap.
 //
 // Usage:
-//   RDF_RadarAutoTestSuite.StartAll();            // ideal channel (logic loop)
-//   RDF_RadarAutoTestSuite.StartAllRealistic();   // realistic channel + wider bands
-//   RDF_RadarAutoTestSuite.Stop();                // clear stuck "already running"
+//   RDF_RadarAutoTestSuite.StartAll();
+//   RDF_RadarAutoTestSuite.Stop();   // clear stuck "already running"
+//
+// Channel policy: each test enables only the fidelity flags it needs
+// (typically StabilizeForRegression()). No ideal/realistic suite tier.
 class RDF_RadarAutoTestSuite
 {
     protected static bool s_TickRegistered;
@@ -12,7 +14,6 @@ class RDF_RadarAutoTestSuite
     protected static int s_Step = -1;
     protected static float s_StepStartWallS;
     protected static float s_StepTimeoutS = 120.0;
-    protected static bool s_RealisticChannel;
     protected static bool s_LastSuitePassed;
     protected static bool s_LastSuiteTimedOut;
     protected static int s_FailCount;
@@ -20,17 +21,7 @@ class RDF_RadarAutoTestSuite
 
     static void StartAll()
     {
-        BeginSuite(false);
-    }
-
-    static void StartAllRealistic()
-    {
-        BeginSuite(true);
-    }
-
-    static bool IsRealisticChannel()
-    {
-        return s_RealisticChannel;
+        BeginSuite();
     }
 
     // Hard reset for stuck static state after aborted Play / Debugger re-entry.
@@ -88,7 +79,7 @@ class RDF_RadarAutoTestSuite
             RDF_RadarStressAutoTest.Stop();
     }
 
-    protected static void BeginSuite(bool realistic)
+    protected static void BeginSuite()
     {
         // Recover zombie suite flags: marked running but nothing is actually busy.
         if (s_Running)
@@ -119,16 +110,12 @@ class RDF_RadarAutoTestSuite
             return;
         }
 
-        s_RealisticChannel = realistic;
         s_Running = true;
         s_LastSuitePassed = true;
         s_LastSuiteTimedOut = false;
         s_FailCount = 0;
         s_FailSummary = "";
-        if (realistic)
-            Print("[RDF Radar AutoTestSuite] begin (sequential, REALISTIC channel)");
-        else
-            Print("[RDF Radar AutoTestSuite] begin (sequential, ideal channel)");
+        Print("[RDF Radar AutoTestSuite] begin (sequential; per-test channel flags)");
 
         if (!s_TickRegistered)
         {

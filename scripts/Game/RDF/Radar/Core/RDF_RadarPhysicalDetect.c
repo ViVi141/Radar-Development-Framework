@@ -102,7 +102,35 @@ class RDF_RadarPhysicalDetect
         }
         else
         {
-            target.m_MultipathFactor = 1.0;
+            target.m_MultipathFactor = ComputeLosTwoRayFactor(
+                origin,
+                target,
+                distance,
+                hardware.GetWavelengthM(),
+                settings,
+                world,
+                demCache);
+        }
+
+        if (settings.m_EnableAtmosphericRefraction)
+        {
+            float radarAgl = ResolveRadarAglM(origin, world, settings, demCache);
+            float targetAgl = target.m_AglM;
+            if (targetAgl < 0.0)
+            {
+                if (target.m_DemSampleValid)
+                    targetAgl = target.m_Position[1] - target.m_DemTerrainY;
+                else
+                    targetAgl = Math.Max(1.0, target.m_Position[1] - origin[1] + radarAgl);
+            }
+            float horizonM = RDF_RadarClutterModel.RadioHorizonRangeM(
+                radarAgl,
+                targetAgl,
+                settings.m_EarthRadiusFactor);
+            float horizonFactor = RDF_RadarClutterModel.HorizonSoftFactor(
+                distance,
+                horizonM);
+            target.m_MultipathFactor = target.m_MultipathFactor * horizonFactor;
         }
 
         string beamName;
@@ -159,6 +187,12 @@ class RDF_RadarPhysicalDetect
                 emitStrength,
                 patternGain);
             target.m_ReceivedPowerW = target.m_ReceivedPowerW * target.m_MultipathFactor;
+            float polEsm = hardware.m_PolarizationFactor;
+            if (polEsm > 0.0)
+            {
+                if (polEsm < 1.0)
+                    target.m_ReceivedPowerW = target.m_ReceivedPowerW * polEsm;
+            }
             if (settings.m_EnableAtmosphericLoss)
             {
                 float atmDbEsm = settings.m_AtmLossDbPerKmOneWay;
@@ -216,6 +250,12 @@ class RDF_RadarPhysicalDetect
             distance,
             patternGain);
         target.m_ReceivedPowerW = target.m_ReceivedPowerW * target.m_MultipathFactor;
+        float polFactor = hardware.m_PolarizationFactor;
+        if (polFactor > 0.0)
+        {
+            if (polFactor < 1.0)
+                target.m_ReceivedPowerW = target.m_ReceivedPowerW * polFactor;
+        }
         if (settings.m_EnableAtmosphericLoss)
         {
             float atmDb = settings.m_AtmLossDbPerKmOneWay;
@@ -501,6 +541,88 @@ class RDF_RadarPhysicalDetect
             clutterMti = 0.000001;
 
         return receivedClutter * processingGain * clutterMti;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Radar height AGL from DEM / live surface under origin.
+    protected static float ResolveRadarAglM(
+        vector origin,
+        BaseWorld world,
+        RDF_RadarSettings settings,
+        RDF_DemRuntimeCache demCache)
+    {
+        float terrainY = SampleTerrainY(origin[0], origin[2], world, settings, demCache);
+        float agl = origin[1] - terrainY;
+        if (agl < 1.0)
+            agl = 1.0;
+        return agl;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Clear-LOS two-ray multipath (direct + specular). Skipped for projectiles.
+    // Uses SurfaceTable dielectric → Fresnel Γ when available; else fixed coeff.
+    protected static float ComputeLosTwoRayFactor(
+        vector origin,
+        RDF_RadarTarget target,
+        float distance,
+        float wavelengthM,
+        RDF_RadarSettings settings,
+        BaseWorld world,
+        RDF_DemRuntimeCache demCache)
+    {
+        if (!settings || !target)
+            return 1.0;
+        if (!settings.m_EnableLosTwoRayMultipath)
+            return 1.0;
+        if (target.m_Type == ERDF_RadarTargetType.RDF_RADAR_TARGET_PROJECTILE)
+            return 1.0;
+
+        float radarAgl = ResolveRadarAglM(origin, world, settings, demCache);
+        float targetAgl = target.m_AglM;
+        if (targetAgl < 0.0)
+        {
+            if (target.m_DemSampleValid)
+                targetAgl = target.m_Position[1] - target.m_DemTerrainY;
+            else
+                targetAgl = Math.Max(1.0, target.m_Position[1] - origin[1] + radarAgl);
+        }
+        if (targetAgl < 1.0)
+            targetAgl = 1.0;
+
+        float gamma = settings.m_LosTwoRayReflectionCoeff;
+        if (settings.m_LosTwoRayUseSurfaceDielectric)
+        {
+            if (target.m_DemSampleValid)
+            {
+                int surf = target.m_DemSurfaceClass;
+                if (surf != ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN)
+                {
+                    float eps = RDF_RadarSurfaceTable.GetDielectric(surf);
+                    float roughness = RDF_RadarSurfaceTable.GetRoughness(surf);
+                    float grazing = Math.Atan2(radarAgl + targetAgl, Math.Max(1.0, distance));
+                    float fresnel = RDF_RadarClutterModel.FresnelReflectionCoeffH(eps, grazing);
+                    float absG = fresnel;
+                    if (absG < 0.0)
+                        absG = -absG;
+                    absG = RDF_RadarClutterModel.RoughnessDampReflectionAbs(
+                        absG, roughness, grazing);
+                    if (fresnel < 0.0)
+                        gamma = -absG;
+                    else
+                        gamma = absG;
+                }
+            }
+        }
+
+        return RDF_RadarClutterModel.TwoRayMultipathFactor(
+            wavelengthM,
+            distance,
+            radarAgl,
+            targetAgl,
+            gamma,
+            settings.m_LosTwoRayMaxTargetAglM,
+            settings.m_LosTwoRayMinFactor,
+            settings.m_LosTwoRayMaxFactor);
     }
 
     // NLOS: max(ground-bounce, single knife-edge). usedKnifeEdge true when

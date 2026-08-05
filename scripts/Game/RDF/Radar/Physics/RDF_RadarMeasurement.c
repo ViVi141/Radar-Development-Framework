@@ -39,7 +39,13 @@ class RDF_RadarMeasurement
 
         float rangeBinM = hardware.GetRangeBinM();
         float rangeSigma = (rangeBinM / denom) * noiseScale;
-        int rangeBin = Math.Floor(trueRange / rangeBinM);
+        float workRange = trueRange;
+        if (settings.m_EnableRangeAmbiguityFold)
+        {
+            float runamb = hardware.GetUnambiguousRangeM();
+            workRange = RDF_RadarClutterModel.FoldRangeAmbiguous(trueRange, runamb);
+        }
+        int rangeBin = Math.Floor(workRange / rangeBinM);
         if (rangeBin < 0)
             rangeBin = 0;
         float quantizedRange = (rangeBin + 0.5) * rangeBinM;
@@ -59,6 +65,12 @@ class RDF_RadarMeasurement
         float elBeamDeg = GetStrongestElevationBeamwidthDeg(hardware, target.m_ElevationDeg);
         float elSigmaDeg = (elBeamDeg / denom) * noiseScale;
         float measuredElDeg = target.m_ElevationDeg + settings.m_MeasElevationBiasDeg;
+        if (settings.m_EnableAtmosphericRefraction)
+        {
+            measuredElDeg = measuredElDeg + RDF_RadarClutterModel.RefractionElevationBiasDeg(
+                trueRange,
+                settings.m_EarthRadiusFactor);
+        }
         if (elSigmaDeg > 0.0)
             measuredElDeg = measuredElDeg + Math.RandomGaussFloat(elSigmaDeg, 0.0);
 
@@ -74,6 +86,20 @@ class RDF_RadarMeasurement
         float measuredDoppler = trueDoppler + settings.m_MeasDopplerBiasHz;
         if (dopplerSigma > 0.0)
             measuredDoppler = measuredDoppler + Math.RandomGaussFloat(dopplerSigma, 0.0);
+        // WLR / weapon-locate needs true radial; skip PRF fold there.
+        bool foldDoppler = settings.m_EnableDopplerAmbiguityFold;
+        if (foldDoppler)
+        {
+            if (settings.m_EnableWeaponLocate)
+                foldDoppler = false;
+        }
+        if (foldDoppler)
+        {
+            float prf = hardware.GetActivePrfHz(target.m_ScanNumber);
+            measuredDoppler = RDF_RadarClutterModel.FoldDopplerAmbiguous(
+                measuredDoppler,
+                prf);
+        }
         float measuredRadial = 0.0;
         if (wavelength > 0.0)
             measuredRadial = measuredDoppler * wavelength * 0.5;

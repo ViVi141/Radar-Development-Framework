@@ -33,9 +33,9 @@ feasible): [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md).
 9. Optional coarse-bin CA-CFAR over azimuth/range power bins; empty cells may
    be filled with thermal noise (`m_EnableCfarThermalFill`) so Pfa is measurable.
 10. **Measurement synthesis** (`RDF_RadarMeasurement`): quantize range to bin
-    center, add SNR-scaled angle/Doppler noise (scale via settings / ideal vs
-    realistic), rebuild plot kinematics; clear `m_Entity` unless
-    `m_KeepEntityTruth`. Optional post-CFAR override:
+    center, add SNR-scaled angle/Doppler noise (scale via
+    `SetMeasurementNoise` / `MeasNoiseScale`), rebuild plot kinematics; clear
+    `m_Entity` unless `m_KeepEntityTruth`. Optional post-CFAR override:
     `RDF_RadarMeasurementModel`.
 11. Feed accepted plots to the measurement-driven alpha-beta tracker
     (nearest-neighbor gates + `PredictAt`). Anonymous / false plots can
@@ -264,8 +264,8 @@ RDF_RadarShellFireAutoTest.Start();
 
 About 42 s: fires O832DU every 6 s ahead of the local player, stares a wide
 projectile sector, then checks detected plots, confirmed tracks, and WLR launch
-error vs truth (ideal pass ≤ **250 m**; realistic channel ≤ **800 m** via
-`WLR_LAUNCH_PASS_REALISTIC_M`). Report:
+error vs truth (default ≤ **250 m**; ≤ **800 m** if the test enables
+measurement noise). Report:
 `$profile:RDF/RadarTests/radar_shellfire_autotest_<tick>.txt`.
 
 ## Automated ballistics / WLR math test
@@ -307,12 +307,12 @@ The test spawns real unaided Mi-8 targets along the boresight (no emitter
 marks, no RCS boost, no pre-seeded scatterer rows). Targets must be found by
 discovery and detected via their own returns (`discovered_unaided` guard).
 
-Run the full suite with ideal vs realistic channels (order:
-Ballistics → DEM → Lock → Airborne → ShellFire):
+Run the full suite (order Ballistics → DEM → Lock → Airborne → ShellFire →
+Perf → Play). Each test owns its channel flags (usually
+`StabilizeForRegression()`):
 
 ```c
 RDF_RadarAutoTestSuite.StartAll();
-RDF_RadarAutoTestSuite.StartAllRealistic();
 ```
 
 Suite order: Ballistics → DEM → Lock → Air → ShellFire → Perf → **Play**.
@@ -430,7 +430,7 @@ Enforce 实现现已遵循与离线原型相同的契约。游戏实体是物理
 8. 计算单站接收功率、多普勒、MTI、处理增益、噪声、DEM 杂波功率、可选大气/雨/天气损耗与 SNR。
 9. 可选方位/距离功率粗栅 CA-CFAR；空单元可用热噪声填充（`m_EnableCfarThermalFill`），以便可测 Pfa。
 10. **测量合成**（`RDF_RadarMeasurement`）：距离量化到门中心，叠加 SNR 缩放的角度/多普勒噪声
-    （经 settings / 理想 vs 逼真档缩放），重建 plot 运动学；除非 `m_KeepEntityTruth`，否则清除 `m_Entity`。
+    （经 settings / `MeasNoiseScale` 等缩放），重建 plot 运动学；除非 `m_KeepEntityTruth`，否则清除 `m_Entity`。
     可选 CFAR 后 override：`RDF_RadarMeasurementModel`。
 11. 将接受的 plots 送入量测驱动的 α-β 跟踪器（最近邻波门 + `PredictAt`）。匿名 / 假 plots 也可关联；并非仅显示。
 12. 可选锁定层（`RDF_RadarLockManager`）作用于航迹：SEARCH → ACQUIRING → TRACKING → COAST；
@@ -639,7 +639,7 @@ Script Debugger（Play 模式）。生成并发射真实 82 mm HE 炮弹：
 RDF_RadarShellFireAutoTest.Start();
 ```
 
-约 42 s：每 6 s 在本地玩家前方发射 O832DU，宽扇区凝视弹道，然后检查检出 plots、确认航迹，以及相对真值的 WLR 发射误差（理想通道通过 ≤ **250 m**；逼真通道 ≤ **800 m**，经 `WLR_LAUNCH_PASS_REALISTIC_M`）。报告：
+约 42 s：每 6 s 在本地玩家前方发射 O832DU，宽扇区凝视弹道，然后检查检出 plots、确认航迹，以及相对真值的 WLR 发射误差（默认 ≤ **250 m**；若测试自行打开测量噪声则 ≤ **800 m**）。报告：
 `$profile:RDF/RadarTests/radar_shellfire_autotest_<tick>.txt`。
 
 ## 自动化弹道 / WLR 数学测试
@@ -677,11 +677,10 @@ RDF_RadarAutoTest.Start();
 
 测试沿瞄准轴生成真实无辅助 Mi-8 目标（无辐射源标记、无 RCS 加成、无预填散射体行）。目标必须由发现找到、并靠自身回波检出（`discovered_unaided` 守卫）。
 
-以理想 vs 逼真通道跑全套件（顺序：Ballistics → DEM → Lock → Airborne → ShellFire）：
+跑全套件（各测试自管通道开关）：
 
 ```c
 RDF_RadarAutoTestSuite.StartAll();
-RDF_RadarAutoTestSuite.StartAllRealistic();
 ```
 
 独立回归（**不**进 `StartAll`；一次跑一个）：
