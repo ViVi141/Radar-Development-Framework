@@ -17,6 +17,11 @@ class RDF_RadarHardware
     float m_AzimuthBeamwidthDeg = 2.5;
     float m_SystemLossDb = 6.0;
     float m_NoiseFigureDb = 5.0;
+    // Polarization mismatch / HH–VV factor (linear, ≤1). Applied to Pr.
+    float m_PolarizationFactor = 1.0;
+    // One-way peak sidelobe floor (dB relative to boresight). Pattern already
+    // uses Gaussian mainlobe; this is reserved for EW / off-axis coupling.
+    float m_SidelobeLevelDb = -25.0;
     float m_PulseWidthS = 0.0000005;
     float m_BandwidthHz = 4000000.0;
     float m_PrfHz = 4000.0;
@@ -162,6 +167,26 @@ class RDF_RadarHardware
         return binFromPulse;
     }
 
+    //------------------------------------------------------------------------------------------------
+    // Unambiguous range R = c / (2·PRF). Uses primary PRF (not stagger cycle).
+    float GetUnambiguousRangeM()
+    {
+        float prf = m_PrfHz;
+        if (prf < 1.0)
+            return 1000000000.0;
+        return RDF_RadarClutterModel.C_LIGHT / (2.0 * prf);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Unambiguous radial speed |v| < λ·PRF/4.
+    float GetUnambiguousVelocityMs()
+    {
+        float prf = m_PrfHz;
+        if (prf < 1.0)
+            return 1000000000.0;
+        return GetWavelengthM() * prf * 0.25;
+    }
+
     void Validate()
     {
         m_FrequencyHz = Math.Max(1000000.0, m_FrequencyHz);
@@ -170,6 +195,8 @@ class RDF_RadarHardware
         m_AzimuthBeamwidthDeg = Math.Clamp(m_AzimuthBeamwidthDeg, 0.1, 360.0);
         m_SystemLossDb = Math.Max(0.0, m_SystemLossDb);
         m_NoiseFigureDb = Math.Max(0.0, m_NoiseFigureDb);
+        m_PolarizationFactor = Math.Clamp(m_PolarizationFactor, 0.05, 1.0);
+        m_SidelobeLevelDb = Math.Clamp(m_SidelobeLevelDb, -80.0, 0.0);
         m_PulseWidthS = Math.Max(0.000000001, m_PulseWidthS);
         m_BandwidthHz = Math.Max(1.0, m_BandwidthHz);
         m_PrfHz = Math.Max(1.0, m_PrfHz);

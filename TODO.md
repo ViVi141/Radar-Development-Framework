@@ -148,6 +148,21 @@
 **MTD Sprint（已完成）**：MTD bank、旋翼微多普勒、clutter map、coast、`PULSE_DOPPLER`、Python/CI 护栏。  
 **P2 可选/离线（已完成）**：粗 RD（默认关）、多雷达 focus 调度、DEM span 门控、mass_battle 拆分、HW 标定 JSON、AutoTest flag 批跑。
 
+#### 8 — 传播数学拟真（无波形，2026-08-05）
+
+原则：加深目标级方程 / 测量层；**不做**波形 → RD / 全脉冲。
+
+| 档 | 项 | 状态 |
+|----|----|------|
+| **P1** | LOS 双射线多径（Fresnel Γ + 粗糙度） | **已完成** |
+| **P1** | 4/3 地球折射（地平线软衰减 + 俯仰偏置） | **已完成** |
+| **P1** | PRF 距离/多普勒模糊折叠（WLR 跳过多普勒） | **已完成** |
+| **P1** | 极化失配标量 | **已完成** |
+| **护栏** | Python `test_rdf_radar_propagation` + full_sim 标签 | **已完成** |
+
+- [x] Enforce：`TwoRay` / refraction / ambiguity helpers + Realistic 默认开 / Ideal 关
+- [x] Python channel 对齐 + CI 收集 propagation 单测
+
 **下一步（择一，按体感）**
 
 1. **产品**：模组侧武器 prefab 接 `WeaponBridge`（框架外）。  
@@ -389,6 +404,21 @@ Context: realistic channel, Network, fusion, MTD/rotor/coast, and dual-job Pytho
 **Datalink/fusion (done)**: Hub + FusionService + light IFF.  
 **MTD Sprint (done)**: MTD bank, rotor micro-Doppler, clutter map, coast, `PULSE_DOPPLER`, Python/CI guards.  
 **P2 optional/offline (done)**: coarse RD (default off), multi-radar focus sched, DEM span gate, mass_battle split, HW calib JSON, AutoTest flag batch.
+
+#### 8 — Propagation math fidelity (no waveform, 2026-08-05)
+
+Deepen target-level equations / measurement layer; **no** waveform → RD / full-pulse.
+
+| Tier | Item | Status |
+|------|------|--------|
+| **P1** | LOS two-ray multipath (Fresnel Γ + roughness) | **done** |
+| **P1** | 4/3-Earth refraction (horizon soft + elevation bias) | **done** |
+| **P1** | PRF range/Doppler ambiguity fold (WLR skips Doppler) | **done** |
+| **P1** | Polarization mismatch scalar | **done** |
+| **Guard** | Python `test_rdf_radar_propagation` + full_sim tags | **done** |
+
+- [x] Enforce two-ray / refraction / ambiguity + Realistic on / Ideal off
+- [x] Python channel parity + CI collects propagation tests
 
 **Next (pick one by feel)**
 

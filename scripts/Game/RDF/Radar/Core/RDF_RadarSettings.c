@@ -87,6 +87,26 @@ class RDF_RadarSettings
     float m_RainLossDbPerKmAtFullIntensity = 0.5;
     // Extra one-way dB/km when GetFogAmount() == 1 (weak; fog is not rain).
     float m_FogLossDbPerKmAtFullFog = 0.05;
+    // Clear-LOS two-ray multipath (power lobes). Not waveform simulation.
+    // Default off; ApplyRealisticChannel enables. Skipped for projectiles.
+    bool m_EnableLosTwoRayMultipath = false;
+    // Fixed Γ when surface dielectric is unavailable (negative = phase inversion).
+    float m_LosTwoRayReflectionCoeff = -0.5;
+    // Skip two-ray when target AGL exceeds this (m).
+    float m_LosTwoRayMaxTargetAglM = 600.0;
+    // Clamp two-ray power factor into [min, max].
+    float m_LosTwoRayMinFactor = 0.08;
+    float m_LosTwoRayMaxFactor = 4.0;
+    // Prefer SurfaceTable dielectric → Fresnel Γ when DEM class is known.
+    bool m_LosTwoRayUseSurfaceDielectric = true;
+    // 4/3-Earth refraction: radio-horizon soft factor + elevation bias.
+    bool m_EnableAtmosphericRefraction = false;
+    // Effective-earth multiplier (4/3 ≈ standard tropospheric refraction).
+    float m_EarthRadiusFactor = 1.333333;
+    // Fold measured range into PRF unambiguous interval.
+    bool m_EnableRangeAmbiguityFold = false;
+    // Fold measured Doppler into ±PRF/2. Skipped when weapon-locate is on.
+    bool m_EnableDopplerAmbiguityFold = false;
     // Plot-to-track association gates (meters / degrees).
     float m_TrackGateRangeM = 400.0;
     float m_TrackGateAzimuthDeg = 4.0;
@@ -241,6 +261,11 @@ class RDF_RadarSettings
         m_RainLossDbPerKmAtFullIntensity = Math.Clamp(
             m_RainLossDbPerKmAtFullIntensity, 0.0, 20.0);
         m_FogLossDbPerKmAtFullFog = Math.Clamp(m_FogLossDbPerKmAtFullFog, 0.0, 5.0);
+        m_LosTwoRayReflectionCoeff = Math.Clamp(m_LosTwoRayReflectionCoeff, -1.0, 1.0);
+        m_LosTwoRayMaxTargetAglM = Math.Clamp(m_LosTwoRayMaxTargetAglM, 10.0, 5000.0);
+        m_LosTwoRayMinFactor = Math.Clamp(m_LosTwoRayMinFactor, 0.01, 1.0);
+        m_LosTwoRayMaxFactor = Math.Clamp(m_LosTwoRayMaxFactor, 1.0, 8.0);
+        m_EarthRadiusFactor = Math.Clamp(m_EarthRadiusFactor, 0.5, 4.0);
         if (!m_Hardware)
             m_Hardware = RDF_RadarHardware.CreateShorad();
         if (!m_EwStack)
@@ -267,14 +292,20 @@ class RDF_RadarSettings
         m_EnableWeatherDrivenRainLoss = false;
         m_AtmLossDbPerKmOneWay = -1.0;
         m_RainLossDbPerKmOneWay = 0.0;
+        m_EnableLosTwoRayMultipath = false;
+        m_EnableAtmosphericRefraction = false;
+        m_EnableRangeAmbiguityFold = false;
+        m_EnableDopplerAmbiguityFold = false;
         m_EnableCoarseRd = false;
         m_EnableDemSpanOcclusion = false;
     }
 
     //------------------------------------------------------------------------------------------------
     // Gameplay / fidelity profile: louder measurement noise, thermal CFAR fill,
-    // clear-air atmosphere + weather-driven rain/fog loss.
+    // clear-air atmosphere + weather-driven rain/fog loss, LOS two-ray,
+    // k-Earth refraction, and PRF ambiguity folds (Doppler fold skipped for WLR).
     // Tests that enable this must use wider error bands.
+    // Does NOT enable waveform / full-pulse RD simulation.
     void ApplyRealisticChannel()
     {
         m_RealisticChannel = true;
@@ -292,6 +323,16 @@ class RDF_RadarSettings
         m_RainLossDbPerKmOneWay = 0.0;
         m_RainLossDbPerKmAtFullIntensity = 0.5;
         m_FogLossDbPerKmAtFullFog = 0.05;
+        m_EnableLosTwoRayMultipath = true;
+        m_LosTwoRayReflectionCoeff = -0.5;
+        m_LosTwoRayMaxTargetAglM = 600.0;
+        m_LosTwoRayMinFactor = 0.08;
+        m_LosTwoRayMaxFactor = 4.0;
+        m_LosTwoRayUseSurfaceDielectric = true;
+        m_EnableAtmosphericRefraction = true;
+        m_EarthRadiusFactor = 1.333333;
+        m_EnableRangeAmbiguityFold = true;
+        m_EnableDopplerAmbiguityFold = true;
     }
 
     //------------------------------------------------------------------------------------------------

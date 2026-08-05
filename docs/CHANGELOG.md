@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 2026-08-05 — 传播数学模型拟真加强（无波形仿真）
+
+目标级工程近似加深；**不做**波形 → RD 立方体 / 全脉冲处理。
+
+- **LOS 双射线多径**：通视路径功率瓣（`TwoRayMultipathFactor`）；逼真档默认开；弹丸跳过；可选 SurfaceTable 介电 → Fresnel Γ + 粗糙度阻尼
+- **大气折射（4/3 地球）**：无线电地平线软衰减 + 测量俯仰偏置；Ideal 强制关
+- **PRF 模糊折叠**：距离折叠进 R_unamb；多普勒折叠进 ±PRF/2（`EnableWeaponLocate` 时跳过多普勒折叠，保护 WLR）
+- **极化失配**：`Hardware.m_PolarizationFactor` 乘到接收功率
+- **离线对齐**：`rdf_radar_channel.py` + `test_rdf_radar_propagation.py`；`full_sim` 覆盖 `propagation.refraction_horizon` / `ambiguity_fold`
+- Settings：`m_EnableLosTwoRayMultipath` / `m_EnableAtmosphericRefraction` / `m_EnableRangeAmbiguityFold` / `m_EnableDopplerAmbiguityFold`；`ApplyRealisticChannel` 开启
+
 ## 2026-08-01 — 清理遗留兼容层（无外部用户）
 
 - **DEM 运行时**：删除 `.dem.data` 二进制包与全量 JSON 包的 Enforce 加载路径（`RDF_DemBinPack.c` / `RDF_DemJsonPack.c`、manifest 的 `m_IsBinaryPack` / `m_IsJsonPack` / `m_Bin*` 字段、`DEM_BIN_*` 常量）；回退链 8 级 → 3 级（profile SURF → packaged SURF → profile V3 CSV）

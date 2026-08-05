@@ -72,13 +72,160 @@ def spectral_overlap_hz(
     return width
 
 
+def fresnel_reflection_coeff_h(eps_r: float, grazing_rad: float) -> float:
+    """Horizontal-pol Fresnel Γ (mirrors RDF_RadarClutterModel)."""
+    eps = float(eps_r)
+    if eps < 1.0:
+        eps = 1.0
+    theta = float(grazing_rad)
+    if theta < 0.001:
+        theta = 0.001
+    if theta > 0.5 * math.pi:
+        theta = 0.5 * math.pi
+    s = math.sin(theta)
+    c = math.cos(theta)
+    inside = eps - c * c
+    if inside < 1.0e-6:
+        inside = 1.0e-6
+    root = math.sqrt(inside)
+    denom = s + root
+    if denom < 1.0e-6:
+        denom = 1.0e-6
+    return (s - root) / denom
+
+
+def roughness_damp_reflection_abs(
+    gamma_abs: float,
+    roughness: float,
+    grazing_rad: float,
+) -> float:
+    """Damp |Γ| by roughness; exp(-x) via 0.5^(x/ln2) like Enforce."""
+    g = abs(float(gamma_abs))
+    r = max(0.0, float(roughness))
+    s = max(0.0, math.sin(float(grazing_rad)))
+    x = 8.0 * r * s
+    if x <= 0.0:
+        return g
+    damp = math.pow(0.5, x / 0.693147)
+    if damp < 0.05:
+        damp = 0.05
+    if damp > 1.0:
+        damp = 1.0
+    return g * damp
+
+
+def two_ray_multipath_factor(
+    wavelength_m: float,
+    range_m: float,
+    radar_height_agl_m: float,
+    target_height_agl_m: float,
+    reflection_coeff: float = -0.5,
+    max_height_m: float = 600.0,
+    min_factor: float = 0.08,
+    max_factor: float = 4.0,
+) -> float:
+    """Clear-LOS two-ray power factor (not a waveform simulation)."""
+    if wavelength_m <= 0.0 or range_m < 1.0:
+        return 1.0
+    if radar_height_agl_m < 1.0 or target_height_agl_m < 1.0:
+        return 1.0
+    if max_height_m > 0.0 and target_height_agl_m > max_height_m:
+        return 1.0
+
+    delta = 2.0 * radar_height_agl_m * target_height_agl_m / range_m
+    phase = 2.0 * math.pi * delta / wavelength_m
+    real = 1.0 + reflection_coeff * math.cos(phase)
+    imag = reflection_coeff * math.sin(phase)
+    factor = real * real + imag * imag
+    lo = min_factor
+    if lo < 0.01:
+        lo = 0.01
+    hi = max_factor
+    if hi < lo:
+        hi = lo
+    if factor < lo:
+        factor = lo
+    if factor > hi:
+        factor = hi
+    return factor
+
+
+def effective_earth_radius_m(earth_radius_factor: float = 4.0 / 3.0) -> float:
+    k = float(earth_radius_factor)
+    if k < 0.5:
+        k = 0.5
+    if k > 4.0:
+        k = 4.0
+    return k * 6371000.0
+
+
+def radio_horizon_range_m(
+    radar_height_agl_m: float,
+    target_height_agl_m: float,
+    earth_radius_factor: float = 4.0 / 3.0,
+) -> float:
+    re = effective_earth_radius_m(earth_radius_factor)
+    hr = max(0.0, float(radar_height_agl_m))
+    ht = max(0.0, float(target_height_agl_m))
+    return math.sqrt(2.0 * re * hr) + math.sqrt(2.0 * re * ht)
+
+
+def horizon_soft_factor(range_m: float, horizon_m: float) -> float:
+    if horizon_m <= 1.0 or range_m <= horizon_m:
+        return 1.0
+    over = (range_m - horizon_m) / horizon_m
+    if over < 0.0:
+        over = 0.0
+    f = 1.0 / (1.0 + 4.0 * over * over)
+    if f < 0.02:
+        f = 0.02
+    return f
+
+
+def refraction_elevation_bias_deg(
+    range_m: float,
+    earth_radius_factor: float = 4.0 / 3.0,
+) -> float:
+    if range_m < 1.0:
+        return 0.0
+    re = effective_earth_radius_m(earth_radius_factor)
+    if re < 1.0:
+        return 0.0
+    return (range_m / (2.0 * re)) * (180.0 / math.pi)
+
+
+def fold_range_ambiguous(range_m: float, unambiguous_range_m: float) -> float:
+    if unambiguous_range_m <= 1.0:
+        return range_m
+    if range_m < 0.0:
+        return 0.0
+    folded = range_m - math.floor(range_m / unambiguous_range_m) * unambiguous_range_m
+    if folded < 0.0:
+        folded = folded + unambiguous_range_m
+    return folded
+
+
+def fold_doppler_ambiguous(doppler_hz: float, prf_hz: float) -> float:
+    if prf_hz <= 0.0:
+        return doppler_hz
+    half = prf_hz * 0.5
+    x = float(doppler_hz)
+    while x >= half:
+        x = x - prf_hz
+    while x < -half:
+        x = x + prf_hz
+    return x
+
+
 @dataclass
 class MultipathModel:
     """Simple two-ray multipath power factor for low-altitude paths."""
 
     enabled: bool = True
-    reflection_coeff: float = -0.6
-    max_height_m: float = 800.0
+    reflection_coeff: float = -0.5
+    max_height_m: float = 600.0
+    min_factor: float = 0.08
+    max_factor: float = 4.0
 
     def power_factor(
         self,
@@ -86,28 +233,53 @@ class MultipathModel:
         range_m: float,
         radar_height_agl_m: float,
         target_height_agl_m: float,
+        reflection_coeff: float | None = None,
     ) -> float:
         if not self.enabled:
             return 1.0
-        if wavelength_m <= 0.0 or range_m < 1.0:
-            return 1.0
-        if radar_height_agl_m < 1.0 or target_height_agl_m < 1.0:
-            return 1.0
-        if target_height_agl_m > self.max_height_m:
-            return 1.0
+        gamma = self.reflection_coeff
+        if reflection_coeff is not None:
+            gamma = float(reflection_coeff)
+        return two_ray_multipath_factor(
+            wavelength_m,
+            range_m,
+            radar_height_agl_m,
+            target_height_agl_m,
+            reflection_coeff=gamma,
+            max_height_m=self.max_height_m,
+            min_factor=self.min_factor,
+            max_factor=self.max_factor,
+        )
 
-        # Path length difference ≈ 2 h_r h_t / R
-        delta = 2.0 * radar_height_agl_m * target_height_agl_m / range_m
-        phase = 2.0 * math.pi * delta / wavelength_m
-        # Coherent sum of direct (1) and reflected (Gamma e^{jφ}).
-        real = 1.0 + self.reflection_coeff * math.cos(phase)
-        imag = self.reflection_coeff * math.sin(phase)
-        factor = real * real + imag * imag
-        if factor < 0.01:
-            factor = 0.01
-        if factor > 4.0:
-            factor = 4.0
-        return factor
+    def power_factor_from_dielectric(
+        self,
+        wavelength_m: float,
+        range_m: float,
+        radar_height_agl_m: float,
+        target_height_agl_m: float,
+        eps_r: float,
+        roughness: float = 0.0,
+    ) -> float:
+        """Fresnel Γ from surface dielectric + roughness damp, then two-ray."""
+        if not self.enabled:
+            return 1.0
+        grazing = math.atan2(
+            radar_height_agl_m + target_height_agl_m,
+            max(1.0, range_m),
+        )
+        fresnel = fresnel_reflection_coeff_h(eps_r, grazing)
+        abs_g = roughness_damp_reflection_abs(abs(fresnel), roughness, grazing)
+        if fresnel < 0.0:
+            gamma = -abs_g
+        else:
+            gamma = abs_g
+        return self.power_factor(
+            wavelength_m,
+            range_m,
+            radar_height_agl_m,
+            target_height_agl_m,
+            reflection_coeff=gamma,
+        )
 
 
 @dataclass

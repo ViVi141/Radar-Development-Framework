@@ -38,6 +38,8 @@
 - **测量合成**：距离门中心 + 波束角抖动 + 多普勒反解径向速度（SNR 越低越抖）
 - **测量噪声/偏差可调**：理想档 vs 逼真档（`MeasNoiseScale` 等）；下游可 override `RDF_RadarMeasurementModel`
 - **大气 / 降雨 / 天气驱动损耗**：简化模型，可关；逼真档可开天气雨雾衰
+- **LOS 双射线多径** + **4/3 地球折射** + **PRF 距离/多普勒模糊折叠**（无波形仿真；WLR 跳过多普勒折叠）
+- **极化失配**标量（`Hardware.m_PolarizationFactor`）
 - **散射体表拟真输入**：姿态方位+俯仰 RCS（AABB 投影）、Swerling 起伏、AGL、DEM 缓存、辐射源射频摘要；烘焙表优先读 `Signatures/*.conf`（工坊），profile CSV 回退
 - DEM / 地表：`GetSurfaceY` + SURF JSON；电磁参数优先 `RadarData/SurfaceTable.conf`
 - **EW 效果栈**：噪声压制 + 欺骗假目标
@@ -71,14 +73,16 @@
 
 #### 传播与回波
 
-- 真多径级联 / **大气折射**（衰减与雨雾损耗已有简化模型，见 §2）；**单刃绕射已接**（非多刃/UTD）
-- 距离门上的杂波谱（不只是 σ⁰ 功率进噪声）
-- 目标起伏（Swerling）已接简化版（0–4）；完整极化 / 闪烁谱仍缺
+- 真多径级联仍缺；**LOS 双射线 + NLOS bounce/单刃**已接（非多刃/UTD）
+- **大气折射（4/3 地球）**已接简化版（地平线软衰减 + 俯仰偏置）；衰减与雨雾损耗见 §2
+- 距离门上的杂波谱（不只是 σ⁰ 功率进噪声；离线 PSD 标定可回灌 leakage）
+- 目标起伏（Swerling）已接简化版（0–4）；完整极化闪烁谱仍缺（有 `m_PolarizationFactor` 失配标量）
 
 #### 信号与检测
 
-- 训练级 RD 图 / 全脉冲 CFAR（当前为粗栅格 CA/GO/SO + 热填空）
-- 完整方向图、副瓣、距离/速度模糊
+- 训练级 RD 图 / 全脉冲 CFAR（当前为粗栅格 CA/GO/SO + 热填空）— **刻意不做波形仿真**
+- 完整方向图仍简化（高斯主瓣）；副瓣以 EW 耦合 / `m_SidelobeLevelDb` 近似
+- **距离/速度模糊折叠**已接（测量层 PRF fold；WLR 跳过多普勒折叠）
 - STAP 等更认真的杂波抑制（现有经典 Two/ThreePulse + 参差消盲 + MTD bank；非自适应阵列）
 
 #### 跟踪与系统
@@ -186,6 +190,8 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 - **Measurement synthesis**: range-gate center + beam-angle jitter + Doppler-derived radial velocity (more jitter at lower SNR)
 - **Tunable measurement noise / bias**: ideal vs realistic profiles (`MeasNoiseScale`, etc.); downstream can override `RDF_RadarMeasurementModel`
 - **Atmosphere / rain / weather-driven loss**: simplified model, can be disabled; realistic profile can enable weather rain/fog attenuation
+- **LOS two-ray multipath** + **4/3-Earth refraction** + **PRF range/Doppler ambiguity fold** (no waveform sim; WLR skips Doppler fold)
+- **Polarization mismatch** scalar on hardware (`m_PolarizationFactor`)
 - **Scatterer-table fidelity inputs**: aspect azimuth + elevation RCS (AABB projection), Swerling fluctuation, AGL, DEM cache, emitter RF summary; baked tables prefer `Signatures/*.conf` (workshop), profile CSV fallback
 - DEM / surface: `GetSurfaceY` + SURF JSON; EM params prefer `RadarData/SurfaceTable.conf`
 - **EW effect stack**: noise jamming + deceptive false targets
@@ -219,14 +225,16 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 
 #### Propagation & returns
 
-- Cascaded multipath / **atmospheric refraction** (attenuation and rain/fog loss already have simplified models; see §2); **single knife-edge shipped** (not multi-edge/UTD)
-- Clutter spectrum on range gates (not only σ⁰ power into noise)
-- Target fluctuation (Swerling) has a simplified hook (0–4); full polarization / scintillation spectra still missing
+- Cascaded multipath still missing; **LOS two-ray + NLOS bounce / single knife-edge shipped** (not multi-edge/UTD)
+- **Atmospheric refraction (4/3 Earth)** simplified (horizon soft factor + elevation bias); attenuation / rain-fog — see §2
+- Clutter spectrum on range gates (not only σ⁰ into noise; offline PSD calib can feed leakage)
+- Target fluctuation (Swerling) simplified (0–4); full polarization scintillation spectra still missing (`m_PolarizationFactor` scalar exists)
 
 #### Signal & detection
 
-- Training-grade RD maps / full-pulse CFAR (currently coarse-grid CA/GO/SO + thermal fill)
-- Full antenna pattern, sidelobes, range/velocity ambiguity
+- Training-grade RD maps / full-pulse CFAR (coarse-grid CA/GO/SO + thermal fill) — **waveform sim intentionally out of scope**
+- Full antenna pattern still simplified (Gaussian mainlobe); sidelobes via EW coupling / `m_SidelobeLevelDb`
+- **Range/velocity ambiguity fold** shipped (measurement-layer PRF fold; WLR skips Doppler fold)
 - More serious clutter rejection such as STAP (classic Two/ThreePulse + stagger de-blind + MTD bank are present; not adaptive array)
 
 #### Tracking & systems

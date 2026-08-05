@@ -23,7 +23,12 @@ from rdf_radar_channel import (
     MultipathModel,
     SwerlingModel,
     aspect_rcs_from_extents,
+    fold_doppler_ambiguous,
+    fold_range_ambiguous,
     hardware_at_frequency,
+    horizon_soft_factor,
+    radio_horizon_range_m,
+    refraction_elevation_bias_deg,
 )
 from rdf_radar_diffraction import knife_edge_factor_from_geometry, knife_edge_linear_factor
 from rdf_radar_ew import (
@@ -283,14 +288,43 @@ def scenario_measurement_noise(cov: FeatureCoverage) -> ScenarioResult:
 def scenario_multipath_diffraction(cov: FeatureCoverage) -> ScenarioResult:
     cov.add("propagation.multipath")
     cov.add("propagation.knife_edge")
+    cov.add("propagation.refraction_horizon")
+    cov.add("propagation.ambiguity_fold")
     hw = get_preset("shorad")
     mp = MultipathModel(enabled=True)
     f = mp.power_factor(hw.wavelength_m, 8000.0, 12.0, 40.0)
+    f_eps = mp.power_factor_from_dielectric(
+        hw.wavelength_m, 3000.0, 15.0, 40.0, eps_r=15.0, roughness=0.15
+    )
     ke = knife_edge_linear_factor(1.2)
     geo = knife_edge_factor_from_geometry(25.0, 10000.0, 0.4, hw.wavelength_m)
+    horizon = radio_horizon_range_m(20.0, 50.0)
+    soft = horizon_soft_factor(2.0 * horizon, horizon)
+    el_bias = refraction_elevation_bias_deg(20000.0)
+    r_fold = fold_range_ambiguous(25000.0, 10000.0)
+    fd_fold = fold_doppler_ambiguous(4500.0, 4000.0)
     if f <= 0.0 or ke <= 0.0 or ke >= 1.0:
         return _fail("multipath_diffraction", "bad factors", {"mp": f, "ke": ke, "geo": geo})
-    return _ok("multipath_diffraction", {"multipath": f, "knife_edge": ke, "geo": geo})
+    if soft >= 1.0 or el_bias <= 0.0 or abs(r_fold - 5000.0) > 1.0e-6:
+        return _fail(
+            "multipath_diffraction",
+            "refraction/ambiguity failed",
+            {"soft": soft, "el_bias": el_bias, "r_fold": r_fold},
+        )
+    return _ok(
+        "multipath_diffraction",
+        {
+            "multipath": f,
+            "multipath_dielectric": f_eps,
+            "knife_edge": ke,
+            "geo": geo,
+            "horizon_m": horizon,
+            "horizon_soft": soft,
+            "el_bias_deg": el_bias,
+            "range_fold": r_fold,
+            "doppler_fold": fd_fold,
+        },
+    )
 
 
 def scenario_cfar_modes(cov: FeatureCoverage) -> ScenarioResult:

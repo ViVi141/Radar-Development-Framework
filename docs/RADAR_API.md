@@ -235,6 +235,18 @@ Also assignable on settings: `cfg.m_MeasurementModel = new MyGameplayNoise();`
   `intensity * m_RainLossDbPerKmAtFullIntensity` (+ fog term) on top of the
   manual `m_RainLossDbPerKmOneWay` floor. Enabled by `ApplyRealisticChannel()`.
 
+### Propagation math (no waveform sim)
+
+Enabled by `ApplyRealisticChannel()`; forced off by `ApplyIdealChannel()`:
+
+| Setting | Effect |
+|---------|--------|
+| `m_EnableLosTwoRayMultipath` | Clear-LOS two-ray power lobes (skipped for projectiles) |
+| `m_EnableAtmosphericRefraction` | 4/3-Earth radio horizon soft factor + elevation bias |
+| `m_EnableRangeAmbiguityFold` | Fold measured range into `c/(2·PRF)` |
+| `m_EnableDopplerAmbiguityFold` | Fold Doppler into ±PRF/2 (**skipped** when `m_EnableWeaponLocate`) |
+| `Hardware.m_PolarizationFactor` | Linear mismatch multiply on received power |
+
 ---
 
 ## Read model (contracts)
@@ -652,6 +664,18 @@ sensor.SetMeasurementModel(new MyGameplayNoise());
 - **雨 / 雾损耗**（可选）：`m_EnableWeatherDrivenRainLoss` 每扫一次采样
   `GetRainIntensity` / `GetFogAmount`，在手动 `m_RainLossDbPerKmOneWay` 下限之上叠加
   `intensity * m_RainLossDbPerKmAtFullIntensity`（另加雾项）。由 `ApplyRealisticChannel()` 开启。
+
+### 传播数学（无波形仿真）
+
+由 `ApplyRealisticChannel()` 开启；`ApplyIdealChannel()` 强制关闭：
+
+| 设置 | 作用 |
+|------|------|
+| `m_EnableLosTwoRayMultipath` | 通视双射线功率瓣（弹丸跳过） |
+| `m_EnableAtmosphericRefraction` | 4/3 地球地平线软衰减 + 俯仰偏置 |
+| `m_EnableRangeAmbiguityFold` | 距离折叠进 `c/(2·PRF)` |
+| `m_EnableDopplerAmbiguityFold` | 多普勒折叠进 ±PRF/2（`m_EnableWeaponLocate` 时跳过） |
+| `Hardware.m_PolarizationFactor` | 接收功率线性极化失配 |
 
 ---
 
