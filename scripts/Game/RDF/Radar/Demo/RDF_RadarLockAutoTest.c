@@ -407,19 +407,10 @@ class RDF_RadarLockAutoTest
         hw.AddElevationBeam("lock_mid", 14.0, 16.0, 0.0);
         hw.Validate();
         cfg.m_Hardware = hw;
-        if (RDF_RadarAutoTestSuite.IsRealisticChannel())
-        {
-            cfg.ApplyRealisticChannel();
-            // Keep entity for lock association; CFAR+thermal stay on.
-            cfg.m_KeepEntityTruth = true;
-        }
-        else
-        {
-            cfg.ApplyIdealChannel();
-            cfg.m_EnableCfarGate = false;
-            cfg.m_KeepEntityTruth = true;
-            cfg.m_EnableMeasurementSynthesis = false;
-        }
+        cfg.StabilizeForRegression();
+        cfg.m_EnableCfarGate = false;
+        cfg.m_KeepEntityTruth = true;
+        cfg.m_EnableMeasurementSynthesis = false;
         cfg.Validate();
         ApplySensorConfig(cfg);
     }

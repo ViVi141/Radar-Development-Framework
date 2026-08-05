@@ -36,10 +36,11 @@
 - DEM σ⁰ **地面杂波**进入噪声分母（ESM 路径跳过）；可选 clutter-map EMA
 - **航迹 coast**：弹道速度更新 + 门限随 miss 增长 + Doppler-null/盲速软 miss
 - **测量合成**：距离门中心 + 波束角抖动 + 多普勒反解径向速度（SNR 越低越抖）
-- **测量噪声/偏差可调**：理想档 vs 逼真档（`MeasNoiseScale` 等）；下游可 override `RDF_RadarMeasurementModel`
-- **大气 / 降雨 / 天气驱动损耗**：简化模型，可关；逼真档可开天气雨雾衰
-- **LOS 双射线多径** + **4/3 地球折射** + **PRF 距离/多普勒模糊折叠**（无波形仿真；WLR 跳过多普勒折叠）
+- **测量噪声/偏差可调**：`SetMeasurementNoise` / `MeasNoiseScale`；下游可 override `RDF_RadarMeasurementModel`
+- **大气 / 降雨 / 天气驱动损耗**：简化模型，按需 `EnableAtmosphericPathLoss`
+- **LOS 双射线多径** + **4/3 地球折射** + **PRF 距离/多普勒模糊折叠**（无波形仿真；按需 Enable*；WLR 跳过多普勒折叠）
 - **极化失配**标量（`Hardware.m_PolarizationFactor`）
+- **无理想/逼真双档**：需要什么开什么；AutoTest 用 `StabilizeForRegression()`
 - **散射体表拟真输入**：姿态方位+俯仰 RCS（AABB 投影）、Swerling 起伏、AGL、DEM 缓存、辐射源射频摘要；烘焙表优先读 `Signatures/*.conf`（工坊），profile CSV 回退
 - DEM / 地表：`GetSurfaceY` + SURF JSON；电磁参数优先 `RadarData/SurfaceTable.conf`
 - **EW 效果栈**：噪声压制 + 欺骗假目标
@@ -54,8 +55,7 @@
 - PPI HUD：默认为匿名量测点；假目标白色；NLOS 青色
 - 量测驱动 α-β 跟踪 + `PredictAt` 外推（最近邻波门；匿名/假目标可进跟踪）
 - **锁定层** `RDF_RadarLockManager`：SEARCH → 截获 → 跟踪 → coast + `GetLockedTarget`
-- AutoTest 双档：`RDF_RadarAutoTestSuite.StartAll()`（ideal）/
-  `StartAllRealistic()`（逼真误差带）；套件 7 项 + 独立 Stress / RWR / ESM-ARM / Rocket / HeliDuel / SamEngage / Fusion
+- AutoTest：`RDF_RadarAutoTestSuite.StartAll()`（各测试自管通道）；套件 7 项 + 独立 Stress / RWR / ESM-ARM / Rocket / HeliDuel / SamEngage / Fusion
 - 单项：DEM / Ballistics / ShellFire / Airborne / Lock / Perf / Play
 - 压测（独立）：`RDF_RadarStressAutoTest`（重负载 soak）
 - DEM/SURF 默认可全图预载入 RAM（`m_DemPreloadAll`，HUD 显示 `SURF RAM`）
@@ -188,10 +188,11 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 - Default MTI remains two-pulse (`RDF_MTI_TWOPULSE`); `RDF_MTI_THREE_PULSE` uses sin⁴; classic paths score rotor spectrum + optional PRF-set max de-blind; `RDF_MTI_MTD_BANK` puts clutter in the near-zero bin and picks the best Doppler channel
 - DEM σ⁰ **ground clutter** enters the noise denominator (skipped on the ESM path); optional runtime clutter-map EMA
 - **Measurement synthesis**: range-gate center + beam-angle jitter + Doppler-derived radial velocity (more jitter at lower SNR)
-- **Tunable measurement noise / bias**: ideal vs realistic profiles (`MeasNoiseScale`, etc.); downstream can override `RDF_RadarMeasurementModel`
-- **Atmosphere / rain / weather-driven loss**: simplified model, can be disabled; realistic profile can enable weather rain/fog attenuation
-- **LOS two-ray multipath** + **4/3-Earth refraction** + **PRF range/Doppler ambiguity fold** (no waveform sim; WLR skips Doppler fold)
+- **Tunable measurement noise / bias**: `SetMeasurementNoise` / `MeasNoiseScale`; downstream can override `RDF_RadarMeasurementModel`
+- **Atmosphere / rain / weather-driven loss**: simplified; opt-in via `EnableAtmosphericPathLoss`
+- **LOS two-ray multipath** + **4/3-Earth refraction** + **PRF range/Doppler ambiguity fold** (no waveform sim; opt-in Enable*; WLR skips Doppler fold)
 - **Polarization mismatch** scalar on hardware (`m_PolarizationFactor`)
+- **No ideal/realistic tiers**: enable what you need; AutoTest uses `StabilizeForRegression()`
 - **Scatterer-table fidelity inputs**: aspect azimuth + elevation RCS (AABB projection), Swerling fluctuation, AGL, DEM cache, emitter RF summary; baked tables prefer `Signatures/*.conf` (workshop), profile CSV fallback
 - DEM / surface: `GetSurfaceY` + SURF JSON; EM params prefer `RadarData/SurfaceTable.conf`
 - **EW effect stack**: noise jamming + deceptive false targets
@@ -206,8 +207,7 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 - PPI HUD: anonymous measurement points by default; false targets white; NLOS cyan
 - Measurement-driven α-β tracking + `PredictAt` extrapolation (nearest-neighbor gate; anonymous / false targets can enter tracking)
 - **Lock layer** `RDF_RadarLockManager`: SEARCH → acquire → track → coast + `GetLockedTarget`
-- AutoTest dual profiles: `RDF_RadarAutoTestSuite.StartAll()` (ideal) /
-  `StartAllRealistic()` (realistic error band); suite of 7 + standalone Stress / RWR / ESM-ARM / Rocket / HeliDuel / SamEngage / Fusion
+- AutoTest: `RDF_RadarAutoTestSuite.StartAll()` (each test owns channel flags); suite of 7 + standalone Stress / RWR / ESM-ARM / Rocket / HeliDuel / SamEngage / Fusion
 - Singles: DEM / Ballistics / ShellFire / Airborne / Lock / Perf / Play
 - Stress (standalone): `RDF_RadarStressAutoTest` (heavy soak)
 - DEM/SURF may preload full map into RAM by default (`m_DemPreloadAll`, HUD shows `SURF RAM`)

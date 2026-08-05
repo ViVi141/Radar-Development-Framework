@@ -361,20 +361,10 @@ class RDF_RadarPlayAutoTest
         hw.Validate();
         cfg.m_Hardware = hw;
 
-        if (RDF_RadarAutoTestSuite.IsRealisticChannel())
-        {
-            cfg.ApplyRealisticChannel();
-            cfg.m_KeepEntityTruth = true;
-            cfg.m_DemClutterScale = 0.25;
-            cfg.m_DetectionSnrDb = 0.0;
-        }
-        else
-        {
-            cfg.ApplyIdealChannel();
-            cfg.m_KeepEntityTruth = true;
-            cfg.m_DemClutterScale = 0.25;
-            cfg.m_DetectionSnrDb = 3.0;
-        }
+        cfg.StabilizeForRegression();
+        cfg.m_KeepEntityTruth = true;
+        cfg.m_DemClutterScale = 0.25;
+        cfg.m_DetectionSnrDb = 3.0;
         cfg.Validate();
         ApplySensorConfig(cfg);
     }

@@ -230,22 +230,36 @@ Also assignable on settings: `cfg.m_MeasurementModel = new MyGameplayNoise();`
 ### Weather coupling
 
 - **Wind** (already): ballistics / WLR via `RDF_RadarBallistics.SampleGlobalWind()`.
-- **Rain / fog loss** (optional): `m_EnableWeatherDrivenRainLoss` samples
-  `GetRainIntensity` / `GetFogAmount` once per scan and adds
-  `intensity * m_RainLossDbPerKmAtFullIntensity` (+ fog term) on top of the
-  manual `m_RainLossDbPerKmOneWay` floor. Enabled by `ApplyRealisticChannel()`.
+- **Rain / fog loss** (optional): `EnableAtmosphericPathLoss(true)` or set
+  `m_EnableWeatherDrivenRainLoss` — samples `GetRainIntensity` / `GetFogAmount`
+  once per scan and adds rain/fog terms on top of `m_RainLossDbPerKmOneWay`.
 
-### Propagation math (no waveform sim)
+### Opt-in channel fidelity (no ideal/realistic tiers)
 
-Enabled by `ApplyRealisticChannel()`; forced off by `ApplyIdealChannel()`:
+Enable only what you need. Defaults leave optional fidelity **off**.
 
-| Setting | Effect |
-|---------|--------|
-| `m_EnableLosTwoRayMultipath` | Clear-LOS two-ray power lobes (skipped for projectiles) |
-| `m_EnableAtmosphericRefraction` | 4/3-Earth radio horizon soft factor + elevation bias |
-| `m_EnableRangeAmbiguityFold` | Fold measured range into `c/(2·PRF)` |
-| `m_EnableDopplerAmbiguityFold` | Fold Doppler into ±PRF/2 (**skipped** when `m_EnableWeaponLocate`) |
-| `Hardware.m_PolarizationFactor` | Linear mismatch multiply on received power |
+| Helper / field | Effect |
+|----------------|--------|
+| `SetMeasurementNoise(scale, …)` | Measurement noise / bias |
+| `EnableCfarThermalFill(true)` | Thermal fill of empty CFAR cells |
+| `EnableAtmosphericPathLoss(weatherDriven)` | Clear-air (+ optional weather) path loss |
+| `EnableLosTwoRayMultipath()` | Clear-LOS two-ray power lobes (skips projectiles) |
+| `EnableAtmosphericRefraction()` | 4/3-Earth horizon soft factor + elevation bias |
+| `EnablePrfAmbiguityFolds(range, doppler)` | PRF ambiguity folds (Doppler skipped for WLR) |
+| `Hardware.m_PolarizationFactor` | Linear mismatch on received power |
+| `StabilizeForRegression()` | AutoTest helper: turn optional fidelity **off** |
+
+```c
+RDF_RadarSettings cfg = RDF_RadarSensor.CreateSearchSettings(64);
+// Pick what the mission needs — no mega-preset:
+cfg.SetMeasurementNoise(2.0, 3.0, 0.15, 0.1);
+cfg.EnableAtmosphericPathLoss(true);
+cfg.EnableLosTwoRayMultipath();
+cfg.EnableAtmosphericRefraction();
+cfg.EnablePrfAmbiguityFolds(true, true);
+cfg.m_Hardware.m_PolarizationFactor = 0.9;
+cfg.Validate();
+```
 
 ---
 
@@ -661,21 +675,23 @@ sensor.SetMeasurementModel(new MyGameplayNoise());
 ### 天气耦合
 
 - **风**（已有）：弹道 / WLR 经 `RDF_RadarBallistics.SampleGlobalWind()`。
-- **雨 / 雾损耗**（可选）：`m_EnableWeatherDrivenRainLoss` 每扫一次采样
-  `GetRainIntensity` / `GetFogAmount`，在手动 `m_RainLossDbPerKmOneWay` 下限之上叠加
-  `intensity * m_RainLossDbPerKmAtFullIntensity`（另加雾项）。由 `ApplyRealisticChannel()` 开启。
+- **雨 / 雾损耗**（可选）：`EnableAtmosphericPathLoss(true)` 或自设
+  `m_EnableWeatherDrivenRainLoss`，每扫采样雨/雾强度并叠加损耗。
 
-### 传播数学（无波形仿真）
+### 按需通道保真（无理想/逼真双档）
 
-由 `ApplyRealisticChannel()` 开启；`ApplyIdealChannel()` 强制关闭：
+需要什么开什么；可选保真项默认关。
 
-| 设置 | 作用 |
-|------|------|
-| `m_EnableLosTwoRayMultipath` | 通视双射线功率瓣（弹丸跳过） |
-| `m_EnableAtmosphericRefraction` | 4/3 地球地平线软衰减 + 俯仰偏置 |
-| `m_EnableRangeAmbiguityFold` | 距离折叠进 `c/(2·PRF)` |
-| `m_EnableDopplerAmbiguityFold` | 多普勒折叠进 ±PRF/2（`m_EnableWeaponLocate` 时跳过） |
-| `Hardware.m_PolarizationFactor` | 接收功率线性极化失配 |
+| 辅助 / 字段 | 作用 |
+|-------------|------|
+| `SetMeasurementNoise(scale, …)` | 测量噪声 / 偏差 |
+| `EnableCfarThermalFill(true)` | CFAR 空单元热填空 |
+| `EnableAtmosphericPathLoss(weatherDriven)` | 晴空（+可选天气）路径损耗 |
+| `EnableLosTwoRayMultipath()` | 通视双射线功率瓣（弹丸跳过） |
+| `EnableAtmosphericRefraction()` | 4/3 地球地平线软衰减 + 俯仰偏置 |
+| `EnablePrfAmbiguityFolds(range, doppler)` | PRF 模糊折叠（WLR 跳过多普勒） |
+| `Hardware.m_PolarizationFactor` | 接收功率极化失配 |
+| `StabilizeForRegression()` | AutoTest：关掉可选保真项 |
 
 ---
 

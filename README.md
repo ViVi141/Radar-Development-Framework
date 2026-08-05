@@ -90,10 +90,8 @@ not through demo-shell indirection like `SetDemoConfig` / `GetLastTargets`. Pres
 `RDF_RadarSensor.CreateSearchSettings` / `CreateStareSettings` / `CreateWlrSettings`.
 
 ```c
-// 推荐：顺序跑完全部（理想档）— 仅下列 5 项
+// 推荐：顺序跑完全部（各测试自管通道开关）
 RDF_RadarAutoTestSuite.StartAll();
-// 逼真档（测量噪声 / 热填空 / 大气等加压，误差带验收）
-RDF_RadarAutoTestSuite.StartAllRealistic();
 
 // 手动摆车看 PPI（物理检测，默认关 MTI）
 RDF_RadarManualDemo.Start();
@@ -135,7 +133,7 @@ Suite scenarios and radar config:
 | DEM AutoTest | 3× Mi-8 hovering on boresight at 400/700/1000 m | `CreateSearchSettings` + 90° wide beam | Clutter changes correctly with DEM on/off, scale, budget |
 | Lock | 1× Mi-8 flying a 120 m-radius racetrack at 800 m on boresight (±8.5° azimuth swing) | `CreateStareSettings` + 20° fire-control narrow beam | SEARCH→ACQUIRING→TRACKING→COAST state machine |
 | Airborne | 1× Mi-8 orbiting ~345 m around the field | `CreateSearchSettings` + 40° beam | Physical detection + vehicle classification (emitter count must be 0) |
-| ShellFire | Live 82 mm mortar shell (RCS 0.01 m²) | `CreateWlrSettings` | Shell discover/detect/track + gun-position back-solve (ideal ≤250 m / realistic ≤800 m) |
+| ShellFire | Live 82 mm mortar shell (RCS 0.01 m²) | `CreateWlrSettings` | Shell discover/detect/track + gun-position back-solve (≤250 m; ≤800 m if MeasNoiseScale > 0.5) |
 
 Standalone regressions:
 
@@ -302,10 +300,8 @@ RDF_RadarAutoRunner.SetHudEnabled(true);   // PPI HUD（品红=辐射源 / 绿=�
 `RDF_RadarSensor.CreateSearchSettings` / `CreateStareSettings` / `CreateWlrSettings` 起步。
 
 ```c
-// 推荐：顺序跑完全部（理想档）— 仅下列 5 项
+// 推荐：顺序跑完全部（各测试自管通道开关）
 RDF_RadarAutoTestSuite.StartAll();
-// 逼真档（测量噪声 / 热填空 / 大气等加压，误差带验收）
-RDF_RadarAutoTestSuite.StartAllRealistic();
 
 // 手动摆车看 PPI（物理检测，默认关 MTI）
 RDF_RadarManualDemo.Start();
@@ -349,7 +345,7 @@ python -m unittest discover -s . -p "test_rdf_*.py" -v
 | DEM AutoTest | 3 架 Mi-8 悬停在视轴 400/700/1000 m | `CreateSearchSettings` + 90° 宽波束 | 杂波随 DEM 开关/scale/budget 正确变化 |
 | Lock | 1 架 Mi-8 沿视轴 800 m 处飞半径 120 m 跑道（方位摆动 ±8.5°） | `CreateStareSettings` + 20° 火控窄波束 | SEARCH→ACQUIRING→TRACKING→COAST 状态机 |
 | Airborne | 1 架 Mi-8 绕场约 345 m 盘旋 | `CreateSearchSettings` + 40° 波束 | 物理检测 + 按载具分类（emitter 计数必须为 0） |
-| ShellFire | 实发 82 mm 迫击炮弹（RCS 0.01 m²） | `CreateWlrSettings` | 弹丸发现/检测/跟踪 + 反推炮位（理想 ≤250 m / 逼真 ≤800 m） |
+| ShellFire | 实发 82 mm 迫击炮弹（RCS 0.01 m²） | `CreateWlrSettings` | 弹丸发现/检测/跟踪 + 反推炮位（≤250 m；开测量噪声时 ≤800 m） |
 | Perf | 轻载 vs 8 辆 UAZ 重载扫描 | light/heavy `CreateSearchSettings` | 弹道微基准 + 平均/P95 扫描墙钟 ms |
 | Play | UAZ×6 + 绕飞 Mi-8 + HUD + DEM 杂波 | `CreateSearchSettings` | 贴近游玩路径的发现/显示/扫描墙钟 |
 

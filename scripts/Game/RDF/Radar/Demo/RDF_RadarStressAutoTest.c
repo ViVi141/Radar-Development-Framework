@@ -346,18 +346,9 @@ class RDF_RadarStressAutoTest
         hw.Validate();
         cfg.m_Hardware = hw;
 
-        if (RDF_RadarAutoTestSuite.IsRealisticChannel())
-        {
-            cfg.ApplyRealisticChannel();
-            cfg.m_KeepEntityTruth = true;
-            cfg.m_DemClutterScale = 1.0;
-        }
-        else
-        {
-            cfg.ApplyIdealChannel();
-            cfg.m_KeepEntityTruth = true;
-            cfg.m_DemClutterScale = 1.0;
-        }
+        cfg.StabilizeForRegression();
+        cfg.m_KeepEntityTruth = true;
+        cfg.m_DemClutterScale = 1.0;
         cfg.Validate();
         ApplySensorConfig(cfg);
     }

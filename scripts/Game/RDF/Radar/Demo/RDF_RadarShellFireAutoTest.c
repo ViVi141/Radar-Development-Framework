@@ -35,7 +35,8 @@ class RDF_RadarShellFireAutoTest
     protected static const float FIRE_INTERVAL_S = 6.0;
     protected static const float TEST_DURATION_S = 42.0;
     protected static const float WLR_LAUNCH_PASS_M = 250.0;
-    protected static const float WLR_LAUNCH_PASS_REALISTIC_M = 800.0;
+    // Used only when the test opts into measurement noise (MeasNoiseScale > 0.5).
+    protected static const float WLR_LAUNCH_PASS_NOISY_M = 800.0;
 
     protected bool m_Running;
     protected float m_StartWallS;
@@ -477,28 +478,27 @@ class RDF_RadarShellFireAutoTest
         hw.AddElevationBeam("mortar_high", 55.0, 28.0, -0.5);
         hw.Validate();
         cfg.m_Hardware = hw;
-        if (RDF_RadarAutoTestSuite.IsRealisticChannel())
-        {
-            cfg.ApplyRealisticChannel();
-            // Keep projectile identity for WLR; CFAR+thermal+meas noise stay on.
-            cfg.m_EnableMeasurementSynthesis = true;
-            cfg.m_KeepEntityTruth = true;
-        }
-        else
-        {
-            cfg.ApplyIdealChannel();
-            cfg.m_EnableMeasurementSynthesis = true;
-            cfg.m_KeepEntityTruth = true;
-            cfg.m_EnableCfarGate = false;
-        }
+        cfg.StabilizeForRegression();
+        cfg.m_EnableMeasurementSynthesis = true;
+        cfg.m_KeepEntityTruth = true;
+        cfg.m_EnableCfarGate = false;
         cfg.Validate();
         ApplySensorConfig(cfg);
     }
 
     protected float GetWlrLaunchPassM()
     {
-        if (RDF_RadarAutoTestSuite.IsRealisticChannel())
-            return WLR_LAUNCH_PASS_REALISTIC_M;
+        // Wider band when the test itself opts into measurement noise.
+        RDF_RadarSensor sensor = GetSensor();
+        if (sensor)
+        {
+            RDF_RadarSettings s = sensor.GetSettings();
+            if (s)
+            {
+                if (s.m_MeasNoiseScale > 0.5)
+                    return WLR_LAUNCH_PASS_NOISY_M;
+            }
+        }
         return WLR_LAUNCH_PASS_M;
     }
 

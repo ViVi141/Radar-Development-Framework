@@ -382,18 +382,9 @@ class RDF_RadarAirborneScanTest
         hw.Validate();
         cfg.m_Hardware = hw;
 
-        if (RDF_RadarAutoTestSuite.IsRealisticChannel())
-        {
-            cfg.ApplyRealisticChannel();
-            // Classification check needs entity truth; CFAR+thermal stay on.
-            cfg.m_KeepEntityTruth = true;
-        }
-        else
-        {
-            cfg.ApplyIdealChannel();
-            cfg.m_KeepEntityTruth = true;
-            cfg.m_EnableCfarGate = false;
-        }
+        cfg.StabilizeForRegression();
+        cfg.m_KeepEntityTruth = true;
+        cfg.m_EnableCfarGate = false;
         cfg.Validate();
         ApplySensorConfig(cfg);
     }

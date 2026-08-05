@@ -598,7 +598,7 @@ class RDF_RadarHeliDuelAutoTest
         hw.AddElevationBeam("air_mid", 14.0, 16.0, 0.0);
         hw.Validate();
         cfg.m_Hardware = hw;
-        cfg.ApplyIdealChannel();
+        cfg.StabilizeForRegression();
         cfg.m_EnableCfarGate = false;
         cfg.m_KeepEntityTruth = true;
         cfg.m_EnableMeasurementSynthesis = false;
