@@ -18,7 +18,7 @@ Modular sensor framework for Arma Reforger: **LiDAR**, **Radar**, and **DEM bake
 |--------|--------|-------|
 | LiDAR | Maintaining | Ray point cloud, Showcase (afterglow/rings/sweep), PPI phosphor HUD, CSV, multiplayer sync |
 | Radar | Shipped | Entity scan, physical detect, DEM clutter, knife-edge NLOS, PPI, ESM/RWR/ARM, EW soft jam + burn-through, Network (typed Rpc + Reliable summary / Unreliable plots), datalink Hub + fusion, automated tests |
-| DEM | Shipped | Bake V3 CSV; publish SURF JSON; runtime GetSurfaceY + SURF (fallback CSV/BIN/LIVE) |
+| DEM | Shipped | Bake V3 CSV; publish SURF (+ optional HEIGHT) JSON; runtime SURF/HEIGHT RAM or GetSurfaceY fallback |
 
 ---
 
@@ -170,7 +170,7 @@ Offline golden tests: `cd tools/dem` → `python -m unittest discover -s . -p "t
 1. Workbench plugin: `RDF Bake DEM Heightfield` (or write `BakeDemFull.flag`)
 2. Keep Play running until `[RDF DEM Bake] Done`
 3. Dev output: `$profile:RDF/DemData/<world>/` (V3 CSV)
-4. Workshop publish: pack SURF JSON (height at runtime via `GetSurfaceY`)
+4. Workshop publish: pack SURF JSON (+ optional HEIGHT JSON for baked Y RAM; else `GetSurfaceY`)
 
 Details: [docs/DEM.md](docs/DEM.md)
 
@@ -227,7 +227,7 @@ Arma Reforger 用的模块化传感器开发框架：**LiDAR**、**雷达**、**
 |------|------|------|
 | LiDAR | 维护中 | 射线点云、Showcase（余晖/环/扇面）、PPI 磷光 HUD、CSV、联机同步 |
 | Radar | 已落地 | 实体扫描、物理检测、DEM 杂波、刀刃 NLOS、PPI、ESM/RWR/ARM、EW 软压制+烧穿、Network（类型化 Rpc + Reliable 摘要 / Unreliable plots）、数据链 Hub+融合、自动化测试 |
-| DEM | 已落地 | 烘焙 V3 CSV；发布用 SURF JSON；运行时 GetSurfaceY + SURF（回退 CSV/BIN/LIVE） |
+| DEM | 已落地 | 烘焙 V3 CSV；发布 SURF（+ 可选 HEIGHT）JSON；运行时 SURF/HEIGHT RAM 或 GetSurfaceY 回退 |
 
 ---
 
@@ -384,7 +384,7 @@ python -m unittest discover -s . -p "test_rdf_*.py" -v
 1. Workbench 插件：`RDF Bake DEM Heightfield`（或写 `BakeDemFull.flag`）
 2. Play 保持运行直到 `[RDF DEM Bake] Done`
 3. 开发输出：`$profile:RDF/DemData/<world>/`（V3 CSV）
-4. 工坊发布：打包 SURF JSON（高度运行时用 `GetSurfaceY`）
+4. 工坊发布：打包 SURF JSON（+ 可选 HEIGHT JSON 进 RAM；否则 `GetSurfaceY`）
 
 详情：[docs/DEM.md](docs/DEM.md)
 

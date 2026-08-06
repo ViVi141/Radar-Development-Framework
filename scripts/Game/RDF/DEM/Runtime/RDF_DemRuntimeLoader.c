@@ -32,6 +32,7 @@ class RDF_DemRuntimeLoader
         string profileRoot = RDF_DemBakeConstants.DEM_DATA_DIR + worldKey + "/";
         if (RDF_DemSurfaceJsonPack.TryLoadManifest(profileRoot, worldKey, outManifest))
         {
+            AttachOptionalHeightPack(outManifest);
             Print("[RDF DEM Runtime] using profile SURF JSON: " + profileRoot, LogLevel.NORMAL);
             return true;
         }
@@ -40,6 +41,7 @@ class RDF_DemRuntimeLoader
         string packagedRoot = RDF_DemBakeConstants.PACKAGED_DEM_DATA_DIR + worldKey + "/";
         if (RDF_DemSurfaceJsonPack.TryLoadManifest(packagedRoot, worldKey, outManifest))
         {
+            AttachOptionalHeightPack(outManifest);
             Print("[RDF DEM Runtime] using packaged SURF JSON: " + packagedRoot, LogLevel.NORMAL);
             return true;
         }
@@ -49,7 +51,10 @@ class RDF_DemRuntimeLoader
         if (FileIO.FileExists(profileManifest))
         {
             if (LoadManifestCsv(profileRoot, worldKey, outManifest))
+            {
+                AttachOptionalHeightPack(outManifest);
                 return true;
+            }
         }
 
         Warn("DEM/SURF missing for " + worldKey
@@ -159,10 +164,33 @@ class RDF_DemRuntimeLoader
 
         manifest.m_IsSurfacePack = false;
         manifest.m_PreferLiveTerrainY = true;
+        manifest.m_HasHeightPack = false;
+        manifest.m_HeightYScale = 0.1;
+        manifest.m_HeightChunksDir = string.Empty;
         manifest.m_RootDir = rootDir;
         manifest.m_TilesDir = rootDir + "tiles/";
         outManifest = manifest;
         return true;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected static void AttachOptionalHeightPack(RDF_DemRuntimeManifest manifest)
+    {
+        if (!manifest)
+            return;
+        if (RDF_DemHeightJsonPack.TryAttachHeightPack(manifest))
+        {
+            Print("[RDF DEM Runtime] HEIGHT pack attached root=" + manifest.m_RootDir
+                + " liveY=" + BoolToFlag(manifest.m_PreferLiveTerrainY), LogLevel.NORMAL);
+        }
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected static string BoolToFlag(bool value)
+    {
+        if (value)
+            return "1";
+        return "0";
     }
 
     //--------------------------------------------------------------------------------------------

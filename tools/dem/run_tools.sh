@@ -27,6 +27,7 @@ RDF tools/dem helper (catalog: ../README.md)
 
 Also common:
   python3 rdf_dem_pack_surface_json.py --world GM_Eden --from-bin
+  python3 rdf_dem_pack_height_json.py --world GM_Eden --terrain ".../worlds/Eden/Terrain"
   python3 rdf_ttile_unpack.py
   python3 rdf_radar_mass_battle_sim.py
   python3 rdf_radar_hw_calibrate.py --preset shorad

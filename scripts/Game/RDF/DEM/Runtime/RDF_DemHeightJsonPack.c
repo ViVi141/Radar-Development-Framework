@@ -1,7 +1,8 @@
-// Workshop-friendly surface-class map. Optional RDF_HEIGHT_JSON_V1 beside the same
-// DemData/<world>/ root supplies baked terrain_y (else runtime uses BaseWorld.GetSurfaceY).
-// Layout: DemData/<world>/surf_manifest.json + surf_chunks/row_<iz>.json (1 byte/cell hex).
-class RDF_DemSurfManifestDoc : JsonApiStruct
+// Workshop-friendly baked height map from official game .ttile (FORM/TERR HGHT).
+// Layout: DemData/<world>/height_manifest.json + height_chunks/row_<iz>.json
+// Cell payload: little-endian int16 quanta (y / y_scale), hex-encoded (4 chars/cell).
+// Aligns with BaseWorld.GetSurfaceY(x,z) semantics; pack is a snapshot of game terrain.
+class RDF_DemHeightManifestDoc : JsonApiStruct
 {
     string magic;
     string world;
@@ -13,9 +14,10 @@ class RDF_DemSurfManifestDoc : JsonApiStruct
     int tile_cells;
     int tile_count_x;
     int tile_count_z;
+    float y_scale;
     string chunks_dir;
 
-    void RDF_DemSurfManifestDoc()
+    void RDF_DemHeightManifestDoc()
     {
         RegV("magic");
         RegV("world");
@@ -27,17 +29,18 @@ class RDF_DemSurfManifestDoc : JsonApiStruct
         RegV("tile_cells");
         RegV("tile_count_x");
         RegV("tile_count_z");
+        RegV("y_scale");
         RegV("chunks_dir");
     }
 }
 
 //------------------------------------------------------------------------------------------------
-class RDF_DemSurfTileEntry : JsonApiStruct
+class RDF_DemHeightTileEntry : JsonApiStruct
 {
     int ix;
     string hex;
 
-    void RDF_DemSurfTileEntry()
+    void RDF_DemHeightTileEntry()
     {
         RegV("ix");
         RegV("hex");
@@ -45,12 +48,12 @@ class RDF_DemSurfTileEntry : JsonApiStruct
 }
 
 //------------------------------------------------------------------------------------------------
-class RDF_DemSurfRowDoc : JsonApiStruct
+class RDF_DemHeightRowDoc : JsonApiStruct
 {
     int iz;
-    ref array<ref RDF_DemSurfTileEntry> tiles;
+    ref array<ref RDF_DemHeightTileEntry> tiles;
 
-    void RDF_DemSurfRowDoc()
+    void RDF_DemHeightRowDoc()
     {
         RegV("iz");
         RegV("tiles");
@@ -58,15 +61,15 @@ class RDF_DemSurfRowDoc : JsonApiStruct
 }
 
 //------------------------------------------------------------------------------------------------
-class RDF_DemSurfaceJsonPack
+class RDF_DemHeightJsonPack
 {
-    static const string MANIFEST_NAME = "surf_manifest.json";
-    static const string CHUNKS_DIR_NAME = "surf_chunks/";
-    static const string MAGIC = "RDF_SURF_JSON_V1";
+    static const string MANIFEST_NAME = "height_manifest.json";
+    static const string CHUNKS_DIR_NAME = "height_chunks/";
+    static const string MAGIC = "RDF_HEIGHT_JSON_V1";
 
     protected static string s_CachedRoot;
     protected static int s_CachedIz;
-    protected static ref RDF_DemSurfRowDoc s_CachedRow;
+    protected static ref RDF_DemHeightRowDoc s_CachedRow;
 
     //--------------------------------------------------------------------------------------------
     static string BuildManifestPath(string rootDir)
@@ -84,193 +87,66 @@ class RDF_DemSurfaceJsonPack
     }
 
     //--------------------------------------------------------------------------------------------
-    static bool TryLoadManifest(string rootDir, string expectWorldKey, out RDF_DemRuntimeManifest outManifest)
+    // Attach height pack metadata onto an already-loaded SURF/CSV manifest (same root).
+    static bool TryAttachHeightPack(notnull RDF_DemRuntimeManifest manifest)
     {
-        outManifest = null;
-        string path = BuildManifestPath(rootDir);
+        if (!manifest)
+            return false;
+        if (manifest.m_RootDir.IsEmpty())
+            return false;
+
+        string path = BuildManifestPath(manifest.m_RootDir);
         if (!FileIO.FileExists(path))
             return false;
 
-        RDF_DemSurfManifestDoc doc = new RDF_DemSurfManifestDoc();
+        RDF_DemHeightManifestDoc doc = new RDF_DemHeightManifestDoc();
         if (!doc.LoadFromFile(path))
             return false;
         if (doc.magic != MAGIC)
             return false;
         if (doc.world.IsEmpty())
             return false;
-        if (!expectWorldKey.IsEmpty() && doc.world != expectWorldKey)
+        if (doc.world != manifest.m_WorldKey)
             return false;
         if (doc.cell_m <= 0.0 || doc.tile_cells < 1)
             return false;
-        if (doc.tile_count_x < 1 || doc.tile_count_z < 1)
+        if (doc.tile_count_x != manifest.m_TileCountX)
+            return false;
+        if (doc.tile_count_z != manifest.m_TileCountZ)
+            return false;
+        if (doc.tile_cells != manifest.m_TileCells)
+            return false;
+        if (Math.AbsFloat(doc.cell_m - manifest.m_CellM) > 0.001)
             return false;
 
-        RDF_DemRuntimeManifest manifest = new RDF_DemRuntimeManifest();
-        manifest.m_WorldKey = doc.world;
-        manifest.m_BoundsMinX = doc.bounds_min_x;
-        manifest.m_BoundsMinZ = doc.bounds_min_z;
-        manifest.m_BoundsMaxX = doc.bounds_max_x;
-        manifest.m_BoundsMaxZ = doc.bounds_max_z;
-        manifest.m_CellM = doc.cell_m;
-        manifest.m_TileCells = doc.tile_cells;
-        manifest.m_TileCountX = doc.tile_count_x;
-        manifest.m_TileCountZ = doc.tile_count_z;
-        manifest.m_MaxSpans = 1;
-        manifest.m_IsSurfacePack = true;
-        manifest.m_PreferLiveTerrainY = true;
-        manifest.m_HasHeightPack = false;
-        manifest.m_HeightYScale = 0.1;
-        manifest.m_HeightChunksDir = string.Empty;
-        manifest.m_RootDir = rootDir;
+        float yScale = doc.y_scale;
+        if (yScale <= 0.0)
+            yScale = 0.1;
+
         string chunks = doc.chunks_dir;
         if (chunks.IsEmpty())
             chunks = CHUNKS_DIR_NAME;
-        manifest.m_TilesDir = rootDir + chunks;
-        outManifest = manifest;
+
+        manifest.m_HasHeightPack = true;
+        manifest.m_HeightYScale = yScale;
+        manifest.m_HeightChunksDir = manifest.m_RootDir + chunks;
+        // Prefer baked Y when pack is present (still fall back to GetSurfaceY on miss).
+        if (RDF_DemBakeConstants.RUNTIME_DEM_PREFER_BAKED_HEIGHT)
+            manifest.m_PreferLiveTerrainY = false;
         return true;
     }
 
     //--------------------------------------------------------------------------------------------
-    static bool LoadTile(
+    static bool BeginWorldHeightGrid(
         notnull RDF_DemRuntimeManifest manifest,
-        int tileIx,
-        int tileIz,
-        out RDF_DemRuntimeTile outTile)
-    {
-        outTile = null;
-        if (!manifest.m_IsSurfacePack)
-            return false;
-
-        RDF_DemSurfRowDoc row = LoadRowCached(manifest, tileIz);
-        if (!row)
-            return false;
-        if (!row.tiles)
-            return false;
-
-        string hex = string.Empty;
-        bool found = false;
-        int n = row.tiles.Count();
-        for (int i = 0; i < n; i++)
-        {
-            RDF_DemSurfTileEntry entry = row.tiles.Get(i);
-            if (!entry)
-                continue;
-            if (entry.ix != tileIx)
-                continue;
-            hex = entry.hex;
-            found = true;
-            break;
-        }
-        if (!found)
-            return false;
-
-        int size = manifest.m_TileCells;
-        int expectedHex = size * size * 2;
-        if (hex.Length() != expectedHex)
-            return false;
-
-        array<int> bytes = new array<int>();
-        if (!HexDecode(hex, bytes))
-            return false;
-
-        RDF_DemRuntimeTile tile = new RDF_DemRuntimeTile();
-        tile.m_TileIx = tileIx;
-        tile.m_TileIz = tileIz;
-        tile.m_CellM = manifest.m_CellM;
-        tile.m_Size = size;
-        tile.m_MaxSpans = 1;
-        tile.m_OriginIx = tileIx * size;
-        tile.m_OriginIz = tileIz * size;
-        tile.m_OriginX = manifest.m_BoundsMinX + tile.m_OriginIx * manifest.m_CellM;
-        tile.m_OriginZ = manifest.m_BoundsMinZ + tile.m_OriginIz * manifest.m_CellM;
-        tile.InitializeStorage(size, 1);
-
-        array<float> spanLo = new array<float>();
-        array<float> spanHi = new array<float>();
-        spanLo.Insert(0.0);
-        spanHi.Insert(0.0);
-
-        for (int localIz = 0; localIz < size; localIz++)
-        {
-            for (int localIx = 0; localIx < size; localIx++)
-            {
-                int cellIdx = localIz * size + localIx;
-                int surfaceClass = bytes.Get(cellIdx);
-                tile.SetCell(
-                    localIx,
-                    localIz,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0,
-                    0,
-                    0,
-                    0.5,
-                    surfaceClass,
-                    1,
-                    spanLo,
-                    spanHi);
-            }
-        }
-
-        outTile = tile;
-        return true;
-    }
-
-    // Decode every surf chunk into a flat world-sized surface-class grid (1 int/cell).
-    // Prefer this over caching thousands of RDF_DemRuntimeTile objects.
-    static bool PreloadWorldSurfaceClasses(
-        notnull RDF_DemRuntimeManifest manifest,
-        out array<int> outWorldSurf,
-        out int outCellsX,
-        out int outCellsZ,
-        out int outTilesLoaded,
-        out int outTilesFailed)
-    {
-        outWorldSurf = null;
-        outCellsX = 0;
-        outCellsZ = 0;
-        outTilesLoaded = 0;
-        outTilesFailed = 0;
-
-        array<int> worldSurf;
-        int cellsX;
-        int cellsZ;
-        if (!BeginWorldSurfaceGrid(manifest, worldSurf, cellsX, cellsZ))
-            return false;
-
-        int loaded = 0;
-        int failed = 0;
-        for (int tileIz = 0; tileIz < manifest.m_TileCountZ; tileIz++)
-        {
-            int rowLoaded;
-            int rowFailed;
-            AppendSurfRow(manifest, worldSurf, cellsX, tileIz, rowLoaded, rowFailed);
-            loaded = loaded + rowLoaded;
-            failed = failed + rowFailed;
-        }
-
-        ClearRowCache();
-
-        outWorldSurf = worldSurf;
-        outCellsX = cellsX;
-        outCellsZ = cellsZ;
-        outTilesLoaded = loaded;
-        outTilesFailed = failed;
-        return loaded > 0;
-    }
-
-    //--------------------------------------------------------------------------------------------
-    static bool BeginWorldSurfaceGrid(
-        notnull RDF_DemRuntimeManifest manifest,
-        out array<int> outWorldSurf,
+        out array<float> outWorldY,
         out int outCellsX,
         out int outCellsZ)
     {
-        outWorldSurf = null;
+        outWorldY = null;
         outCellsX = 0;
         outCellsZ = 0;
-        if (!manifest.m_IsSurfacePack)
+        if (!manifest.m_HasHeightPack)
             return false;
         if (manifest.m_TileCountX <= 0 || manifest.m_TileCountZ <= 0)
             return false;
@@ -283,23 +159,62 @@ class RDF_DemSurfaceJsonPack
         if (cellCount <= 0)
             return false;
 
-        array<int> worldSurf = new array<int>();
-        worldSurf.Resize(cellCount);
-        int unknown = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
+        array<float> worldY = new array<float>();
+        worldY.Resize(cellCount);
         for (int i = 0; i < cellCount; i++)
-            worldSurf.Set(i, unknown);
+            worldY.Set(i, 0.0);
 
-        outWorldSurf = worldSurf;
+        outWorldY = worldY;
         outCellsX = cellsX;
         outCellsZ = cellsZ;
         return true;
     }
 
     //--------------------------------------------------------------------------------------------
-    // Decode one surf_chunks row into the flat grid. Used by sync preload.
-    static void AppendSurfRow(
+    static bool PreloadWorldHeights(
         notnull RDF_DemRuntimeManifest manifest,
-        notnull array<int> worldSurf,
+        out array<float> outWorldY,
+        out int outCellsX,
+        out int outCellsZ,
+        out int outTilesLoaded,
+        out int outTilesFailed)
+    {
+        outWorldY = null;
+        outCellsX = 0;
+        outCellsZ = 0;
+        outTilesLoaded = 0;
+        outTilesFailed = 0;
+
+        array<float> worldY;
+        int cellsX;
+        int cellsZ;
+        if (!BeginWorldHeightGrid(manifest, worldY, cellsX, cellsZ))
+            return false;
+
+        int loaded = 0;
+        int failed = 0;
+        for (int tileIz = 0; tileIz < manifest.m_TileCountZ; tileIz++)
+        {
+            int rowLoaded;
+            int rowFailed;
+            AppendHeightRow(manifest, worldY, cellsX, tileIz, rowLoaded, rowFailed);
+            loaded = loaded + rowLoaded;
+            failed = failed + rowFailed;
+        }
+
+        ClearRowCache();
+        outWorldY = worldY;
+        outCellsX = cellsX;
+        outCellsZ = cellsZ;
+        outTilesLoaded = loaded;
+        outTilesFailed = failed;
+        return loaded > 0;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    static void AppendHeightRow(
+        notnull RDF_DemRuntimeManifest manifest,
+        notnull array<float> worldY,
         int cellsX,
         int tileIz,
         out int outTilesLoaded,
@@ -310,7 +225,7 @@ class RDF_DemSurfaceJsonPack
         if (tileIz < 0 || tileIz >= manifest.m_TileCountZ)
             return;
 
-        RDF_DemSurfRowDoc row = LoadRowCached(manifest, tileIz);
+        RDF_DemHeightRowDoc row = LoadRowCached(manifest, tileIz);
         if (!row || !row.tiles)
         {
             outTilesFailed = manifest.m_TileCountX;
@@ -323,20 +238,18 @@ class RDF_DemSurfaceJsonPack
         {
             int oneLoaded;
             int oneFailed;
-            AppendSurfTileEntry(manifest, worldSurf, cellsX, tileIz, t, oneLoaded, oneFailed);
+            AppendHeightTileEntry(manifest, worldY, cellsX, tileIz, t, oneLoaded, oneFailed);
             loaded = loaded + oneLoaded;
             failed = failed + oneFailed;
         }
-
         outTilesLoaded = loaded;
         outTilesFailed = failed;
     }
 
     //--------------------------------------------------------------------------------------------
-    // Decode a single tile entry inside an already-cached row (async frame slices).
-    static void AppendSurfTileEntry(
+    static void AppendHeightTileEntry(
         notnull RDF_DemRuntimeManifest manifest,
-        notnull array<int> worldSurf,
+        notnull array<float> worldY,
         int cellsX,
         int tileIz,
         int entryIndex,
@@ -345,7 +258,7 @@ class RDF_DemSurfaceJsonPack
     {
         outTilesLoaded = 0;
         outTilesFailed = 0;
-        RDF_DemSurfRowDoc row = LoadRowCached(manifest, tileIz);
+        RDF_DemHeightRowDoc row = LoadRowCached(manifest, tileIz);
         if (!row || !row.tiles)
         {
             outTilesFailed = 1;
@@ -354,7 +267,7 @@ class RDF_DemSurfaceJsonPack
         if (entryIndex < 0 || entryIndex >= row.tiles.Count())
             return;
 
-        RDF_DemSurfTileEntry entry = row.tiles.Get(entryIndex);
+        RDF_DemHeightTileEntry entry = row.tiles.Get(entryIndex);
         if (!entry)
         {
             outTilesFailed = 1;
@@ -362,7 +275,7 @@ class RDF_DemSurfaceJsonPack
         }
 
         int size = manifest.m_TileCells;
-        int expectedHex = size * size * 2;
+        int expectedHex = size * size * 4;
         int tileIx = entry.ix;
         if (tileIx < 0 || tileIx >= manifest.m_TileCountX)
         {
@@ -383,11 +296,15 @@ class RDF_DemSurfaceJsonPack
             outTilesFailed = 1;
             return;
         }
-        if (bytes.Count() < size * size)
+        if (bytes.Count() < size * size * 2)
         {
             outTilesFailed = 1;
             return;
         }
+
+        float yScale = manifest.m_HeightYScale;
+        if (yScale <= 0.0)
+            yScale = 0.1;
 
         int originIx = tileIx * size;
         int originIz = tileIz * size;
@@ -395,17 +312,25 @@ class RDF_DemSurfaceJsonPack
         {
             int globalIz = originIz + localIz;
             int rowBase = globalIz * cellsX + originIx;
-            int localBase = localIz * size;
+            int localBase = localIz * size * 2;
             for (int localIx = 0; localIx < size; localIx++)
-                worldSurf.Set(rowBase + localIx, bytes.Get(localBase + localIx));
+            {
+                int bo = localBase + localIx * 2;
+                int lo = bytes.Get(bo);
+                int hi = bytes.Get(bo + 1);
+                int q = lo | (hi << 8);
+                if (q >= 32768)
+                    q = q - 65536;
+                worldY.Set(rowBase + localIx, q * yScale);
+            }
         }
         outTilesLoaded = 1;
     }
 
     //--------------------------------------------------------------------------------------------
-    static int GetSurfRowEntryCount(notnull RDF_DemRuntimeManifest manifest, int tileIz)
+    static int GetHeightRowEntryCount(notnull RDF_DemRuntimeManifest manifest, int tileIz)
     {
-        RDF_DemSurfRowDoc row = LoadRowCached(manifest, tileIz);
+        RDF_DemHeightRowDoc row = LoadRowCached(manifest, tileIz);
         if (!row || !row.tiles)
             return 0;
         return row.tiles.Count();
@@ -420,26 +345,21 @@ class RDF_DemSurfaceJsonPack
     }
 
     //--------------------------------------------------------------------------------------------
-    protected static RDF_DemSurfRowDoc LoadRowCached(
+    protected static RDF_DemHeightRowDoc LoadRowCached(
         notnull RDF_DemRuntimeManifest manifest,
         int tileIz)
     {
         if (s_CachedRow && s_CachedRoot == manifest.m_RootDir && s_CachedIz == tileIz)
             return s_CachedRow;
 
-        string chunksName = CHUNKS_DIR_NAME;
-        if (manifest.m_TilesDir.Length() > manifest.m_RootDir.Length())
-        {
-            chunksName = manifest.m_TilesDir.Substring(
-                manifest.m_RootDir.Length(),
-                manifest.m_TilesDir.Length() - manifest.m_RootDir.Length());
-        }
-
-        string path = BuildRowPath(manifest.m_RootDir, chunksName, tileIz);
+        string chunksDir = manifest.m_HeightChunksDir;
+        if (chunksDir.IsEmpty())
+            chunksDir = manifest.m_RootDir + CHUNKS_DIR_NAME;
+        string path = chunksDir + "row_" + tileIz.ToString() + ".json";
         if (!FileIO.FileExists(path))
             return null;
 
-        RDF_DemSurfRowDoc doc = new RDF_DemSurfRowDoc();
+        RDF_DemHeightRowDoc doc = new RDF_DemHeightRowDoc();
         if (!doc.LoadFromFile(path))
             return null;
         if (doc.iz != tileIz)

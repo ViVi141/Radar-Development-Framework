@@ -16,8 +16,9 @@ Catalog index: [tools/README.md](../README.md). Scripts remain flat under `tools
 - `rdf_dem_io.py`: terrain, material, and vertical-span environment.
 - `rdf_dem_pack.py` / `rdf_dem_bake_help.py` / `rdf_dem_preview.py`: pack,
   bake helpers, and heightfield preview (also covered in `docs/DEM.md`).
-- `rdf_dem_pack_bin.py` / `rdf_dem_pack_json.py` / `rdf_dem_pack_surface_json.py`:
-  pack V3 bake into `.dem.data`, full DEM JSON, or SURF JSON (workshop path).
+- `rdf_dem_pack_bin.py` / `rdf_dem_pack_json.py` / `rdf_dem_pack_surface_json.py` /
+  `rdf_dem_pack_height_json.py`:
+  pack V3 bake into `.dem.data`, full DEM JSON, SURF JSON, or HEIGHT JSON from official `.ttile`.
 - `rdf_sig_pack_bin.py` / `rdf_sig_pack_json.py` / `rdf_sig_pack_conf.py`:
   pack signature tables for game / profile / `.conf`.
 - `rdf_sig_patch_heli_rotors.py`: fill UH-1 / Mi-8 rotor tip/blades/hub fields
@@ -195,7 +196,7 @@ Outputs under `tools/dem/out/`:
 
 - `rdf_dem_io.py`：地形、材质与垂直跨度环境。
 - `rdf_dem_pack.py` / `rdf_dem_bake_help.py` / `rdf_dem_preview.py`：打包、烘焙辅助与高程预览（亦见 `docs/DEM.md`）。
-- `rdf_dem_pack_bin.py` / `rdf_dem_pack_json.py` / `rdf_dem_pack_surface_json.py`：将 V3 烘焙打成 `.dem.data`、全量 DEM JSON 或 SURF JSON（工坊路径）。
+- `rdf_dem_pack_bin.py` / `rdf_dem_pack_json.py` / `rdf_dem_pack_surface_json.py` / `rdf_dem_pack_height_json.py`：将 V3 打成 `.dem.data`/全量 JSON/SURF，或从官方 `.ttile` 打 HEIGHT JSON（工坊高度 RAM）。
 - `rdf_sig_pack_bin.py` / `rdf_sig_pack_json.py` / `rdf_sig_pack_conf.py`：为游戏 / profile / `.conf` 打包特征表。
 - `rdf_sig_patch_heli_rotors.py`：为 UH-1 / Mi-8 签名 conf 填 tip/blades/hub。
 - `rdf_ttile_unpack.py`：解包官方 `.ttile` 高程，供离线叠加。

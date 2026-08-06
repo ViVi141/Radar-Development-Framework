@@ -11,7 +11,7 @@ import numpy as np
 
 # Default: Arland from official full data dump.
 DEFAULT_TERRAIN = Path(
-    r"C:\Users\74738\Desktop\arma_reforger_full\worlds\Arland\Terrain"
+    r"C:\Users\74738\Documents\arma_reforger_code\worlds\Arland\Terrain"
 )
 
 

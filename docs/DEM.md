@@ -15,28 +15,31 @@ DEM / 地表类数据为雷达杂波与离线电磁仿真提供地形基底。
 
 ### 游戏内杂波（推荐）
 
-**高度**用引擎实时 `BaseWorld.GetSurfaceY`（官方 `.ttile` 背后数据，精度更好）。  
-**地表类**用自建 `RDF_SURF_JSON_V1`（只发 JSON，体积远小于完整 DEM）。
+**地表类**用自建 `RDF_SURF_JSON_V1`（只发 JSON，体积远小于完整 DEM）。  
+**高度**优先可选 `RDF_HEIGHT_JSON_V1`：离线从**官方** `worlds/<Name>/Terrain`（`.ttile` HGHT，与 `GetSurfaceY` 同源）打包进模组并进 RAM；缺包或缺 RAM 时回退 `BaseWorld.GetSurfaceY`。打包**不**依赖 Workbench 插件，也**不**依赖 RDF 已烘焙 CSV/`.dem.data`。
 
 ```
-烘焙 CSV → rdf_dem_pack_surface_json.py
-  → DemData/<world>/surf_manifest.json
-  → DemData/<world>/surf_chunks/row_<iz>.json
+官方 Terrain.terr + .Data/*.ttile
+  → rdf_ttile_unpack.py（可选中间 npz）
+  → rdf_dem_pack_height_json.py  → height_manifest.json + height_chunks/
+烘焙 CSV / .dem.data（仅地表类）
+  → rdf_dem_pack_surface_json.py → surf_manifest.json + surf_chunks/
 运行时 TrySampleAt:
   surface_class ← SURF JSON
-  terrain_y     ← GetSurfaceY（优先）
+  terrain_y     ← HEIGHT RAM（有则优先）否则 GetSurfaceY
 ```
 
 打包：
 
 ```powershell
 python tools\dem\rdf_dem_pack_surface_json.py --world GM_Arland --from-bin
-python tools\dem\rdf_dem_pack_surface_json.py --world GM_Eden --from-bin
-python tools\dem\rdf_dem_pack_surface_json.py --world GM_Cain --from-bin
+python tools\dem\rdf_dem_pack_height_json.py --world GM_Arland --terrain "D:\arma_reforger_full\worlds\Arland\Terrain"
+# 或已解包：
+python tools\dem\rdf_dem_pack_height_json.py --world GM_Eden --from-ttile-npz
 ```
 
-体积大约：Arland ~2.3 MB；Eden/Cain ~20 MB（相对 `.dem.data` ~60 MB）。  
-工坊：Resource Browser 选中 `surf_manifest.json` 与 `surf_chunks/*.json` → **Register** → Publish。
+体积大约：2 m 网格下 SURF 约为 HEIGHT 的一半（Arland ~8 MB / ~16 MB；Eden ~79 MB / ~157 MB）。  
+无地表类烘焙源时可用 `--match-height` 先写出与 HEIGHT 同网格的 UNKNOWN SURF（保证运行时可附着高度）；有 `.dem.data` 后再加 `--from-bin` 重采样填类。
 
 ### SurfaceTable（类 → 电磁参数）
 
@@ -61,13 +64,13 @@ Workbench 中可直接编辑 `.conf`；改完后确保 Resource Browser 仍已 R
 3. `$profile` V3 CSV（开发全量 DEM）
 4. 皆无 → `mode=LIVE`（仅 `GetSurfaceY`，地表类 = UNKNOWN）
 
-采样时：只要世界已加载，**一律优先用 `GetSurfaceY` 覆盖**烘焙高度（含全量 DEM 回退路径）。
+采样时：若 HEIGHT 包已进 RAM，**优先烘焙 Y**；否则用 `GetSurfaceY`（含全量 DEM 回退路径上的 live 覆盖，取决于 `m_PreferLiveTerrainY` / `RUNTIME_DEM_PREFER_BAKED_HEIGHT`）。
 
-日志：`mode=SURF|LIVE|CSV`，`liveY=1`。  
-HUD：`SURF` / `SURF RAM` / `LIVE` / `DEM OK` / `DEM RAM` / `DEM OFF`。  
-默认 `m_DemPreloadAll=true`：权威端把整图 SURF 解码进扁平 RAM（约数十 MB）。  
-开局约 2s 后自动异步预热（约 6ms/帧，不卡死）；纯客户端跳过。  
-扫图时若尚未完成则暂用 LRU。关：`RUNTIME_DEM_PRELOAD_AT_GAME_START` / `RUNTIME_DEM_PRELOAD_ASYNC`。
+日志：`mode=SURF|LIVE|CSV`，`liveY=`，`heightPack=`。  
+HUD：`SURF` / `SURF RAM` / `SURF+H` / `LIVE` / `DEM OK` / `DEM RAM` / `DEM OFF`。  
+默认 `m_DemPreloadAll=true`：权威端把整图 SURF（及可选 HEIGHT）解码进扁平 RAM。  
+开局约 2s 后自动异步预热（约 6ms/帧；SURF 完成后接 HEIGHT）；纯客户端跳过。  
+扫图时若尚未完成则暂用 LRU / live Y。关：`RUNTIME_DEM_PRELOAD_AT_GAME_START` / `RUNTIME_DEM_PRELOAD_ASYNC`。
 
 ### 数据流（开发烘焙）
 
@@ -77,6 +80,7 @@ Workbench Play + BakeDemFull.flag
     → $profile:RDF/DemData/<world>/manifest.csv + tiles/*.csv
          ├─ 游戏内优先 SURF JSON；否则可读 CSV
          ├─ python tools/dem/rdf_dem_pack_surface_json.py --from-bin → surf_*.json（工坊）
+         ├─ python tools/dem/rdf_dem_pack_height_json.py --terrain … → height_*.json（官方 .ttile）
          └─ python tools/dem/rdf_dem_pack.py → TrainData/*.npz（离线仿真）
 ```
 
@@ -87,7 +91,7 @@ Workbench Play + BakeDemFull.flag
 2. Play 中看 `[RDF DEM Bake] progress=...`
 3. 产出 `manifest.csv`、`tiles/tile_*.csv`、`bake_complete.txt`
 
-常量：`RDF_DemBakeConstants`（默认 `CELL_M=4`，`TILE_CELLS=32`）。
+常量：`RDF_DemBakeConstants`（默认 `CELL_M=2`，`TILE_CELLS=32`，与官方 `.ttile` / HEIGHT 包对齐）。
 
 ```powershell
 python tools\dem\rdf_dem_bake_help.py
@@ -96,16 +100,17 @@ python tools\dem\rdf_dem_bake_help.py
 ### V3 CSV 要点
 
 - 每格：`terrain_y`、坡度、水深、密度、`surface_class`、`n_spans`…
-- **游戏内杂波**：实时高度 + 地表类；span 主要给离线仿真
+- **游戏内杂波**：SURF + 可选 HEIGHT RAM（否则 `GetSurfaceY`）；span 主要给离线仿真
 
 ### 发布格式
 
 | 格式 | 路径 | 说明 |
 |------|------|------|
-| `RDF_SURF_JSON_V1` | `surf_manifest.json` + `surf_chunks/` | **推荐发布** |
+| `RDF_SURF_JSON_V1` | `surf_manifest.json` + `surf_chunks/` | **推荐发布**（地表类） |
+| `RDF_HEIGHT_JSON_V1` | `height_manifest.json` + `height_chunks/` | 可选（烘焙高度进 RAM） |
 
-`DemData/` 默认不进 Git；模组内仅保留 SURF JSON（已无 `.dem.data`）。
-`.dem.data` 仅作离线中间格式（`rdf_dem_pack_surface_json.py --from-bin`），游戏运行时不再加载。
+`DemData/` 默认不进 Git；模组内保留 SURF JSON，并可附带 HEIGHT JSON（已无运行时 `.dem.data`）。
+`.dem.data` 仅作离线中间格式（`--from-bin`），游戏运行时不再加载。
 
 ### 离线 npz 仿真
 
@@ -137,28 +142,30 @@ DEM / surface-class data provides the terrain base for radar clutter and offline
 
 ### In-game clutter (recommended)
 
-**Height** uses the engine live `BaseWorld.GetSurfaceY` (data behind official `.ttile`, better precision).  
-**Surface class** uses custom `RDF_SURF_JSON_V1` (JSON only; much smaller than a full DEM).
+**Surface class** uses custom `RDF_SURF_JSON_V1` (JSON only; much smaller than a full DEM).  
+**Height** prefers optional `RDF_HEIGHT_JSON_V1` packed offline from **official** `worlds/<Name>/Terrain` (`.ttile` HGHT — same source as `GetSurfaceY`); missing pack/RAM falls back to `BaseWorld.GetSurfaceY`. No Workbench plugin; **not** re-baked from RDF V3 CSV / `.dem.data`.
 
 ```
-烘焙 CSV → rdf_dem_pack_surface_json.py
-  → DemData/<world>/surf_manifest.json
-  → DemData/<world>/surf_chunks/row_<iz>.json
-运行时 TrySampleAt:
+Official Terrain.terr + .Data/*.ttile
+  → rdf_ttile_unpack.py (optional intermediate npz)
+  → rdf_dem_pack_height_json.py  → height_manifest.json + height_chunks/
+Bake CSV / .dem.data (surface class only)
+  → rdf_dem_pack_surface_json.py → surf_manifest.json + surf_chunks/
+Runtime TrySampleAt:
   surface_class ← SURF JSON
-  terrain_y     ← GetSurfaceY（优先）
+  terrain_y     ← HEIGHT RAM (if present) else GetSurfaceY
 ```
 
 Pack:
 
 ```powershell
 python tools\dem\rdf_dem_pack_surface_json.py --world GM_Arland --from-bin
-python tools\dem\rdf_dem_pack_surface_json.py --world GM_Eden --from-bin
-python tools\dem\rdf_dem_pack_surface_json.py --world GM_Cain --from-bin
+python tools\dem\rdf_dem_pack_height_json.py --world GM_Arland --terrain "D:\arma_reforger_full\worlds\Arland\Terrain"
+python tools\dem\rdf_dem_pack_height_json.py --world GM_Eden --from-ttile-npz
 ```
 
-Approx. size: Arland ~2.3 MB; Eden/Cain ~20 MB (vs `.dem.data` ~60 MB).  
-Workshop: in Resource Browser select `surf_manifest.json` and `surf_chunks/*.json` → **Register** → Publish.
+Approx. size: SURF Arland ~2.3 MB, Eden/Cain ~20 MB; HEIGHT ≈ 2× SURF (int16 vs uint8).  
+Workshop: Register `surf_*` and optional `height_manifest.json` + `height_chunks/*.json` → Publish.
 
 ### SurfaceTable (class → EM parameters)
 
@@ -183,10 +190,12 @@ You can edit `.conf` directly in Workbench; after changes, ensure Resource Brows
 3. `$profile` V3 CSV (full DEM for development)
 4. None of the above → `mode=LIVE` (`GetSurfaceY` only; surface class = UNKNOWN)
 
-When sampling: once the world is loaded, **always prefer `GetSurfaceY` to override** baked height (including full-DEM fallback paths).
+When sampling: if a HEIGHT pack is resident in RAM, **prefer baked Y**; otherwise use `GetSurfaceY` (live override on CSV paths still follows `m_PreferLiveTerrainY` / `RUNTIME_DEM_PREFER_BAKED_HEIGHT`).
 
-Logs: `mode=SURF|LIVE|CSV`, `liveY=1`.  
-HUD: `SURF` / `LIVE` / `DEM OK` / `DEM OFF`.
+Logs: `mode=SURF|LIVE|CSV`, `liveY=`, `heightPack=`.  
+HUD: `SURF` / `SURF RAM` / `SURF+H` / `LIVE` / `DEM OK` / `DEM RAM` / `DEM OFF`.  
+Default `m_DemPreloadAll=true`: authority decodes whole-world SURF (and optional HEIGHT) into flat RAM.  
+~2s after start, async warm (~6ms/frame; HEIGHT follows SURF); pure clients skip.
 
 ### Data flow (dev bake)
 
@@ -196,6 +205,7 @@ Workbench Play + BakeDemFull.flag
     → $profile:RDF/DemData/<world>/manifest.csv + tiles/*.csv
          ├─ 游戏内优先 SURF JSON；否则可读 CSV
          ├─ python tools/dem/rdf_dem_pack_surface_json.py --from-bin → surf_*.json（工坊）
+         ├─ python tools/dem/rdf_dem_pack_height_json.py --terrain … → height_*.json（官方 .ttile）
          └─ python tools/dem/rdf_dem_pack.py → TrainData/*.npz（离线仿真）
 ```
 
@@ -206,7 +216,7 @@ Workbench Play + BakeDemFull.flag
 2. In Play watch `[RDF DEM Bake] progress=...`
 3. Outputs `manifest.csv`, `tiles/tile_*.csv`, `bake_complete.txt`
 
-Constants: `RDF_DemBakeConstants` (defaults `CELL_M=4`, `TILE_CELLS=32`).
+Constants: `RDF_DemBakeConstants` (defaults `CELL_M=2`, `TILE_CELLS=32`, aligned with official `.ttile` / HEIGHT packs).
 
 ```powershell
 python tools\dem\rdf_dem_bake_help.py
@@ -215,16 +225,17 @@ python tools\dem\rdf_dem_bake_help.py
 ### V3 CSV essentials
 
 - Per cell: `terrain_y`, slope, water depth, density, `surface_class`, `n_spans`, …
-- **In-game clutter**: live height + surface class; spans are mainly for offline simulation
+- **In-game clutter**: SURF + optional HEIGHT RAM (else `GetSurfaceY`); spans mainly for offline simulation
 
 ### Publish format
 
 | Format | Path | Notes |
 |--------|------|-------|
-| `RDF_SURF_JSON_V1` | `surf_manifest.json` + `surf_chunks/` | **Recommended for publish** |
+| `RDF_SURF_JSON_V1` | `surf_manifest.json` + `surf_chunks/` | **Recommended** (surface class) |
+| `RDF_HEIGHT_JSON_V1` | `height_manifest.json` + `height_chunks/` | Optional (baked height RAM) |
 
-`DemData/` is not in Git by default; the mod keeps only SURF JSON (no `.dem.data`).
-`.dem.data` remains only as an offline intermediate (`rdf_dem_pack_surface_json.py --from-bin`); the game runtime no longer loads it.
+`DemData/` is not in Git by default; ship SURF JSON and optionally HEIGHT JSON (no runtime `.dem.data`).
+`.dem.data` remains only as an offline intermediate (`--from-bin`); the game runtime no longer loads it.
 
 ### Offline npz simulation
 

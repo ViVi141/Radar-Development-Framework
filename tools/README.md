@@ -65,6 +65,7 @@ Generated files go to `tools/dem/out/` (gitignored except `.gitkeep`). Do not co
 | `rdf_dem_pack_bin.py` | Pack → `.dem.data` (legacy / offline) |
 | `rdf_dem_pack_json.py` | Pack → full DEM JSON |
 | `rdf_dem_pack_surface_json.py` | Pack → SURF JSON (workshop path) |
+| `rdf_dem_pack_height_json.py` | Pack → HEIGHT JSON from official `.ttile` (optional Y RAM) |
 | `rdf_sig_pack_bin.py` | Signature table → binary |
 | `rdf_sig_pack_json.py` | Signature table → JSON |
 | `rdf_sig_pack_conf.py` | Signature table → `.conf` (workshop) |
@@ -169,6 +170,7 @@ cd tools\dem
 | `rdf_dem_pack_bin.py` | → `.dem.data`（遗留 / 离线） |
 | `rdf_dem_pack_json.py` | → 全量 DEM JSON |
 | `rdf_dem_pack_surface_json.py` | → SURF JSON（工坊路径） |
+| `rdf_dem_pack_height_json.py` | → HEIGHT JSON（官方 `.ttile`，可选高度 RAM） |
 | `rdf_sig_pack_bin.py` | 特征表 → 二进制 |
 | `rdf_sig_pack_json.py` | 特征表 → JSON |
 | `rdf_sig_pack_conf.py` | 特征表 → `.conf`（工坊） |

@@ -33,7 +33,8 @@ class RDF_DemBakePlugin : WorkbenchPlugin
         else
             Print("[RDF DEM Bake] Column entity query OFF (safe mode; ground slab only).", LogLevel.WARNING);
         Print("[RDF DEM Bake] Delete tiles/ only for full re-bake; resume skips existing files.", LogLevel.NORMAL);
-        Print("[RDF DEM Bake] After bake: python tools/dem/rdf_dem_pack.py --world <worldKey>", LogLevel.NORMAL);
+        Print("[RDF DEM Bake] After bake: pack SURF/HEIGHT — rdf_dem_pack_surface_json.py / rdf_dem_pack_height_json.py", LogLevel.NORMAL);
+        Print("[RDF DEM Bake] Offline npz: python tools/dem/rdf_dem_pack.py --world <worldKey>", LogLevel.NORMAL);
     }
 }
 #endif

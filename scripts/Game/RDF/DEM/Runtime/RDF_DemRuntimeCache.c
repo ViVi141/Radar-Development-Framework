@@ -1,21 +1,26 @@
 // Runtime DEM / surface-class tile cache with optional whole-world RAM preload.
-// SURF packs use a compact flat surface-class grid; other packs fill the tile map.
-// Prefer live BaseWorld.GetSurfaceY for terrain height when available.
+// SURF packs use a compact flat surface-class grid; optional HEIGHT JSON fills Y.
+// Prefer baked height RAM when RDF_HEIGHT_JSON_V1 is attached; else GetSurfaceY.
 class RDF_DemRuntimeCache
 {
     protected static bool s_LoggedClientPreloadSkip;
-    // Shared SURF RAM so game-start warm preload is reused by every scanner.
+    // Shared SURF/HEIGHT RAM so game-start warm preload is reused by every scanner.
     protected static string s_SharedWorldKey;
     protected static bool s_SharedSurfReady;
     protected static ref array<int> s_SharedSurfClass;
+    protected static bool s_SharedHeightReady;
+    protected static ref array<float> s_SharedWorldY;
     protected static int s_SharedCellsX;
     protected static int s_SharedCellsZ;
     // Async warm-preload job (authority-only, frame-budgeted).
+    // Phase 0 = SURF decode; phase 1 = optional HEIGHT decode.
     protected static bool s_AsyncRunning;
     protected static bool s_AsyncPumpScheduled;
+    protected static int s_AsyncPhase;
     protected static string s_AsyncWorldKey;
     protected static ref RDF_DemRuntimeManifest s_AsyncManifest;
     protected static ref array<int> s_AsyncWorldSurf;
+    protected static ref array<float> s_AsyncWorldY;
     protected static int s_AsyncCellsX;
     protected static int s_AsyncCellsZ;
     protected static int s_AsyncTileIz;
@@ -40,6 +45,8 @@ class RDF_DemRuntimeCache
     protected bool m_FullyResident;
     protected bool m_WorldSurfReady;
     protected ref array<int> m_WorldSurfClass;
+    protected bool m_WorldHeightReady;
+    protected ref array<float> m_WorldHeightY;
     protected int m_WorldCellsX;
     protected int m_WorldCellsZ;
 
@@ -54,6 +61,7 @@ class RDF_DemRuntimeCache
     protected int m_StatEvictions;
     protected int m_StatBudgetBlocks;
     protected int m_StatLiveHeight;
+    protected int m_StatBakedHeight;
 
     void RDF_DemRuntimeCache()
     {
@@ -73,6 +81,8 @@ class RDF_DemRuntimeCache
         m_FullyResident = false;
         m_WorldSurfReady = false;
         m_WorldSurfClass = null;
+        m_WorldHeightReady = false;
+        m_WorldHeightY = null;
         m_WorldCellsX = 0;
         m_WorldCellsZ = 0;
         m_TilesByKey.Clear();
@@ -88,6 +98,8 @@ class RDF_DemRuntimeCache
         s_SharedWorldKey = string.Empty;
         s_SharedSurfReady = false;
         s_SharedSurfClass = null;
+        s_SharedHeightReady = false;
+        s_SharedWorldY = null;
         s_SharedCellsX = 0;
         s_SharedCellsZ = 0;
     }
@@ -171,8 +183,10 @@ class RDF_DemRuntimeCache
         s_AsyncManifest = warm.m_Manifest;
         s_AsyncWorldKey = warm.m_WorldKey;
         s_AsyncWorldSurf = worldSurf;
+        s_AsyncWorldY = null;
         s_AsyncCellsX = cellsX;
         s_AsyncCellsZ = cellsZ;
+        s_AsyncPhase = 0;
         s_AsyncTileIz = 0;
         s_AsyncEntryIdx = 0;
         s_AsyncLoaded = 0;
@@ -180,10 +194,11 @@ class RDF_DemRuntimeCache
         s_AsyncWall0 = System.GetTickCount();
         s_AsyncRunning = true;
         Print(string.Format(
-            "[RDF DEM Runtime] async SURF warm start world=%1 rows=%2 budgetMs=%3",
+            "[RDF DEM Runtime] async SURF warm start world=%1 rows=%2 budgetMs=%3 heightPack=%4",
             s_AsyncWorldKey,
             s_AsyncManifest.m_TileCountZ.ToString(),
-            RDF_DemBakeConstants.RUNTIME_DEM_PRELOAD_FRAME_BUDGET_MS.ToString()));
+            RDF_DemBakeConstants.RUNTIME_DEM_PRELOAD_FRAME_BUDGET_MS.ToString(),
+            BoolToStaticFlag(s_AsyncManifest.m_HasHeightPack)));
         ScheduleAsyncPump();
         return true;
     }
@@ -212,7 +227,11 @@ class RDF_DemRuntimeCache
     // Returns true if more work remains.
     static bool PumpAsyncWarmPreloadSlice()
     {
-        if (!s_AsyncRunning || !s_AsyncManifest || !s_AsyncWorldSurf)
+        if (!s_AsyncRunning || !s_AsyncManifest)
+            return false;
+        if (s_AsyncPhase == 0 && !s_AsyncWorldSurf)
+            return false;
+        if (s_AsyncPhase == 1 && !s_AsyncWorldY)
             return false;
 
         int budgetMs = RDF_DemBakeConstants.RUNTIME_DEM_PRELOAD_FRAME_BUDGET_MS;
@@ -223,8 +242,14 @@ class RDF_DemRuntimeCache
 
         while (s_AsyncTileIz < rowCount)
         {
-            int entryCount = RDF_DemSurfaceJsonPack.GetSurfRowEntryCount(
-                s_AsyncManifest, s_AsyncTileIz);
+            int entryCount;
+            if (s_AsyncPhase == 0)
+                entryCount = RDF_DemSurfaceJsonPack.GetSurfRowEntryCount(
+                    s_AsyncManifest, s_AsyncTileIz);
+            else
+                entryCount = RDF_DemHeightJsonPack.GetHeightRowEntryCount(
+                    s_AsyncManifest, s_AsyncTileIz);
+
             if (entryCount <= 0)
             {
                 s_AsyncFailed = s_AsyncFailed + s_AsyncManifest.m_TileCountX;
@@ -237,14 +262,28 @@ class RDF_DemRuntimeCache
                 {
                     int oneLoaded;
                     int oneFailed;
-                    RDF_DemSurfaceJsonPack.AppendSurfTileEntry(
-                        s_AsyncManifest,
-                        s_AsyncWorldSurf,
-                        s_AsyncCellsX,
-                        s_AsyncTileIz,
-                        s_AsyncEntryIdx,
-                        oneLoaded,
-                        oneFailed);
+                    if (s_AsyncPhase == 0)
+                    {
+                        RDF_DemSurfaceJsonPack.AppendSurfTileEntry(
+                            s_AsyncManifest,
+                            s_AsyncWorldSurf,
+                            s_AsyncCellsX,
+                            s_AsyncTileIz,
+                            s_AsyncEntryIdx,
+                            oneLoaded,
+                            oneFailed);
+                    }
+                    else
+                    {
+                        RDF_DemHeightJsonPack.AppendHeightTileEntry(
+                            s_AsyncManifest,
+                            s_AsyncWorldY,
+                            s_AsyncCellsX,
+                            s_AsyncTileIz,
+                            s_AsyncEntryIdx,
+                            oneLoaded,
+                            oneFailed);
+                    }
                     s_AsyncLoaded = s_AsyncLoaded + oneLoaded;
                     s_AsyncFailed = s_AsyncFailed + oneFailed;
                     s_AsyncEntryIdx = s_AsyncEntryIdx + 1;
@@ -262,27 +301,90 @@ class RDF_DemRuntimeCache
                 return true;
         }
 
-        RDF_DemSurfaceJsonPack.ClearRowCache();
-        PublishSharedSurf(s_AsyncWorldKey, s_AsyncWorldSurf, s_AsyncCellsX, s_AsyncCellsZ);
+        if (s_AsyncPhase == 0)
+        {
+            RDF_DemSurfaceJsonPack.ClearRowCache();
+            PublishSharedSurf(s_AsyncWorldKey, s_AsyncWorldSurf, s_AsyncCellsX, s_AsyncCellsZ);
 
-        float totalMs = System.GetTickCount() - s_AsyncWall0;
-        if (totalMs < 0.0)
-            totalMs = 0.0;
+            float surfMs = System.GetTickCount() - s_AsyncWall0;
+            if (surfMs < 0.0)
+                surfMs = 0.0;
+            Print(string.Format(
+                "[RDF DEM Runtime] async SURF warm done world=%1 cells=%2x%3 tilesOk=%4 fail=%5 ms=%6",
+                s_AsyncWorldKey,
+                s_AsyncCellsX.ToString(),
+                s_AsyncCellsZ.ToString(),
+                s_AsyncLoaded.ToString(),
+                s_AsyncFailed.ToString(),
+                (Math.Round(surfMs * 10.0) * 0.1).ToString()), LogLevel.NORMAL);
+
+            if (BeginAsyncHeightPhase())
+                return true;
+
+            FinishAsyncWarmJob();
+            return false;
+        }
+
+        RDF_DemHeightJsonPack.ClearRowCache();
+        PublishSharedHeight(s_AsyncWorldKey, s_AsyncWorldY, s_AsyncCellsX, s_AsyncCellsZ);
+
+        float heightMs = System.GetTickCount() - s_AsyncWall0;
+        if (heightMs < 0.0)
+            heightMs = 0.0;
         Print(string.Format(
-            "[RDF DEM Runtime] async SURF warm done world=%1 cells=%2x%3 tilesOk=%4 fail=%5 ms=%6",
+            "[RDF DEM Runtime] async HEIGHT warm done world=%1 cells=%2x%3 tilesOk=%4 fail=%5 ms=%6",
             s_AsyncWorldKey,
             s_AsyncCellsX.ToString(),
             s_AsyncCellsZ.ToString(),
             s_AsyncLoaded.ToString(),
             s_AsyncFailed.ToString(),
-            (Math.Round(totalMs * 10.0) * 0.1).ToString()), LogLevel.NORMAL);
+            (Math.Round(heightMs * 10.0) * 0.1).ToString()), LogLevel.NORMAL);
 
+        FinishAsyncWarmJob();
+        return false;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected static bool BeginAsyncHeightPhase()
+    {
+        if (!s_AsyncManifest || !s_AsyncManifest.m_HasHeightPack)
+            return false;
+
+        array<float> worldY;
+        int cellsX;
+        int cellsZ;
+        if (!RDF_DemHeightJsonPack.BeginWorldHeightGrid(
+            s_AsyncManifest, worldY, cellsX, cellsZ))
+        {
+            Print("[RDF DEM Runtime] async HEIGHT allocate failed", LogLevel.WARNING);
+            return false;
+        }
+
+        s_AsyncWorldY = worldY;
+        s_AsyncCellsX = cellsX;
+        s_AsyncCellsZ = cellsZ;
+        s_AsyncPhase = 1;
+        s_AsyncTileIz = 0;
+        s_AsyncEntryIdx = 0;
+        s_AsyncLoaded = 0;
+        s_AsyncFailed = 0;
+        Print(string.Format(
+            "[RDF DEM Runtime] async HEIGHT warm start world=%1 rows=%2",
+            s_AsyncWorldKey,
+            s_AsyncManifest.m_TileCountZ.ToString()), LogLevel.NORMAL);
+        return true;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected static void FinishAsyncWarmJob()
+    {
         s_AsyncRunning = false;
         s_AsyncManifest = null;
         s_AsyncWorldSurf = null;
+        s_AsyncWorldY = null;
         s_AsyncWorldKey = string.Empty;
+        s_AsyncPhase = 0;
         s_AsyncEntryIdx = 0;
-        return false;
     }
 
     //--------------------------------------------------------------------------------------------
@@ -292,75 +394,120 @@ class RDF_DemRuntimeCache
         s_AsyncPumpScheduled = false;
         s_AsyncManifest = null;
         s_AsyncWorldSurf = null;
+        s_AsyncWorldY = null;
         s_AsyncWorldKey = string.Empty;
+        s_AsyncPhase = 0;
         s_AsyncTileIz = 0;
         s_AsyncEntryIdx = 0;
         s_AsyncLoaded = 0;
         s_AsyncFailed = 0;
         RDF_DemSurfaceJsonPack.ClearRowCache();
+        RDF_DemHeightJsonPack.ClearRowCache();
     }
 
     //--------------------------------------------------------------------------------------------
-    // Finish remaining async work synchronously (tests that need resident SURF now).
+    // Finish remaining async work synchronously (tests that need resident SURF/HEIGHT now).
     static bool FlushAsyncWarmPreload()
     {
-        if (s_SharedSurfReady)
-            return true;
-        if (!s_AsyncRunning || !s_AsyncManifest || !s_AsyncWorldSurf)
-            return false;
+        if (!s_AsyncRunning)
+            return s_SharedSurfReady;
+        DrainAsyncPhaseFully();
+        return s_SharedSurfReady;
+    }
 
-        int rowCount = s_AsyncManifest.m_TileCountZ;
-        while (s_AsyncTileIz < rowCount)
+    //--------------------------------------------------------------------------------------------
+    protected static void DrainAsyncPhaseFully()
+    {
+        if (!s_AsyncRunning || !s_AsyncManifest)
+            return;
+
+        int safety = 0;
+        while (s_AsyncRunning && safety < 1000000)
         {
-            int entryCount = RDF_DemSurfaceJsonPack.GetSurfRowEntryCount(
-                s_AsyncManifest, s_AsyncTileIz);
-            if (entryCount <= 0)
+            safety = safety + 1;
+            int rowCount = s_AsyncManifest.m_TileCountZ;
+
+            while (s_AsyncTileIz < rowCount)
             {
-                s_AsyncFailed = s_AsyncFailed + s_AsyncManifest.m_TileCountX;
+                int entryCount;
+                if (s_AsyncPhase == 0)
+                    entryCount = RDF_DemSurfaceJsonPack.GetSurfRowEntryCount(
+                        s_AsyncManifest, s_AsyncTileIz);
+                else
+                    entryCount = RDF_DemHeightJsonPack.GetHeightRowEntryCount(
+                        s_AsyncManifest, s_AsyncTileIz);
+
+                if (entryCount <= 0)
+                {
+                    s_AsyncFailed = s_AsyncFailed + s_AsyncManifest.m_TileCountX;
+                    s_AsyncTileIz = s_AsyncTileIz + 1;
+                    s_AsyncEntryIdx = 0;
+                    continue;
+                }
+
+                while (s_AsyncEntryIdx < entryCount)
+                {
+                    int oneLoaded;
+                    int oneFailed;
+                    if (s_AsyncPhase == 0)
+                    {
+                        RDF_DemSurfaceJsonPack.AppendSurfTileEntry(
+                            s_AsyncManifest,
+                            s_AsyncWorldSurf,
+                            s_AsyncCellsX,
+                            s_AsyncTileIz,
+                            s_AsyncEntryIdx,
+                            oneLoaded,
+                            oneFailed);
+                    }
+                    else
+                    {
+                        RDF_DemHeightJsonPack.AppendHeightTileEntry(
+                            s_AsyncManifest,
+                            s_AsyncWorldY,
+                            s_AsyncCellsX,
+                            s_AsyncTileIz,
+                            s_AsyncEntryIdx,
+                            oneLoaded,
+                            oneFailed);
+                    }
+                    s_AsyncLoaded = s_AsyncLoaded + oneLoaded;
+                    s_AsyncFailed = s_AsyncFailed + oneFailed;
+                    s_AsyncEntryIdx = s_AsyncEntryIdx + 1;
+                }
                 s_AsyncTileIz = s_AsyncTileIz + 1;
                 s_AsyncEntryIdx = 0;
+            }
+
+            if (s_AsyncPhase == 0)
+            {
+                RDF_DemSurfaceJsonPack.ClearRowCache();
+                PublishSharedSurf(
+                    s_AsyncWorldKey, s_AsyncWorldSurf, s_AsyncCellsX, s_AsyncCellsZ);
+                Print(string.Format(
+                    "[RDF DEM Runtime] async SURF warm flushed world=%1 tilesOk=%2 fail=%3",
+                    s_AsyncWorldKey,
+                    s_AsyncLoaded.ToString(),
+                    s_AsyncFailed.ToString()), LogLevel.NORMAL);
+                if (!BeginAsyncHeightPhase())
+                {
+                    FinishAsyncWarmJob();
+                    return;
+                }
                 continue;
             }
 
-            while (s_AsyncEntryIdx < entryCount)
-            {
-                int oneLoaded;
-                int oneFailed;
-                RDF_DemSurfaceJsonPack.AppendSurfTileEntry(
-                    s_AsyncManifest,
-                    s_AsyncWorldSurf,
-                    s_AsyncCellsX,
-                    s_AsyncTileIz,
-                    s_AsyncEntryIdx,
-                    oneLoaded,
-                    oneFailed);
-                s_AsyncLoaded = s_AsyncLoaded + oneLoaded;
-                s_AsyncFailed = s_AsyncFailed + oneFailed;
-                s_AsyncEntryIdx = s_AsyncEntryIdx + 1;
-            }
-            s_AsyncTileIz = s_AsyncTileIz + 1;
-            s_AsyncEntryIdx = 0;
+            RDF_DemHeightJsonPack.ClearRowCache();
+            PublishSharedHeight(
+                s_AsyncWorldKey, s_AsyncWorldY, s_AsyncCellsX, s_AsyncCellsZ);
+            Print(string.Format(
+                "[RDF DEM Runtime] async HEIGHT warm flushed world=%1 tilesOk=%2 fail=%3",
+                s_AsyncWorldKey,
+                s_AsyncLoaded.ToString(),
+                s_AsyncFailed.ToString()), LogLevel.NORMAL);
+            FinishAsyncWarmJob();
+            return;
         }
-
-        RDF_DemSurfaceJsonPack.ClearRowCache();
-        PublishSharedSurf(s_AsyncWorldKey, s_AsyncWorldSurf, s_AsyncCellsX, s_AsyncCellsZ);
-
-        float totalMs = System.GetTickCount() - s_AsyncWall0;
-        if (totalMs < 0.0)
-            totalMs = 0.0;
-        Print(string.Format(
-            "[RDF DEM Runtime] async SURF warm flushed world=%1 tilesOk=%2 fail=%3 ms=%4",
-            s_AsyncWorldKey,
-            s_AsyncLoaded.ToString(),
-            s_AsyncFailed.ToString(),
-            (Math.Round(totalMs * 10.0) * 0.1).ToString()), LogLevel.NORMAL);
-
-        s_AsyncRunning = false;
-        s_AsyncManifest = null;
-        s_AsyncWorldSurf = null;
-        s_AsyncWorldKey = string.Empty;
-        s_AsyncEntryIdx = 0;
-        return s_SharedSurfReady;
     }
 
     //--------------------------------------------------------------------------------------------
@@ -436,6 +583,8 @@ class RDF_DemRuntimeCache
             m_FullyResident = false;
             m_WorldSurfReady = false;
             m_WorldSurfClass = null;
+            m_WorldHeightReady = false;
+            m_WorldHeightY = null;
             m_WorldCellsX = 0;
             m_WorldCellsZ = 0;
         }
@@ -451,7 +600,7 @@ class RDF_DemRuntimeCache
             if (manifest.m_IsSurfacePack)
                 mode = "SURF";
             Print(string.Format(
-                "[RDF DEM Runtime] ready world=%1 cell=%2 tile=%3 count=%4x%5 cache=%6 mode=%7 liveY=%8",
+                "[RDF DEM Runtime] ready world=%1 cell=%2 tile=%3 count=%4x%5 cache=%6 mode=%7 liveY=%8 heightPack=%9",
                 worldKey,
                 manifest.m_CellM.ToString(),
                 manifest.m_TileCells.ToString(),
@@ -459,7 +608,8 @@ class RDF_DemRuntimeCache
                 manifest.m_TileCountZ.ToString(),
                 m_MaxTiles.ToString(),
                 mode,
-                BoolToLiveFlag(manifest.m_PreferLiveTerrainY)), LogLevel.NORMAL);
+                BoolToLiveFlag(manifest.m_PreferLiveTerrainY),
+                BoolToLiveFlag(manifest.m_HasHeightPack)), LogLevel.NORMAL);
             AdoptSharedSurfIfMatching();
             return true;
         }
@@ -559,6 +709,8 @@ class RDF_DemRuntimeCache
             return "DEM OFF";
         if (m_LiveHeightOnly)
             return "LIVE";
+        if (m_WorldSurfReady && m_WorldHeightReady)
+            return "SURF+H";
         if (m_WorldSurfReady)
             return "SURF RAM";
         if (m_FullyResident)
@@ -572,7 +724,7 @@ class RDF_DemRuntimeCache
     string GetStatsLine()
     {
         return string.Format(
-            "hit=%1 miss=%2 load=%3 fail=%4 evict=%5 budget=%6 liveY=%7 ram=%8",
+            "hit=%1 miss=%2 load=%3 fail=%4 evict=%5 budget=%6 liveY=%7 bakeY=%8 ram=%9",
             m_StatHits.ToString(),
             m_StatMisses.ToString(),
             m_StatLoads.ToString(),
@@ -580,6 +732,7 @@ class RDF_DemRuntimeCache
             m_StatEvictions.ToString(),
             m_StatBudgetBlocks.ToString(),
             m_StatLiveHeight.ToString(),
+            m_StatBakedHeight.ToString(),
             BoolToLiveFlag(IsFullyResident()));
     }
 
@@ -724,12 +877,57 @@ class RDF_DemRuntimeCache
         m_TileTouchOrder.Clear();
 
         PublishSharedSurf(m_WorldKey, worldSurf, cellsX, cellsZ);
+        PreloadHeightWorldIfPresent();
 
         float ms = System.GetTickCount() - wall0;
         if (ms < 0.0)
             ms = 0.0;
         Print(string.Format(
-            "[RDF DEM Runtime] SURF RAM preload world=%1 cells=%2x%3 tilesOk=%4 fail=%5 ms=%6",
+            "[RDF DEM Runtime] SURF RAM preload world=%1 cells=%2x%3 tilesOk=%4 fail=%5 ms=%6 heightRam=%7",
+            m_WorldKey,
+            cellsX.ToString(),
+            cellsZ.ToString(),
+            loaded.ToString(),
+            failed.ToString(),
+            (Math.Round(ms * 10.0) * 0.1).ToString(),
+            BoolToLiveFlag(m_WorldHeightReady)), LogLevel.NORMAL);
+        return true;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected bool PreloadHeightWorldIfPresent()
+    {
+        if (!m_Manifest || !m_Manifest.m_HasHeightPack)
+            return false;
+        if (m_WorldHeightReady)
+            return true;
+        if (AdoptSharedHeightIfMatching())
+            return true;
+
+        int wall0 = System.GetTickCount();
+        array<float> worldY;
+        int cellsX;
+        int cellsZ;
+        int loaded;
+        int failed;
+        if (!RDF_DemHeightJsonPack.PreloadWorldHeights(
+            m_Manifest, worldY, cellsX, cellsZ, loaded, failed))
+        {
+            Print("[RDF DEM Runtime] HEIGHT RAM preload failed", LogLevel.WARNING);
+            return false;
+        }
+
+        m_WorldHeightY = worldY;
+        m_WorldCellsX = cellsX;
+        m_WorldCellsZ = cellsZ;
+        m_WorldHeightReady = true;
+        PublishSharedHeight(m_WorldKey, worldY, cellsX, cellsZ);
+
+        float ms = System.GetTickCount() - wall0;
+        if (ms < 0.0)
+            ms = 0.0;
+        Print(string.Format(
+            "[RDF DEM Runtime] HEIGHT RAM preload world=%1 cells=%2x%3 tilesOk=%4 fail=%5 ms=%6",
             m_WorldKey,
             cellsX.ToString(),
             cellsZ.ToString(),
@@ -756,6 +954,24 @@ class RDF_DemRuntimeCache
         m_FullyResident = true;
         m_TilesByKey.Clear();
         m_TileTouchOrder.Clear();
+        AdoptSharedHeightIfMatching();
+        return true;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected bool AdoptSharedHeightIfMatching()
+    {
+        if (!s_SharedHeightReady || !s_SharedWorldY)
+            return false;
+        if (m_WorldKey.IsEmpty() || s_SharedWorldKey != m_WorldKey)
+            return false;
+        if (!m_Manifest || !m_Manifest.m_HasHeightPack)
+            return false;
+
+        m_WorldHeightY = s_SharedWorldY;
+        m_WorldCellsX = s_SharedCellsX;
+        m_WorldCellsZ = s_SharedCellsZ;
+        m_WorldHeightReady = true;
         return true;
     }
 
@@ -771,6 +987,20 @@ class RDF_DemRuntimeCache
         s_SharedCellsX = cellsX;
         s_SharedCellsZ = cellsZ;
         s_SharedSurfReady = true;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected static void PublishSharedHeight(
+        string worldKey,
+        notnull array<float> worldY,
+        int cellsX,
+        int cellsZ)
+    {
+        s_SharedWorldKey = worldKey;
+        s_SharedWorldY = worldY;
+        s_SharedCellsX = cellsX;
+        s_SharedCellsZ = cellsZ;
+        s_SharedHeightReady = true;
     }
 
     //--------------------------------------------------------------------------------------------
@@ -802,16 +1032,18 @@ class RDF_DemRuntimeCache
         }
 
         m_FullyResident = loaded > 0;
+        PreloadHeightWorldIfPresent();
         float ms = System.GetTickCount() - wall0;
         if (ms < 0.0)
             ms = 0.0;
         Print(string.Format(
-            "[RDF DEM Runtime] DEM RAM preload world=%1 tilesOk=%2 fail=%3 resident=%4 ms=%5",
+            "[RDF DEM Runtime] DEM RAM preload world=%1 tilesOk=%2 fail=%3 resident=%4 ms=%5 heightRam=%6",
             m_WorldKey,
             loaded.ToString(),
             failed.ToString(),
             m_TilesByKey.Count().ToString(),
-            (Math.Round(ms * 10.0) * 0.1).ToString()), LogLevel.NORMAL);
+            (Math.Round(ms * 10.0) * 0.1).ToString(),
+            BoolToLiveFlag(m_WorldHeightReady)), LogLevel.NORMAL);
         return m_FullyResident;
     }
 
@@ -847,9 +1079,24 @@ class RDF_DemRuntimeCache
         sample.m_SurfaceClass = m_WorldSurfClass.Get(idx);
         sample.m_DensityGcm3 = 0.5;
         sample.m_NSpans = 1;
-        sample.m_SpanLo.Insert(0.0);
-        sample.m_SpanHi.Insert(0.0);
-        ApplyLiveTerrainY(worldX, worldZ, sample);
+
+        float y = 0.0;
+        bool haveY = false;
+        if (TryGetBakedHeightAt(globalIx, globalIz, y))
+        {
+            haveY = true;
+            m_StatBakedHeight = m_StatBakedHeight + 1;
+        }
+        else if (TryGetLiveTerrainY(worldX, worldZ, y))
+        {
+            haveY = true;
+            m_StatLiveHeight = m_StatLiveHeight + 1;
+        }
+
+        if (haveY)
+            sample.m_TerrainY = y;
+        sample.m_SpanLo.Insert(sample.m_TerrainY);
+        sample.m_SpanHi.Insert(sample.m_TerrainY);
         outSample = sample;
         m_StatHits = m_StatHits + 1;
         return true;
@@ -911,7 +1158,32 @@ class RDF_DemRuntimeCache
     {
         if (!sample)
             return;
-        if (m_Manifest && !m_Manifest.m_PreferLiveTerrainY && !m_Manifest.m_IsSurfacePack)
+
+        // Prefer packed HEIGHT RAM when resident (grid-aligned with SURF/CSV).
+        if (m_Manifest && m_WorldHeightReady)
+        {
+            float relX = worldX - m_Manifest.m_BoundsMinX;
+            float relZ = worldZ - m_Manifest.m_BoundsMinZ;
+            int globalIx = Math.Floor(relX / m_Manifest.m_CellM);
+            int globalIz = Math.Floor(relZ / m_Manifest.m_CellM);
+            float bakedY;
+            if (TryGetBakedHeightAt(globalIx, globalIz, bakedY))
+            {
+                sample.m_TerrainY = bakedY;
+                if (sample.m_NSpans >= 1 && sample.m_SpanLo && sample.m_SpanHi)
+                {
+                    if (sample.m_SpanLo.Count() > 0)
+                        sample.m_SpanLo.Set(0, bakedY);
+                    if (sample.m_SpanHi.Count() > 0)
+                        sample.m_SpanHi.Set(0, bakedY);
+                }
+                m_StatBakedHeight = m_StatBakedHeight + 1;
+                return;
+            }
+        }
+
+        // Skip GetSurfaceY when preferring baked tile/CSV height (no height pack miss).
+        if (m_Manifest && !m_Manifest.m_PreferLiveTerrainY)
             return;
 
         float liveY;
@@ -930,6 +1202,26 @@ class RDF_DemRuntimeCache
     }
 
     //--------------------------------------------------------------------------------------------
+    protected bool TryGetBakedHeightAt(int globalIx, int globalIz, out float outY)
+    {
+        outY = 0.0;
+        if (!m_WorldHeightReady || !m_WorldHeightY)
+            return false;
+        if (globalIx < 0 || globalIz < 0
+            || globalIx >= m_WorldCellsX
+            || globalIz >= m_WorldCellsZ)
+        {
+            return false;
+        }
+
+        int idx = globalIz * m_WorldCellsX + globalIx;
+        if (idx < 0 || idx >= m_WorldHeightY.Count())
+            return false;
+        outY = m_WorldHeightY.Get(idx);
+        return true;
+    }
+
+    //--------------------------------------------------------------------------------------------
     protected bool TryGetLiveTerrainY(float worldX, float worldZ, out float outY)
     {
         outY = 0.0;
@@ -942,6 +1234,14 @@ class RDF_DemRuntimeCache
 
     //--------------------------------------------------------------------------------------------
     protected string BoolToLiveFlag(bool value)
+    {
+        if (value)
+            return "1";
+        return "0";
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected static string BoolToStaticFlag(bool value)
     {
         if (value)
             return "1";
@@ -1010,5 +1310,6 @@ class RDF_DemRuntimeCache
         m_StatEvictions = 0;
         m_StatBudgetBlocks = 0;
         m_StatLiveHeight = 0;
+        m_StatBakedHeight = 0;
     }
 }

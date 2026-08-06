@@ -12,6 +12,14 @@ class RDF_DemBakeConstants
     static const string DEM_SURF_CHUNKS_DIR = "surf_chunks/";
     static const string DEM_SURF_MAGIC = "RDF_SURF_JSON_V1";
 
+    // Optional height JSON (RDF_HEIGHT_JSON_V1): offline pack from official .ttile.
+    // Same DemData/<world>/ root as SURF; no Workbench plugin; not from RDF bake CSV.
+    static const string DEM_HEIGHT_MANIFEST_NAME = "height_manifest.json";
+    static const string DEM_HEIGHT_CHUNKS_DIR = "height_chunks/";
+    static const string DEM_HEIGHT_MAGIC = "RDF_HEIGHT_JSON_V1";
+    // When a height pack is attached, prefer packed Y over BaseWorld.GetSurfaceY.
+    static const bool RUNTIME_DEM_PREFER_BAKED_HEIGHT = true;
+
     // When true, runtime loads the whole world surface/DEM into RAM
     // (SURF uses a compact flat class map; other packs fill the tile cache).
     static const bool RUNTIME_DEM_PRELOAD_ALL = true;
@@ -25,8 +33,9 @@ class RDF_DemBakeConstants
     static const int RUNTIME_DEM_PRELOAD_START_DELAY_MS = 2000;
 
     // Grid: change these then delete tiles/ and re-bake for finer DEM.
-    // 4 m / 32 = ANNA standard; Fine: CELL_M=2, TILE_CELLS=64; Target: CELL_M=1, TILE_CELLS=128.
-    static const float CELL_M = 4.0;
+    // Default 2 m matches official .ttile / packaged HEIGHT+SURF workshop packs.
+    // Coarser: CELL_M=4; finer: CELL_M=1, TILE_CELLS=128.
+    static const float CELL_M = 2.0;
     static const int TILE_CELLS = 32;
 
     // Throughput: bake every frame, multiple tiles per frame.

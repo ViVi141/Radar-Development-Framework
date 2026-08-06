@@ -19,6 +19,13 @@ class RDF_DemRuntimeManifest
     // Height is sampled live via BaseWorld.GetSurfaceY when PreferLiveTerrainY is set.
     bool m_IsSurfacePack;
     bool m_PreferLiveTerrainY;
+
+    // Optional RDF_HEIGHT_JSON_V1 beside the same DemData/<world>/ root.
+    // When present and RUNTIME_DEM_PREFER_BAKED_HEIGHT, PreferLiveTerrainY is cleared
+    // and runtime prefers packed height RAM over GetSurfaceY (live remains fallback).
+    bool m_HasHeightPack;
+    float m_HeightYScale;
+    string m_HeightChunksDir;
 }
 
 class RDF_DemRuntimeCellSample

@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 2026-08-06 — DEM 烘焙默认 2 m 网格
+
+- `RDF_DemBakeConstants.CELL_M`：`4` → `2`（与官方 `.ttile` / 已打包 HEIGHT+SURF 对齐；`TILE_CELLS` 仍为 32）
+- 旧 4 m `tiles/` 需删除后全量重烤；Workbench 插件 `RDF Bake DEM Heightfield` 读同一常量
+
+## 2026-08-06 — 可选 HEIGHT JSON 烘焙包（离线打包，运行时 RAM）
+
+- **离线**：`tools/dem/rdf_dem_pack_height_json.py` 从**官方游戏地形** `.ttile` / `Terrain.terr`（或 `rdf_ttile_unpack.py` 的 npz）打出 `RDF_HEIGHT_JSON_V1`；默认对齐 SURF 网格；**不是**从 RDF V3 CSV / `.dem.data` 成品再烘焙
+- **运行时**：`RDF_DemHeightJsonPack`；SURF/CSV 同根目录自动附着；权威端异步预热 SURF 后接 HEIGHT → 共享 RAM
+- **采样**：HEIGHT 常驻时优先烘焙 Y；未就绪或缺包时回退 `BaseWorld.GetSurfaceY`（`RUNTIME_DEM_PREFER_BAKED_HEIGHT`）
+- HUD：`SURF+H`；统计 `bakeY=`
+
 ## 2026-08-06 — 游戏侧扫描热路径性能优化
 
 - **DEM**：`TrySampleAt` / SURF / LIVE 复用 scratch `CellSample`（调用方须立即读字段，勿长期持有引用）；瓦片 `TryFillCell`
