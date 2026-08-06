@@ -4,11 +4,13 @@
 
 - `RDF_RadarDemLosBenchAutoTest.Start()`：同步 ScanOnce；**DemLos ON/OFF × flush/cache** 四象限
 - flush=每扫清 LOS/reuse；cache=保留（类游戏）；累计 demBlk/trace/losHit/reuse；报告 `$profile:RDF/RadarTests/dem_los_bench_*.txt`
+- 文档：`RADAR_API` § Scan LOS path、`RADAR_GAME_FRAMEWORK` 链路、`DEM` / `OPTIMIZATION` / `AUTOTEST_CI_LIMITS` / `CAPABILITIES`
 
 ## 2026-08-06 — LOS：DEM 先挡再 Trace
 
 - `m_EnableDemLosPrecheck`（默认开）：沿射线采 DEM HEIGHT RAM，地形刺穿几何 LOS 则跳过 `TraceMove`
 - 未挡再 Trace（实体/建筑遮挡）；NLOS 仍可用；状态 `demBlk=`
+- **对外 API 不变**（仍 Sensor Configure / Tick）；仅 Settings 可选字段
 
 ## 2026-08-06 — SURF+HEIGHT 常驻后禁 GetSurfaceY
 

@@ -208,7 +208,7 @@ RDF_RadarWeaponBridge.TryGetFireSolutionFromOwner(vehicle, sol, true);
 
 若只用**一条射线**从雷达打到目标**中心**，当目标只露出一部分（例如车体大半被墙/地形挡住，只有一小块朝向雷达）时，这条中心射线会先打到墙或地形，从而被判为“不可见”，产生**漏检**。现实中雷达只要能看到目标任意一块有效反射面，就可以检测到。
 
-**当前 RDF 雷达 LOS**（`RDF_RadarScanGeometry`）对齐官方 nametag 写法：一条射线打到几何中心，`ExcludeArray` 含 subject+目标，通视 ≈ `hitFraction ≥ 0.999`（目标本体不挡自己的端点）；同层级用 `GetRootParent` 回退。这覆盖「中心通视」主路径，**尚未**做 AABB 多点采样。
+**当前 RDF 雷达 LOS**（`RDF_RadarScanGeometry`）：HEIGHT RAM 就绪时默认 DEM 地形预检，挡则跳过 Trace；否则对齐官方 nametag 写法——一条射线打到几何中心，`ExcludeArray` 含 subject+目标，通视 ≈ `hitFraction ≥ 0.999`（目标本体不挡自己的端点）；同层级用 `GetRootParent` 回退。这覆盖「中心通视」主路径，**尚未**做 AABB 多点采样。
 
 若要覆盖「只露出一部分」的漏检，可对每个候选做多条射线：
 
@@ -435,7 +435,7 @@ Then **ray count = candidates in range × rays per entity** (below); at modest v
 
 A **single ray** to the target **center** fails when only part of the target faces the radar (most of the hull behind wall/terrain) — the center ray hits wall/terrain first → **false miss**. Real radar detects any useful reflecting facet.
 
-**Current RDF radar LOS** (`RDF_RadarScanGeometry`) follows stock nametag style: one ray to the geometric center, `ExcludeArray` = subject + target, clear when `hitFraction ≥ 0.999` (target does not block its own endpoint); `GetRootParent` as hierarchy fallback. That covers the main center-LOS path; **AABB multi-point sampling is not implemented yet**.
+**Current RDF radar LOS** (`RDF_RadarScanGeometry`): with HEIGHT RAM ready, default DEM terrain precheck skips Trace when terrain blocks; otherwise stock nametag style — one ray to geometric center, `ExcludeArray` = subject + target, clear when `hitFraction ≥ 0.999` (target does not block its own endpoint); `GetRootParent` as hierarchy fallback. That covers the main center-LOS path; **AABB multi-point sampling is not implemented yet**.
 
 To cover partial-exposure misses, fire multiple rays per candidate:
 

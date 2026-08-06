@@ -14,7 +14,9 @@ Radar 联机**不要**沿用 LiDAR CSV 分片缓冲思路。权威路径用类�
 
 Radar **LOS TraceMove** 热路径（`RDF_RadarScanner` / `RDF_RadarScanGeometry`）：
 复用成员 `TraceParam` + `ExcludeArray`；`ANY_CONTACT`；起点出壳；单次扫描预算
-`m_MaxLosTracesPerScan`。细则见 [LESSONS_FROM_ENGINE.md](LESSONS_FROM_ENGINE.md) §6.5。
+`m_MaxLosTracesPerScan`。HEIGHT RAM 就绪时默认 **DEM 先挡**（`m_EnableDemLosPrecheck`）再 Trace；
+复扫时 **LOS/reuse 缓存**墙钟收益更大。细则：[LESSONS_FROM_ENGINE.md](LESSONS_FROM_ENGINE.md) §6.5、
+[RADAR_API.md](RADAR_API.md) § Scan LOS path。
 
 ---
 
@@ -117,7 +119,10 @@ throttle / fingerprint skip / `m_InterestRadiusM`. Contract: [RADAR_API.md](RADA
 
 Radar **LOS TraceMove** hot path (`RDF_RadarScanner` / `RDF_RadarScanGeometry`):
 reuse member `TraceParam` + `ExcludeArray`; `ANY_CONTACT`; start clearance; per-scan
-budget `m_MaxLosTracesPerScan`. Details: [LESSONS_FROM_ENGINE.md](LESSONS_FROM_ENGINE.md) §6.5.
+budget `m_MaxLosTracesPerScan`. With HEIGHT RAM, default **DEM terrain precheck**
+(`m_EnableDemLosPrecheck`) before Trace; **LOS/reuse caches** dominate wall time on
+repeat dwells. Details: [LESSONS_FROM_ENGINE.md](LESSONS_FROM_ENGINE.md) §6.5,
+[RADAR_API.md](RADAR_API.md) § Scan LOS path.
 
 ---
 

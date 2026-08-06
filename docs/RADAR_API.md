@@ -261,6 +261,36 @@ cfg.m_Hardware.m_PolarizationFactor = 0.9;
 cfg.Validate();
 ```
 
+### Scan LOS (what mods need to know)
+
+**You do not change call sites.** Keep using `Configure` / `Tick` / `ScanOnce`.
+Ship `DemData/<world>/` with SURF + HEIGHT (`HUD: SURF+H`) and the defaults already help.
+
+```text
+candidate
+  → LOS/reuse cache hit?  ──yes──► reuse last LOS / target (biggest wall-time win)
+  → no → DEM HEIGHT ready & m_EnableDemLosPrecheck?
+           ──yes & terrain pierces ray──► skip TraceMove (demBlk++) ; may still try NLOS
+           ──no / clear / unknown──────► TraceMove (trace++) ; then NLOS if blocked
+```
+
+| Status token | Meaning |
+|--------------|---------|
+| `losHit=` / `reuse=` | Cache hits (repeat dwells) |
+| `demBlk=` | Terrain blocked via HEIGHT RAM (no Trace) |
+| `trace=` | Real `TraceMove` count this scan |
+
+| Knob | Default | When to touch |
+|------|---------|----------------|
+| `m_EnableDemLosPrecheck` | **on** | Set `false` only to force every candidate through Trace (debug) |
+| `m_DemLosPrecheckSamples` | 8 (2–24) | More samples = safer terrain reject, slightly more CPU |
+| `m_KnifeEdgeClearanceSlackM` | ~2 m | Extra metres of clearance in the pierce test (shared with knife-edge NLOS) |
+| `m_MaxLosTracesPerScan` | 48 | Cap TraceMove after DEM skips |
+| LOS / reuse ages & fresh budget | (see Settings) | Tune dwell cadence; leave alone unless profiling |
+
+No HEIGHT pack → precheck is a **no-op** (same as old Trace-only path).  
+In-game matrix bench: Debugger `RDF_RadarDemLosBenchAutoTest.Start()` → [AUTOTEST_CI_LIMITS.md](AUTOTEST_CI_LIMITS.md).
+
 ---
 
 ## Read model (contracts)
@@ -692,6 +722,48 @@ sensor.SetMeasurementModel(new MyGameplayNoise());
 | `EnablePrfAmbiguityFolds(range, doppler)` | PRF 模糊折叠（WLR 跳过多普勒） |
 | `Hardware.m_PolarizationFactor` | 接收功率极化失配 |
 | `StabilizeForRegression()` | AutoTest：关掉可选保真项 |
+
+```c
+RDF_RadarSettings cfg = RDF_RadarSensor.CreateSearchSettings(64);
+// 按任务需要开项 — 无大包预设：
+cfg.SetMeasurementNoise(2.0, 3.0, 0.15, 0.1);
+cfg.EnableAtmosphericPathLoss(true);
+cfg.EnableLosTwoRayMultipath();
+cfg.EnableAtmosphericRefraction();
+cfg.EnablePrfAmbiguityFolds(true, true);
+cfg.m_Hardware.m_PolarizationFactor = 0.9;
+cfg.Validate();
+```
+
+### 扫描通视（模组只要知道这些）
+
+**不用改调用点。** 继续 `Configure` / `Tick` / `ScanOnce`。  
+工坊带上 `DemData/<world>/` 的 SURF+HEIGHT（HUD 显示 `SURF+H`），默认配置就会受益。
+
+```text
+候选目标
+  → LOS/reuse 缓存命中？──是──► 复用上次通视/目标（复扫墙钟收益最大）
+  → 否 → HEIGHT 就绪且 m_EnableDemLosPrecheck？
+           ──是且地形刺穿射线──► 跳过 TraceMove（demBlk++）；仍可走 NLOS
+           ──否 / 通视 / 不确定──► TraceMove（trace++）；挡了再 NLOS
+```
+
+| 状态字 | 含义 |
+|--------|------|
+| `losHit=` / `reuse=` | 缓存命中（复扫） |
+| `demBlk=` | HEIGHT RAM 判地形挡（未做 Trace） |
+| `trace=` | 本扫真实 `TraceMove` 次数 |
+
+| 旋钮 | 默认 | 何时动 |
+|------|------|--------|
+| `m_EnableDemLosPrecheck` | **开** | 仅调试「强制全 Trace」时设 `false` |
+| `m_DemLosPrecheckSamples` | 8（2–24） | 采样越多地形拒识越稳，略费 CPU |
+| `m_KnifeEdgeClearanceSlackM` | ~2 m | 刺穿判定额外净空（与刀刃 NLOS 共用） |
+| `m_MaxLosTracesPerScan` | 48 | DEM 跳过后的 Trace 上限 |
+| LOS/reuse 年龄与 fresh 预算 | （见 Settings） | 调驻留节奏；一般别动 |
+
+无 HEIGHT 包 → 预检是**空操作**（与旧版纯 Trace 相同）。  
+游戏内四象限基准：Debugger `RDF_RadarDemLosBenchAutoTest.Start()` → [AUTOTEST_CI_LIMITS.md](AUTOTEST_CI_LIMITS.md)。
 
 ---
 

@@ -219,6 +219,7 @@ if (parentEntityRay != parentEntityAct)
 | `GetRootParent()` | `SCR_NearbyContextDisplay` | 同层级命中不算遮挡 |
 | 勿写 owned 字符串 | TraceParam 生成头 | 不要写 `ColliderName` / `TraceMaterial` |
 | 起点出壳 | LiDAR 教训 + TerrainHelper | 壳内 `Start` 可致 SEH；雷达 LOS 外推 `LOS_START_CLEARANCE_M` |
+| DEM 先挡再 Trace | RDF（HEIGHT RAM） | `m_EnableDemLosPrecheck`：地形刺穿跳过 TraceMove；状态 `demBlk=` |
 
 ---
 
@@ -507,6 +508,7 @@ if (parentEntityRay != parentEntityAct)
 | `GetRootParent()` | `SCR_NearbyContextDisplay` | Same hierarchy ≠ obstruction |
 | Do not write owned strings | TraceParam generated header | Never assign `ColliderName` / `TraceMaterial` |
 | Start outside hull | LiDAR lesson + TerrainHelper | In-solid `Start` can SEH; radar LOS uses `LOS_START_CLEARANCE_M` |
+| DEM before Trace | RDF (HEIGHT RAM) | `m_EnableDemLosPrecheck`: terrain pierce skips TraceMove; status `demBlk=` |
 
 ---
 

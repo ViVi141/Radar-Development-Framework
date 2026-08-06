@@ -67,6 +67,8 @@ Workbench 中可直接编辑 `.conf`；改完后确保 Resource Browser 仍已 R
 采样时：HEIGHT+SURF 常驻后**只读 RAM**（不再 `GetSurfaceY`）。预热未完成或仅有 SURF、无 HEIGHT 包时，才允许 live Y。  
 HUD：`SURF+H` = 两者皆 RAM；`SURF RAM` = 仅地表类（高度仍可能 live）。
 
+**雷达 LOS（给集成者）**：带 `SURF+H` 时默认先用 HEIGHT 挡地形再 Trace；你**不用改 Sensor API**。说明与旋钮表：[RADAR_API.md](RADAR_API.md) § 扫描通视。
+
 日志：`mode=SURF|LIVE|CSV`，`liveY=`，`heightPack=`。  
 HUD：`SURF` / `SURF RAM` / `SURF+H` / `LIVE` / `DEM OK` / `DEM RAM` / `DEM OFF`。  
 默认 `m_DemPreloadAll=true`：权威端把整图 SURF（及可选 HEIGHT）解码进扁平 RAM。  
@@ -192,6 +194,8 @@ You can edit `.conf` directly in Workbench; after changes, ensure Resource Brows
 4. None of the above → `mode=LIVE` (`GetSurfaceY` only; surface class = UNKNOWN)
 
 When sampling: once SURF+HEIGHT are resident, **read RAM only** (no `GetSurfaceY`). Live Y is allowed only while warming or when no HEIGHT pack ships.
+
+**Radar LOS (integrators)**: with `SURF+H`, HEIGHT terrain precheck runs before Trace by default; **no Sensor API change**. Knobs: [RADAR_API.md](RADAR_API.md) § Scan LOS.
 
 Logs: `mode=SURF|LIVE|CSV`, `liveY=`, `heightPack=`.  
 HUD: `SURF` / `SURF RAM` / `SURF+H` / `LIVE` / `DEM OK` / `DEM RAM` / `DEM OFF`.  

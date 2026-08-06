@@ -8,6 +8,8 @@ License: Apache-2.0
 
 入口文档：[README.md](../README.md) · 雷达公共 API：[RADAR_API.md](RADAR_API.md) · 雷达内部框架：[RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md) · DEM：[DEM.md](DEM.md)
 
+**通视 / DEM 集成（最常问）**：带 `DemData` 的 `SURF+H` 即可；默认 DEM 先挡再 Trace + LOS 缓存。调用点不变。见 [RADAR_API.md](RADAR_API.md) § 扫描通视。
+
 ---
 
 ## 中文
@@ -99,7 +101,7 @@ scripts/Game/RDF/Radar/
 ├── Core/
 │   ├── RDF_RadarSettings.c / RDF_RadarTypes.c / RDF_RadarHardware.c
 │   ├── RDF_RadarScanner.c              编排：Registry 扫描 + Trace + 复用预算
-│   ├── RDF_RadarScanGeometry.c         LOS TraceMove（ANY_CONTACT / ExcludeArray / 出壳）+ 实体中心 / 速度
+│   ├── RDF_RadarScanGeometry.c         LOS：DEM 预检 + TraceMove（ANY_CONTACT / ExcludeArray / 出壳）+ 实体中心 / 速度
 │   ├── RDF_RadarPhysicalDetect.c       雷达方程 / MTI·MTD / NLOS bounce+刀刃 / DEM 杂波 / SNR / ESM
 │   ├── RDF_RadarScattererRegistry.c    全局散射体/辐射源表（增量维护；多雷达 focus 合并）
 │   ├── RDF_RadarEmitterRegistry.c      辐射标记门面（转发到散射体表）
@@ -148,7 +150,7 @@ scripts/Game/RDF/Radar/
     ├── RDF_RadarAirborneScanTest.c     空中目标扫描（入 StartAll）
     ├── RDF_RadarLockAutoTest.c         载具锁定状态机（入 StartAll）
     ├── RDF_RadarPerfAutoTest.c         扫描/弹道墙钟开销（入 StartAll）
-    ├── RDF_RadarDemLosBenchAutoTest.c  DEM-LOS 预检 ON/OFF A/B（Debugger 单独 Start）
+    ├── RDF_RadarDemLosBenchAutoTest.c  DEM-LOS×flush/cache 四象限（Debugger 单独 Start）
     ├── RDF_RadarPlayAutoTest.c         游玩路径：HUD + 发现 + DEM + 漫步负载（入 StartAll）
     ├── RDF_RadarStressAutoTest.c       性能压测：重负载 soak（独立）
     ├── RDF_RadarRwrAutoTest.c          RWR 告警（独立）
@@ -339,6 +341,8 @@ License: Apache-2.0
 
 Entry points: [README.md](../README.md) · Radar public API: [RADAR_API.md](RADAR_API.md) · Radar internal framework: [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md) · DEM: [DEM.md](DEM.md)
 
+**LOS / DEM (FAQ)**: ship `DemData` as `SURF+H`; defaults do DEM-before-Trace + LOS cache. No call-site change. See [RADAR_API.md](RADAR_API.md) § Scan LOS.
+
 ---
 
 ## Design principles
@@ -428,7 +432,7 @@ scripts/Game/RDF/Radar/
 ├── Core/
 │   ├── RDF_RadarSettings.c / RDF_RadarTypes.c / RDF_RadarHardware.c
 │   ├── RDF_RadarScanner.c              编排：Registry 扫描 + Trace + 复用预算
-│   ├── RDF_RadarScanGeometry.c         LOS TraceMove（ANY_CONTACT / ExcludeArray / 出壳）+ 实体中心 / 速度
+│   ├── RDF_RadarScanGeometry.c         LOS：DEM 预检 + TraceMove（ANY_CONTACT / ExcludeArray / 出壳）+ 实体中心 / 速度
 │   ├── RDF_RadarPhysicalDetect.c       雷达方程 / MTI·MTD / NLOS bounce+刀刃 / DEM 杂波 / SNR / ESM
 │   ├── RDF_RadarScattererRegistry.c    全局散射体/辐射源表（增量维护；多雷达 focus 合并）
 │   ├── RDF_RadarEmitterRegistry.c      辐射标记门面（转发到散射体表）
@@ -476,6 +480,10 @@ scripts/Game/RDF/Radar/
     ├── RDF_RadarShellFireAutoTest.c    实弹 Spawn+Launch + WLR（入 StartAll）
     ├── RDF_RadarAirborneScanTest.c     空中目标扫描（入 StartAll）
     ├── RDF_RadarLockAutoTest.c         载具锁定状态机（入 StartAll）
+    ├── RDF_RadarPerfAutoTest.c         扫描/弹道墙钟开销（入 StartAll）
+    ├── RDF_RadarDemLosBenchAutoTest.c  DEM-LOS×flush/cache 四象限（Debugger 单独 Start）
+    ├── RDF_RadarPlayAutoTest.c         游玩路径：HUD + 发现 + DEM + 漫步负载（入 StartAll）
+    ├── RDF_RadarStressAutoTest.c       性能压测：重负载 soak（独立）
     ├── RDF_RadarRwrAutoTest.c          RWR 告警（独立）
     ├── RDF_RadarEsmArmAutoTest.c       ESM + GetArmAim（独立）
     ├── RDF_RadarFusionAutoTest.c       数据链融合 / 交会（独立）
