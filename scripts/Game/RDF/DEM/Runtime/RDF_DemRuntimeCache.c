@@ -111,6 +111,24 @@ class RDF_DemRuntimeCache
     }
 
     //--------------------------------------------------------------------------------------------
+    static bool IsSharedHeightReady()
+    {
+        return s_SharedHeightReady;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    // True when authority shared RAM can serve surface + height without GetSurfaceY.
+    static bool IsSharedTerrainRamReady()
+    {
+        if (!s_SharedSurfReady)
+            return false;
+        // Height pack is optional; when absent, live Y is still used until pack ships.
+        if (s_AsyncRunning)
+            return false;
+        return true;
+    }
+
+    //--------------------------------------------------------------------------------------------
     static bool IsAsyncWarmPreloadRunning()
     {
         return s_AsyncRunning;
@@ -132,7 +150,13 @@ class RDF_DemRuntimeCache
             return false;
         }
         if (s_SharedSurfReady)
+        {
+            if (s_AsyncRunning)
+                return true;
+            if (RDF_DemBakeConstants.RUNTIME_DEM_PRELOAD_ASYNC)
+                return StartAsyncWarmPreload();
             return true;
+        }
         if (RDF_DemBakeConstants.RUNTIME_DEM_PRELOAD_ASYNC)
             return StartAsyncWarmPreload();
 
@@ -149,8 +173,6 @@ class RDF_DemRuntimeCache
     //--------------------------------------------------------------------------------------------
     static bool StartAsyncWarmPreload()
     {
-        if (s_SharedSurfReady)
-            return true;
         if (s_AsyncRunning)
             return true;
         if (!IsAuthorityPeer())
@@ -168,6 +190,27 @@ class RDF_DemRuntimeCache
             // Non-SURF packs: fall back to one-shot tile preload on first Ensure.
             Print("[RDF DEM Runtime] async warm skipped (not SURF pack); will preload on first use");
             return false;
+        }
+
+        // SURF already shared: only warm HEIGHT if the pack is present and missing.
+        if (s_SharedSurfReady)
+        {
+            if (!warm.m_Manifest.m_HasHeightPack)
+                return true;
+            if (s_SharedHeightReady)
+                return true;
+            s_AsyncManifest = warm.m_Manifest;
+            s_AsyncWorldKey = warm.m_WorldKey;
+            s_AsyncWorldSurf = null;
+            s_AsyncWall0 = System.GetTickCount();
+            s_AsyncRunning = true;
+            if (!BeginAsyncHeightPhase())
+            {
+                FinishAsyncWarmJob();
+                return false;
+            }
+            ScheduleAsyncPump();
+            return true;
         }
 
         array<int> worldSurf;
@@ -520,8 +563,20 @@ class RDF_DemRuntimeCache
     bool IsFullyResident()
     {
         if (m_WorldSurfReady)
+        {
+            if (NeedsHeightRam() && !m_WorldHeightReady)
+                return false;
             return true;
+        }
         return m_FullyResident;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected bool NeedsHeightRam()
+    {
+        if (!m_Manifest)
+            return false;
+        return m_Manifest.m_HasHeightPack;
     }
 
     //--------------------------------------------------------------------------------------------
@@ -667,10 +722,29 @@ class RDF_DemRuntimeCache
             return false;
         if (!m_Manifest)
             return false;
-        if (m_WorldSurfReady || m_FullyResident)
-            return true;
         if (AdoptSharedSurfIfMatching())
+        {
+            if (IsTerrainRamResident())
+                return true;
+        }
+        if (m_WorldSurfReady || m_FullyResident)
+        {
+            if (IsTerrainRamResident())
+                return true;
+            // SURF resident but HEIGHT pack still decoding — keep warming, avoid live Y.
+            if (NeedsHeightRam() && !m_WorldHeightReady)
+            {
+                if (!s_AsyncRunning && m_Manifest.m_IsSurfacePack)
+                {
+                    if (RDF_DemBakeConstants.RUNTIME_DEM_PRELOAD_ASYNC)
+                        StartAsyncWarmPreload();
+                    else
+                        PreloadHeightWorldIfPresent();
+                }
+                return false;
+            }
             return true;
+        }
         if (s_AsyncRunning)
             return false;
 
@@ -686,6 +760,17 @@ class RDF_DemRuntimeCache
         }
 
         return PreloadAllTiles();
+    }
+
+    //--------------------------------------------------------------------------------------------
+    // SURF RAM (+ HEIGHT RAM when pack present) — hot path must not call GetSurfaceY.
+    protected bool IsTerrainRamResident()
+    {
+        if (!m_WorldSurfReady && !m_FullyResident)
+            return false;
+        if (NeedsHeightRam() && !m_WorldHeightReady)
+            return false;
+        return true;
     }
 
     //--------------------------------------------------------------------------------------------
@@ -1087,10 +1172,13 @@ class RDF_DemRuntimeCache
             haveY = true;
             m_StatBakedHeight = m_StatBakedHeight + 1;
         }
-        else if (TryGetLiveTerrainY(worldX, worldZ, y))
+        else if (AllowLiveTerrainQuery())
         {
-            haveY = true;
-            m_StatLiveHeight = m_StatLiveHeight + 1;
+            if (TryGetLiveTerrainY(worldX, worldZ, y))
+            {
+                haveY = true;
+                m_StatLiveHeight = m_StatLiveHeight + 1;
+            }
         }
 
         if (haveY)
@@ -1151,6 +1239,21 @@ class RDF_DemRuntimeCache
     }
 
     //--------------------------------------------------------------------------------------------
+    // GetSurfaceY only when HEIGHT RAM is unavailable and live Y is allowed.
+    protected bool AllowLiveTerrainQuery()
+    {
+        if (m_WorldHeightReady)
+            return false;
+        if (!m_Manifest)
+            return true;
+        if (m_Manifest.m_HasHeightPack && !m_Manifest.m_PreferLiveTerrainY)
+            return false;
+        if (!m_Manifest.m_PreferLiveTerrainY)
+            return false;
+        return true;
+    }
+
+    //--------------------------------------------------------------------------------------------
     protected void ApplyLiveTerrainY(
         float worldX,
         float worldZ,
@@ -1180,10 +1283,11 @@ class RDF_DemRuntimeCache
                 m_StatBakedHeight = m_StatBakedHeight + 1;
                 return;
             }
+            // HEIGHT RAM resident but cell miss: do not fall back to engine.
+            return;
         }
 
-        // Skip GetSurfaceY when preferring baked tile/CSV height (no height pack miss).
-        if (m_Manifest && !m_Manifest.m_PreferLiveTerrainY)
+        if (!AllowLiveTerrainQuery())
             return;
 
         float liveY;

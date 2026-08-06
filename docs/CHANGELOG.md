@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2026-08-06 — SURF+HEIGHT 常驻后禁 GetSurfaceY
+
+- `TrySampleAt`：HEIGHT RAM 就绪后不再回退 `BaseWorld.GetSurfaceY`；有 HEIGHT 包且 `PreferLiveTerrainY=0` 时预热中也不打引擎
+- `EnsurePreloaded` / 异步预热：有 HEIGHT 包时须 SURF+HEIGHT 都进共享 RAM 才算 resident（`SURF+H`）
+
 ## 2026-08-06 — DEM 烘焙默认 2 m 网格
 
 - `RDF_DemBakeConstants.CELL_M`：`4` → `2`（与官方 `.ttile` / 已打包 HEIGHT+SURF 对齐；`TILE_CELLS` 仍为 32）

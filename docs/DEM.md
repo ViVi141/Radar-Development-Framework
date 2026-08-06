@@ -64,7 +64,8 @@ Workbench 中可直接编辑 `.conf`；改完后确保 Resource Browser 仍已 R
 3. `$profile` V3 CSV（开发全量 DEM）
 4. 皆无 → `mode=LIVE`（仅 `GetSurfaceY`，地表类 = UNKNOWN）
 
-采样时：若 HEIGHT 包已进 RAM，**优先烘焙 Y**；否则用 `GetSurfaceY`（含全量 DEM 回退路径上的 live 覆盖，取决于 `m_PreferLiveTerrainY` / `RUNTIME_DEM_PREFER_BAKED_HEIGHT`）。
+采样时：HEIGHT+SURF 常驻后**只读 RAM**（不再 `GetSurfaceY`）。预热未完成或仅有 SURF、无 HEIGHT 包时，才允许 live Y。  
+HUD：`SURF+H` = 两者皆 RAM；`SURF RAM` = 仅地表类（高度仍可能 live）。
 
 日志：`mode=SURF|LIVE|CSV`，`liveY=`，`heightPack=`。  
 HUD：`SURF` / `SURF RAM` / `SURF+H` / `LIVE` / `DEM OK` / `DEM RAM` / `DEM OFF`。  
@@ -190,7 +191,7 @@ You can edit `.conf` directly in Workbench; after changes, ensure Resource Brows
 3. `$profile` V3 CSV (full DEM for development)
 4. None of the above → `mode=LIVE` (`GetSurfaceY` only; surface class = UNKNOWN)
 
-When sampling: if a HEIGHT pack is resident in RAM, **prefer baked Y**; otherwise use `GetSurfaceY` (live override on CSV paths still follows `m_PreferLiveTerrainY` / `RUNTIME_DEM_PREFER_BAKED_HEIGHT`).
+When sampling: once SURF+HEIGHT are resident, **read RAM only** (no `GetSurfaceY`). Live Y is allowed only while warming or when no HEIGHT pack ships.
 
 Logs: `mode=SURF|LIVE|CSV`, `liveY=`, `heightPack=`.  
 HUD: `SURF` / `SURF RAM` / `SURF+H` / `LIVE` / `DEM OK` / `DEM RAM` / `DEM OFF`.  

@@ -21,7 +21,8 @@ class RDF_DemBakeConstants
     static const bool RUNTIME_DEM_PREFER_BAKED_HEIGHT = true;
 
     // When true, runtime loads the whole world surface/DEM into RAM
-    // (SURF uses a compact flat class map; other packs fill the tile cache).
+    // (SURF flat class map + optional HEIGHT flat Y). After resident, TrySampleAt
+    // reads RAM only — no BaseWorld.GetSurfaceY on the hot path.
     static const bool RUNTIME_DEM_PRELOAD_ALL = true;
     // Authority peers warm-preload at game start (before radar is used).
     static const bool RUNTIME_DEM_PRELOAD_AT_GAME_START = true;
