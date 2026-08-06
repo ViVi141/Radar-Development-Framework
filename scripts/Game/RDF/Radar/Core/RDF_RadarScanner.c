@@ -137,6 +137,16 @@ class RDF_RadarScanner
         return m_StatTraceMoves;
     }
 
+    int GetLastLosCacheHits()
+    {
+        return m_StatLosCacheHits;
+    }
+
+    int GetLastReuseHits()
+    {
+        return m_StatReuseHits;
+    }
+
     // Whole-world SURF/DEM RAM load. Prefer calling from Sensor before ScanOnce
     // wall-clock timing; Scan() also no-ops when already resident.
     void EnsureDemPreloaded()

@@ -2,8 +2,8 @@
 
 ## 2026-08-06 — 游戏内 DEM-LOS A/B 基准
 
-- `RDF_RadarDemLosBenchAutoTest.Start()`：同步 ScanOnce，对比 `m_EnableDemLosPrecheck` ON/OFF
-- 每扫清 LOS/reuse 缓存；累计 `demBlk`/`trace`；尽量 DEM 遮挡落点；报告写 `$profile:RDF/RadarTests/dem_los_bench_*.txt`
+- `RDF_RadarDemLosBenchAutoTest.Start()`：同步 ScanOnce；**DemLos ON/OFF × flush/cache** 四象限
+- flush=每扫清 LOS/reuse；cache=保留（类游戏）；累计 demBlk/trace/losHit/reuse；报告 `$profile:RDF/RadarTests/dem_los_bench_*.txt`
 
 ## 2026-08-06 — LOS：DEM 先挡再 Trace
 
