@@ -15,7 +15,14 @@ from enum import Enum, IntEnum
 
 import numpy as np
 
-from rdf_radar_physics import RadarHardware, ca_cfar_detections, db_to_lin, lin_to_db
+from rdf_radar_channel import ChannelFidelity
+from rdf_radar_physics import (
+    RadarHardware,
+    ca_cfar_detections,
+    db_to_lin,
+    doppler_hz,
+    lin_to_db,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -145,11 +152,34 @@ def two_way_path_loss_db(
 
 @dataclass
 class MeasurementModel:
-    """SNR-scaled range/az/el/radial measurement noise (MeasNoiseScale)."""
+    """SNR-scaled range/az/el/radial measurement noise (MeasNoiseScale).
+
+    Optional PRF folds / refraction elevation bias mirror RDF_RadarMeasurement
+    when ChannelFidelity flags are set (default off).
+    """
 
     noise_scale: float = 1.0
     range_bias_m: float = 0.0
     az_bias_deg: float = 0.0
+    el_bias_deg: float = 0.0
+    fidelity: ChannelFidelity | None = None
+
+    @classmethod
+    def from_fidelity(
+        cls,
+        fidelity: ChannelFidelity,
+        noise_scale: float = 1.0,
+        range_bias_m: float = 0.0,
+        az_bias_deg: float = 0.0,
+        el_bias_deg: float = 0.0,
+    ) -> "MeasurementModel":
+        return cls(
+            noise_scale=noise_scale,
+            range_bias_m=range_bias_m,
+            az_bias_deg=az_bias_deg,
+            el_bias_deg=el_bias_deg,
+            fidelity=fidelity,
+        )
 
     def synthesize(
         self,
@@ -160,16 +190,32 @@ class MeasurementModel:
         true_radial_m_s: float,
         snr_db: float,
         rng: np.random.Generator,
+        scan_number: int = 0,
     ) -> tuple[float, float, float, float]:
+        from rdf_radar_channel import (
+            fold_doppler_ambiguous,
+            fold_range_ambiguous,
+            refraction_elevation_bias_deg,
+        )
+
         snr_lin = max(10.0 ** (snr_db / 10.0), 1.0)
         denom = 1.6 * math.sqrt(2.0 * snr_lin)
         if denom < 0.001:
             denom = 0.001
         scale = max(self.noise_scale, 0.0)
 
+        work_range = true_range_m
+        fid = self.fidelity
+        if fid is not None:
+            if fid.enable_range_ambiguity_fold:
+                work_range = fold_range_ambiguous(
+                    true_range_m,
+                    hardware.unambiguous_range_m,
+                )
+
         range_bin = hardware.range_bin_m()
         range_sigma = (range_bin / denom) * scale
-        qbin = math.floor(true_range_m / range_bin)
+        qbin = math.floor(work_range / range_bin)
         if qbin < 0:
             qbin = 0
         quantized = (qbin + 0.5) * range_bin
@@ -180,9 +226,27 @@ class MeasurementModel:
         az_sigma = (hardware.az_beamwidth_deg / denom) * scale
         el_sigma = (hardware.el_beamwidth_deg / denom) * scale
         meas_az = true_az_deg + self.az_bias_deg + float(rng.normal(0.0, az_sigma))
-        meas_el = true_el_deg + float(rng.normal(0.0, el_sigma))
+        meas_el = true_el_deg + self.el_bias_deg
+        if fid is not None:
+            if fid.enable_atmospheric_refraction:
+                meas_el = meas_el + refraction_elevation_bias_deg(
+                    true_range_m,
+                    fid.earth_radius_factor,
+                )
+        meas_el = meas_el + float(rng.normal(0.0, el_sigma))
+
         rr_sigma = max(0.5, 8.0 / denom) * scale
         meas_rr = true_radial_m_s + float(rng.normal(0.0, rr_sigma))
+        if fid is not None:
+            fold_doppler = fid.enable_doppler_ambiguity_fold
+            if fold_doppler:
+                if fid.weapon_locate:
+                    fold_doppler = False
+            if fold_doppler:
+                fd = doppler_hz(meas_rr, hardware.wavelength_m)
+                fd = fold_doppler_ambiguous(fd, hardware.active_prf_hz(scan_number))
+                if hardware.wavelength_m > 0.0:
+                    meas_rr = fd * hardware.wavelength_m * 0.5
         return meas_range, meas_az, meas_el, meas_rr
 
 

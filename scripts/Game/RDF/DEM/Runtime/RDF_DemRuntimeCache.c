@@ -43,6 +43,10 @@ class RDF_DemRuntimeCache
     protected int m_WorldCellsX;
     protected int m_WorldCellsZ;
 
+    // Transient sample returned by TrySampleAt. Callers must copy fields before
+    // the next TrySampleAt on this cache (do not store the reference).
+    protected ref RDF_DemRuntimeCellSample m_ScratchSample;
+
     protected int m_StatHits;
     protected int m_StatMisses;
     protected int m_StatLoads;
@@ -632,7 +636,7 @@ class RDF_DemRuntimeCache
             return false;
         }
 
-        if (!tile.TryGetCell(localIx, localIz, outSample))
+        if (!tile.TryFillCell(localIx, localIz, BorrowScratchSample()))
         {
             if (TrySampleLiveOnly(worldX, worldZ, outSample))
                 return true;
@@ -640,6 +644,7 @@ class RDF_DemRuntimeCache
             return false;
         }
 
+        outSample = m_ScratchSample;
         ApplyLiveTerrainY(worldX, worldZ, outSample);
         m_StatHits = m_StatHits + 1;
         return true;
@@ -836,7 +841,7 @@ class RDF_DemRuntimeCache
             return false;
         }
 
-        RDF_DemRuntimeCellSample sample = new RDF_DemRuntimeCellSample();
+        RDF_DemRuntimeCellSample sample = BorrowScratchSample();
         sample.m_Valid = true;
         sample.m_TerrainY = 0.0;
         sample.m_SurfaceClass = m_WorldSurfClass.Get(idx);
@@ -861,7 +866,7 @@ class RDF_DemRuntimeCache
         if (!TryGetLiveTerrainY(worldX, worldZ, liveY))
             return false;
 
-        RDF_DemRuntimeCellSample sample = new RDF_DemRuntimeCellSample();
+        RDF_DemRuntimeCellSample sample = BorrowScratchSample();
         sample.m_Valid = true;
         sample.m_TerrainY = liveY;
         sample.m_SurfaceClass = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
@@ -873,6 +878,29 @@ class RDF_DemRuntimeCache
         m_StatLiveHeight = m_StatLiveHeight + 1;
         m_StatHits = m_StatHits + 1;
         return true;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    // Hot-path scratch. Valid only until the next BorrowScratchSample / TrySampleAt.
+    protected RDF_DemRuntimeCellSample BorrowScratchSample()
+    {
+        if (!m_ScratchSample)
+            m_ScratchSample = new RDF_DemRuntimeCellSample();
+        m_ScratchSample.m_Valid = false;
+        m_ScratchSample.m_TerrainY = 0.0;
+        m_ScratchSample.m_SlopeDeg = 0.0;
+        m_ScratchSample.m_WaterDepthM = 0.0;
+        m_ScratchSample.m_WaterType = 0;
+        m_ScratchSample.m_OccGround = 0;
+        m_ScratchSample.m_EntityHits = 0;
+        m_ScratchSample.m_DensityGcm3 = 0.0;
+        m_ScratchSample.m_SurfaceClass = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
+        m_ScratchSample.m_NSpans = 0;
+        if (m_ScratchSample.m_SpanLo)
+            m_ScratchSample.m_SpanLo.Clear();
+        if (m_ScratchSample.m_SpanHi)
+            m_ScratchSample.m_SpanHi.Clear();
+        return m_ScratchSample;
     }
 
     //--------------------------------------------------------------------------------------------

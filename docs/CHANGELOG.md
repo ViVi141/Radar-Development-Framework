@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-08-06 — 游戏侧扫描热路径性能优化
+
+- **DEM**：`TrySampleAt` / SURF / LIVE 复用 scratch `CellSample`（调用方须立即读字段，勿长期持有引用）；瓦片 `TryFillCell`
+- **Registry**：`s_ByEntity` O(1) 查找，替代线性 `Find`
+- **扫描**：skip 路径不再 `GetBounds`/`GetScattererLosEnd`；`ScanPassContext` 成员复用
+- **LOS 预算**：`TraceLineOfSightCounted` 按真实 `TraceMove` 次数扣预算；状态行增加 `trace=`
+- **复用缓存**：`StoreResult` 原地 `CopyFieldsInto`，减少每帧 `new RDF_RadarTarget`
+- **PhysicalDetect**：多普勒谱 / PRF 列表用静态 scratch 数组
+
 ## 2026-08-05 — 取消理想/逼真双档，改为按需开启
 
 - **删除** `ApplyIdealChannel` / `ApplyRealisticChannel` / `m_RealisticChannel`

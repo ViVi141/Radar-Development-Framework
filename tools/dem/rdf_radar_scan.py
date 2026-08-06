@@ -9,11 +9,15 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from rdf_radar_channel import (
+    ChannelFidelity,
     MultipathModel,
     SwerlingModel,
     clutter_sigma0_frequency_scale,
+    fold_doppler_ambiguous,
+    fold_range_ambiguous,
     hardware_at_frequency,
     radar_constant_scale,
+    refraction_elevation_bias_deg,
 )
 from rdf_radar_ew import EWContext, EWStack, FrequencyHopSchedule
 from rdf_radar_physics import (
@@ -42,10 +46,19 @@ class ScanConfig:
     direction: int = 1
     ew_stack: EWStack = field(default_factory=EWStack)
     frequency_hop: FrequencyHopSchedule = field(default_factory=FrequencyHopSchedule)
-    multipath: MultipathModel = field(default_factory=MultipathModel)
+    # Opt-in fidelity (default off). multipath follows fidelity unless overridden.
+    fidelity: ChannelFidelity = field(default_factory=ChannelFidelity)
+    multipath: MultipathModel | None = None
     swerling: SwerlingModel = field(default_factory=lambda: SwerlingModel(model=1))
     tracker: TrackerConfig = field(default_factory=TrackerConfig)
     radar_height_agl_m: float = 25.0
+    # When True, apply range/Doppler fold + refraction bias on reported plots.
+    apply_measurement_folds: bool = True
+
+    def resolved_multipath(self) -> MultipathModel:
+        if self.multipath is not None:
+            return self.multipath
+        return self.fidelity.multipath_model()
 
 
 @dataclass
@@ -164,6 +177,8 @@ def simulate_scan(
 
     base_noise_proc = sector.noise_proc_w
     base_const = hardware.radar_constant()
+    multipath_model = config.resolved_multipath()
+    fidelity = config.fidelity
 
     for time_i, time_s in enumerate(times):
         boresight = boresight_at(
@@ -252,11 +267,18 @@ def simulate_scan(
                 g = float(terrain[tgt_iz_i, tgt_ix_i])
                 if np.isfinite(g):
                     tgt_ground = g
-            multipath = config.multipath.power_factor(
+            radar_agl = max(radar_y - ground_y, 1.0)
+            target_agl = max(target.y_m - tgt_ground, 1.0)
+            multipath = multipath_model.power_factor(
                 dwell_hw.wavelength_m,
                 range_m,
-                max(radar_y - ground_y, 1.0),
-                max(target.y_m - tgt_ground, 1.0),
+                radar_agl,
+                target_agl,
+            )
+            multipath = multipath * fidelity.horizon_power_factor(
+                range_m,
+                radar_agl,
+                target_agl,
             )
 
             rf_power = received_power_w(
@@ -293,15 +315,41 @@ def simulate_scan(
             dwell_power[0, range_i] = dwell_power[0, range_i] + target_power
 
             snr = target_power / max(noise_proc, 1e-30)
+            meas_range = range_m
+            meas_el = elevation_deg
+            meas_rr = radial_speed
+            meas_fd = doppler_hz(radial_speed, dwell_hw.wavelength_m)
+            if config.apply_measurement_folds:
+                if fidelity.enable_range_ambiguity_fold:
+                    meas_range = fold_range_ambiguous(
+                        range_m,
+                        dwell_hw.unambiguous_range_m,
+                    )
+                if fidelity.enable_atmospheric_refraction:
+                    meas_el = meas_el + refraction_elevation_bias_deg(
+                        range_m,
+                        fidelity.earth_radius_factor,
+                    )
+                fold_doppler = fidelity.enable_doppler_ambiguity_fold
+                if fold_doppler:
+                    if fidelity.weapon_locate:
+                        fold_doppler = False
+                if fold_doppler:
+                    meas_fd = fold_doppler_ambiguous(
+                        meas_fd,
+                        dwell_hw.active_prf_hz(int(scans[time_i])),
+                    )
+                    if dwell_hw.wavelength_m > 0.0:
+                        meas_rr = meas_fd * dwell_hw.wavelength_m * 0.5
             measurement = ScanDetection(
                 time_s=float(time_s),
                 scan_number=int(scans[time_i]),
                 target_name=target.name,
-                measured_range_m=range_m,
+                measured_range_m=meas_range,
                 azimuth_deg=math.degrees(target_az),
-                elevation_deg=elevation_deg,
-                radial_speed_m_s=radial_speed,
-                doppler_hz=doppler_hz(radial_speed, dwell_hw.wavelength_m),
+                elevation_deg=meas_el,
+                radial_speed_m_s=meas_rr,
+                doppler_hz=meas_fd,
                 beam_name=beam_name,
                 snr_db=10.0 * math.log10(max(snr, 1e-30)),
                 detected=False,

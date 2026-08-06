@@ -63,6 +63,8 @@ class RDF_RadarScatterer
 class RDF_RadarScattererRegistry
 {
     protected static ref array<ref RDF_RadarScatterer> s_Entries;
+    // O(1) lookup by entity — kept in sync with s_Entries insert/remove.
+    protected static ref map<IEntity, ref RDF_RadarScatterer> s_ByEntity;
     protected static ref array<IEntity> s_Pending;
     protected static ref array<IEntity> s_DiscoveryScratch;
     // Entities a sweep already looked at, accepted or rejected. Without this the
@@ -293,6 +295,7 @@ class RDF_RadarScattererRegistry
             if (!entry)
                 return null;
             s_Entries.Insert(entry);
+            s_ByEntity.Set(entity, entry);
         }
 
         entry.m_Position = worldPos;
@@ -324,6 +327,7 @@ class RDF_RadarScattererRegistry
                 e.m_Emitting = false;
                 e.m_Entity = null;
                 RemoveEntryFromGrid(e);
+                s_ByEntity.Remove(entity);
                 s_Entries.Remove(i);
                 ForgetSeen(entity);
                 return;
@@ -345,13 +349,15 @@ class RDF_RadarScattererRegistry
         if (!entity)
             return null;
         EnsureContainers();
-        for (int i = 0; i < s_Entries.Count(); i++)
+        if (!s_ByEntity.Contains(entity))
+            return null;
+        RDF_RadarScatterer e = s_ByEntity.Get(entity);
+        if (!e || !e.m_Alive || e.m_Entity != entity)
         {
-            RDF_RadarScatterer e = s_Entries.Get(i);
-            if (e && e.m_Alive && e.m_Entity == entity)
-                return e;
+            s_ByEntity.Remove(entity);
+            return null;
         }
-        return null;
+        return e;
     }
 
     //------------------------------------------------------------------------------------------------
@@ -374,6 +380,7 @@ class RDF_RadarScattererRegistry
     {
         EnsureContainers();
         s_Entries.Clear();
+        s_ByEntity.Clear();
         s_Pending.Clear();
         s_Seen.Clear();
         s_CellBuckets.Clear();
@@ -641,6 +648,7 @@ class RDF_RadarScattererRegistry
             if (!entry)
                 continue;
             s_Entries.Insert(entry);
+            s_ByEntity.Set(ent, entry);
             InsertEntryToGrid(entry);
             s_StatClassified = s_StatClassified + 1;
         }
@@ -803,6 +811,8 @@ class RDF_RadarScattererRegistry
             {
                 if (entry)
                 {
+                    if (entry.m_Entity)
+                        s_ByEntity.Remove(entry.m_Entity);
                     entry.m_Alive = false;
                     RemoveEntryFromGrid(entry);
                 }
@@ -825,6 +835,7 @@ class RDF_RadarScattererRegistry
                 // Out of range now, but a later sweep must be able to re-add it.
                 ForgetSeen(entry.m_Entity);
                 RemoveEntryFromGrid(entry);
+                s_ByEntity.Remove(entry.m_Entity);
                 s_Entries.Remove(index);
                 s_StatPruned = s_StatPruned + 1;
                 continue;
@@ -1086,6 +1097,8 @@ class RDF_RadarScattererRegistry
     {
         if (!s_Entries)
             s_Entries = new array<ref RDF_RadarScatterer>();
+        if (!s_ByEntity)
+            s_ByEntity = new map<IEntity, ref RDF_RadarScatterer>();
         if (!s_Pending)
             s_Pending = new array<IEntity>();
         if (!s_DiscoveryScratch)

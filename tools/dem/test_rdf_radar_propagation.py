@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
-import math
 import unittest
 
+import numpy as np
+
 from rdf_radar_channel import (
+    ChannelFidelity,
     MultipathModel,
     fold_doppler_ambiguous,
     fold_range_ambiguous,
@@ -18,9 +20,24 @@ from rdf_radar_channel import (
     two_ray_multipath_factor,
 )
 from rdf_radar_physics import get_preset
+from rdf_radar_systems import MeasurementModel
 
 
 class TestTwoRayMultipath(unittest.TestCase):
+    def test_default_disabled(self) -> None:
+        mp = MultipathModel()
+        self.assertFalse(mp.enabled)
+        self.assertEqual(mp.power_factor(0.03, 2000.0, 10.0, 20.0), 1.0)
+
+    def test_channel_fidelity_opt_in(self) -> None:
+        fid = ChannelFidelity()
+        self.assertEqual(fid.multipath_model().power_factor(0.03, 2000.0, 10.0, 40.0), 1.0)
+        fid.enable_los_two_ray()
+        f = fid.multipath_model().power_factor(0.03, 2000.0, 10.0, 40.0)
+        self.assertNotEqual(f, 1.0)
+        fid.stabilize_for_regression()
+        self.assertFalse(fid.enable_los_two_ray_multipath)
+
     def test_disabled_is_unity(self) -> None:
         mp = MultipathModel(enabled=False)
         self.assertEqual(mp.power_factor(0.03, 2000.0, 10.0, 20.0), 1.0)
@@ -97,6 +114,28 @@ class TestAmbiguityFold(unittest.TestCase):
         hw = get_preset("shorad")
         # High PRF → fold is a no-op for typical instrumented ranges.
         self.assertGreater(hw.unambiguous_range_m, 10000.0)
+
+    def test_measurement_model_folds_and_refraction(self) -> None:
+        hw = get_preset("shorad")
+        fid = (
+            ChannelFidelity()
+            .enable_prf_ambiguity_folds(True, True)
+            .enable_refraction()
+        )
+        mm = MeasurementModel.from_fidelity(fid, noise_scale=0.0)
+        rng = np.random.default_rng(3)
+        true_r = hw.unambiguous_range_m + 8000.0
+        expected = fold_range_ambiguous(true_r, hw.unambiguous_range_m)
+        r, _, el, rr = mm.synthesize(hw, true_r, 0.0, 1.0, 200.0, 50.0, rng)
+        self.assertAlmostEqual(r, expected, delta=hw.range_bin_m())
+        self.assertGreater(el, 1.0)
+        # Doppler fold into ±PRF/2 should reduce extreme radial when wavelength known.
+        fd = fold_doppler_ambiguous(
+            (200.0 / (0.5 * hw.wavelength_m)),
+            hw.active_prf_hz(),
+        )
+        self.assertGreaterEqual(fd, -0.5 * hw.active_prf_hz())
+        _ = rr
 
 
 if __name__ == "__main__":

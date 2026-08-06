@@ -27,6 +27,7 @@ class RDF_RadarScanner
     protected int m_StatFreshUpdates;
     protected int m_StatBudgetSkips;
     protected int m_StatLosCacheHits;
+    protected int m_StatTraceMoves;
     protected int m_StatMtdRotorAided;
     protected int m_StatMtdDetected;
     protected int m_LastMtdWinBin;
@@ -40,6 +41,8 @@ class RDF_RadarScanner
     protected int m_RegistryScanCursor;
     // Resolved once per Scan() when atmospheric loss is enabled.
     protected float m_ScanRainLossDbPerKm;
+    // Reused pass context (avoid per-scan allocation).
+    protected ref RDF_RadarScanPassContext m_PassCtx;
 
     void RDF_RadarScanner(RDF_RadarSettings settings = null)
     {
@@ -57,6 +60,7 @@ class RDF_RadarScanner
         m_CoarseRdMap = new RDF_RadarCoarseRdMap();
         m_TraceParam = new TraceParam();
         m_LosExclude = new array<IEntity>();
+        m_PassCtx = new RDF_RadarScanPassContext();
         m_SettingsValidated = false;
         m_RegistryScanCursor = 0;
         m_ScanRainLossDbPerKm = 0.0;
@@ -136,7 +140,8 @@ class RDF_RadarScanner
         return "reuse=" + m_StatReuseHits.ToString()
             + " fresh=" + m_StatFreshUpdates.ToString()
             + " skip=" + m_StatBudgetSkips.ToString()
-            + " losHit=" + m_StatLosCacheHits.ToString();
+            + " losHit=" + m_StatLosCacheHits.ToString()
+            + " trace=" + m_StatTraceMoves.ToString();
     }
 
     string GetMtdStatsShort()
@@ -250,6 +255,7 @@ class RDF_RadarScanner
         m_StatFreshUpdates = 0;
         m_StatBudgetSkips = 0;
         m_StatLosCacheHits = 0;
+        m_StatTraceMoves = 0;
         m_StatMtdRotorAided = 0;
         m_StatMtdDetected = 0;
         m_LastMtdWinBin = -1;
@@ -358,7 +364,9 @@ class RDF_RadarScanner
         int freshBudget = ComputeFreshUpdateBudget();
         float rangeSq = range * range;
 
-        RDF_RadarScanPassContext passCtx = new RDF_RadarScanPassContext();
+        if (!m_PassCtx)
+            m_PassCtx = new RDF_RadarScanPassContext();
+        RDF_RadarScanPassContext passCtx = m_PassCtx;
         passCtx.m_Subject = subject;
         passCtx.m_World = world;
         passCtx.m_Origin = origin;
@@ -456,10 +464,9 @@ class RDF_RadarScanner
             }
 
             vector pos = entry.m_Position;
-            // Aim LOS at the geometric center so ground vehicles are not
-            // blocked by terrain before their chassis origin (often on the ground).
-            vector losEnd = RDF_RadarScanGeometry.GetScattererLosEnd(entry);
-            vector toTarget = losEnd - origin;
+            // Sector / range gate uses registry position (cheap). Geometric LOS
+            // end (GetBounds) is deferred until a full update is required.
+            vector toTarget = pos - origin;
             float distSq = toTarget.LengthSq();
             if (distSq < minDistSq || distSq > rangeSq)
                 continue;
@@ -508,13 +515,26 @@ class RDF_RadarScanner
                 TryInsertReusedScattererTarget(
                     outTargets,
                     entry,
-                    losEnd,
+                    pos,
                     dist,
                     priorityType,
                     worldTime,
                     wallTime);
                 continue;
             }
+
+            // Aim LOS at the geometric center so ground vehicles are not
+            // blocked by terrain before their chassis origin (often on the ground).
+            vector losEnd = RDF_RadarScanGeometry.GetScattererLosEnd(entry);
+            toTarget = losEnd - origin;
+            distSq = toTarget.LengthSq();
+            if (distSq < minDistSq || distSq > rangeSq)
+                continue;
+            dist = Math.Sqrt(distSq);
+            if (dist > 0.001)
+                toTargetNorm = toTarget / dist;
+            else
+                toTargetNorm = toTarget;
 
             float hitFraction = 1.0;
             bool losClear = false;
@@ -550,13 +570,18 @@ class RDF_RadarScanner
                     break;
                 }
                 RDF_RadarScanGeometry.FillLosExclude(m_LosExclude, subject, entry.m_Entity);
-                hitFraction = RDF_RadarScanGeometry.TraceLineOfSight(
+                int traceMoves = 0;
+                hitFraction = RDF_RadarScanGeometry.TraceLineOfSightCounted(
                     world,
                     param,
                     origin,
                     losEnd,
-                    RDF_RadarScanGeometry.LOS_START_CLEARANCE_M);
-                losUsed = losUsed + 1;
+                    RDF_RadarScanGeometry.LOS_START_CLEARANCE_M,
+                    traceMoves);
+                if (traceMoves < 1)
+                    traceMoves = 1;
+                losUsed = losUsed + traceMoves;
+                m_StatTraceMoves = m_StatTraceMoves + traceMoves;
                 losClear = RDF_RadarScanGeometry.IsLineOfSightClear(
                     hitFraction, param.TraceEnt, entry.m_Entity);
                 if (m_LosCache)

@@ -165,7 +165,9 @@ class RDF_RadarScanReuseCache
             m_ByEntity.Set(entity, e);
         }
 
-        e.m_LastTarget = CopyTarget(target);
+        if (!e.m_LastTarget)
+            e.m_LastTarget = new RDF_RadarTarget();
+        CopyFieldsInto(e.m_LastTarget, target);
         e.m_LastOrigin = origin;
         e.m_LastPosition = position;
         e.m_LastWallS = wallS;
@@ -229,6 +231,14 @@ class RDF_RadarScanReuseCache
         if (!src)
             return null;
         RDF_RadarTarget t = new RDF_RadarTarget();
+        CopyFieldsInto(t, src);
+        return t;
+    }
+
+    protected void CopyFieldsInto(RDF_RadarTarget t, RDF_RadarTarget src)
+    {
+        if (!t || !src)
+            return;
         t.m_Entity = src.m_Entity;
         t.m_ScattererId = src.m_ScattererId;
         t.m_Position = src.m_Position;
@@ -273,6 +283,5 @@ class RDF_RadarScanReuseCache
         t.m_EmitPeakPowerW = src.m_EmitPeakPowerW;
         t.m_EmitAntennaGainDbi = src.m_EmitAntennaGainDbi;
         t.m_EmitStrength = src.m_EmitStrength;
-        return t;
     }
 }

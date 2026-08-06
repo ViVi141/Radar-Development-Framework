@@ -185,9 +185,15 @@ class RDF_DemRuntimeTile
         return true;
     }
 
-    bool TryGetCell(int localIx, int localIz, out RDF_DemRuntimeCellSample outSample)
+    bool TryFillCell(int localIx, int localIz, notnull RDF_DemRuntimeCellSample sample)
     {
-        outSample = new RDF_DemRuntimeCellSample();
+        if (!sample)
+            return false;
+        if (sample.m_SpanLo)
+            sample.m_SpanLo.Clear();
+        if (sample.m_SpanHi)
+            sample.m_SpanHi.Clear();
+        sample.m_Valid = false;
         if (localIx < 0 || localIz < 0 || localIx >= m_Size || localIz >= m_Size)
             return false;
 
@@ -195,26 +201,31 @@ class RDF_DemRuntimeTile
         if (m_HasCell.Get(idx) == 0)
             return false;
 
-        outSample.m_Valid = true;
-        outSample.m_TerrainY = m_TerrainY.Get(idx);
-        outSample.m_SlopeDeg = m_SlopeDeg.Get(idx);
-        outSample.m_WaterDepthM = m_WaterDepthM.Get(idx);
-        outSample.m_WaterType = m_WaterType.Get(idx);
-        outSample.m_OccGround = m_OccGround.Get(idx);
-        outSample.m_EntityHits = m_EntityHits.Get(idx);
-        outSample.m_DensityGcm3 = m_DensityGcm3.Get(idx);
-        outSample.m_SurfaceClass = m_SurfaceClass.Get(idx);
-        outSample.m_NSpans = m_NSpans.Get(idx);
+        sample.m_Valid = true;
+        sample.m_TerrainY = m_TerrainY.Get(idx);
+        sample.m_SlopeDeg = m_SlopeDeg.Get(idx);
+        sample.m_WaterDepthM = m_WaterDepthM.Get(idx);
+        sample.m_WaterType = m_WaterType.Get(idx);
+        sample.m_OccGround = m_OccGround.Get(idx);
+        sample.m_EntityHits = m_EntityHits.Get(idx);
+        sample.m_DensityGcm3 = m_DensityGcm3.Get(idx);
+        sample.m_SurfaceClass = m_SurfaceClass.Get(idx);
+        sample.m_NSpans = m_NSpans.Get(idx);
 
-        outSample.m_SpanLo.Clear();
-        outSample.m_SpanHi.Clear();
         for (int s = 0; s < m_MaxSpans; s++)
         {
             int spanIdx = SpanIndex(localIx, localIz, s);
-            outSample.m_SpanLo.Insert(m_SpanLo.Get(spanIdx));
-            outSample.m_SpanHi.Insert(m_SpanHi.Get(spanIdx));
+            sample.m_SpanLo.Insert(m_SpanLo.Get(spanIdx));
+            sample.m_SpanHi.Insert(m_SpanHi.Get(spanIdx));
         }
 
         return true;
+    }
+
+    // Compatibility wrapper — allocates. Prefer TryFillCell with a scratch sample.
+    bool TryGetCell(int localIx, int localIz, out RDF_DemRuntimeCellSample outSample)
+    {
+        outSample = new RDF_DemRuntimeCellSample();
+        return TryFillCell(localIx, localIz, outSample);
     }
 }

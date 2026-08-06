@@ -20,6 +20,7 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 from rdf_dem_io import choose_radar_site, default_tile_dir, load_dem, resolve_dem_source
+from rdf_radar_channel import ChannelFidelity
 from rdf_radar_ew import (
     DeceptionJammer,
     EWStack,
@@ -246,7 +247,7 @@ def _render(path: str, hardware, sector, history, ew_names: list[str]) -> None:
             "  RadarHardware + ElevationBeam[]",
             "  TargetTrajectory.sample(t)",
             "  hardware_at_frequency(f) / hop",
-            "  MultipathModel + SwerlingModel",
+            "  ChannelFidelity opt-in (two-ray + Swerling)",
             "  EWEffect.apply(power, context)",
             "  associate_and_filter(detections)",
             "",
@@ -396,6 +397,7 @@ def main() -> None:
         duration_s=duration,
         ew_stack=ew_stack,
         frequency_hop=hop,
+        fidelity=ChannelFidelity().enable_los_two_ray(),
     )
     history = simulate_scan(
         dem,

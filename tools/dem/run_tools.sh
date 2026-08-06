@@ -24,6 +24,13 @@ RDF tools/dem helper (catalog: ../README.md)
   ./run_tools.sh full-sim   Capability smoke -> out/full_sim_report.json
   ./run_tools.sh demo       Framework demo (--preset shorad)
   ./run_tools.sh demo --ew  Framework demo with EW
+
+Also common:
+  python3 rdf_dem_pack_surface_json.py --world GM_Eden --from-bin
+  python3 rdf_ttile_unpack.py
+  python3 rdf_radar_mass_battle_sim.py
+  python3 rdf_radar_hw_calibrate.py --preset shorad
+  python3 rdf_sig_patch_heli_rotors.py
 EOF
 }
 

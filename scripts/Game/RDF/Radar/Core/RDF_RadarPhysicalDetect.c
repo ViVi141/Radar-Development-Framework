@@ -6,6 +6,11 @@ class RDF_RadarPhysicalDetect
     protected static const float RAD_TO_DEG = 57.2957795;
     protected static const float LIGHT_SPEED = 299792458.0;
 
+    // Reused per Process() — single-threaded game loop only.
+    protected static ref array<float> s_DopplerLines;
+    protected static ref array<float> s_DopplerPowers;
+    protected static ref array<float> s_PrfList;
+
     static void Process(
         RDF_RadarTarget target,
         vector origin,
@@ -286,14 +291,18 @@ class RDF_RadarPhysicalDetect
         target.m_PrfIndex = hardware.GetActivePrfIndex(scanNumberPre);
 
         // Optional micro-Doppler spectrum (rotor sidebands). Empty → body line only.
-        array<float> dopplerLines = new array<float>();
-        array<float> dopplerPowers = new array<float>();
+        if (!s_DopplerLines)
+            s_DopplerLines = new array<float>();
+        if (!s_DopplerPowers)
+            s_DopplerPowers = new array<float>();
+        s_DopplerLines.Clear();
+        s_DopplerPowers.Clear();
         RDF_RadarRcsModel.FillDopplerSpectrum(
             target,
             wavelength,
             bodyDopplerHz,
-            dopplerLines,
-            dopplerPowers);
+            s_DopplerLines,
+            s_DopplerPowers);
 
         if (hardware.m_EnableMti)
         {
@@ -302,8 +311,8 @@ class RDF_RadarPhysicalDetect
                 int winBin = 0;
                 float peakFd = bodyDopplerHz;
                 target.m_MtiGain = RDF_RadarClutterModel.MaxMtdSpectrumGain(
-                    dopplerLines,
-                    dopplerPowers,
+                    s_DopplerLines,
+                    s_DopplerPowers,
                     activePrfHz,
                     hardware.m_DopplerBinCount,
                     hardware.m_MtiClutterFloor,
@@ -321,16 +330,18 @@ class RDF_RadarPhysicalDetect
             }
             else
             {
-                array<float> prfList = new array<float>();
+                if (!s_PrfList)
+                    s_PrfList = new array<float>();
+                s_PrfList.Clear();
                 if (hardware.m_MtiStaggerDeblind && hardware.m_PrfSetHz
                     && hardware.m_PrfSetHz.Count() >= 2)
                 {
                     for (int pi = 0; pi < hardware.m_PrfSetHz.Count(); pi++)
-                        prfList.Insert(hardware.m_PrfSetHz.Get(pi));
+                        s_PrfList.Insert(hardware.m_PrfSetHz.Get(pi));
                 }
                 else
                 {
-                    prfList.Insert(activePrfHz);
+                    s_PrfList.Insert(activePrfHz);
                 }
 
                 ERDF_MtiMode cancelMode = ERDF_MtiMode.RDF_MTI_TWOPULSE;
@@ -339,9 +350,9 @@ class RDF_RadarPhysicalDetect
 
                 float peakFdCancel = bodyDopplerHz;
                 target.m_MtiGain = RDF_RadarClutterModel.MaxMtiCancellerSpectrumGain(
-                    dopplerLines,
-                    dopplerPowers,
-                    prfList,
+                    s_DopplerLines,
+                    s_DopplerPowers,
+                    s_PrfList,
                     cancelMode,
                     peakFdCancel);
                 target.m_DopplerBin = -1;

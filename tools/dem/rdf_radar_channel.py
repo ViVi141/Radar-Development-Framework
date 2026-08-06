@@ -2,6 +2,9 @@
 """Propagation extras: frequency retune, multipath, and Swerling RCS.
 
 These are framework utilities used by the scan loop. They do not bake into DEM.
+
+Optional fidelity (LOS two-ray, 4/3 refraction, PRF folds) mirrors in-game
+RDF_RadarSettings Enable* APIs — default OFF; call ChannelFidelity helpers.
 """
 
 from __future__ import annotations
@@ -218,10 +221,89 @@ def fold_doppler_ambiguous(doppler_hz: float, prf_hz: float) -> float:
 
 
 @dataclass
-class MultipathModel:
-    """Simple two-ray multipath power factor for low-altitude paths."""
+class ChannelFidelity:
+    """Opt-in propagation / measurement extras (mirrors RDF_RadarSettings).
 
-    enabled: bool = True
+    Defaults match StabilizeForRegression / game defaults: all optional
+    fidelity off until Enable* helpers are called.
+    """
+
+    enable_los_two_ray_multipath: bool = False
+    enable_atmospheric_refraction: bool = False
+    enable_range_ambiguity_fold: bool = False
+    enable_doppler_ambiguity_fold: bool = False
+    earth_radius_factor: float = 4.0 / 3.0
+    los_two_ray_reflection_coeff: float = -0.5
+    los_two_ray_max_target_agl_m: float = 600.0
+    los_two_ray_min_factor: float = 0.08
+    los_two_ray_max_factor: float = 4.0
+    # When True, MeasurementModel skips Doppler fold (WLR / weapon-locate).
+    weapon_locate: bool = False
+
+    def enable_los_two_ray(self) -> "ChannelFidelity":
+        self.enable_los_two_ray_multipath = True
+        self.los_two_ray_reflection_coeff = -0.5
+        self.los_two_ray_max_target_agl_m = 600.0
+        self.los_two_ray_min_factor = 0.08
+        self.los_two_ray_max_factor = 4.0
+        return self
+
+    def enable_refraction(self) -> "ChannelFidelity":
+        self.enable_atmospheric_refraction = True
+        self.earth_radius_factor = 4.0 / 3.0
+        return self
+
+    def enable_prf_ambiguity_folds(
+        self,
+        fold_range: bool = True,
+        fold_doppler: bool = True,
+    ) -> "ChannelFidelity":
+        self.enable_range_ambiguity_fold = fold_range
+        self.enable_doppler_ambiguity_fold = fold_doppler
+        return self
+
+    def stabilize_for_regression(self) -> "ChannelFidelity":
+        """Turn off optional fidelity extras (AutoTest / golden helper)."""
+        self.enable_los_two_ray_multipath = False
+        self.enable_atmospheric_refraction = False
+        self.enable_range_ambiguity_fold = False
+        self.enable_doppler_ambiguity_fold = False
+        return self
+
+    def multipath_model(self) -> "MultipathModel":
+        return MultipathModel(
+            enabled=self.enable_los_two_ray_multipath,
+            reflection_coeff=self.los_two_ray_reflection_coeff,
+            max_height_m=self.los_two_ray_max_target_agl_m,
+            min_factor=self.los_two_ray_min_factor,
+            max_factor=self.los_two_ray_max_factor,
+        )
+
+    def horizon_power_factor(
+        self,
+        range_m: float,
+        radar_height_agl_m: float,
+        target_height_agl_m: float,
+    ) -> float:
+        """1.0 unless refraction enabled; then soft radio-horizon roll-off."""
+        if not self.enable_atmospheric_refraction:
+            return 1.0
+        horizon = radio_horizon_range_m(
+            radar_height_agl_m,
+            target_height_agl_m,
+            self.earth_radius_factor,
+        )
+        return horizon_soft_factor(range_m, horizon)
+
+
+@dataclass
+class MultipathModel:
+    """Simple two-ray multipath power factor for low-altitude paths.
+
+    Default disabled to match in-game EnableLosTwoRayMultipath() opt-in.
+    """
+
+    enabled: bool = False
     reflection_coeff: float = -0.5
     max_height_m: float = 600.0
     min_factor: float = 0.08

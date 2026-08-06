@@ -80,6 +80,7 @@ class RDF_RadarScanGeometry
     // so NLOS / knife-edge keep a stable parameter after start clearance.
     // Clearance segment is traced first so obstacles between origin and the
     // pushed Start are not silently skipped.
+    // outTraceMoves: actual TraceMove calls (1 or 2) for honest LOS budgeting.
     static float TraceLineOfSight(
         notnull BaseWorld world,
         notnull TraceParam param,
@@ -87,6 +88,21 @@ class RDF_RadarScanGeometry
         vector losEnd,
         float startClearanceM)
     {
+        int unusedMoves;
+        return TraceLineOfSightCounted(
+            world, param, origin, losEnd, startClearanceM, unusedMoves);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    static float TraceLineOfSightCounted(
+        notnull BaseWorld world,
+        notnull TraceParam param,
+        vector origin,
+        vector losEnd,
+        float startClearanceM,
+        out int outTraceMoves)
+    {
+        outTraceMoves = 0;
         vector delta = losEnd - origin;
         float fullLen = delta.Length();
         vector start = origin;
@@ -102,6 +118,7 @@ class RDF_RadarScanGeometry
             param.TraceEnt = null;
             param.SurfaceProps = null;
             float clearHit = world.TraceMove(param, null);
+            outTraceMoves = outTraceMoves + 1;
             if (clearHit < LOS_CLEAR_FRACTION)
             {
                 float alongClear = clearHit * startOffset;
@@ -119,6 +136,7 @@ class RDF_RadarScanGeometry
         param.SurfaceProps = null;
 
         float segmentHit = world.TraceMove(param, null);
+        outTraceMoves = outTraceMoves + 1;
 
         if (fullLen <= 0.001)
             return segmentHit;

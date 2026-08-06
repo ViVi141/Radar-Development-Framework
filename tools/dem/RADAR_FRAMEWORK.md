@@ -20,6 +20,8 @@ Catalog index: [tools/README.md](../README.md). Scripts remain flat under `tools
   pack V3 bake into `.dem.data`, full DEM JSON, or SURF JSON (workshop path).
 - `rdf_sig_pack_bin.py` / `rdf_sig_pack_json.py` / `rdf_sig_pack_conf.py`:
   pack signature tables for game / profile / `.conf`.
+- `rdf_sig_patch_heli_rotors.py`: fill UH-1 / Mi-8 rotor tip/blades/hub fields
+  in signature conf.
 - `rdf_ttile_unpack.py`: unpack official `.ttile` height for offline overlays.
 
 ### Simulation libraries
@@ -27,20 +29,27 @@ Catalog index: [tools/README.md](../README.md). Scripts remain flat under `tools
 - `rdf_radar_materials.py`: calibratable band/sea-state sigma-zero tables
   (`calib/sigma0_x_ss3.json`).
 - `rdf_radar_physics.py`: hardware, waveform, elevation beams, radar equation,
-  pulse compression, integration, Doppler, MTI, and CFAR.
-- `rdf_radar_channel.py`: frequency retune, multipath, Swerling RCS, spectral
-  overlap helpers.
+  pulse compression, integration, Doppler, MTI / MTD bank, and CFAR.
+- `rdf_radar_channel.py`: frequency retune, Swerling RCS, aspect RCS, spectral
+  overlap; `ChannelFidelity` opt-in helpers (`enable_los_two_ray` /
+  `enable_refraction` / `enable_prf_ambiguity_folds` / `stabilize_for_regression`)
+  for LOS two-ray multipath, 4/3-Earth refraction, and PRF range/Doppler folds
+  (default OFF — mirrors in-game Enable* APIs). `MultipathModel.enabled`
+  defaults to False.
 - `rdf_radar_targets.py`: target state and time-parametric trajectories.
 - `rdf_radar_sector_sim.py`: static full-sector RF/clutter snapshot.
 - `rdf_radar_scan.py`: `scan(t)`, dwell updates, persistent PPI, moving-track
-  intercepts, per-beam measurements, hop-aware retune.
+  intercepts, per-beam measurements, hop-aware retune; `ScanConfig.fidelity`
+  applies optional multipath / radio-horizon soft factor / plot folds.
 - `rdf_radar_ew.py`: pluggable noise/deception effects and frequency schedules.
 - `rdf_radar_diffraction.py`: knife-edge diffraction helpers.
 - `rdf_radar_track.py`: nearest-neighbor association and alpha-beta filtering.
 - `rdf_radar_fusion.py`: multi-radar association / horizontal cross-fix.
 - `rdf_radar_systems.py`: lock FSM, ESM Friis, RWR/ARM hooks, GO/SO-CFAR,
   measurement noise, rain path loss, RGPO/angular/intermittent deception,
-  Network Reliable/Unreliable / caps / throttle / interest / fingerprint.
+  Network Reliable/Unreliable / caps / throttle / interest / fingerprint;
+  `MeasurementModel.from_fidelity` applies opt-in range/Doppler fold and
+  refraction elevation bias (WLR skips Doppler fold via `weapon_locate`).
 
 ### CLI demos / validation
 
@@ -48,13 +57,15 @@ Catalog index: [tools/README.md](../README.md). Scripts remain flat under `tools
 - `rdf_radar_framework_demo.py`: clean/EW validation output and CSV dumps.
 - `rdf_radar_shellfire_offline.py`: offline shell-fire / WLR mirror of the
   in-game ShellFire regression.
-- `rdf_radar_mass_battle_sim.py`: DEM-backed multi-radar / multi-target battle,
-  trajectory prediction, and WLR evaluation (large monolith; split tracked in
-  TODO.md).
+- `rdf_radar_mass_battle_sim.py`: thin facade into `mass_battle/` package
+  (logic in `_impl.py`; thematic modules are re-exports — see
+  `mass_battle/README.md`).
+- `rdf_radar_hw_calibrate.py`: offline HW bake-back →
+  `calib/prf_clutter_*.json` (copy to `$profile:RDF/RadarData/HwCalib.json`).
 - `rdf_radar_full_sim.py`: no-DEM orchestrator exercising capability coverage
   (writes `out/full_sim_report.json`).
 - `rdf_knife_edge_eden_validate.py`: Eden knife-edge validation helper.
-- `run_tools.ps1`: Windows entry (`test` / `full-sim` / `demo`).
+- `run_tools.ps1` / `run_tools.sh`: entry helpers (`test` / `full-sim` / `demo`).
 
 ### Golden tests
 
@@ -65,7 +76,13 @@ Catalog index: [tools/README.md](../README.md). Scripts remain flat under `tools
 - `test_rdf_radar_ew.py`: noise jam coupling / burn-through.
 - `test_rdf_radar_diffraction.py`: knife-edge factor geometry.
 - `test_rdf_radar_fusion.py`: associate / cross-fix.
-- `test_rdf_radar_systems.py`: systems unit tests + full_sim smoke (16 scenarios).
+- `test_rdf_radar_systems.py`: systems unit tests + full_sim smoke.
+- `test_rdf_radar_mtd.py`: MTD bank / rotor micro-Doppler.
+- `test_rdf_radar_heli_cpa.py`: helicopter CPA / body-null vs tip survival.
+- `test_rdf_radar_propagation.py`: two-ray / refraction / PRF ambiguity folds.
+- `test_rdf_radar_hw_calibrate.py`: HW calib suggest / preset JSON.
+- `test_rdf_radar_sig_pack.py`: signature pack / rotor fields.
+- `test_rdf_sig_patch_heli_rotors.py`: heli rotor conf patch.
 
 Install: `pip install -r tools/dem/requirements.txt` (numpy + matplotlib).
 Golden suite: `cd tools/dem` then `.\run_tools.ps1 test` or
@@ -103,10 +120,13 @@ Generated images/CSV under `tools/dem/out/` are gitignored — do not commit.
 | MTD bank + rotor micro-Doppler + heli CPA | `test_rdf_radar_mtd` / `heli_cpa` + `full_sim` |
 | PRF stagger | `RadarHardware.active_prf_hz` + `full_sim` |
 | Signature rotor pack | `rdf_sig_pack_conf` / `test_rdf_radar_sig_pack` |
+| Heli rotor conf fill | `rdf_sig_patch_heli_rotors` / `test_rdf_sig_patch_heli_rotors` |
+| HW clutter / MTD bake-back | `rdf_radar_hw_calibrate` → `calib/prf_clutter_*.json` |
 | Track coast on miss | `TrackerConfig.coast_on_miss` + `test_rdf_radar_track` |
 | Atmosphere / rain | `rdf_radar_systems.two_way_path_loss_db` |
 | Measurement noise | `MeasurementModel` |
 | Multipath / knife-edge | `rdf_radar_channel` / `rdf_radar_diffraction` |
+| LOS two-ray / 4/3 refraction / PRF folds | `ChannelFidelity` + `rdf_radar_channel` + `MeasurementModel` / `ScanConfig` + `test_rdf_radar_propagation` + `full_sim` (`propagation.refraction_horizon` / `ambiguity_fold`) |
 | CA / GO / SO-CFAR + thermal fill | `cfar_detections` / `fill_thermal_noise` |
 | Aspect RCS / Swerling | `rdf_radar_channel` |
 | α-β track / WLR fit | `rdf_radar_track` |
@@ -116,7 +136,7 @@ Generated images/CSV under `tools/dem/out/` are gitignored — do not commit.
 | Fusion / cross-fix / IFF | `rdf_radar_fusion` + `resolve_iff` |
 | Lock / RWR / ARM / ESM Friis | `rdf_radar_systems` |
 | Network caps / throttle / interest | `network_should_send` |
-| DEM sector / mass battle | `sector_sim` / `mass_battle_sim` (optional DEM) |
+| DEM sector / mass battle | `sector_sim` / `mass_battle` package (optional DEM) |
 
 Not simulated (by design): FDTD, full DRFM, JPDA, STAP.
 
@@ -127,15 +147,17 @@ cd tools\dem
 .\run_tools.ps1 test
 .\run_tools.ps1 full-sim
 .\run_tools.ps1 demo
-python tools\dem\rdf_radar_framework_demo.py --preset shorad
-python tools\dem\rdf_radar_framework_demo.py --preset shorad --ew
-python tools\dem\rdf_radar_framework_demo.py --preset p18
-python tools\dem\rdf_radar_framework_demo.py --use-ttile --world GM_Eden --preset shorad
-python tools\dem\rdf_radar_mass_battle_sim.py
-python tools\dem\rdf_radar_mass_battle_sim.py --use-ttile --world GM_Eden
-python tools\dem\rdf_radar_full_sim.py
-python tools\dem\rdf_ttile_unpack.py
-python -m unittest discover -s tools\dem -p "test_rdf_*.py" -v
+python rdf_radar_framework_demo.py --preset shorad
+python rdf_radar_framework_demo.py --preset shorad --ew
+python rdf_radar_framework_demo.py --preset p18
+python rdf_radar_framework_demo.py --use-ttile --world GM_Eden --preset shorad
+python rdf_radar_mass_battle_sim.py
+python rdf_radar_mass_battle_sim.py --use-ttile --world GM_Eden
+python rdf_radar_full_sim.py
+python rdf_radar_hw_calibrate.py --preset shorad
+python rdf_sig_patch_heli_rotors.py
+python rdf_ttile_unpack.py
+python -m unittest discover -s . -p "test_rdf_*.py" -v
 ```
 
 Outputs under `tools/dem/out/`:
@@ -175,31 +197,33 @@ Outputs under `tools/dem/out/`:
 - `rdf_dem_pack.py` / `rdf_dem_bake_help.py` / `rdf_dem_preview.py`：打包、烘焙辅助与高程预览（亦见 `docs/DEM.md`）。
 - `rdf_dem_pack_bin.py` / `rdf_dem_pack_json.py` / `rdf_dem_pack_surface_json.py`：将 V3 烘焙打成 `.dem.data`、全量 DEM JSON 或 SURF JSON（工坊路径）。
 - `rdf_sig_pack_bin.py` / `rdf_sig_pack_json.py` / `rdf_sig_pack_conf.py`：为游戏 / profile / `.conf` 打包特征表。
+- `rdf_sig_patch_heli_rotors.py`：为 UH-1 / Mi-8 签名 conf 填 tip/blades/hub。
 - `rdf_ttile_unpack.py`：解包官方 `.ttile` 高程，供离线叠加。
 
 ### 仿真库
 
 - `rdf_radar_materials.py`：可标定的频段/海况 σ⁰ 表（`calib/sigma0_x_ss3.json`）。
-- `rdf_radar_physics.py`：硬件、波形、俯仰波束、雷达方程、脉压、积累、多普勒、MTI、CFAR。
-- `rdf_radar_channel.py`：频率重调、多径、Swerling RCS、频谱重叠辅助。
+- `rdf_radar_physics.py`：硬件、波形、俯仰波束、雷达方程、脉压、积累、多普勒、MTI / MTD、CFAR。
+- `rdf_radar_channel.py`：频率重调、Swerling RCS、方位 RCS、频谱重叠；`ChannelFidelity` 按需助手（`enable_los_two_ray` / `enable_refraction` / `enable_prf_ambiguity_folds` / `stabilize_for_regression`）覆盖 LOS 双射线、4/3 折射、PRF 距离/多普勒折叠（默认关，对齐游戏 Enable*）。`MultipathModel.enabled` 默认 False。
 - `rdf_radar_targets.py`：目标状态与时间参数化轨迹。
 - `rdf_radar_sector_sim.py`：静态全扇区 RF/杂波快照。
-- `rdf_radar_scan.py`：`scan(t)`、驻留更新、持久 PPI、动目标截获、分波束量测、跳频感知重调。
+- `rdf_radar_scan.py`：`scan(t)`、驻留更新、持久 PPI、动目标截获、分波束量测、跳频感知重调；`ScanConfig.fidelity` 应用可选多径 / 无线电地平线软因子 / 点迹折叠。
 - `rdf_radar_ew.py`：可插拔噪声/欺骗效果与频率时间表。
 - `rdf_radar_diffraction.py`：刀刃绕射辅助。
 - `rdf_radar_track.py`：最近邻关联与 α-β 滤波。
 - `rdf_radar_fusion.py`：多雷达关联 / 水平交会。
-- `rdf_radar_systems.py`：锁定状态机、ESM Friis、RWR/ARM、GO/SO-CFAR、测量噪声、降雨损耗、拖距/角闪烁/间歇假点、Network 带宽策略。
+- `rdf_radar_systems.py`：锁定状态机、ESM Friis、RWR/ARM、GO/SO-CFAR、测量噪声、降雨损耗、拖距/角闪烁/间歇假点、Network 带宽策略；`MeasurementModel.from_fidelity` 按需应用距离/多普勒折叠与折射俯仰偏置（WLR 经 `weapon_locate` 跳过多普勒折叠）。
 
 ### CLI / 校验
 
 - `rdf_radar_sector_preview.py`：扇区预览图。
 - `rdf_radar_framework_demo.py`：干净通道 / EW 验证输出与 CSV。
 - `rdf_radar_shellfire_offline.py`：游戏内 ShellFire 回归的离线炮弹 / WLR 镜像。
-- `rdf_radar_mass_battle_sim.py`：基于 DEM 的多雷达 / 多目标战场、轨迹预测与 WLR 评估（大单体；拆分见 TODO.md）。
+- `rdf_radar_mass_battle_sim.py`：进入 `mass_battle/` 包的薄 facade（逻辑在 `_impl.py`；主题模块为再导出 — 见 `mass_battle/README.md`）。
+- `rdf_radar_hw_calibrate.py`：离线 HW 回灌 → `calib/prf_clutter_*.json`（可拷到 `$profile:RDF/RadarData/HwCalib.json`）。
 - `rdf_radar_full_sim.py`：无 DEM 全能力编排（写出 `out/full_sim_report.json`）。
 - `rdf_knife_edge_eden_validate.py`：Eden 刀刃绕射校验。
-- `run_tools.ps1`：Windows 入口（`test` / `full-sim` / `demo`）。
+- `run_tools.ps1` / `run_tools.sh`：入口助手（`test` / `full-sim` / `demo`）。
 
 ### Golden 测试
 
@@ -209,7 +233,13 @@ Outputs under `tools/dem/out/`:
 - `test_rdf_radar_ew.py`：噪声耦合 / 烧穿。
 - `test_rdf_radar_diffraction.py`：刀刃因子几何。
 - `test_rdf_radar_fusion.py`：关联 / 交会。
-- `test_rdf_radar_systems.py`：systems 单测 + full_sim 冒烟（16 场景）。
+- `test_rdf_radar_systems.py`：systems 单测 + full_sim 冒烟。
+- `test_rdf_radar_mtd.py`：MTD 滤波器组 / 旋翼微多普勒。
+- `test_rdf_radar_heli_cpa.py`：直升机 CPA / 机身盲速 vs tip 存活。
+- `test_rdf_radar_propagation.py`：双射线 / 折射 / PRF 模糊折叠。
+- `test_rdf_radar_hw_calibrate.py`：HW 标定 suggest / 预设 JSON。
+- `test_rdf_radar_sig_pack.py`：签名打包 / 旋翼字段。
+- `test_rdf_sig_patch_heli_rotors.py`：旋翼 conf 填数补丁。
 
 安装：`pip install -r tools/dem/requirements.txt`（numpy + matplotlib）。
 Golden 套件：`cd tools/dem` 后 `.\run_tools.ps1 test` 或
@@ -247,10 +277,13 @@ Golden 套件：`cd tools/dem` 后 `.\run_tools.ps1 test` 或
 | MTD 滤波器组 + 旋翼微多普勒 + 直升机 CPA | `test_rdf_radar_mtd` / `heli_cpa` + `full_sim` |
 | 参差 PRF | `RadarHardware.active_prf_hz` + `full_sim` |
 | Signature 旋翼打包 | `rdf_sig_pack_conf` / `test_rdf_radar_sig_pack` |
+| 旋翼 conf 填数 | `rdf_sig_patch_heli_rotors` / `test_rdf_sig_patch_heli_rotors` |
+| HW 杂波 / MTD 回灌 | `rdf_radar_hw_calibrate` → `calib/prf_clutter_*.json` |
 | 航迹 miss coast | `TrackerConfig.coast_on_miss` + `test_rdf_radar_track` |
 | 大气 / 降雨 | `rdf_radar_systems.two_way_path_loss_db` |
 | 测量噪声 | `MeasurementModel` |
 | 多径 / 刀刃绕射 | `rdf_radar_channel` / `rdf_radar_diffraction` |
+| LOS 双射线 / 4/3 折射 / PRF 折叠 | `ChannelFidelity` + `rdf_radar_channel` + `MeasurementModel` / `ScanConfig` + `test_rdf_radar_propagation` + `full_sim`（`propagation.refraction_horizon` / `ambiguity_fold`） |
 | CA / GO / SO-CFAR + 热填空 | `cfar_detections` / `fill_thermal_noise` |
 | 方位 RCS / Swerling | `rdf_radar_channel` |
 | α-β 跟踪 / WLR 拟合 | `rdf_radar_track` |
@@ -260,7 +293,7 @@ Golden 套件：`cd tools/dem` 后 `.\run_tools.ps1 test` 或
 | 融合 / 交会 / IFF | `rdf_radar_fusion` + `resolve_iff` |
 | 锁定 / RWR / ARM / ESM Friis | `rdf_radar_systems` |
 | Network 上限 / 降频 / 兴趣 | `network_should_send` |
-| DEM 扇区 / 大规模战场 | `sector_sim` / `mass_battle_sim`（可选 DEM） |
+| DEM 扇区 / 大规模战场 | `sector_sim` / `mass_battle` 包（可选 DEM） |
 
 故意不模拟：FDTD、完整 DRFM、JPDA、STAP。
 
@@ -271,15 +304,17 @@ cd tools\dem
 .\run_tools.ps1 test
 .\run_tools.ps1 full-sim
 .\run_tools.ps1 demo
-python tools\dem\rdf_radar_framework_demo.py --preset shorad
-python tools\dem\rdf_radar_framework_demo.py --preset shorad --ew
-python tools\dem\rdf_radar_framework_demo.py --preset p18
-python tools\dem\rdf_radar_framework_demo.py --use-ttile --world GM_Eden --preset shorad
-python tools\dem\rdf_radar_mass_battle_sim.py
-python tools\dem\rdf_radar_mass_battle_sim.py --use-ttile --world GM_Eden
-python tools\dem\rdf_radar_full_sim.py
-python tools\dem\rdf_ttile_unpack.py
-python -m unittest discover -s tools\dem -p "test_rdf_*.py" -v
+python rdf_radar_framework_demo.py --preset shorad
+python rdf_radar_framework_demo.py --preset shorad --ew
+python rdf_radar_framework_demo.py --preset p18
+python rdf_radar_framework_demo.py --use-ttile --world GM_Eden --preset shorad
+python rdf_radar_mass_battle_sim.py
+python rdf_radar_mass_battle_sim.py --use-ttile --world GM_Eden
+python rdf_radar_full_sim.py
+python rdf_radar_hw_calibrate.py --preset shorad
+python rdf_sig_patch_heli_rotors.py
+python rdf_ttile_unpack.py
+python -m unittest discover -s . -p "test_rdf_*.py" -v
 ```
 
 输出位于 `tools/dem/out/`：

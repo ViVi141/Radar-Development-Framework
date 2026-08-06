@@ -20,7 +20,7 @@ from pathlib import Path
 import numpy as np
 
 from rdf_radar_channel import (
-    MultipathModel,
+    ChannelFidelity,
     SwerlingModel,
     aspect_rcs_from_extents,
     fold_doppler_ambiguous,
@@ -282,7 +282,36 @@ def scenario_measurement_noise(cov: FeatureCoverage) -> ScenarioResult:
             "low SNR should jitter more",
             {"mean_hi": mean_hi, "mean_lo": mean_lo},
         )
-    return _ok("measurement_noise", {"mean_err_hi_snr": mean_hi, "mean_err_lo_snr": mean_lo})
+    # Opt-in fidelity folds through MeasurementModel.from_fidelity
+    fid = ChannelFidelity().enable_prf_ambiguity_folds(True, True).enable_refraction()
+    mm_fold = MeasurementModel.from_fidelity(fid, noise_scale=0.0)
+    rng2 = np.random.default_rng(0)
+    true_r = hw.unambiguous_range_m + 5000.0
+    expected_fold = fold_range_ambiguous(true_r, hw.unambiguous_range_m)
+    r_fold, _, el_fold, _ = mm_fold.synthesize(
+        hw, true_r, 0.0, 2.0, 100.0, 40.0, rng2
+    )
+    if abs(r_fold - expected_fold) > hw.range_bin_m():
+        return _fail(
+            "measurement_noise",
+            "range fold not applied",
+            {"r_fold": r_fold, "expected": expected_fold, "runamb": hw.unambiguous_range_m},
+        )
+    if el_fold <= 2.0:
+        return _fail(
+            "measurement_noise",
+            "refraction elevation bias missing",
+            {"el_fold": el_fold},
+        )
+    return _ok(
+        "measurement_noise",
+        {
+            "mean_err_hi_snr": mean_hi,
+            "mean_err_lo_snr": mean_lo,
+            "folded_range": r_fold,
+            "el_with_refraction": el_fold,
+        },
+    )
 
 
 def scenario_multipath_diffraction(cov: FeatureCoverage) -> ScenarioResult:
@@ -291,18 +320,34 @@ def scenario_multipath_diffraction(cov: FeatureCoverage) -> ScenarioResult:
     cov.add("propagation.refraction_horizon")
     cov.add("propagation.ambiguity_fold")
     hw = get_preset("shorad")
-    mp = MultipathModel(enabled=True)
+    fid = (
+        ChannelFidelity()
+        .enable_los_two_ray()
+        .enable_refraction()
+        .enable_prf_ambiguity_folds(True, True)
+    )
+    mp = fid.multipath_model()
     f = mp.power_factor(hw.wavelength_m, 8000.0, 12.0, 40.0)
     f_eps = mp.power_factor_from_dielectric(
         hw.wavelength_m, 3000.0, 15.0, 40.0, eps_r=15.0, roughness=0.15
+    )
+    f_off = ChannelFidelity().multipath_model().power_factor(
+        hw.wavelength_m, 8000.0, 12.0, 40.0
     )
     ke = knife_edge_linear_factor(1.2)
     geo = knife_edge_factor_from_geometry(25.0, 10000.0, 0.4, hw.wavelength_m)
     horizon = radio_horizon_range_m(20.0, 50.0)
     soft = horizon_soft_factor(2.0 * horizon, horizon)
+    soft_via_fid = fid.horizon_power_factor(2.0 * horizon, 20.0, 50.0)
     el_bias = refraction_elevation_bias_deg(20000.0)
     r_fold = fold_range_ambiguous(25000.0, 10000.0)
     fd_fold = fold_doppler_ambiguous(4500.0, 4000.0)
+    if f_off != 1.0:
+        return _fail(
+            "multipath_diffraction",
+            "default ChannelFidelity must disable two-ray",
+            {"f_off": f_off},
+        )
     if f <= 0.0 or ke <= 0.0 or ke >= 1.0:
         return _fail("multipath_diffraction", "bad factors", {"mp": f, "ke": ke, "geo": geo})
     if soft >= 1.0 or el_bias <= 0.0 or abs(r_fold - 5000.0) > 1.0e-6:
@@ -310,6 +355,12 @@ def scenario_multipath_diffraction(cov: FeatureCoverage) -> ScenarioResult:
             "multipath_diffraction",
             "refraction/ambiguity failed",
             {"soft": soft, "el_bias": el_bias, "r_fold": r_fold},
+        )
+    if abs(soft_via_fid - soft) > 1.0e-9:
+        return _fail(
+            "multipath_diffraction",
+            "horizon_power_factor mismatch",
+            {"soft": soft, "soft_via_fid": soft_via_fid},
         )
     return _ok(
         "multipath_diffraction",

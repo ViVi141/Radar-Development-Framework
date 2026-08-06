@@ -33,6 +33,8 @@ Also common:
   python rdf_dem_pack_surface_json.py --world GM_Eden --from-bin
   python rdf_ttile_unpack.py
   python rdf_radar_mass_battle_sim.py
+  python rdf_radar_hw_calibrate.py --preset shorad
+  python rdf_sig_patch_heli_rotors.py
 "@
 }
 
