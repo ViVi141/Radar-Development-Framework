@@ -91,6 +91,12 @@ class SignaturePriors:
 
 
 def _default_sig_path() -> str:
+    """Prefer workshop .conf, then profile CSV."""
+    addon_conf = os.path.normpath(
+        os.path.join(_DEM, "..", "..", "Signatures", "rdf_radar_signatures.conf")
+    )
+    if os.path.isfile(addon_conf):
+        return addon_conf
     home = os.path.expanduser("~")
     return os.path.join(
         home,
@@ -104,11 +110,31 @@ def _default_sig_path() -> str:
     )
 
 
-def load_signature_priors(path: str) -> SignaturePriors:
-    priors = SignaturePriors()
-    if not path or not os.path.isfile(path):
-        return priors
+def _ingest_sig_row(
+    priors: SignaturePriors,
+    key: str,
+    rcs: float,
+    type_hint: int,
+    vehicles: list[float],
+    helios: list[float],
+    shells: list[float],
+) -> None:
+    if rcs <= 0.0:
+        return
+    priors.loaded_rows += 1
+    key_l = key.lower()
+    if type_hint == 1 or "ammo" in key_l or "rocket" in key_l:
+        if rcs >= 0.005:
+            shells.append(rcs)
+        return
+    if "heli" in key_l or "mi8" in key_l or "uh1" in key_l or "helicopter" in key_l:
+        helios.append(rcs)
+        return
+    if "vehicle" in key_l:
+        vehicles.append(rcs)
 
+
+def _load_signature_priors_csv(path: str, priors: SignaturePriors) -> SignaturePriors:
     vehicles: list[float] = []
     helios: list[float] = []
     shells: list[float] = []
@@ -118,7 +144,6 @@ def load_signature_priors(path: str) -> SignaturePriors:
         return priors
 
     for row in lines[2:]:
-        # "key",sx,sy,sz,cl,rcs,sw,th
         if not row.startswith('"'):
             continue
         end = row.find('"', 1)
@@ -133,31 +158,88 @@ def load_signature_priors(path: str) -> SignaturePriors:
             type_hint = int(rest[6])
         except ValueError:
             continue
-        if rcs <= 0.0:
-            continue
-        priors.loaded_rows += 1
-        key_l = key.lower()
-        if type_hint == 1 or "ammo" in key_l or "rocket" in key_l:
-            if rcs >= 0.005:
-                shells.append(rcs)
-            continue
-        if "heli" in key_l or "mi8" in key_l or "uh1" in key_l:
-            helios.append(rcs)
-            continue
-        if "vehicle" in key_l:
-            vehicles.append(rcs)
+        _ingest_sig_row(priors, key, rcs, type_hint, vehicles, helios, shells)
 
+    _apply_sig_medians(priors, vehicles, helios, shells)
+    priors.source = path
+    return priors
+
+
+def _load_signature_priors_conf(path: str, priors: SignaturePriors) -> SignaturePriors:
+    """Parse Enforce rdf_radar_signatures.conf (m_sKey / m_fMeanRcsM2 / m_iTypeHint)."""
+    vehicles: list[float] = []
+    helios: list[float] = []
+    shells: list[float] = []
+    key = ""
+    rcs = 0.0
+    type_hint = 0
+    have_rcs = False
+
+    with open(path, "r", encoding="utf-8") as handle:
+        for raw in handle:
+            line = raw.strip()
+            if line.startswith("m_sKey "):
+                # m_sKey "{GUID}Prefabs/..."
+                quoted = line[len("m_sKey ") :].strip()
+                if quoted.startswith('"') and quoted.endswith('"'):
+                    key = quoted[1:-1]
+                else:
+                    key = quoted
+                rcs = 0.0
+                type_hint = 0
+                have_rcs = False
+                continue
+            if line.startswith("m_fMeanRcsM2 "):
+                try:
+                    rcs = float(line.split()[1])
+                    have_rcs = True
+                except (IndexError, ValueError):
+                    have_rcs = False
+                continue
+            if line.startswith("m_iTypeHint "):
+                try:
+                    type_hint = int(line.split()[1])
+                except (IndexError, ValueError):
+                    type_hint = 0
+                continue
+            if line.startswith("}") and key and have_rcs:
+                _ingest_sig_row(priors, key, rcs, type_hint, vehicles, helios, shells)
+                key = ""
+                have_rcs = False
+
+    if key and have_rcs:
+        _ingest_sig_row(priors, key, rcs, type_hint, vehicles, helios, shells)
+
+    _apply_sig_medians(priors, vehicles, helios, shells)
+    priors.source = path
+    return priors
+
+
+def _apply_sig_medians(
+    priors: SignaturePriors,
+    vehicles: list[float],
+    helios: list[float],
+    shells: list[float],
+) -> None:
     if helios:
         priors.heli_rcs = float(np.median(helios))
     if shells:
         priors.shell_rcs = float(np.median(shells))
     if vehicles:
         med = float(np.median(vehicles))
-        # Split wheeled median into fighter/transport order-of-magnitude slots.
         priors.fighter_rcs = max(1.0, med * 0.6)
         priors.transport_rcs = max(priors.fighter_rcs, med * 1.8)
-    priors.source = path
-    return priors
+
+
+def load_signature_priors(path: str) -> SignaturePriors:
+    priors = SignaturePriors()
+    if not path or not os.path.isfile(path):
+        return priors
+
+    lower = path.lower()
+    if lower.endswith(".conf"):
+        return _load_signature_priors_conf(path, priors)
+    return _load_signature_priors_csv(path, priors)
 
 
 # ---------------------------------------------------------------------------
@@ -1429,7 +1511,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--duration-s", type=float, default=60.0)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--sig-csv", default="")
+    parser.add_argument(
+        "--sig-csv",
+        default="",
+        help="Signature table: workshop .conf or RDF_RADAR_SIG_V2 CSV "
+        "(default: addon Signatures/rdf_radar_signatures.conf).",
+    )
     parser.add_argument("--ad-preset", default="shorad", choices=["p18", "tps43", "shorad"])
     parser.add_argument("--output-dir", default="")
     parser.add_argument(
