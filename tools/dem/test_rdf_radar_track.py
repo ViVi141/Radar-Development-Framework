@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 from rdf_radar_track import (
     BallisticState,
+    RadarObservation,
     TrackerConfig,
     associate_and_filter,
     cartesian_to_polar,
@@ -33,6 +34,50 @@ class FakeDetection:
     elevation_deg: float = 0.0
     doppler_bin: int = -1
     prf_index: int = 0
+
+
+class TestRadarObservationInverse(unittest.TestCase):
+    def test_frozen_observations_confirm_without_entity(self) -> None:
+        """Golden: inverse tracker eats RadarObservation only (no forward truth)."""
+        dets: list[RadarObservation] = []
+        for scan in range(1, 6):
+            t = float(scan) * 2.0
+            rng = 4000.0 - 40.0 * float(scan - 1)
+            dets.append(
+                RadarObservation(
+                    time_s=t,
+                    scan_number=scan,
+                    measured_range_m=rng,
+                    azimuth_deg=10.0,
+                    radial_speed_m_s=20.0,
+                    snr_db=18.0,
+                    target_name="frozen",
+                )
+            )
+        result = associate_and_filter(
+            dets, TrackerConfig(confirm_hits=3, gate_range_m=200.0, gate_azimuth_deg=6.0)
+        )
+        conf = confirmed_tracks(result, min_hits=3)
+        self.assertGreaterEqual(len(conf), 1)
+
+    def test_false_plot_observation_seeds_track(self) -> None:
+        dets = [
+            RadarObservation(
+                time_s=float(s) * 1.5,
+                scan_number=s,
+                measured_range_m=2500.0,
+                azimuth_deg=-5.0,
+                radial_speed_m_s=0.0,
+                snr_db=14.0,
+                is_false_plot=True,
+                target_name="deception",
+            )
+            for s in range(1, 5)
+        ]
+        result = associate_and_filter(
+            dets, TrackerConfig(confirm_hits=2, gate_range_m=250.0, gate_azimuth_deg=8.0)
+        )
+        self.assertGreaterEqual(len(result.tracks), 1)
 
 
 class TestNearBlindSpeed(unittest.TestCase):

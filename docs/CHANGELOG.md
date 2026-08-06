@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 2026-08-07 — 正演 TruthSample ↔ 反演 Observation 切开
+
+- 新增 `RDF_RadarTruthSample`：Scanner / `PhysicalDetect` / reuse 缓存只写正演真值
+- `RDF_RadarMeasurement.PublishFromTruth` → 新建 `RDF_RadarTarget` 观测；`Synthesize` 只改观测，不改 truth
+- Tracker 不再从 plot 继承 `m_Entity`；`m_ScattererId` + `Sensor.GetDebugTruthEntity` / `RebindTrackEntitiesFromDebugTruth` 作旁路
+- 假点 / CFAR 填空点仍为无 Truth 的 Observation；`RDF_RadarInverseTrackAutoTest` + Python `RadarObservation` golden
+- 套件 step1：Ballistics + InverseTrack
+
 ## 2026-08-07 — 开发者食谱示例
 
 - 新增 [DEVELOPER_RECIPES.md](DEVELOPER_RECIPES.md)：挂 `RDF_RadarComponent`、改 Settings、`DemData` 新图 HEIGHT+SURF、单 prefab RCS 签名（中英）

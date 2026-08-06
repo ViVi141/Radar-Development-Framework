@@ -1,6 +1,6 @@
 class RDF_RadarScanReuseEntry
 {
-    ref RDF_RadarTarget m_LastTarget;
+    ref RDF_RadarTruthSample m_LastTruth;
     vector m_LastOrigin;
     vector m_LastPosition;
     float m_LastWallS;
@@ -82,24 +82,24 @@ class RDF_RadarScanReuseCache
         return false;
     }
 
-    bool TryGetReusedTarget(
+    bool TryGetReusedTruth(
         IEntity entity,
         float wallS,
         float maxAgeS,
-        out RDF_RadarTarget outTarget)
+        out RDF_RadarTruthSample outTruth)
     {
-        outTarget = null;
+        outTruth = null;
         if (!entity || !m_ByEntity)
             return false;
         if (!m_ByEntity.Contains(entity))
             return false;
         RDF_RadarScanReuseEntry e = m_ByEntity.Get(entity);
-        if (!e || !e.m_LastTarget)
+        if (!e || !e.m_LastTruth)
             return false;
         if (wallS - e.m_LastWallS > maxAgeS)
             return false;
-        outTarget = CopyTarget(e.m_LastTarget);
-        return outTarget != null;
+        outTruth = CopyTruth(e.m_LastTruth);
+        return outTruth != null;
     }
 
     bool TryGetPhysicalReuse(
@@ -112,7 +112,7 @@ class RDF_RadarScanReuseCache
         float maxOriginShiftM,
         float maxTargetShiftM,
         float maxSpeedMs,
-        out RDF_RadarTarget outPhysicalSource)
+        out RDF_RadarTruthSample outPhysicalSource)
     {
         outPhysicalSource = null;
         if (!entity || !m_ByEntity)
@@ -125,7 +125,7 @@ class RDF_RadarScanReuseCache
         if (!m_ByEntity.Contains(entity))
             return false;
         RDF_RadarScanReuseEntry e = m_ByEntity.Get(entity);
-        if (!e || !e.m_LastTarget)
+        if (!e || !e.m_LastTruth)
             return false;
         if (e.m_LastPhysicalWallS <= 0.0)
             return false;
@@ -139,13 +139,13 @@ class RDF_RadarScanReuseCache
         if (posDelta.LengthSq() > maxTargetShiftM * maxTargetShiftM)
             return false;
 
-        outPhysicalSource = e.m_LastTarget;
+        outPhysicalSource = e.m_LastTruth;
         return true;
     }
 
     void StoreResult(
         IEntity entity,
-        RDF_RadarTarget target,
+        RDF_RadarTruthSample truth,
         vector origin,
         vector position,
         float wallS,
@@ -153,7 +153,7 @@ class RDF_RadarScanReuseCache
         bool ranFullUpdate,
         bool ranPhysical)
     {
-        if (!entity || !target || !m_ByEntity)
+        if (!entity || !truth || !m_ByEntity)
             return;
 
         RDF_RadarScanReuseEntry e = null;
@@ -165,9 +165,9 @@ class RDF_RadarScanReuseCache
             m_ByEntity.Set(entity, e);
         }
 
-        if (!e.m_LastTarget)
-            e.m_LastTarget = new RDF_RadarTarget();
-        CopyFieldsInto(e.m_LastTarget, target);
+        if (!e.m_LastTruth)
+            e.m_LastTruth = new RDF_RadarTruthSample();
+        CopyFieldsInto(e.m_LastTruth, truth);
         e.m_LastOrigin = origin;
         e.m_LastPosition = position;
         e.m_LastWallS = wallS;
@@ -226,16 +226,16 @@ class RDF_RadarScanReuseCache
         return band2;
     }
 
-    protected RDF_RadarTarget CopyTarget(RDF_RadarTarget src)
+    protected RDF_RadarTruthSample CopyTruth(RDF_RadarTruthSample src)
     {
         if (!src)
             return null;
-        RDF_RadarTarget t = new RDF_RadarTarget();
+        RDF_RadarTruthSample t = new RDF_RadarTruthSample();
         CopyFieldsInto(t, src);
         return t;
     }
 
-    protected void CopyFieldsInto(RDF_RadarTarget t, RDF_RadarTarget src)
+    protected void CopyFieldsInto(RDF_RadarTruthSample t, RDF_RadarTruthSample src)
     {
         if (!t || !src)
             return;
@@ -277,11 +277,11 @@ class RDF_RadarScanReuseCache
         t.m_LosBlocked = src.m_LosBlocked;
         t.m_LosHitFraction = src.m_LosHitFraction;
         t.m_MultipathFactor = src.m_MultipathFactor;
-        t.m_BeamName = src.m_BeamName;
-        t.m_ScanNumber = src.m_ScanNumber;
         t.m_EmitFrequencyHz = src.m_EmitFrequencyHz;
         t.m_EmitPeakPowerW = src.m_EmitPeakPowerW;
         t.m_EmitAntennaGainDbi = src.m_EmitAntennaGainDbi;
         t.m_EmitStrength = src.m_EmitStrength;
+        t.m_BeamName = src.m_BeamName;
+        t.m_ScanNumber = src.m_ScanNumber;
     }
 }

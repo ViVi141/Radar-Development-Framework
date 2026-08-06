@@ -25,6 +25,27 @@ class DetectionLike(Protocol):
 
 
 @dataclass
+class RadarObservation:
+    """Inverse-path observation DTO (mirrors published RDF_RadarTarget plots).
+
+    No entity / world handle. Forward truth must not be required to track.
+    """
+
+    time_s: float
+    measured_range_m: float
+    azimuth_deg: float
+    radial_speed_m_s: float
+    snr_db: float
+    scan_number: int = 0
+    elevation_deg: float = 0.0
+    detected: bool = True
+    is_false_plot: bool = False
+    doppler_bin: int = -1
+    prf_index: int = 0
+    target_name: str = "obs"
+
+
+@dataclass
 class TrackState:
     track_id: int
     time_s: float

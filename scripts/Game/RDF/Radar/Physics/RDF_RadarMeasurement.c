@@ -1,6 +1,6 @@
-// Measurement synthesis: turn truth geometry into quantized, noisy radar plots.
-// Entities supply RCS / LOS / truth kinematics only for the physics chain;
-// published range / angles / radial speed come from this model.
+// Measurement synthesis: turn forward truth into quantized, noisy radar plots.
+// PhysicalDetect writes RDF_RadarTruthSample; this layer emits RDF_RadarTarget
+// observations for Tracker / Lock / Fusion (inverse path).
 class RDF_RadarMeasurement
 {
     protected static const float DEG_TO_RAD = 0.0174532925199;
@@ -9,7 +9,74 @@ class RDF_RadarMeasurement
     protected static const float CRLB_K = 1.6;
 
     //------------------------------------------------------------------------------------------------
-    // Overwrite target kinematics with measured values. Truth entity may be cleared.
+    // Copy detectability + pre-noise kinematics from truth into a new observation.
+    // Entity is never copied onto the inverse DTO (use Sensor debug-truth map).
+    static RDF_RadarTarget PublishFromTruth(RDF_RadarTruthSample truth)
+    {
+        if (!truth)
+            return null;
+
+        RDF_RadarTarget plot = new RDF_RadarTarget();
+        plot.m_Entity = null;
+        plot.m_ScattererId = truth.m_ScattererId;
+        plot.m_Position = truth.m_Position;
+        plot.m_Distance = truth.m_Distance;
+        plot.m_Velocity = truth.m_Velocity;
+        plot.m_Type = truth.m_Type;
+        plot.m_Time = truth.m_Time;
+        plot.m_AzimuthDeg = truth.m_AzimuthDeg;
+        plot.m_ElevationDeg = truth.m_ElevationDeg;
+        plot.m_RadialSpeedMs = truth.m_RadialSpeedMs;
+        plot.m_RcsM2 = truth.m_RcsM2;
+        plot.m_MeanRcsM2 = truth.m_MeanRcsM2;
+        plot.m_SwerlingModel = truth.m_SwerlingModel;
+        plot.m_AglM = truth.m_AglM;
+        plot.m_DemTerrainY = truth.m_DemTerrainY;
+        plot.m_ReceivedPowerW = truth.m_ReceivedPowerW;
+        plot.m_ProcessedPowerW = truth.m_ProcessedPowerW;
+        plot.m_DopplerHz = truth.m_DopplerHz;
+        plot.m_MtiGain = truth.m_MtiGain;
+        plot.m_DopplerBin = truth.m_DopplerBin;
+        plot.m_PrfIndex = truth.m_PrfIndex;
+        plot.m_RotorTipSpeedMs = truth.m_RotorTipSpeedMs;
+        plot.m_BladeCount = truth.m_BladeCount;
+        plot.m_RotorRcsFraction = truth.m_RotorRcsFraction;
+        plot.m_HubWidthMs = truth.m_HubWidthMs;
+        plot.m_RotorSidebandUsed = truth.m_RotorSidebandUsed;
+        plot.m_DemSurfaceClass = truth.m_DemSurfaceClass;
+        plot.m_DemSampleValid = truth.m_DemSampleValid;
+        plot.m_ClutterPowerW = truth.m_ClutterPowerW;
+        plot.m_ClutterToNoiseDb = truth.m_ClutterToNoiseDb;
+        plot.m_SnrDb = truth.m_SnrDb;
+        plot.m_Detected = truth.m_Detected;
+        plot.m_IsAnonymous = true;
+        plot.m_IsFalsePlot = truth.m_IsFalsePlot;
+        plot.m_CfarPowerW = truth.m_CfarPowerW;
+        plot.m_LosBlocked = truth.m_LosBlocked;
+        plot.m_LosHitFraction = truth.m_LosHitFraction;
+        plot.m_MultipathFactor = truth.m_MultipathFactor;
+        plot.m_EmitFrequencyHz = truth.m_EmitFrequencyHz;
+        plot.m_EmitPeakPowerW = truth.m_EmitPeakPowerW;
+        plot.m_EmitAntennaGainDbi = truth.m_EmitAntennaGainDbi;
+        plot.m_EmitStrength = truth.m_EmitStrength;
+        plot.m_BeamName = truth.m_BeamName;
+        plot.m_ScanNumber = truth.m_ScanNumber;
+
+        if (truth.m_Type == ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER)
+        {
+            // ESM ARM needs emitter type tag on the observation; still no entity.
+            plot.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER;
+            plot.m_IsAnonymous = false;
+        }
+        else
+        {
+            plot.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_ANONYMOUS;
+        }
+        return plot;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Overwrite observation kinematics with measured values. Truth is never mutated.
     static void Synthesize(
         RDF_RadarTarget target,
         vector radarOrigin,
@@ -121,20 +188,12 @@ class RDF_RadarMeasurement
         // Only radial component is observable; Cartesian velocity is reconstructed along LOS.
         target.m_Velocity = los * (-measuredRadial);
 
-        if (!settings.m_KeepEntityTruth)
+        // Inverse DTO: never carry the scatterer entity.
+        target.m_Entity = null;
+        if (target.m_Type != ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER)
         {
-            bool keepEmitterForArm = false;
-            if (settings.m_EnableEsmReceive)
-            {
-                if (target.m_Type == ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER)
-                    keepEmitterForArm = true;
-            }
-            if (!keepEmitterForArm)
-            {
-                target.m_Entity = null;
-                target.m_IsAnonymous = true;
-                target.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_ANONYMOUS;
-            }
+            target.m_IsAnonymous = true;
+            target.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_ANONYMOUS;
         }
     }
 

@@ -12,7 +12,7 @@ class RDF_RadarPhysicalDetect
     protected static ref array<float> s_PrfList;
 
     static void Process(
-        RDF_RadarTarget target,
+        RDF_RadarTruthSample target,
         vector origin,
         vector scanForward,
         float worldTime,
@@ -442,7 +442,7 @@ class RDF_RadarPhysicalDetect
     }
 
     protected static float ComputeDemClutterPower(
-        RDF_RadarTarget target,
+        RDF_RadarTruthSample target,
         vector origin,
         float distance,
         float azimuthOffsetDeg,
@@ -574,7 +574,7 @@ class RDF_RadarPhysicalDetect
     // Uses SurfaceTable dielectric → Fresnel Γ when available; else fixed coeff.
     protected static float ComputeLosTwoRayFactor(
         vector origin,
-        RDF_RadarTarget target,
+        RDF_RadarTruthSample target,
         float distance,
         float wavelengthM,
         RDF_RadarSettings settings,

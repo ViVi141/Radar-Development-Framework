@@ -1,5 +1,5 @@
-// Extensible measurement / channel-error model.
-// Called after CFAR and before Tracker / WLR, so custom noise affects tracks.
+// Extensible measurement / channel-error model on published observations.
+// Called after CFAR and before Tracker / WLR. Does not mutate forward truth.
 // Downstream mods should subclass and override SynthesizePlot (or SynthesizeAll).
 class RDF_RadarMeasurementModel
 {
@@ -26,7 +26,7 @@ class RDF_RadarMeasurementModel
     }
 
     //------------------------------------------------------------------------------------------------
-    // Per-plot hook. Default delegates to built-in CRLB + quantization synthesis.
+    // Per-observation hook. Default delegates to built-in CRLB + quantization.
     // Override this in gameplay mods for σ floors, bias tables, weather, etc.
     void SynthesizePlot(
         RDF_RadarTarget target,

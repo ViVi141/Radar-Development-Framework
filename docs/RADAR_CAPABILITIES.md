@@ -16,7 +16,7 @@
 | 离线数字孪生算完再回灌游戏 | **否**。游戏内 Enforce 实时跑检测；`tools/dem/` 是同约定的离线原型/调参，不驱动游戏内检出结果。 |
 | 真正的电磁波传播（场求解 / FDTD） | **否**。是功率与检测链路的工程近似，不是波在空间里传。 |
 | 训练级雷达信号处理整链 | **否**。没有完整「波形 → RD 图 → CFAR → 航迹」实时链；但已有测量合成、量测关联、热噪声填空与 Swerling/方位 RCS。 |
-| 直接把实体坐标当雷达读数 | **否（默认）**。实体只作散射体；输出为量化+噪声的量测 plot。 |
+| 直接把实体坐标当雷达读数 | **否（默认）**。实体只作正演散射体（`RDF_RadarTruthSample`）；发布的是量化+噪声观测。Tracker 不从 plot 继承 `m_Entity`。 |
 
 一句话：适合做**可玩、带物理门限与测量不确定性的传感器玩法**；不适合当电磁仿真器或训练级雷达孪生。
 
@@ -169,7 +169,7 @@ Implementation details: [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md); publ
 | Offline digital twin computes then feeds results back into the game | **No**. In-game Enforce runs detection in real time; `tools/dem/` is an offline prototype / tuning tool under the same conventions and does not drive in-game detections. |
 | True EM wave propagation (field solvers / FDTD) | **No**. It is an engineering approximation of power and detection chains, not waves propagating in space. |
 | Full training-grade radar signal-processing pipeline | **No**. There is no complete real-time “waveform → RD map → CFAR → track” chain; there is measurement synthesis, measurement association, thermal-noise fill, and Swerling / aspect RCS. |
-| Entity world coordinates used directly as radar readings | **No (default)**. Entities are scatterers only; output is quantized, noisy measurement plots. |
+| Entity world coordinates used directly as radar readings | **No (default)**. Entities are forward scatterers only (`RDF_RadarTruthSample`); published plots are quantized, noisy observations. Tracker does not inherit `m_Entity` from plots. |
 
 In short: suited for **playable sensor gameplay with physical thresholds and measurement uncertainty**; not suited as an EM simulator or training-grade radar twin.
 

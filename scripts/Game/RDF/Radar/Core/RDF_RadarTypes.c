@@ -36,13 +36,64 @@ enum ERDF_NoiseJamCoupling
     RDF_JAM_COUPLE_MAINLOBE_ONLY
 }
 
-// Single radar detection / plot. With measurement synthesis enabled, kinematics
-// are model-derived (quantized + noisy); m_Entity is debug-only when kept.
+// Forward-only truth sample for PhysicalDetect. Never publish to Tracker/Lock.
+// Entity and DEM/LOS inputs live here; inverse path must not read this type.
+class RDF_RadarTruthSample
+{
+    IEntity m_Entity;
+    int m_ScattererId;
+    vector m_Position;
+    float m_Distance;
+    vector m_Velocity;
+    ERDF_RadarTargetType m_Type;
+    float m_Time;
+    float m_AzimuthDeg;
+    float m_ElevationDeg;
+    float m_RadialSpeedMs;
+    float m_RcsM2;
+    float m_MeanRcsM2;
+    int m_SwerlingModel;
+    float m_AglM = -1.0;
+    float m_DemTerrainY;
+    float m_ReceivedPowerW;
+    float m_ProcessedPowerW;
+    float m_DopplerHz;
+    float m_MtiGain;
+    int m_DopplerBin = -1;
+    int m_PrfIndex;
+    float m_RotorTipSpeedMs;
+    int m_BladeCount;
+    float m_RotorRcsFraction;
+    float m_HubWidthMs;
+    bool m_RotorSidebandUsed;
+    int m_DemSurfaceClass = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
+    bool m_DemSampleValid;
+    float m_ClutterPowerW;
+    float m_ClutterToNoiseDb;
+    float m_SnrDb;
+    bool m_Detected;
+    bool m_IsAnonymous;
+    bool m_IsFalsePlot;
+    float m_CfarPowerW;
+    bool m_LosBlocked;
+    float m_LosHitFraction;
+    float m_MultipathFactor;
+    float m_EmitFrequencyHz;
+    float m_EmitPeakPowerW;
+    float m_EmitAntennaGainDbi;
+    float m_EmitStrength = 1.0;
+    string m_BeamName;
+    int m_ScanNumber;
+}
+
+// Published observation / plot (inverse input). Kinematics are model-derived
+// after measurement synthesis. m_Entity stays null on the inverse path;
+// use Sensor debug-truth bypass when AutoTests need the scatterer handle.
 class RDF_RadarTarget
 {
-    // Optional debug link to the scatterer; null under measurement synthesis.
+    // Debug-only when KeepEntityTruth; inverse algorithms must ignore this.
     IEntity m_Entity;
-    // Stable scatterer-table id; survives measurement synthesis (debug / regression).
+    // Stable scatterer-table id for debug / regression / truth bypass.
     int m_ScattererId;
     vector m_Position;
     float m_Distance;

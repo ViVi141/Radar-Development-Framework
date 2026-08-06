@@ -13,11 +13,15 @@ feasible): [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md).
 
 ## Runtime chain
 
+Forward (`RDF_RadarTruthSample`) and inverse (published `RDF_RadarTarget`
+observations) are split: Tracker / Lock consume observations only.
+
 1. Resolve radar origin and current boresight.
 2. Advance the global scatterer table (`RDF_RadarScattererRegistry`): periodic
    discovery sweep, amortized classification, round-robin kinematics refresh.
    Type and RCS are cached per entry, so scans never re-classify entities.
-3. Read candidates from the table, then apply range and azimuth dwell.
+3. Read candidates from the table, then apply range and azimuth dwell; fill
+   **`RDF_RadarTruthSample`** (forward; may hold `IEntity`).
 4. Line-of-sight (see [RADAR_API.md](RADAR_API.md) § Scan LOS for the short guide):
    - Optional LOS / target **reuse cache** may skip work on repeat dwells.
    - Else if `m_EnableDemLosPrecheck` (default on) and HEIGHT RAM ready:
@@ -25,20 +29,18 @@ feasible): [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md).
    - Else: `TraceMove` (`TraceLineOfSight`: `ANY_CONTACT`, reused param, ExcludeArray,
      start clearance). Clear → detect. Blocked → optional NLOS (bounce and/or knife-edge).
 5. Read projectile or rigid-body velocity (**truth, physics only**).
-6. Estimate entity RCS; scale received power by `m_MultipathFactor`.
-7. Select the strongest configured elevation beam.
-8. Evaluate monostatic received power, Doppler, MTI, processing gain, noise,
-   DEM clutter power, optional atmospheric/rain/weather loss, and SNR.
-9. Optional coarse-bin CA-CFAR over azimuth/range power bins; empty cells may
-   be filled with thermal noise (`m_EnableCfarThermalFill`) so Pfa is measurable.
-10. **Measurement synthesis** (`RDF_RadarMeasurement`): quantize range to bin
-    center, add SNR-scaled angle/Doppler noise (scale via
-    `SetMeasurementNoise` / `MeasNoiseScale`), rebuild plot kinematics; clear
-    `m_Entity` unless `m_KeepEntityTruth`. Optional post-CFAR override:
-    `RDF_RadarMeasurementModel`.
-11. Feed accepted plots to the measurement-driven alpha-beta tracker
-    (nearest-neighbor gates + `PredictAt`). Anonymous / false plots can
-    associate; they are not display-only.
+6. `RDF_RadarPhysicalDetect.Process(truth, …)`: RCS, received power ×
+   `m_MultipathFactor`, beams, Doppler, MTI/MTD, clutter, SNR.
+7. **`PublishFromTruth`** → new anonymous `RDF_RadarTarget` observation (no
+   `m_Entity` by default). Debug bypass: `Sensor.GetDebugTruthEntity` /
+   optional `m_KeepEntityTruth` on the plot.
+8. Optional deception false plots / CFAR thermal fill (Observation only, no Truth).
+9. Optional coarse-bin CA-CFAR over azimuth/range power bins.
+10. **Measurement synthesis** (`RDF_RadarMeasurement.Synthesize`): mutates
+    observation kinematics only (quantize + noise); never mutates TruthSample.
+11. Feed observations to the alpha-beta tracker. Tracker does **not** inherit
+    entity from plots; Sensor may rebind track entities from the debug-truth map
+    (fire-control / AutoTest).
 12. Optional lock layer (`RDF_RadarLockManager`) on tracks for SEARCH →
     ACQUIRING → TRACKING → COAST; exposed via `RDF_RadarSensor.GetLockedTarget`.
 
@@ -415,10 +417,12 @@ Enforce 实现现已遵循与离线原型相同的契约。游戏实体是物理
 
 ## 运行时链路
 
+正演（`RDF_RadarTruthSample`）与反演（发布的 `RDF_RadarTarget` 观测）切开：Tracker / Lock 只吃观测。
+
 1. 解析雷达原点与当前瞄准轴（boresight）。
 2. 推进全局散射体表（`RDF_RadarScattererRegistry`）：周期发现扫描、摊销分类、轮询运动学刷新。
    类型与 RCS 按条目缓存，扫描不再重新分类实体。
-3. 从表中读取候选，再施加距离与方位驻留。
+3. 从表中读取候选，再施加距离与方位驻留；填入 **`RDF_RadarTruthSample`**（正演，可持有 `IEntity`）。
 4. 通视（短说明见 [RADAR_API.md](RADAR_API.md) § 扫描通视）：
    - 可选 LOS / 目标 **复用缓存**，复扫可跳过重活。
    - 否则若 `m_EnableDemLosPrecheck`（默认开）且 HEIGHT RAM 就绪：
@@ -426,16 +430,16 @@ Enforce 实现现已遵循与离线原型相同的契约。游戏实体是物理
    - 否则：`TraceMove`（`TraceLineOfSight`：`ANY_CONTACT`、复用 param、ExcludeArray、起点出壳）。
      通畅 → 检测；遮挡 → 可选 NLOS（反射和/或刀刃）。
 5. 读取炮弹或刚体速度（**真值，仅物理用**）。
-6. 估计实体 RCS；接收功率乘以 `m_MultipathFactor`。
-7. 选择配置中最强的俯仰波束。
-8. 计算单站接收功率、多普勒、MTI、处理增益、噪声、DEM 杂波功率、可选大气/雨/天气损耗与 SNR。
-9. 可选方位/距离功率粗栅 CA-CFAR；空单元可用热噪声填充（`m_EnableCfarThermalFill`），以便可测 Pfa。
-10. **测量合成**（`RDF_RadarMeasurement`）：距离量化到门中心，叠加 SNR 缩放的角度/多普勒噪声
-    （经 settings / `MeasNoiseScale` 等缩放），重建 plot 运动学；除非 `m_KeepEntityTruth`，否则清除 `m_Entity`。
-    可选 CFAR 后 override：`RDF_RadarMeasurementModel`。
-11. 将接受的 plots 送入量测驱动的 α-β 跟踪器（最近邻波门 + `PredictAt`）。匿名 / 假 plots 也可关联；并非仅显示。
-12. 可选锁定层（`RDF_RadarLockManager`）作用于航迹：SEARCH → ACQUIRING → TRACKING → COAST；
-    经 `RDF_RadarSensor.GetLockedTarget` 暴露。
+6. `RDF_RadarPhysicalDetect.Process(truth, …)`：估计 RCS；接收功率 × `m_MultipathFactor`；
+   波束、多普勒、MTI/MTD、杂波、SNR。
+7. **`PublishFromTruth`** → 新建匿名 `RDF_RadarTarget` 观测（默认无 `m_Entity`）；
+   调试旁路：`Sensor.GetDebugTruthEntity(scattererId)` / `m_KeepEntityTruth` 可选写回 plot。
+8. 可选欺骗假点 / CFAR 热噪声填空（无 Truth，直接 Observation）。
+9. 可选方位/距离功率粗栅 CA-CFAR。
+10. **测量合成**（`RDF_RadarMeasurement.Synthesize`）：只改观测运动学（量化 + 噪声）；不改 TruthSample。
+11. 将观测送入量测驱动的 α-β 跟踪器（最近邻波门）。Tracker **不**从 plot 继承实体；
+    Sensor 可用 debug-truth 表给航迹回绑实体（火控 / AutoTest）。
+12. 可选锁定层（`RDF_RadarLockManager`）：SEARCH → ACQUIRING → TRACKING → COAST。
 
 ## 主要配置
 

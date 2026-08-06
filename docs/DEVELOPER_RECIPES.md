@@ -37,6 +37,8 @@ if (!radar || !radar.IsEnabled())
 RDF_RadarSensor sensor = radar.GetSensor();
 array<ref RDF_RadarTarget> plots = sensor.GetPlots();
 array<ref RDF_RadarTrack> tracks = sensor.GetTracks();
+// plots 是反演观测（默认无 m_Entity）。需要散射体句柄时用：
+// sensor.GetDebugTruthEntity(plot.m_ScattererId);
 
 IEntity locked;
 vector aimPos;
@@ -347,6 +349,8 @@ if (!radar || !radar.IsEnabled())
 RDF_RadarSensor sensor = radar.GetSensor();
 array<ref RDF_RadarTarget> plots = sensor.GetPlots();
 array<ref RDF_RadarTrack> tracks = sensor.GetTracks();
+// plots are inverse observations (no m_Entity by default). For scatterer handle:
+// sensor.GetDebugTruthEntity(plot.m_ScattererId);
 
 IEntity locked;
 vector aimPos;

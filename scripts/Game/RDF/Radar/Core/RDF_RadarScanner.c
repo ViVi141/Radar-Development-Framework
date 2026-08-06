@@ -44,6 +44,8 @@ class RDF_RadarScanner
     protected float m_ScanRainLossDbPerKm;
     // Reused pass context (avoid per-scan allocation).
     protected ref RDF_RadarScanPassContext m_PassCtx;
+    // Forward-side truth bypass for AutoTest / ARM (scattererId -> entity).
+    protected ref map<int, IEntity> m_DebugTruthByScattererId;
 
     void RDF_RadarScanner(RDF_RadarSettings settings = null)
     {
@@ -62,6 +64,7 @@ class RDF_RadarScanner
         m_TraceParam = new TraceParam();
         m_LosExclude = new array<IEntity>();
         m_PassCtx = new RDF_RadarScanPassContext();
+        m_DebugTruthByScattererId = new map<int, IEntity>();
         m_SettingsValidated = false;
         m_RegistryScanCursor = 0;
         m_ScanRainLossDbPerKm = 0.0;
@@ -198,7 +201,7 @@ class RDF_RadarScanner
             + " calib=" + calib;
     }
 
-    protected void NoteMtdPlot(RDF_RadarTarget target)
+    protected void NoteMtdPlot(RDF_RadarTruthSample target)
     {
         if (!target || !target.m_Detected)
             return;
@@ -210,6 +213,68 @@ class RDF_RadarScanner
         m_LastMtdPrfIndex = target.m_PrfIndex;
         if (target.m_RotorSidebandUsed)
             m_StatMtdRotorAided = m_StatMtdRotorAided + 1;
+    }
+
+    IEntity GetDebugTruthEntity(int scattererId)
+    {
+        if (!m_DebugTruthByScattererId)
+            return null;
+        if (scattererId <= 0)
+            return null;
+        if (!m_DebugTruthByScattererId.Contains(scattererId))
+            return null;
+        return m_DebugTruthByScattererId.Get(scattererId);
+    }
+
+    void CopyDebugTruthMap(notnull map<int, IEntity> outMap)
+    {
+        outMap.Clear();
+        if (!m_DebugTruthByScattererId)
+            return;
+        for (int i = 0; i < m_DebugTruthByScattererId.Count(); i++)
+        {
+            int key = m_DebugTruthByScattererId.GetKey(i);
+            if (key <= 0)
+                continue;
+            if (!m_DebugTruthByScattererId.Contains(key))
+                continue;
+            IEntity ent = m_DebugTruthByScattererId.Get(key);
+            if (ent)
+                outMap.Set(key, ent);
+        }
+    }
+
+    protected void RememberDebugTruth(RDF_RadarTruthSample truth)
+    {
+        if (!truth || !m_DebugTruthByScattererId)
+            return;
+        if (truth.m_ScattererId <= 0)
+            return;
+        if (!truth.m_Entity)
+            return;
+        m_DebugTruthByScattererId.Set(truth.m_ScattererId, truth.m_Entity);
+    }
+
+    protected void PublishTruthToPlots(
+        notnull array<ref RDF_RadarTarget> outTargets,
+        RDF_RadarTruthSample truth)
+    {
+        if (!truth)
+            return;
+        RememberDebugTruth(truth);
+        if (!truth.m_Detected && !(m_Settings && m_Settings.m_KeepUndetected))
+            return;
+        RDF_RadarTarget plot = RDF_RadarMeasurement.PublishFromTruth(truth);
+        if (!plot)
+            return;
+        // Optional debug cheat for PPI / legacy tests; inverse must ignore.
+        if (m_Settings && m_Settings.m_KeepEntityTruth)
+        {
+            plot.m_Entity = truth.m_Entity;
+            plot.m_Type = truth.m_Type;
+            plot.m_IsAnonymous = false;
+        }
+        outTargets.Insert(plot);
     }
 
     float GetLastEwNoiseRfW()
@@ -282,6 +347,8 @@ class RDF_RadarScanner
             return;
 
         outTargets.Clear();
+        if (m_DebugTruthByScattererId)
+            m_DebugTruthByScattererId.Clear();
         m_StatReuseHits = 0;
         m_StatFreshUpdates = 0;
         m_StatBudgetSkips = 0;
@@ -676,7 +743,7 @@ class RDF_RadarScanner
                 losElevationDeg,
                 scanNumber);
 
-            RDF_RadarTarget t = new RDF_RadarTarget();
+            RDF_RadarTruthSample t = new RDF_RadarTruthSample();
             t.m_Entity = entry.m_Entity;
             t.m_ScattererId = entry.m_ScattererId;
             t.m_Position = losEnd;
@@ -714,7 +781,7 @@ class RDF_RadarScanner
             t.m_IsAnonymous = false;
             t.m_IsFalsePlot = false;
             bool reusedPhysical = false;
-            RDF_RadarTarget physicalSource;
+            RDF_RadarTruthSample physicalSource;
             if (m_ScanReuseCache)
             {
                 reusedPhysical = m_ScanReuseCache.TryGetPhysicalReuse(
@@ -755,8 +822,7 @@ class RDF_RadarScanner
             m_StatFreshUpdates = m_StatFreshUpdates + 1;
             if (!highPriority && freshBudget > 0)
                 freshBudget = freshBudget - 1;
-            if (t.m_Detected || m_Settings.m_KeepUndetected)
-                outTargets.Insert(t);
+            PublishTruthToPlots(outTargets, t);
         }
 
         if (m_Settings.m_FairScanCursor)
@@ -778,7 +844,7 @@ class RDF_RadarScanner
     }
 
 
-    protected void DepositCoarseRd(RDF_RadarTarget target)
+    protected void DepositCoarseRd(RDF_RadarTruthSample target)
     {
         if (!target || !m_Settings || !m_Settings.m_EnableCoarseRd)
             return;
@@ -855,52 +921,52 @@ class RDF_RadarScanner
         if (!entry || !entry.m_Entity || !m_ScanReuseCache)
             return;
 
-        RDF_RadarTarget reusedTarget;
-        if (!m_ScanReuseCache.TryGetReusedTarget(
+        RDF_RadarTruthSample reusedTruth;
+        if (!m_ScanReuseCache.TryGetReusedTruth(
             entry.m_Entity,
             wallTime,
             m_Settings.m_TargetReuseMaxAgeS,
-            reusedTarget))
+            reusedTruth))
         {
             return;
         }
 
         m_StatReuseHits = m_StatReuseHits + 1;
-        reusedTarget.m_Entity = entry.m_Entity;
-        reusedTarget.m_ScattererId = entry.m_ScattererId;
-        reusedTarget.m_Position = losEnd;
-        reusedTarget.m_Distance = dist;
-        reusedTarget.m_Velocity = entry.m_Velocity;
-        reusedTarget.m_Type = priorityType;
-        reusedTarget.m_AglM = entry.m_AglM;
-        reusedTarget.m_Time = worldTime;
+        reusedTruth.m_Entity = entry.m_Entity;
+        reusedTruth.m_ScattererId = entry.m_ScattererId;
+        reusedTruth.m_Position = losEnd;
+        reusedTruth.m_Distance = dist;
+        reusedTruth.m_Velocity = entry.m_Velocity;
+        reusedTruth.m_Type = priorityType;
+        reusedTruth.m_AglM = entry.m_AglM;
+        reusedTruth.m_Time = worldTime;
         if (entry.m_DemSampleValid)
         {
-            reusedTarget.m_DemSampleValid = true;
-            reusedTarget.m_DemSurfaceClass = entry.m_DemSurfaceClass;
-            reusedTarget.m_DemTerrainY = entry.m_DemTerrainY;
+            reusedTruth.m_DemSampleValid = true;
+            reusedTruth.m_DemSurfaceClass = entry.m_DemSurfaceClass;
+            reusedTruth.m_DemTerrainY = entry.m_DemTerrainY;
         }
-        if (reusedTarget.m_Detected || m_Settings.m_KeepUndetected)
-            outTargets.Insert(reusedTarget);
+        PublishTruthToPlots(outTargets, reusedTruth);
     }
 
-    protected bool ContainsTargetEntity(
+    protected bool ContainsScattererId(
         notnull array<ref RDF_RadarTarget> targets,
-        IEntity entity)
+        int scattererId)
     {
-        if (!entity)
+        if (scattererId <= 0)
             return false;
         for (int i = 0; i < targets.Count(); i++)
         {
             RDF_RadarTarget t = targets.Get(i);
             if (!t)
                 continue;
-            if (t.m_Entity == entity)
+            if (t.m_ScattererId == scattererId)
                 return true;
         }
         return false;
     }
 
+    // Deception false plots are inverse-only observations (no TruthSample).
     protected void AddDeceptionFalsePlots(
         notnull array<ref RDF_RadarTarget> outTargets,
         vector origin,
@@ -1010,8 +1076,8 @@ class RDF_RadarScanner
     }
 
     protected void ApplyPhysicalReuse(
-        RDF_RadarTarget target,
-        RDF_RadarTarget source)
+        RDF_RadarTruthSample target,
+        RDF_RadarTruthSample source)
     {
         if (!target || !source)
             return;

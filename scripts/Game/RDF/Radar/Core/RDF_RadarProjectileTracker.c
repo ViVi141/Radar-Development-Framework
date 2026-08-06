@@ -6,6 +6,8 @@ class RDF_RadarTrack
 {
     int m_TrackId;
     IEntity m_Entity;
+    // Scatterer id from associated observation (debug / truth bypass).
+    int m_ScattererId;
     ref array<vector> m_Positions = new array<vector>();
     ref array<vector> m_Velocities = new array<vector>();
     ref array<float> m_Times = new array<float>();
@@ -286,8 +288,10 @@ class RDF_RadarTrack
             m_Confirmed = true;
         else
             m_Confirmed = false;
-        if (target.m_Entity)
-            m_Entity = target.m_Entity;
+        // Inverse path: do not inherit entity from plots. ScattererId is enough
+        // for Sensor debug-truth rebind when KeepEntityTruth is enabled.
+        if (target.m_ScattererId > 0)
+            m_ScattererId = target.m_ScattererId;
         Push(m_FilteredPosition, m_FilteredVelocity, target.m_Time);
     }
 
@@ -752,8 +756,8 @@ class RDF_RadarProjectileTracker
             RDF_RadarTrack born = new RDF_RadarTrack();
             born.m_TrackId = m_NextTrackId;
             m_NextTrackId = m_NextTrackId + 1;
-            if (seed.m_Entity)
-                born.m_Entity = seed.m_Entity;
+            if (seed.m_ScattererId > 0)
+                born.m_ScattererId = seed.m_ScattererId;
             ApplyBallisticConfig(born);
             born.FilterUpdate(seed, m_Alpha, m_Beta, m_ConfirmHits);
             born.m_LastPrfHz = ResolvePrfHz(seed.m_PrfIndex);

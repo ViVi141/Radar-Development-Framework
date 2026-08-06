@@ -481,6 +481,52 @@ class RDF_RadarSensor
         return m_Plots;
     }
 
+    // Forward-side truth bypass: scatterer id -> entity from the last local Scan.
+    IEntity GetDebugTruthEntity(int scattererId)
+    {
+        if (!m_Scanner)
+            return null;
+        return m_Scanner.GetDebugTruthEntity(scattererId);
+    }
+
+    void CopyDebugTruthMap(notnull map<int, IEntity> outMap)
+    {
+        if (!m_Scanner)
+        {
+            outMap.Clear();
+            return;
+        }
+        m_Scanner.CopyDebugTruthMap(outMap);
+    }
+
+    // After inverse tracking, optionally attach entity handles for fire-control /
+    // AutoTest via the forward debug-truth map (not via plot inheritance).
+    protected void RebindTrackEntitiesFromDebugTruth()
+    {
+        if (!m_Tracker || !m_Scanner)
+            return;
+        array<ref RDF_RadarTrack> tracks = m_Tracker.GetAllTracks();
+        if (!tracks)
+            return;
+        for (int i = 0; i < tracks.Count(); i++)
+        {
+            RDF_RadarTrack tr = tracks.Get(i);
+            if (!tr)
+                continue;
+            if (tr.m_ScattererId <= 0)
+                continue;
+            IEntity ent = m_Scanner.GetDebugTruthEntity(tr.m_ScattererId);
+            if (!ent)
+            {
+                RDF_RadarScatterer entry = RDF_RadarScattererRegistry.FindById(tr.m_ScattererId);
+                if (entry)
+                    ent = entry.m_Entity;
+            }
+            if (ent)
+                tr.m_Entity = ent;
+        }
+    }
+
     array<ref RDF_RadarTrack> GetTracks()
     {
         if (!m_Tracker)
@@ -662,6 +708,7 @@ class RDF_RadarSensor
         {
             m_Tracker.UpdateWithOrigin(m_Plots, worldTimeS, trackOrigin);
             m_Tracker.RefreshWeaponLocates(trackOrigin[1]);
+            RebindTrackEntitiesFromDebugTruth();
 
             if (m_LockManager)
             {

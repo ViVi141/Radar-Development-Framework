@@ -122,7 +122,7 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarHwCalib.c              σ_vr → leakage/floor；HwCalib.json 回灌
 │   ├── RDF_RadarClutterMap.c           range–az 杂波 EMA
 │   ├── RDF_RadarCoarseRdMap.c          粗 RD 分帧图（默认关）
-│   ├── RDF_RadarMeasurement.c          距离门/波束量化 + SNR 噪声
+│   ├── RDF_RadarMeasurement.c          PublishFromTruth + 观测加噪
 │   ├── RDF_RadarMeasurementModel.c     CFAR 后 / Tracker 前可扩展测量误差
 │   └── RDF_RadarCfarGate.c             粗栅格 CA/GO/SO-CFAR 判检
 ├── EW/
@@ -454,7 +454,7 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarHwCalib.c              σ_vr → leakage/floor；HwCalib.json 回灌
 │   ├── RDF_RadarClutterMap.c           range–az 杂波 EMA
 │   ├── RDF_RadarCoarseRdMap.c          粗 RD 分帧图（默认关）
-│   ├── RDF_RadarMeasurement.c          距离门/波束量化 + SNR 噪声
+│   ├── RDF_RadarMeasurement.c          PublishFromTruth + 观测加噪
 │   ├── RDF_RadarMeasurementModel.c     CFAR 后 / Tracker 前可扩展测量误差
 │   └── RDF_RadarCfarGate.c             粗栅格 CA/GO/SO-CFAR 判检
 ├── EW/

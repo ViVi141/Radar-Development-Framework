@@ -65,7 +65,8 @@ class RDF_RadarSettings
     int m_RangeBinCount = 64;
     // Quantize + noise measurements; clear entity refs so plots are model-derived.
     bool m_EnableMeasurementSynthesis = true;
-    // Debug only: keep m_Entity / soft type tags (cheats identity into the PPI).
+    // Debug only: also stamp plot.m_Entity (inverse algorithms must ignore it).
+    // Prefer Sensor.GetDebugTruthEntity / track rebind for fire-control.
     bool m_KeepEntityTruth = false;
     // Measurement synthesis extras (applied when synthesis is on).
     // 0 = quantized / bias-only (or clean when biases are 0). Opt into noise via

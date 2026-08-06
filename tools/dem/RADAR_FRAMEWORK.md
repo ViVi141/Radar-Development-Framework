@@ -44,7 +44,8 @@ Catalog index: [tools/README.md](../README.md). Scripts remain flat under `tools
   applies optional multipath / radio-horizon soft factor / plot folds.
 - `rdf_radar_ew.py`: pluggable noise/deception effects and frequency schedules.
 - `rdf_radar_diffraction.py`: knife-edge diffraction helpers.
-- `rdf_radar_track.py`: nearest-neighbor association and alpha-beta filtering.
+- `rdf_radar_track.py`: nearest-neighbor association and alpha-beta filtering;
+  `RadarObservation` inverse DTO + frozen-observation golden in `test_rdf_radar_track.py`.
 - `rdf_radar_fusion.py`: multi-radar association / horizontal cross-fix.
 - `rdf_radar_systems.py`: lock FSM, ESM Friis, RWR/ARM hooks, GO/SO-CFAR,
   measurement noise, rain path loss, RGPO/angular/intermittent deception,
@@ -211,7 +212,8 @@ Outputs under `tools/dem/out/`:
 - `rdf_radar_scan.py`：`scan(t)`、驻留更新、持久 PPI、动目标截获、分波束量测、跳频感知重调；`ScanConfig.fidelity` 应用可选多径 / 无线电地平线软因子 / 点迹折叠。
 - `rdf_radar_ew.py`：可插拔噪声/欺骗效果与频率时间表。
 - `rdf_radar_diffraction.py`：刀刃绕射辅助。
-- `rdf_radar_track.py`：最近邻关联与 α-β 滤波。
+- `rdf_radar_track.py`：最近邻关联与 α-β 滤波；`RadarObservation` 反演 DTO +
+  `test_rdf_radar_track.py` 冻结观测 golden。
 - `rdf_radar_fusion.py`：多雷达关联 / 水平交会。
 - `rdf_radar_systems.py`：锁定状态机、ESM Friis、RWR/ARM、GO/SO-CFAR、测量噪声、降雨损耗、拖距/角闪烁/间歇假点、Network 带宽策略；`MeasurementModel.from_fidelity` 按需应用距离/多普勒折叠与折射俯仰偏置（WLR 经 `weapon_locate` 跳过多普勒折叠）。
 

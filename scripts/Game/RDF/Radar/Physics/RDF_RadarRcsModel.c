@@ -304,7 +304,7 @@ class RDF_RadarRcsModel
     // powers are relative RCS weights (sum need not be 1; MaxMtdSpectrumGain normalizes).
     // blade_count drives interior harmonics at tip*(h/blades); elevation scales sidebands.
     static void FillDopplerSpectrum(
-        RDF_RadarTarget target,
+        RDF_RadarTruthSample target,
         float wavelengthM,
         float bodyDopplerHz,
         notnull array<float> outDopplerHz,

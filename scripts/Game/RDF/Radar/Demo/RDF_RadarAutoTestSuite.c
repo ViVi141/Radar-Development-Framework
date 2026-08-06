@@ -223,7 +223,7 @@ class RDF_RadarAutoTestSuite
     protected static string StepName(int step)
     {
         if (step == 0)
-            return "ballistics";
+            return "ballistics+inverse";
         if (step == 1)
             return "dem";
         if (step == 2)
@@ -242,7 +242,8 @@ class RDF_RadarAutoTestSuite
     protected static bool DidStepPass(int step)
     {
         if (step == 0)
-            return RDF_RadarBallisticsAutoTest.DidLastPass();
+            return RDF_RadarBallisticsAutoTest.DidLastPass()
+                && RDF_RadarInverseTrackAutoTest.DidLastPass();
         if (step == 1)
             return RDF_RadarAutoTest.DidLastPass();
         if (step == 2)
@@ -284,8 +285,9 @@ class RDF_RadarAutoTestSuite
 
         if (step == 0)
         {
-            Print("[RDF Radar AutoTestSuite] step 1/7 Ballistics");
+            Print("[RDF Radar AutoTestSuite] step 1/7 Ballistics + InverseTrack");
             RDF_RadarBallisticsAutoTest.Start();
+            RDF_RadarInverseTrackAutoTest.Start();
             RecordSyncStepResult(0);
             RunStep(1);
             return;
