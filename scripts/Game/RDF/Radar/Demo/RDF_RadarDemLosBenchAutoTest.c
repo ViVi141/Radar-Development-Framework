@@ -1,5 +1,6 @@
 // In-game DEM-LOS A/B benchmark (synchronous ScanOnce — debugger-safe).
 // Compares scan wall time with m_EnableDemLosPrecheck ON vs OFF after DEM RAM warm.
+// Clears LOS/reuse caches each ScanOnce so demBlk/trace are actually exercised.
 //
 // Script Debugger (Play):
 //   RDF_RadarDemLosBenchAutoTest.Start();
@@ -10,9 +11,10 @@ class RDF_RadarDemLosBenchAutoTest
 
     protected static const ResourceName LOAD_TARGET_PREFAB =
         "{259EE7B78C51B624}Prefabs/Vehicles/Wheeled/UAZ469/UAZ469.et";
-    protected static const int LOAD_TARGET_COUNT = 12;
+    protected static const int LOAD_TARGET_COUNT = 16;
+    protected static const int NLOS_TARGET_GOAL = 8;
     protected static const int WARMUP_SCANS = 2;
-    protected static const int MEASURE_SCANS = 10;
+    protected static const int MEASURE_SCANS = 12;
     // Soft: precheck ON should not be slower than OFF by more than this margin.
     protected static const float PASS_ON_NOT_SLOWER_MS = 40.0;
 
@@ -26,6 +28,11 @@ class RDF_RadarDemLosBenchAutoTest
     protected float m_AvgOffMs;
     protected float m_BatchOnMs;
     protected float m_BatchOffMs;
+    protected int m_SumDemBlkOn;
+    protected int m_SumTraceOn;
+    protected int m_SumDemBlkOff;
+    protected int m_SumTraceOff;
+    protected int m_NlosSpawned;
     protected string m_ReuseOn;
     protected string m_ReuseOff;
     protected string m_DemStatus;
@@ -98,6 +105,11 @@ class RDF_RadarDemLosBenchAutoTest
         m_ReuseOn = "";
         m_ReuseOff = "";
         m_DemStatus = "DEM OFF";
+        m_SumDemBlkOn = 0;
+        m_SumTraceOn = 0;
+        m_SumDemBlkOff = 0;
+        m_SumTraceOff = 0;
+        m_NlosSpawned = 0;
 
         RDF_RadarAutoRunner.SetForceLocalScan(true);
         RDF_RadarAutoRunner.SetHudEnabled(false);
@@ -110,9 +122,8 @@ class RDF_RadarDemLosBenchAutoTest
             return;
         }
 
-        Print("[RDF DEM-LOS Bench] begin (A/B DemLosPrecheck ON vs OFF)");
+        Print("[RDF DEM-LOS Bench] begin (A/B DemLosPrecheck ON vs OFF, caches flushed each scan)");
 
-        // Force shared SURF+HEIGHT resident before measuring.
         if (RDF_DemRuntimeCache.IsAsyncWarmPreloadRunning())
             RDF_DemRuntimeCache.FlushAsyncWarmPreload();
         if (!RDF_DemRuntimeCache.IsSharedSurfReady())
@@ -121,28 +132,33 @@ class RDF_RadarDemLosBenchAutoTest
             RDF_DemRuntimeCache.FlushAsyncWarmPreload();
         }
 
-        SpawnLoadTargets();
-        SeedLoadTargetsInRegistry();
-
         ApplyBenchConfig(true);
         WarmDemViaSensor();
         CaptureDemStatus();
 
-        Print("[RDF DEM-LOS Bench] phase ON demStatus=" + m_DemStatus);
+        SpawnLoadTargets();
+        SeedLoadTargetsInRegistry();
+
+        Print("[RDF DEM-LOS Bench] phase ON demStatus=" + m_DemStatus
+            + " nlos=" + m_NlosSpawned.ToString());
         RunBatch(true);
         Print(string.Format(
-            "[RDF DEM-LOS Bench] ON avgMs=%1 batchAvgMs=%2 stats=%3",
+            "[RDF DEM-LOS Bench] ON avgMs=%1 batchAvgMs=%2 demBlkSum=%3 traceSum=%4 last=%5",
             (Math.Round(m_AvgOnMs * 10.0) * 0.1).ToString(),
             (Math.Round(m_BatchOnMs * 10.0) * 0.1).ToString(),
+            m_SumDemBlkOn.ToString(),
+            m_SumTraceOn.ToString(),
             m_ReuseOn));
 
         ApplyBenchConfig(false);
         Print("[RDF DEM-LOS Bench] phase OFF");
         RunBatch(false);
         Print(string.Format(
-            "[RDF DEM-LOS Bench] OFF avgMs=%1 batchAvgMs=%2 stats=%3",
+            "[RDF DEM-LOS Bench] OFF avgMs=%1 batchAvgMs=%2 demBlkSum=%3 traceSum=%4 last=%5",
             (Math.Round(m_AvgOffMs * 10.0) * 0.1).ToString(),
             (Math.Round(m_BatchOffMs * 10.0) * 0.1).ToString(),
+            m_SumDemBlkOff.ToString(),
+            m_SumTraceOff.ToString(),
             m_ReuseOff));
 
         FinalizeAndReport();
@@ -172,10 +188,13 @@ class RDF_RadarDemLosBenchAutoTest
 
         int wall0 = System.GetTickCount();
         sensor.SetForceLocalScan(true);
+        if (sensor.GetScanner())
+            sensor.GetScanner().ClearScanOptimizationCaches();
         sensor.ScanOnce(m_Subject, null, 0.0);
-        // EnsurePreloaded may still be async; flush again after first scan kicked it.
         if (RDF_DemRuntimeCache.IsAsyncWarmPreloadRunning())
             RDF_DemRuntimeCache.FlushAsyncWarmPreload();
+        if (sensor.GetScanner())
+            sensor.GetScanner().ClearScanOptimizationCaches();
         sensor.ScanOnce(m_Subject, null, 0.2);
         int wall1 = System.GetTickCount();
         m_DemWarmMs = wall1 - wall0;
@@ -201,28 +220,35 @@ class RDF_RadarDemLosBenchAutoTest
     protected void ApplyBenchConfig(bool demLosPrecheck)
     {
         RDF_RadarSettings cfg = RDF_RadarSensor.CreateSearchSettings(128);
-        cfg.m_Range = 2500.0;
+        cfg.m_Range = 2800.0;
         cfg.m_SectorHalfAngleDeg = 90.0;
         cfg.m_UpdateInterval = 0.2;
         cfg.m_MaxLosTracesPerScan = 64;
         cfg.m_IncludeVehicles = true;
-        cfg.m_IncludeProjectiles = true;
-        cfg.m_IncludeRadarEmitters = true;
-        cfg.m_EnableDemClutter = true;
-        cfg.m_EnableCfarGate = true;
-        cfg.m_EnableMeasurementSynthesis = true;
+        cfg.m_IncludeProjectiles = false;
+        cfg.m_IncludeRadarEmitters = false;
+        cfg.m_EnableDemClutter = false;
+        cfg.m_EnableCfarGate = false;
+        cfg.m_EnableMeasurementSynthesis = false;
         cfg.m_EnablePhysicalDetection = true;
         cfg.m_KeepUndetected = true;
         cfg.m_EnableDemLosPrecheck = demLosPrecheck;
         cfg.m_EnableNlosMultipath = true;
-        cfg.m_OriginOffset = Vector(0.0, 12.0, 0.0);
-        cfg.m_FreshUpdateBudgetMin = 24;
-        cfg.m_FreshUpdateBudgetMax = 48;
+        cfg.m_DemLosPrecheckSamples = 12;
+        cfg.m_KnifeEdgeClearanceSlackM = 1.0;
+        cfg.m_OriginOffset = Vector(0.0, 4.0, 0.0);
+        // Force full update + no LOS reuse between bench scans (also cleared in code).
+        cfg.m_FreshUpdateBudgetMin = 64;
+        cfg.m_FreshUpdateBudgetMax = 128;
+        cfg.m_PriorityBand1IntervalS = 0.0;
+        cfg.m_PriorityBand2IntervalS = 0.0;
+        cfg.m_LosCacheMaxAgeS = 0.05;
+        cfg.m_TargetReuseMaxAgeS = 0.05;
+        cfg.m_PhysicalReuseMaxAgeS = 0.05;
         cfg.m_ScattererDiscoveryIntervalS = 0.5;
         cfg.m_ScattererClassifyPerTick = 128;
         cfg.m_ScattererRefreshPerTick = 256;
         cfg.StabilizeForRegression();
-        // Stabilize turns off some fidelity; keep DEM LOS precheck as requested.
         cfg.m_EnableDemLosPrecheck = demLosPrecheck;
         cfg.Validate();
 
@@ -231,6 +257,8 @@ class RDF_RadarDemLosBenchAutoTest
             return;
         sensor.SetForceLocalScan(true);
         sensor.Configure(cfg);
+        if (sensor.GetScanner())
+            sensor.GetScanner().ClearScanOptimizationCaches();
     }
 
     protected void RunBatch(bool precheckOn)
@@ -248,11 +276,18 @@ class RDF_RadarDemLosBenchAutoTest
         int total = WARMUP_SCANS + MEASURE_SCANS;
         int measureWall0 = 0;
         int measured = 0;
+        int sumDemBlk = 0;
+        int sumTrace = 0;
+        string lastReuse = "";
+
         for (int i = 0; i < total; i++)
         {
             float t = worldTimeS + i * 0.2;
             if (i == WARMUP_SCANS)
                 measureWall0 = System.GetTickCount();
+
+            if (sensor.GetScanner())
+                sensor.GetScanner().ClearScanOptimizationCaches();
 
             sensor.SetForceLocalScan(true);
             sensor.ScanOnce(m_Subject, null, t);
@@ -261,6 +296,12 @@ class RDF_RadarDemLosBenchAutoTest
             {
                 durations.Insert(ms);
                 measured = measured + 1;
+                if (sensor.GetScanner())
+                {
+                    sumDemBlk = sumDemBlk + sensor.GetScanner().GetLastDemLosBlocks();
+                    sumTrace = sumTrace + sensor.GetScanner().GetLastTraceMoves();
+                    lastReuse = sensor.GetScanner().GetScanReuseStatsShort();
+                }
             }
         }
 
@@ -283,21 +324,21 @@ class RDF_RadarDemLosBenchAutoTest
             avg = sum / durations.Count();
         }
 
-        string reuse = "";
-        if (sensor.GetScanner())
-            reuse = sensor.GetScanner().GetScanReuseStatsShort();
-
         if (precheckOn)
         {
             m_AvgOnMs = avg;
             m_BatchOnMs = batchAvg;
-            m_ReuseOn = reuse;
+            m_SumDemBlkOn = sumDemBlk;
+            m_SumTraceOn = sumTrace;
+            m_ReuseOn = lastReuse;
         }
         else
         {
             m_AvgOffMs = avg;
             m_BatchOffMs = batchAvg;
-            m_ReuseOff = reuse;
+            m_SumDemBlkOff = sumDemBlk;
+            m_SumTraceOff = sumTrace;
+            m_ReuseOff = lastReuse;
         }
     }
 
@@ -313,7 +354,8 @@ class RDF_RadarDemLosBenchAutoTest
         m_Subject.GetWorldTransform(mat);
         vector center = mat[3];
         float surfaceY = world.GetSurfaceY(center[0], center[2]);
-        m_RadarOrigin = Vector(center[0], surfaceY + 8.0, center[2]);
+        // Keep antenna low so DEM occlusion is more likely than a 20 m mast.
+        m_RadarOrigin = Vector(center[0], surfaceY + 3.0, center[2]);
         return true;
     }
 
@@ -333,12 +375,14 @@ class RDF_RadarDemLosBenchAutoTest
             if (entry)
                 seeded = seeded + 1;
         }
-        Print("[RDF DEM-LOS Bench] seeded loadTargets=" + seeded.ToString());
+        Print("[RDF DEM-LOS Bench] seeded loadTargets=" + seeded.ToString()
+            + " nlos=" + m_NlosSpawned.ToString());
     }
 
     protected void SpawnLoadTargets()
     {
         ClearLoadTargets();
+        m_NlosSpawned = 0;
         if (!m_Subject)
             return;
         BaseWorld world = GetGame().GetWorld();
@@ -363,28 +407,109 @@ class RDF_RadarDemLosBenchAutoTest
             flatFwd = Vector(fwd[0] / flatLen, 0.0, fwd[2] / flatLen);
         vector right = Vector(flatFwd[2], 0.0, -flatFwd[0]);
 
-        for (int i = 0; i < LOAD_TARGET_COUNT; i++)
+        RDF_RadarSensor sensor = RDF_RadarAutoRunner.GetSensor();
+        RDF_DemRuntimeCache dem = null;
+        RDF_RadarSettings demSettings = null;
+        if (sensor && sensor.GetScanner())
         {
-            float rangeM = 200.0 + i * 120.0;
-            int lane = i - (i / 3) * 3;
+            dem = sensor.GetScanner().GetDemCache();
+            demSettings = sensor.GetSettings();
+        }
+
+        int spawned = 0;
+        int nlosWanted = NLOS_TARGET_GOAL;
+        if (nlosWanted > LOAD_TARGET_COUNT)
+            nlosWanted = LOAD_TARGET_COUNT;
+
+        // Prefer DEM-blocked placements first so demBlk is measurable.
+        for (int tryN = 0; tryN < 80; tryN++)
+        {
+            if (m_NlosSpawned >= nlosWanted)
+                break;
+            if (spawned >= LOAD_TARGET_COUNT)
+                break;
+
+            int rangeStep = tryN - (tryN / 12) * 12;
+            float rangeM = 350.0 + rangeStep * 90.0;
+            int lane = tryN - (tryN / 5) * 5;
+            float lateral = (lane - 2) * 95.0;
+            vector flatPos = Vector(
+                m_RadarOrigin[0] + flatFwd[0] * rangeM + right[0] * lateral,
+                m_RadarOrigin[1],
+                m_RadarOrigin[2] + flatFwd[2] * rangeM + right[2] * lateral);
+            float groundY = SampleGroundY(world, dem, flatPos[0], flatPos[2]);
+            vector pos = Vector(flatPos[0], groundY + 0.5, flatPos[2]);
+
+            if (!IsDemBlocked(dem, demSettings, m_RadarOrigin, pos))
+                continue;
+            if (!SpawnOne(prefabRes, world, pos))
+                continue;
+            m_NlosSpawned = m_NlosSpawned + 1;
+            spawned = spawned + 1;
+        }
+
+        // Fill remaining with open-sector targets (force TraceMove path).
+        int fill = 0;
+        while (spawned < LOAD_TARGET_COUNT && fill < 64)
+        {
+            float rangeM = 200.0 + fill * 100.0;
+            int lane = fill - (fill / 3) * 3;
             float lateral = (lane - 1) * 70.0;
             vector flatPos = Vector(
                 m_RadarOrigin[0] + flatFwd[0] * rangeM + right[0] * lateral,
                 m_RadarOrigin[1],
                 m_RadarOrigin[2] + flatFwd[2] * rangeM + right[2] * lateral);
-            float groundY = world.GetSurfaceY(flatPos[0], flatPos[2]);
+            float groundY = SampleGroundY(world, dem, flatPos[0], flatPos[2]);
             vector pos = Vector(flatPos[0], groundY + 0.5, flatPos[2]);
-
-            EntitySpawnParams spawnParams = new EntitySpawnParams();
-            Math3D.AnglesToMatrix(Vector(0, 0, 0), spawnParams.Transform);
-            spawnParams.Transform[3] = pos;
-
-            IEntity ent = GetGame().SpawnEntityPrefab(prefabRes, world, spawnParams);
-            if (!ent)
-                continue;
-            ent.SetOrigin(pos);
-            m_LoadTargets.Insert(ent);
+            if (SpawnOne(prefabRes, world, pos))
+                spawned = spawned + 1;
+            fill = fill + 1;
         }
+    }
+
+    protected float SampleGroundY(BaseWorld world, RDF_DemRuntimeCache dem, float x, float z)
+    {
+        if (dem)
+        {
+            RDF_DemRuntimeCellSample sample;
+            if (dem.TrySampleAt(x, z, sample))
+            {
+                if (sample && sample.m_Valid)
+                    return sample.m_TerrainY;
+            }
+        }
+        if (world)
+            return world.GetSurfaceY(x, z);
+        return 0.0;
+    }
+
+    protected bool IsDemBlocked(
+        RDF_DemRuntimeCache dem,
+        RDF_RadarSettings settings,
+        vector origin,
+        vector losEnd)
+    {
+        if (!dem || !settings)
+            return false;
+        if (!dem.IsReady())
+            return false;
+        float hitFraction = 1.0;
+        return RDF_RadarScanGeometry.TryDemTerrainBlock(
+            origin, losEnd, dem, settings, hitFraction);
+    }
+
+    protected bool SpawnOne(Resource prefabRes, BaseWorld world, vector pos)
+    {
+        EntitySpawnParams spawnParams = new EntitySpawnParams();
+        Math3D.AnglesToMatrix(Vector(0, 0, 0), spawnParams.Transform);
+        spawnParams.Transform[3] = pos;
+
+        IEntity ent = GetGame().SpawnEntityPrefab(prefabRes, world, spawnParams);
+        if (!ent)
+            return false;
+        ent.SetOrigin(pos);
+        m_LoadTargets.Insert(ent);
+        return true;
     }
 
     protected void ClearLoadTargets()
@@ -412,22 +537,36 @@ class RDF_RadarDemLosBenchAutoTest
     protected void FinalizeAndReport()
     {
         float delta = m_AvgOffMs - m_AvgOnMs;
-        bool pass = m_AvgOnMs <= (m_AvgOffMs + PASS_ON_NOT_SLOWER_MS);
+        bool passTiming = m_AvgOnMs <= (m_AvgOffMs + PASS_ON_NOT_SLOWER_MS);
+        bool passPath = m_SumTraceOff > 0;
+        if (m_SumDemBlkOn <= 0 && m_SumTraceOn <= 0)
+            passPath = false;
+        // OFF must never credit DEM blocks.
+        if (m_SumDemBlkOff > 0)
+            passPath = false;
+        bool pass = passTiming;
+        if (!passPath)
+            pass = false;
         s_LastPass = pass;
 
         array<string> lines = new array<string>();
         lines.Insert("RDF DEM-LOS Bench AutoTest");
-        lines.Insert("mode synchronous_ScanOnce A/B");
+        lines.Insert("mode synchronous_ScanOnce A/B cache_flush_each_scan");
         lines.Insert("dem_status " + m_DemStatus);
         lines.Insert("dem_warm_ms " + m_DemWarmMs.ToString());
         lines.Insert("load_targets " + LOAD_TARGET_COUNT.ToString());
+        lines.Insert("nlos_spawned " + m_NlosSpawned.ToString());
         lines.Insert("measure_scans " + MEASURE_SCANS.ToString());
         lines.Insert("precheck_ON_avg_ms " + m_AvgOnMs.ToString());
         lines.Insert("precheck_ON_batch_avg_ms " + m_BatchOnMs.ToString());
-        lines.Insert("precheck_ON_stats " + m_ReuseOn);
+        lines.Insert("precheck_ON_demBlk_sum " + m_SumDemBlkOn.ToString());
+        lines.Insert("precheck_ON_trace_sum " + m_SumTraceOn.ToString());
+        lines.Insert("precheck_ON_last_stats " + m_ReuseOn);
         lines.Insert("precheck_OFF_avg_ms " + m_AvgOffMs.ToString());
         lines.Insert("precheck_OFF_batch_avg_ms " + m_BatchOffMs.ToString());
-        lines.Insert("precheck_OFF_stats " + m_ReuseOff);
+        lines.Insert("precheck_OFF_demBlk_sum " + m_SumDemBlkOff.ToString());
+        lines.Insert("precheck_OFF_trace_sum " + m_SumTraceOff.ToString());
+        lines.Insert("precheck_OFF_last_stats " + m_ReuseOff);
         lines.Insert("delta_off_minus_on_ms " + delta.ToString());
         if (pass)
             lines.Insert("result=PASS");
@@ -445,11 +584,14 @@ class RDF_RadarDemLosBenchAutoTest
             label = "PASS";
         Print("[RDF DEM-LOS Bench] " + label + "  report=" + reportPath);
         Print(string.Format(
-            "[RDF DEM-LOS Bench] ON=%1ms OFF=%2ms saved≈%3ms  ON[%4] OFF[%5]",
+            "[RDF DEM-LOS Bench] ON=%1ms OFF=%2ms saved≈%3ms  ON demBlk=%4 trace=%5  OFF demBlk=%6 trace=%7  nlos=%8",
             (Math.Round(m_AvgOnMs * 10.0) * 0.1).ToString(),
             (Math.Round(m_AvgOffMs * 10.0) * 0.1).ToString(),
             (Math.Round(delta * 10.0) * 0.1).ToString(),
-            m_ReuseOn,
-            m_ReuseOff));
+            m_SumDemBlkOn.ToString(),
+            m_SumTraceOn.ToString(),
+            m_SumDemBlkOff.ToString(),
+            m_SumTraceOff.ToString(),
+            m_NlosSpawned.ToString()));
     }
 }

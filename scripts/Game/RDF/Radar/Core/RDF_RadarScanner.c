@@ -118,6 +118,25 @@ class RDF_RadarScanner
             m_DemCache.Clear();
     }
 
+    // Drop LOS / scan reuse so the next Scan() re-runs DEM precheck + TraceMove.
+    void ClearScanOptimizationCaches()
+    {
+        if (m_LosCache)
+            m_LosCache.Clear();
+        if (m_ScanReuseCache)
+            m_ScanReuseCache.Clear();
+    }
+
+    int GetLastDemLosBlocks()
+    {
+        return m_StatDemLosBlocks;
+    }
+
+    int GetLastTraceMoves()
+    {
+        return m_StatTraceMoves;
+    }
+
     // Whole-world SURF/DEM RAM load. Prefer calling from Sensor before ScanOnce
     // wall-clock timing; Scan() also no-ops when already resident.
     void EnsureDemPreloaded()
