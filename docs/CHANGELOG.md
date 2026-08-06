@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2026-08-06 — LOS：DEM 先挡再 Trace
+
+- `m_EnableDemLosPrecheck`（默认开）：沿射线采 DEM HEIGHT RAM，地形刺穿几何 LOS 则跳过 `TraceMove`
+- 未挡再 Trace（实体/建筑遮挡）；NLOS 仍可用；状态 `demBlk=`
+
 ## 2026-08-06 — SURF+HEIGHT 常驻后禁 GetSurfaceY
 
 - `TrySampleAt`：HEIGHT RAM 就绪后不再回退 `BaseWorld.GetSurfaceY`；有 HEIGHT 包且 `PreferLiveTerrainY=0` 时预热中也不打引擎

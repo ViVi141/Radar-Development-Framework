@@ -50,6 +50,11 @@ class RDF_RadarSettings
     int m_KnifeEdgeMaxSamples = 8;
     // Subtract from obstacle height to reduce GetSurfaceY / DEM noise false blocks.
     float m_KnifeEdgeClearanceSlackM = 2.0;
+    // Before TraceMove: sample DEM HEIGHT RAM along the ray. If terrain blocks,
+    // skip Trace (entity occlusion still needs Trace when DEM is clear).
+    bool m_EnableDemLosPrecheck = true;
+    // Interior samples along radar→target for DEM precheck (endpoints skipped).
+    int m_DemLosPrecheckSamples = 8;
     // Optional receiver-side EW/noise injection after processing.
     float m_AdditionalNoisePowerW = 0.0;
     ref RDF_RadarEwStack m_EwStack;
@@ -209,6 +214,7 @@ class RDF_RadarSettings
         m_NlosMaxTargetAglM = Math.Clamp(m_NlosMaxTargetAglM, 10.0, 20000.0);
         m_KnifeEdgeMaxSamples = Math.Clamp(m_KnifeEdgeMaxSamples, 2, 16);
         m_KnifeEdgeClearanceSlackM = Math.Clamp(m_KnifeEdgeClearanceSlackM, 0.0, 50.0);
+        m_DemLosPrecheckSamples = Math.Clamp(m_DemLosPrecheckSamples, 2, 24);
         m_AdditionalNoisePowerW = Math.Max(0.0, m_AdditionalNoisePowerW);
         m_CfarGuardCells = Math.Clamp(m_CfarGuardCells, 0, 32);
         m_CfarTrainingCells = Math.Clamp(m_CfarTrainingCells, 2, 128);

@@ -247,4 +247,90 @@ class RDF_RadarScanGeometry
             angle = angle + Math.PI * 2.0;
         return angle;
     }
+
+    //------------------------------------------------------------------------------------------------
+    // Cheap DEM HEIGHT (and optional span top) occlusion along origin→losEnd.
+    // Returns true when terrain clearly pierces the geometric LOS — caller should
+    // skip TraceMove. Inconclusive / missing DEM → false (fall through to Trace).
+    static bool TryDemTerrainBlock(
+        vector origin,
+        vector losEnd,
+        RDF_DemRuntimeCache demCache,
+        RDF_RadarSettings settings,
+        out float outHitFraction)
+    {
+        outHitFraction = 1.0;
+        if (!demCache || !settings)
+            return false;
+        if (!settings.m_EnableDemLosPrecheck)
+            return false;
+        if (!demCache.IsReady())
+            return false;
+
+        vector delta = losEnd - origin;
+        float fullLen = delta.Length();
+        if (fullLen < 1.0)
+            return false;
+
+        int samples = settings.m_DemLosPrecheckSamples;
+        if (samples < 2)
+            samples = 2;
+
+        float slackM = settings.m_KnifeEdgeClearanceSlackM;
+        if (slackM < 0.0)
+            slackM = 0.0;
+
+        bool useSpan = settings.m_EnableDemSpanOcclusion;
+        int validSamples = 0;
+        for (int i = 1; i <= samples; i++)
+        {
+            float u = i / (samples + 1.0);
+            float wx = origin[0] + delta[0] * u;
+            float wyLos = origin[1] + delta[1] * u;
+            float wz = origin[2] + delta[2] * u;
+
+            RDF_DemRuntimeCellSample demSample;
+            if (!demCache.TrySampleAt(wx, wz, demSample))
+                continue;
+            if (!demSample || !demSample.m_Valid)
+                continue;
+
+            validSamples = validSamples + 1;
+            float topY = demSample.m_TerrainY;
+            if (useSpan)
+            {
+                int n = demSample.m_NSpans;
+                if (n > 0 && demSample.m_SpanHi && demSample.m_SpanLo)
+                {
+                    int hiCount = demSample.m_SpanHi.Count();
+                    int loCount = demSample.m_SpanLo.Count();
+                    int count = n;
+                    if (count > hiCount)
+                        count = hiCount;
+                    if (count > loCount)
+                        count = loCount;
+                    for (int s = 0; s < count; s++)
+                    {
+                        float hi = demSample.m_SpanHi.Get(s);
+                        float lo = demSample.m_SpanLo.Get(s);
+                        if (hi <= lo)
+                            continue;
+                        if (hi > topY)
+                            topY = hi;
+                    }
+                }
+            }
+
+            if ((topY - slackM) > wyLos)
+            {
+                outHitFraction = u;
+                return true;
+            }
+        }
+
+        // Too few DEM hits → do not claim clear; let Trace decide.
+        if (validSamples < 2)
+            return false;
+        return false;
+    }
 }

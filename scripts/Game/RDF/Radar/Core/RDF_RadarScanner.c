@@ -28,6 +28,7 @@ class RDF_RadarScanner
     protected int m_StatBudgetSkips;
     protected int m_StatLosCacheHits;
     protected int m_StatTraceMoves;
+    protected int m_StatDemLosBlocks;
     protected int m_StatMtdRotorAided;
     protected int m_StatMtdDetected;
     protected int m_LastMtdWinBin;
@@ -141,6 +142,7 @@ class RDF_RadarScanner
             + " fresh=" + m_StatFreshUpdates.ToString()
             + " skip=" + m_StatBudgetSkips.ToString()
             + " losHit=" + m_StatLosCacheHits.ToString()
+            + " demBlk=" + m_StatDemLosBlocks.ToString()
             + " trace=" + m_StatTraceMoves.ToString();
     }
 
@@ -256,6 +258,7 @@ class RDF_RadarScanner
         m_StatBudgetSkips = 0;
         m_StatLosCacheHits = 0;
         m_StatTraceMoves = 0;
+        m_StatDemLosBlocks = 0;
         m_StatMtdRotorAided = 0;
         m_StatMtdDetected = 0;
         m_LastMtdWinBin = -1;
@@ -556,43 +559,72 @@ class RDF_RadarScanner
                 m_StatLosCacheHits = m_StatLosCacheHits + 1;
             if (!reusedLos)
             {
-                if (losUsed >= losBudget)
+                bool demBlocked = false;
+                if (m_Settings.m_EnableDemLosPrecheck && m_DemCache)
                 {
-                    m_StatBudgetSkips = m_StatBudgetSkips + 1;
-                    TryInsertReusedScattererTarget(
-                        outTargets,
-                        entry,
-                        losEnd,
-                        dist,
-                        priorityType,
-                        worldTime,
-                        wallTime);
-                    break;
-                }
-                RDF_RadarScanGeometry.FillLosExclude(m_LosExclude, subject, entry.m_Entity);
-                int traceMoves = 0;
-                hitFraction = RDF_RadarScanGeometry.TraceLineOfSightCounted(
-                    world,
-                    param,
-                    origin,
-                    losEnd,
-                    RDF_RadarScanGeometry.LOS_START_CLEARANCE_M,
-                    traceMoves);
-                if (traceMoves < 1)
-                    traceMoves = 1;
-                losUsed = losUsed + traceMoves;
-                m_StatTraceMoves = m_StatTraceMoves + traceMoves;
-                losClear = RDF_RadarScanGeometry.IsLineOfSightClear(
-                    hitFraction, param.TraceEnt, entry.m_Entity);
-                if (m_LosCache)
-                {
-                    m_LosCache.Store(
-                        entry.m_Entity,
+                    demBlocked = RDF_RadarScanGeometry.TryDemTerrainBlock(
                         origin,
                         losEnd,
-                        hitFraction,
-                        losClear,
-                        wallTime);
+                        m_DemCache,
+                        m_Settings,
+                        hitFraction);
+                    if (demBlocked)
+                    {
+                        losClear = false;
+                        m_StatDemLosBlocks = m_StatDemLosBlocks + 1;
+                        if (m_LosCache)
+                        {
+                            m_LosCache.Store(
+                                entry.m_Entity,
+                                origin,
+                                losEnd,
+                                hitFraction,
+                                false,
+                                wallTime);
+                        }
+                    }
+                }
+
+                if (!demBlocked)
+                {
+                    if (losUsed >= losBudget)
+                    {
+                        m_StatBudgetSkips = m_StatBudgetSkips + 1;
+                        TryInsertReusedScattererTarget(
+                            outTargets,
+                            entry,
+                            losEnd,
+                            dist,
+                            priorityType,
+                            worldTime,
+                            wallTime);
+                        break;
+                    }
+                    RDF_RadarScanGeometry.FillLosExclude(m_LosExclude, subject, entry.m_Entity);
+                    int traceMoves = 0;
+                    hitFraction = RDF_RadarScanGeometry.TraceLineOfSightCounted(
+                        world,
+                        param,
+                        origin,
+                        losEnd,
+                        RDF_RadarScanGeometry.LOS_START_CLEARANCE_M,
+                        traceMoves);
+                    if (traceMoves < 1)
+                        traceMoves = 1;
+                    losUsed = losUsed + traceMoves;
+                    m_StatTraceMoves = m_StatTraceMoves + traceMoves;
+                    losClear = RDF_RadarScanGeometry.IsLineOfSightClear(
+                        hitFraction, param.TraceEnt, entry.m_Entity);
+                    if (m_LosCache)
+                    {
+                        m_LosCache.Store(
+                            entry.m_Entity,
+                            origin,
+                            losEnd,
+                            hitFraction,
+                            losClear,
+                            wallTime);
+                    }
                 }
             }
             if (!losClear && !m_Settings.m_EnableNlosMultipath)
