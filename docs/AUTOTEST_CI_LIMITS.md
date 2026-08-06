@@ -24,6 +24,8 @@ That is the regression backbone for radar **physics**. It does **not** spawn ent
 
 Manual Debugger: `RDF_RadarAutoTestSuite.StartAll()` / `Stop()`.
 
+DEM-LOS A/B（不入 StartAll）：Play 后 Debugger 执行 `RDF_RadarDemLosBenchAutoTest.Start()`；报告 `$profile:RDF/RadarTests/dem_los_bench_*.txt`（对比 `demBlk=` / `trace=`）。
+
 Channel policy: each test enables only the fidelity flags it needs (usually
 `StabilizeForRegression()`). There is no ideal/realistic suite tier.
 

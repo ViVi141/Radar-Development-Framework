@@ -148,6 +148,7 @@ scripts/Game/RDF/Radar/
     ├── RDF_RadarAirborneScanTest.c     空中目标扫描（入 StartAll）
     ├── RDF_RadarLockAutoTest.c         载具锁定状态机（入 StartAll）
     ├── RDF_RadarPerfAutoTest.c         扫描/弹道墙钟开销（入 StartAll）
+    ├── RDF_RadarDemLosBenchAutoTest.c  DEM-LOS 预检 ON/OFF A/B（Debugger 单独 Start）
     ├── RDF_RadarPlayAutoTest.c         游玩路径：HUD + 发现 + DEM + 漫步负载（入 StartAll）
     ├── RDF_RadarStressAutoTest.c       性能压测：重负载 soak（独立）
     ├── RDF_RadarRwrAutoTest.c          RWR 告警（独立）
