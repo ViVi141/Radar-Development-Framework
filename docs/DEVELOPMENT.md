@@ -6,9 +6,10 @@ Repository: https://github.com/ViVi141/Radar-Development-Framework
 Contact: 747384120@qq.com  
 License: Apache-2.0
 
-入口文档：[README.md](../README.md) · 雷达公共 API：[RADAR_API.md](RADAR_API.md) · 雷达内部框架：[RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md) · DEM：[DEM.md](DEM.md)
+入口文档：[README.md](../README.md) · 雷达公共 API：[RADAR_API.md](RADAR_API.md) · **操作示例：[DEVELOPER_RECIPES.md](DEVELOPER_RECIPES.md)** · 雷达内部框架：[RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md) · DEM：[DEM.md](DEM.md)
 
-**通视 / DEM 集成（最常问）**：带 `DemData` 的 `SURF+H` 即可；默认 DEM 先挡再 Trace + LOS 缓存。调用点不变。见 [RADAR_API.md](RADAR_API.md) § 扫描通视。
+**通视 / DEM 集成（最常问）**：带 `DemData` 的 `SURF+H` 即可；默认 DEM 先挡再 Trace + LOS 缓存。调用点不变。见 [RADAR_API.md](RADAR_API.md) § 扫描通视。  
+**挂雷达 / 改参 / 新图 DEM / RCS 签名**：见 [DEVELOPER_RECIPES.md](DEVELOPER_RECIPES.md)。
 
 ---
 
@@ -339,9 +340,10 @@ Repository: https://github.com/ViVi141/Radar-Development-Framework
 Contact: 747384120@qq.com  
 License: Apache-2.0
 
-Entry points: [README.md](../README.md) · Radar public API: [RADAR_API.md](RADAR_API.md) · Radar internal framework: [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md) · DEM: [DEM.md](DEM.md)
+Entry points: [README.md](../README.md) · Radar public API: [RADAR_API.md](RADAR_API.md) · **Recipes: [DEVELOPER_RECIPES.md](DEVELOPER_RECIPES.md)** · Radar internal framework: [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md) · DEM: [DEM.md](DEM.md)
 
-**LOS / DEM (FAQ)**: ship `DemData` as `SURF+H`; defaults do DEM-before-Trace + LOS cache. No call-site change. See [RADAR_API.md](RADAR_API.md) § Scan LOS.
+**LOS / DEM (FAQ)**: ship `DemData` as `SURF+H`; defaults do DEM-before-Trace + LOS cache. No call-site change. See [RADAR_API.md](RADAR_API.md) § Scan LOS.  
+**Attach radar / knobs / new-world DEM / RCS signatures**: [DEVELOPER_RECIPES.md](DEVELOPER_RECIPES.md).
 
 ---
 

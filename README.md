@@ -56,7 +56,7 @@ Full API: [docs/API.md](docs/API.md)
 
 ### Quick start — Radar
 
-Preferred facade for mod authors (see [docs/RADAR_API.md](docs/RADAR_API.md)):
+Preferred facade for mod authors (see [docs/RADAR_API.md](docs/RADAR_API.md); recipes: [docs/DEVELOPER_RECIPES.md](docs/DEVELOPER_RECIPES.md)):
 
 ```c
 RDF_RadarSensor sensor = new RDF_RadarSensor();
@@ -189,6 +189,7 @@ python tools\dem\rdf_dem_pack.py --world GM_Eden
 | [tools/README.md](tools/README.md) | Offline tools catalog (pack / sim / tests) |
 | [docs/API.md](docs/API.md) | LiDAR / Radar API summary (radar contract is RADAR_API) |
 | [docs/RADAR_API.md](docs/RADAR_API.md) | Radar public Sensor / Network / Datalink / Fusion contract |
+| [docs/DEVELOPER_RECIPES.md](docs/DEVELOPER_RECIPES.md) | Copy-paste recipes: attach radar, knobs, DEM/SURF, RCS signatures |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Architecture and extension |
 | [docs/RADAR_GAME_FRAMEWORK.md](docs/RADAR_GAME_FRAMEWORK.md) | In-game radar framework |
 | [docs/RADAR_CAPABILITIES.md](docs/RADAR_CAPABILITIES.md) | Capability bounds: have / missing vs reality / next |
@@ -265,7 +266,7 @@ RDF_LidarAutoRunner.StartWithConfig(RDF_LidarDemoConfig.CreateDefault(256));
 
 ### 快速上手 — 雷达
 
-模组作者首选门面（详见 [docs/RADAR_API.md](docs/RADAR_API.md)）：
+模组作者首选门面（详见 [docs/RADAR_API.md](docs/RADAR_API.md)；操作示例：[docs/DEVELOPER_RECIPES.md](docs/DEVELOPER_RECIPES.md)）：
 
 ```c
 RDF_RadarSensor sensor = new RDF_RadarSensor();
@@ -403,6 +404,7 @@ python tools\dem\rdf_dem_pack.py --world GM_Eden
 | [tools/README.md](tools/README.md) | 离线工具目录（打包 / 仿真 / 测试） |
 | [docs/API.md](docs/API.md) | LiDAR / Radar API 摘要（雷达契约以 RADAR_API 为准） |
 | [docs/RADAR_API.md](docs/RADAR_API.md) | 雷达公共 Sensor / Network / Datalink / Fusion 契约 |
+| [docs/DEVELOPER_RECIPES.md](docs/DEVELOPER_RECIPES.md) | 操作示例：挂雷达、改参、新图 DEM/SURF、RCS 签名 |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 架构与扩展 |
 | [docs/RADAR_GAME_FRAMEWORK.md](docs/RADAR_GAME_FRAMEWORK.md) | 游戏内雷达框架 |
 | [docs/RADAR_CAPABILITIES.md](docs/RADAR_CAPABILITIES.md) | 能力边界：已有 / 相对现实缺什么 / 还能做什么 |

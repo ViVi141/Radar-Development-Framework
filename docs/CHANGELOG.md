@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2026-08-07 — 开发者食谱示例
+
+- 新增 [DEVELOPER_RECIPES.md](DEVELOPER_RECIPES.md)：挂 `RDF_RadarComponent`、改 Settings、`DemData` 新图 HEIGHT+SURF、单 prefab RCS 签名（中英）
+- `DEVELOPMENT` / `RADAR_API` 入口链到食谱
+
 ## 2026-08-06 — 游戏内 DEM-LOS A/B 基准
 
 - `RDF_RadarDemLosBenchAutoTest.Start()`：同步 ScanOnce；**DemLos ON/OFF × flush/cache** 四象限

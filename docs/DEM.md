@@ -6,6 +6,8 @@
 
 DEM / 地表类数据为雷达杂波与离线电磁仿真提供地形基底。
 
+**新图操作示例（HEIGHT+SURF 打包与识别）**：[DEVELOPER_RECIPES.md](DEVELOPER_RECIPES.md) §3。
+
 ### 仓库卫生
 
 - 离线工具目录索引：[tools/README.md](../tools/README.md)；Windows 入口 `tools/dem/run_tools.ps1`。

@@ -7,7 +7,7 @@
 Repository: https://github.com/ViVi141/Radar-Development-Framework  
 Audience: mod authors who want plots / tracks / WLR without wiring physics internals.
 
-Related: [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md) · [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md) · [API.md](API.md)
+Related: [RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md) · [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md) · [API.md](API.md) · **Recipes: [DEVELOPER_RECIPES.md](DEVELOPER_RECIPES.md)** · **Recipes: [DEVELOPER_RECIPES.md](DEVELOPER_RECIPES.md)**
 
 ---
 
@@ -485,7 +485,7 @@ Public API: `RDF_RadarHUD.Show` / `Hide` / `FeedScan` / `SetMode` / `SetDisplayR
 仓库：https://github.com/ViVi141/Radar-Development-Framework  
 读者：需要 plots / 航迹 / WLR、又不想直接接线物理内部的模组作者。
 
-相关：[RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md) · [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md) · [API.md](API.md)
+相关：[RADAR_GAME_FRAMEWORK.md](RADAR_GAME_FRAMEWORK.md) · [RADAR_CAPABILITIES.md](RADAR_CAPABILITIES.md) · [API.md](API.md) · **操作示例：[DEVELOPER_RECIPES.md](DEVELOPER_RECIPES.md)**
 
 ---
 
