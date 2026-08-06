@@ -37,7 +37,7 @@ tools/dem/out/*
 TrainData/
 tools/dem/TrainData/
 
-# Packaged runtime DEM tiles (large; keep on disk, do not commit)
-DemData/
+# Runtime SURF/HEIGHT packs under DemData/ are tracked (workshop path).
+# Profile bake CSV / .dem.data stay out of git (local only).
 
 # Signature .conf is workshop-packable — tracked in git under Signatures/
