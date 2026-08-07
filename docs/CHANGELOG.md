@@ -1,5 +1,25 @@
 # CHANGELOG
 
+## 2026-08-07 — 分段方向图 LUT + 固定站路径因子表
+
+- **PatternLut**：方位主瓣 + 旁瓣峰 + 地板（`m_EnablePatternLut` 默认开）；`RDF_RadarPatternLut` / `$profile:…/PatternLut.json`
+- **SitePathLut**：固定站极坐标 (az×range) DEM 路径因子（`m_EnableSitePathLut` 默认关）；NLOS 与活刀刃取 max
+- 离线：`pattern-site` → `calib/PatternLut.json` + `SitePathLut.json`（合成脊或 `--dem-dir`）
+
+## 2026-08-07 — Enforce：双主导刃 + ν LUT + 旁瓣/极化
+
+- **双主导刃**（Deygout-lite）：`m_EnableDualKnifeEdge` / `m_KnifeEdgeMinUSeparation`；次刃因子下限 0.25
+- **ν→factor LUT**：`RDF_RadarKnifeEdgeLut`（运行时建表或 `$profile:RDF/RadarData/KnifeEdgeLut.json`）；`m_EnableKnifeEdgeLut` 默认开
+- 方向图旁瓣地板 + 极化 H/V/圆匹配表 + 可选 EW SLB（见下）
+- 离线：`knife-lut` → `calib/KnifeEdgeLut.json`（Enforce 瘦表）+ full table
+
+## 2026-08-07 — 旁瓣地板 + 极化匹配 + 可选 SLB
+
+- 方向图：高斯主瓣 + `m_SidelobeLevelDb` 双程地板（`m_EnableSidelobeFloor`，默认开）
+- 极化：`ERDF_RadarPolarization`（H/V/圆）匹配表 × `m_PolarizationFactor`；圆极化雨杂波抑制标量
+- EW：`NoiseJammerEffect.m_EnableSlb`（默认关）旁瓣耦合消隐；`EnableSlb(true)` 开启
+- Python：`test_rdf_radar_antenna`；Settings `EnableAntennaPatternFidelity`
+
 ## 2026-08-07 — 正演 TruthSample ↔ 反演 Observation 切开
 
 - 新增 `RDF_RadarTruthSample`：Scanner / `PhysicalDetect` / reuse 缓存只写正演真值

@@ -5,10 +5,11 @@
 #   .\run_tools.ps1 full-sim
 #   .\run_tools.ps1 demo
 #   .\run_tools.ps1 demo -Ew
+#   .\run_tools.ps1 knife-lut
 
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("help", "test", "full-sim", "demo")]
+    [ValidateSet("help", "test", "full-sim", "demo", "knife-lut", "pattern-site")]
     [string]$Command = "help",
 
     [switch]$Ew
@@ -26,6 +27,8 @@ RDF tools/dem helper (catalog: ..\README.md)
   .\run_tools.ps1 full-sim   Capability smoke -> out\full_sim_report.json
   .\run_tools.ps1 demo       Framework demo (--preset shorad)
   .\run_tools.ps1 demo -Ew   Framework demo with EW
+  .\run_tools.ps1 knife-lut  Knife-edge ν LUT bake + Enforce profile
+  .\run_tools.ps1 pattern-site  Pattern + site-path LUT bake
 
 Linux/macOS: ./run_tools.sh <same commands>
 
@@ -59,6 +62,14 @@ switch ($Command) {
         else {
             python rdf_radar_framework_demo.py --preset shorad
         }
+        exit $LASTEXITCODE
+    }
+    "knife-lut" {
+        python rdf_radar_knife_lut_validate.py
+        exit $LASTEXITCODE
+    }
+    "pattern-site" {
+        python rdf_radar_pattern_site_validate.py
         exit $LASTEXITCODE
     }
 }

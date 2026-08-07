@@ -17,10 +17,12 @@ class RDF_RadarHardware
     float m_AzimuthBeamwidthDeg = 2.5;
     float m_SystemLossDb = 6.0;
     float m_NoiseFigureDb = 5.0;
-    // Polarization mismatch / HH–VV factor (linear, ≤1). Applied to Pr.
+    // Polarization mode for match-table lookup (H / V / circular).
+    ERDF_RadarPolarization m_PolarizationMode = ERDF_RadarPolarization.RDF_POL_H;
+    // Extra polarization trim (linear, ≤1). Multiplies the mode match factor.
     float m_PolarizationFactor = 1.0;
-    // One-way peak sidelobe floor (dB relative to boresight). Pattern already
-    // uses Gaussian mainlobe; this is reserved for EW / off-axis coupling.
+    // One-way peak sidelobe floor (dB relative to boresight). Gaussian mainlobe
+    // is floored to this level for off-axis pattern / EW coupling.
     float m_SidelobeLevelDb = -25.0;
     float m_PulseWidthS = 0.0000005;
     float m_BandwidthHz = 4000000.0;
@@ -195,6 +197,14 @@ class RDF_RadarHardware
         m_AzimuthBeamwidthDeg = Math.Clamp(m_AzimuthBeamwidthDeg, 0.1, 360.0);
         m_SystemLossDb = Math.Max(0.0, m_SystemLossDb);
         m_NoiseFigureDb = Math.Max(0.0, m_NoiseFigureDb);
+        if (m_PolarizationMode != ERDF_RadarPolarization.RDF_POL_H)
+        {
+            if (m_PolarizationMode != ERDF_RadarPolarization.RDF_POL_V)
+            {
+                if (m_PolarizationMode != ERDF_RadarPolarization.RDF_POL_CIRCULAR)
+                    m_PolarizationMode = ERDF_RadarPolarization.RDF_POL_H;
+            }
+        }
         m_PolarizationFactor = Math.Clamp(m_PolarizationFactor, 0.05, 1.0);
         m_SidelobeLevelDb = Math.Clamp(m_SidelobeLevelDb, -80.0, 0.0);
         m_PulseWidthS = Math.Max(0.000000001, m_PulseWidthS);

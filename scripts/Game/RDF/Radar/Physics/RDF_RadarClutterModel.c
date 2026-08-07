@@ -86,6 +86,25 @@ class RDF_RadarClutterModel
     }
 
     //------------------------------------------------------------------------------------------------
+    // Two-way power floor from one-way sidelobe level (dB).
+    static float TwoWaySidelobeFloor(float sidelobeLevelDb)
+    {
+        float oneWay = DbToLin(sidelobeLevelDb);
+        if (oneWay < 0.0)
+            oneWay = 0.0;
+        return oneWay * oneWay;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    static float ApplyTwoWaySidelobeFloor(float twoWayGain, float sidelobeLevelDb)
+    {
+        float floorTwoWay = TwoWaySidelobeFloor(sidelobeLevelDb);
+        if (twoWayGain < floorTwoWay)
+            return floorTwoWay;
+        return twoWayGain;
+    }
+
+    //------------------------------------------------------------------------------------------------
     static float GetStrongestBeamGain(
         RDF_RadarHardware hardware,
         float azimuthOffsetDeg,
@@ -96,9 +115,18 @@ class RDF_RadarClutterModel
         if (!hardware || !hardware.m_ElevationBeams)
             return 0.0;
 
-        float azimuthGain = GaussianBeamGain(
-            azimuthOffsetDeg,
-            hardware.m_AzimuthBeamwidthDeg);
+        float azimuthGain;
+        if (RDF_RadarPatternLut.IsEnabled())
+        {
+            RDF_RadarPatternLut.EnsureReady(hardware);
+            azimuthGain = RDF_RadarPatternLut.EvalOneWay(azimuthOffsetDeg);
+        }
+        else
+        {
+            azimuthGain = GaussianBeamGain(
+                azimuthOffsetDeg,
+                hardware.m_AzimuthBeamwidthDeg);
+        }
         float strongest = 0.0;
 
         for (int i = 0; i < hardware.m_ElevationBeams.Count(); i++)
@@ -119,6 +147,49 @@ class RDF_RadarClutterModel
             }
         }
         return strongest;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Engineering polarization match (linear ≤1). Not a Mueller/Jones solver.
+    // Vehicles depolarize more; projectiles keep match (corner-like); circular
+    // trades some target match for rain-clutter rejection elsewhere.
+    static float PolarizationMatchFactor(
+        ERDF_RadarPolarization mode,
+        ERDF_RadarTargetType targetType)
+    {
+        if (mode == ERDF_RadarPolarization.RDF_POL_CIRCULAR)
+        {
+            if (targetType == ERDF_RadarTargetType.RDF_RADAR_TARGET_PROJECTILE)
+                return 0.95;
+            if (targetType == ERDF_RadarTargetType.RDF_RADAR_TARGET_VEHICLE)
+                return 0.75;
+            if (targetType == ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER)
+                return 0.80;
+            return 0.85;
+        }
+
+        // H or V linear (same table; cross-pol trim is m_PolarizationFactor).
+        if (targetType == ERDF_RadarTargetType.RDF_RADAR_TARGET_PROJECTILE)
+            return 1.0;
+        if (targetType == ERDF_RadarTargetType.RDF_RADAR_TARGET_VEHICLE)
+            return 0.65;
+        if (targetType == ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER)
+            return 0.85;
+        return 0.90;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Circular polarization rain-clutter rejection (linear scale on DEM clutter).
+    static float PolarizationClutterFactor(
+        ERDF_RadarPolarization mode,
+        float rainDbPerKmOneWay)
+    {
+        if (mode != ERDF_RadarPolarization.RDF_POL_CIRCULAR)
+            return 1.0;
+        if (rainDbPerKmOneWay < 0.05)
+            return 1.0;
+        // Strong rain → keep ~0.2 of wet-ground clutter power.
+        return 0.20;
     }
 
     //------------------------------------------------------------------------------------------------

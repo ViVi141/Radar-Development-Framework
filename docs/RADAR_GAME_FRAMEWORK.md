@@ -104,7 +104,8 @@ RDF_RadarNoiseJammerEffect jammer = new RDF_RadarNoiseJammerEffect();
 jammer.m_Position = jammerWorldPosition;
 jammer.m_ErpW = 10000.0;
 jammer.m_BandwidthHz = 5000000.0;
-// Default: SEARCH_AVG + -40 dB sidelobe (playable soft). Hard stare:
+// Default: SEARCH_AVG + -40 dB sidelobe (playable soft). Optional SLB:
+// jammer.EnableSlb(true) blanks sidelobe-only coupling. Hard stare:
 // jammer.ConfigurePhysicsBeam(-25.0);
 // Mainlobe sector only: jammer.ConfigureMainlobeOnly();
 // Extra soft knob: jammer.m_CouplingGain = 0.25;
@@ -387,7 +388,8 @@ Output report:
 - Target candidates remain entity-first (scatterer registry). LOS: optional DEM
   HEIGHT precheck (`m_EnableDemLosPrecheck`) then `TraceLineOfSight` (`ANY_CONTACT`,
   reused TraceParam, ExcludeArray, start clearance); NLOS may use ground-bounce
-  weak detection + **single knife-edge diffraction** (not multi-edge/UTD).
+  weak detection + **dual-dominant knife-edge diffraction** (Deygout-lite; ν LUT;
+  not arbitrary multi-edge/UTD).
 - DEM / surface: prefer SURF+HEIGHT JSON RAM (`SURF+H`); V3 CSV is the dev fallback.
   Multiplayer parity for clutter still needs matching local SURF/DEM (or LIVE);
   detection **results** sync via `RDF_RadarNetworkComponent` (not a substitute

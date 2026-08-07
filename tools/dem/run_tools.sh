@@ -6,6 +6,7 @@
 #   ./run_tools.sh full-sim
 #   ./run_tools.sh demo
 #   ./run_tools.sh demo --ew
+#   ./run_tools.sh knife-lut
 
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -24,6 +25,8 @@ RDF tools/dem helper (catalog: ../README.md)
   ./run_tools.sh full-sim   Capability smoke -> out/full_sim_report.json
   ./run_tools.sh demo       Framework demo (--preset shorad)
   ./run_tools.sh demo --ew  Framework demo with EW
+  ./run_tools.sh knife-lut  Knife-edge ν LUT bake + Enforce profile
+  ./run_tools.sh pattern-site  Pattern + site-path LUT bake
 
 Also common:
   python3 rdf_dem_pack_surface_json.py --world GM_Eden --from-bin
@@ -51,6 +54,12 @@ case "$cmd" in
     else
       python3 rdf_radar_framework_demo.py --preset shorad
     fi
+    ;;
+  knife-lut)
+    python3 rdf_radar_knife_lut_validate.py
+    ;;
+  pattern-site)
+    python3 rdf_radar_pattern_site_validate.py
     ;;
   *)
     echo "unknown command: $cmd" >&2

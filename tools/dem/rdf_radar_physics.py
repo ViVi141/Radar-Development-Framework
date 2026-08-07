@@ -85,8 +85,16 @@ class RadarHardware:
     # Integration: pulses in CPI (scan dwell approx).
     pulses_integrated: int = 16
     coherent_integration: bool = False
-    # Polarization mismatch / HH-VV factor (linear, ≤1).
+    # Polarization mode: "H" | "V" | "CIRCULAR".
+    polarization_mode: str = "H"
+    # Extra polarization trim (linear, ≤1). Multiplies mode match factor.
     polarization_factor: float = 1.0
+    # When True, floor two-way pattern to sidelobe_level_db^2.
+    enable_sidelobe_floor: bool = True
+    # When True, use segmented az pattern LUT (mainlobe + peaks + floor).
+    enable_pattern_lut: bool = True
+    # When True, apply polarization_mode match table.
+    enable_polarization_match: bool = True
     # Two-way atmospheric loss coefficient near surface [dB/km] one-way * 2 applied.
     atm_loss_db_per_km_one_way: float = 0.01
     # Instrumented / advertised max range (m). DEM may be smaller.
@@ -491,7 +499,16 @@ def elevation_beam_gains(
 ) -> dict[str, float]:
     """Return two-way gain for every configured elevation beam."""
     result: dict[str, float] = {}
-    az_gain = gaussian_beam_gain(az_offset_deg, hardware.az_beamwidth_deg)
+    if hardware.enable_pattern_lut:
+        from rdf_radar_pattern_lut import segmented_one_way_gain
+
+        az_gain = segmented_one_way_gain(
+            az_offset_deg,
+            hardware.az_beamwidth_deg,
+            hardware.sidelobe_level_db,
+        )
+    else:
+        az_gain = gaussian_beam_gain(az_offset_deg, hardware.az_beamwidth_deg)
     for beam in hardware.resolved_elevation_beams():
         el_gain = gaussian_beam_gain(
             elevation_deg - beam.boresight_deg,
@@ -503,16 +520,97 @@ def elevation_beam_gains(
     return result
 
 
+def two_way_sidelobe_floor(sidelobe_level_db: float) -> float:
+    one_way = db_to_lin(sidelobe_level_db)
+    if one_way < 0.0:
+        one_way = 0.0
+    return one_way * one_way
+
+
+def apply_two_way_sidelobe_floor(
+    two_way_gain: float,
+    sidelobe_level_db: float,
+) -> float:
+    floor_two = two_way_sidelobe_floor(sidelobe_level_db)
+    if two_way_gain < floor_two:
+        return floor_two
+    return two_way_gain
+
+
 def combined_two_way_pattern_gain(
     hardware: RadarHardware,
     elevation_deg: float,
     az_offset_deg: float = 0.0,
+    apply_sidelobe_floor: bool | None = None,
 ) -> float:
     """Use the strongest configured elevation beam at a look direction."""
     gains = elevation_beam_gains(hardware, elevation_deg, az_offset_deg)
     if not gains:
         return 0.0
-    return max(gains.values())
+    strongest = max(gains.values())
+    use_floor = apply_sidelobe_floor
+    if use_floor is None:
+        use_floor = hardware.enable_sidelobe_floor
+    # Segmented pattern LUT already embeds the one-way floor.
+    if use_floor and (not hardware.enable_pattern_lut):
+        strongest = apply_two_way_sidelobe_floor(
+            strongest,
+            hardware.sidelobe_level_db,
+        )
+    return strongest
+
+
+def polarization_match_factor(
+    mode: str,
+    target_type: str,
+) -> float:
+    """Engineering match table (linear ≤1). Mirrors Enforce ClutterModel."""
+    mode_key = str(mode).upper()
+    typ = str(target_type).upper()
+    if mode_key in ("CIRC", "CIRCULAR", "RHCP", "LHCP"):
+        if typ in ("PROJECTILE", "MISSILE", "ROCKET"):
+            return 0.95
+        if typ in ("VEHICLE", "HELI", "HELICOPTER"):
+            return 0.75
+        if typ in ("EMITTER", "RADAR_EMITTER"):
+            return 0.80
+        return 0.85
+    if typ in ("PROJECTILE", "MISSILE", "ROCKET"):
+        return 1.0
+    if typ in ("VEHICLE", "HELI", "HELICOPTER"):
+        return 0.65
+    if typ in ("EMITTER", "RADAR_EMITTER"):
+        return 0.85
+    return 0.90
+
+
+def polarization_clutter_factor(
+    mode: str,
+    rain_db_per_km_one_way: float,
+) -> float:
+    mode_key = str(mode).upper()
+    if mode_key not in ("CIRC", "CIRCULAR", "RHCP", "LHCP"):
+        return 1.0
+    if rain_db_per_km_one_way < 0.05:
+        return 1.0
+    return 0.20
+
+
+def resolve_polarization_factor(
+    hardware: RadarHardware,
+    target_type: str,
+) -> float:
+    factor = float(hardware.polarization_factor)
+    if hardware.enable_polarization_match:
+        factor = factor * polarization_match_factor(
+            hardware.polarization_mode,
+            target_type,
+        )
+    if factor < 0.05:
+        factor = 0.05
+    if factor > 1.0:
+        factor = 1.0
+    return factor
 
 
 def received_power_w(

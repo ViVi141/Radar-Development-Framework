@@ -158,6 +158,9 @@
 | **P1** | 4/3 地球折射（地平线软衰减 + 俯仰偏置） | **已完成** |
 | **P1** | PRF 距离/多普勒模糊折叠（WLR 跳过多普勒） | **已完成** |
 | **P1** | 极化失配标量 | **已完成** |
+| **P1** | 旁瓣地板 + 极化模式匹配表 + 可选 SLB | **已完成** |
+| **P1** | Enforce 双主导刃 + ν LUT bake-back | **已完成** |
+| **P1** | 分段方向图 LUT + 固定站路径因子表 | **已完成** |
 | **护栏** | Python `test_rdf_radar_propagation` + full_sim 标签 | **已完成** |
 | **API** | 取消理想/逼真双档 → 按需 Enable* | **已完成** |
 
@@ -416,6 +419,9 @@ Deepen target-level equations / measurement layer; **no** waveform → RD / full
 | **P1** | 4/3-Earth refraction (horizon soft + elevation bias) | **done** |
 | **P1** | PRF range/Doppler ambiguity fold (WLR skips Doppler) | **done** |
 | **P1** | Polarization mismatch scalar | **done** |
+| **P1** | Sidelobe floor + pol match table + optional SLB | **done** |
+| **P1** | Enforce dual knife-edge + ν LUT bake-back | **done** |
+| **P1** | Segmented pattern LUT + fixed-site path LUT | **done** |
 | **Guard** | Python `test_rdf_radar_propagation` + full_sim tags | **done** |
 | **API** | Drop ideal/realistic tiers → opt-in Enable* | **done** |
 

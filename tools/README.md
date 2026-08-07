@@ -86,6 +86,8 @@ Generated files go to `tools/dem/out/` (gitignored except `.gitkeep`). Do not co
 | `rdf_radar_track.py` | NN association, α-β, WLR vacuum fit |
 | `rdf_radar_ew.py` | Noise / deception / hop schedule |
 | `rdf_radar_diffraction.py` | Knife-edge diffraction helpers |
+| `rdf_radar_pattern_lut.py` | Segmented az pattern LUT (mainlobe + peaks + floor) |
+| `rdf_radar_site_path_lut.py` | Fixed-site polar DEM path-factor LUT |
 | `rdf_radar_fusion.py` | Multi-radar associate / cross-fix |
 | `rdf_radar_systems.py` | Lock, ESM/RWR/ARM, GO/SO-CFAR, Network policy; `MeasurementModel` + optional `ChannelFidelity` folds |
 
@@ -100,6 +102,7 @@ Generated files go to `tools/dem/out/` (gitignored except `.gitkeep`). Do not co
 | `rdf_radar_mass_battle_sim.py` | Multi-radar DEM battle facade → `mass_battle/` |
 | `rdf_radar_hw_calibrate.py` | Offline HW bake-back → `calib/prf_clutter_*.json` |
 | `rdf_knife_edge_eden_validate.py` | Eden knife-edge validation helper |
+| `rdf_radar_pattern_site_validate.py` | Pattern + site-path LUT bake → `calib/PatternLut.json` / `SitePathLut.json` |
 
 ### Golden tests
 
@@ -110,6 +113,8 @@ Generated files go to `tools/dem/out/` (gitignored except `.gitkeep`). Do not co
 | `test_rdf_radar_track.py` | Association / α-β / vacuum fit |
 | `test_rdf_radar_ew.py` | Noise jam coupling / burn-through |
 | `test_rdf_radar_diffraction.py` | Knife-edge factors |
+| `test_rdf_radar_pattern_site_lut.py` | Pattern + site-path LUT |
+| `test_rdf_radar_antenna.py` | Sidelobe floor / polarization / SLB |
 | `test_rdf_radar_fusion.py` | Associate / cross-fix |
 | `test_rdf_radar_systems.py` | Systems + full_sim smoke |
 | `test_rdf_radar_mtd.py` | MTD bank / rotor micro-Doppler |
@@ -192,6 +197,8 @@ cd tools\dem
 | `rdf_radar_track.py` | 最近邻关联、α-β、WLR 真空拟合 |
 | `rdf_radar_ew.py` | 噪声 / 欺骗 / 跳频表 |
 | `rdf_radar_diffraction.py` | 刀刃绕射辅助 |
+| `rdf_radar_pattern_lut.py` | 分段方位方向图 LUT（主瓣+旁瓣峰+地板） |
+| `rdf_radar_site_path_lut.py` | 固定站极坐标 DEM 路径因子 LUT |
 | `rdf_radar_fusion.py` | 多雷达关联 / 交会 |
 | `rdf_radar_systems.py` | 锁定、ESM/RWR/ARM、GO/SO-CFAR、Network 策略；`MeasurementModel` + 可选 `ChannelFidelity` 折叠 |
 
@@ -206,6 +213,7 @@ cd tools\dem
 | `rdf_radar_mass_battle_sim.py` | 多雷达 DEM 战场 facade → `mass_battle/` |
 | `rdf_radar_hw_calibrate.py` | 离线 HW 回灌 → `calib/prf_clutter_*.json` |
 | `rdf_knife_edge_eden_validate.py` | Eden 刀刃绕射校验 |
+| `rdf_radar_pattern_site_validate.py` | 方向图 + 站点路径 LUT → `calib/PatternLut.json` / `SitePathLut.json` |
 
 ### Golden 测试
 
@@ -216,6 +224,8 @@ cd tools\dem
 | `test_rdf_radar_track.py` | 关联 / α-β / 真空拟合 |
 | `test_rdf_radar_ew.py` | 噪声耦合 / 烧穿 |
 | `test_rdf_radar_diffraction.py` | 刀刃因子 |
+| `test_rdf_radar_pattern_site_lut.py` | 方向图 + 站点路径 LUT |
+| `test_rdf_radar_antenna.py` | 旁瓣地板 / 极化 / SLB |
 | `test_rdf_radar_fusion.py` | 关联 / 交会 |
 | `test_rdf_radar_systems.py` | systems + full_sim 冒烟 |
 | `test_rdf_radar_mtd.py` | MTD 滤波器组 / 旋翼微多普勒 |

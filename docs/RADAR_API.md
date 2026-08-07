@@ -246,7 +246,16 @@ Enable only what you need. Defaults leave optional fidelity **off**.
 | `EnableLosTwoRayMultipath()` | Clear-LOS two-ray power lobes (skips projectiles) |
 | `EnableAtmosphericRefraction()` | 4/3-Earth horizon soft factor + elevation bias |
 | `EnablePrfAmbiguityFolds(range, doppler)` | PRF ambiguity folds (Doppler skipped for WLR) |
-| `Hardware.m_PolarizationFactor` | Linear mismatch on received power |
+| `EnableAntennaPatternFidelity(sll, pol)` | Sidelobe floor + polarization match tables |
+| `EnablePatternAndSiteLuts(pattern, site)` | Segmented pattern LUT + fixed-site path LUT |
+| `m_EnablePatternLut` | Az segmented pattern (default on) |
+| `m_EnableSitePathLut` | Polar DEM path factors (default off; needs bake) |
+| `m_EnableDualKnifeEdge` / `m_KnifeEdgeMinUSeparation` | Dual-dominant knife-edge (Deygout-lite) |
+| `m_EnableKnifeEdgeLut` | ν→factor LUT (`RDF_RadarKnifeEdgeLut`) |
+| `Hardware.m_PolarizationMode` | `RDF_POL_H` / `V` / `CIRCULAR` match table |
+| `Hardware.m_PolarizationFactor` | Extra linear trim on received power |
+| `Hardware.m_SidelobeLevelDb` | One-way sidelobe floor (two-way = lin²) |
+| `NoiseJammerEffect.EnableSlb(true)` | Blank sidelobe-only jam coupling |
 | `StabilizeForRegression()` | AutoTest helper: turn optional fidelity **off** |
 
 ```c
@@ -257,7 +266,10 @@ cfg.EnableAtmosphericPathLoss(true);
 cfg.EnableLosTwoRayMultipath();
 cfg.EnableAtmosphericRefraction();
 cfg.EnablePrfAmbiguityFolds(true, true);
+cfg.EnableAntennaPatternFidelity(true, true);
+cfg.m_Hardware.m_PolarizationMode = ERDF_RadarPolarization.RDF_POL_CIRCULAR;
 cfg.m_Hardware.m_PolarizationFactor = 0.9;
+cfg.m_Hardware.m_SidelobeLevelDb = -30.0;
 cfg.Validate();
 ```
 
@@ -720,7 +732,16 @@ sensor.SetMeasurementModel(new MyGameplayNoise());
 | `EnableLosTwoRayMultipath()` | 通视双射线功率瓣（弹丸跳过） |
 | `EnableAtmosphericRefraction()` | 4/3 地球地平线软衰减 + 俯仰偏置 |
 | `EnablePrfAmbiguityFolds(range, doppler)` | PRF 模糊折叠（WLR 跳过多普勒） |
-| `Hardware.m_PolarizationFactor` | 接收功率极化失配 |
+| `EnableAntennaPatternFidelity(sll, pol)` | 旁瓣地板 + 极化匹配表 |
+| `EnablePatternAndSiteLuts(pattern, site)` | 分段方向图 LUT + 固定站路径 LUT |
+| `m_EnablePatternLut` | 方位分段方向图（默认开） |
+| `m_EnableSitePathLut` | 极坐标 DEM 路径因子（默认关；需 bake） |
+| `m_EnableDualKnifeEdge` / `m_KnifeEdgeMinUSeparation` | 双主导刃（Deygout-lite） |
+| `m_EnableKnifeEdgeLut` | ν→factor LUT（`RDF_RadarKnifeEdgeLut`） |
+| `Hardware.m_PolarizationMode` | `RDF_POL_H` / `V` / `CIRCULAR` 匹配表 |
+| `Hardware.m_PolarizationFactor` | 接收功率额外极化微调 |
+| `Hardware.m_SidelobeLevelDb` | 单程旁瓣地板（双程 = lin²） |
+| `NoiseJammerEffect.EnableSlb(true)` | 旁瓣耦合消隐 |
 | `StabilizeForRegression()` | AutoTest：关掉可选保真项 |
 
 ```c
@@ -731,7 +752,10 @@ cfg.EnableAtmosphericPathLoss(true);
 cfg.EnableLosTwoRayMultipath();
 cfg.EnableAtmosphericRefraction();
 cfg.EnablePrfAmbiguityFolds(true, true);
+cfg.EnableAntennaPatternFidelity(true, true);
+cfg.m_Hardware.m_PolarizationMode = ERDF_RadarPolarization.RDF_POL_CIRCULAR;
 cfg.m_Hardware.m_PolarizationFactor = 0.9;
+cfg.m_Hardware.m_SidelobeLevelDb = -30.0;
 cfg.Validate();
 ```
 

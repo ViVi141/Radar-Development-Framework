@@ -44,17 +44,34 @@ class RDF_RadarSettings
     float m_NlosMinFactor = 0.008;
     // Skip bounce model for high-flying targets (AGL).
     float m_NlosMaxTargetAglM = 800.0;
-    // Single knife-edge diffraction over DEM/surface samples (still under NLOS gate).
+    // Knife-edge diffraction over DEM/surface samples (still under NLOS gate).
     bool m_EnableKnifeEdgeDiffraction = true;
+    // When true: up to two dominant edges cascaded (Deygout-lite).
+    // When false: legacy single worst-edge knife only.
+    bool m_EnableDualKnifeEdge = true;
     // Uniform samples along radar→target (plus Trace hitFraction candidate).
     int m_KnifeEdgeMaxSamples = 8;
+    // Min |Δu| between the two dominant edges (ignore near-duplicate samples).
+    float m_KnifeEdgeMinUSeparation = 0.10;
     // Subtract from obstacle height to reduce GetSurfaceY / DEM noise false blocks.
     float m_KnifeEdgeClearanceSlackM = 2.0;
+    // Use baked ν→factor LUT for KnifeEdgeLinearFactor (default on).
+    bool m_EnableKnifeEdgeLut = true;
     // Before TraceMove: sample DEM HEIGHT RAM along the ray. If terrain blocks,
     // skip Trace (entity occlusion still needs Trace when DEM is clear).
     bool m_EnableDemLosPrecheck = true;
     // Interior samples along radar→target for DEM precheck (endpoints skipped).
     int m_DemLosPrecheckSamples = 8;
+    // Floor Gaussian two-way pattern to Hardware.m_SidelobeLevelDb^2.
+    bool m_EnableSidelobeFloor = true;
+    // Azimuth segmented pattern LUT (mainlobe + sidelobe peaks); default on.
+    bool m_EnablePatternLut = true;
+    // Apply Hardware.m_PolarizationMode match table × m_PolarizationFactor.
+    bool m_EnablePolarizationMatch = true;
+    // Fixed-site DEM polar path LUT (opt-in; needs profile SitePathLut.json).
+    bool m_EnableSitePathLut = false;
+    // Max radar-origin drift vs bake origin before site LUT is ignored.
+    float m_SitePathMaxOriginDriftM = 5.0;
     // Optional receiver-side EW/noise injection after processing.
     float m_AdditionalNoisePowerW = 0.0;
     ref RDF_RadarEwStack m_EwStack;
@@ -214,7 +231,9 @@ class RDF_RadarSettings
         m_NlosMinFactor = Math.Clamp(m_NlosMinFactor, 0.0, 1.0);
         m_NlosMaxTargetAglM = Math.Clamp(m_NlosMaxTargetAglM, 10.0, 20000.0);
         m_KnifeEdgeMaxSamples = Math.Clamp(m_KnifeEdgeMaxSamples, 2, 16);
+        m_KnifeEdgeMinUSeparation = Math.Clamp(m_KnifeEdgeMinUSeparation, 0.05, 0.5);
         m_KnifeEdgeClearanceSlackM = Math.Clamp(m_KnifeEdgeClearanceSlackM, 0.0, 50.0);
+        m_SitePathMaxOriginDriftM = Math.Clamp(m_SitePathMaxOriginDriftM, 0.5, 200.0);
         m_DemLosPrecheckSamples = Math.Clamp(m_DemLosPrecheckSamples, 2, 24);
         m_AdditionalNoisePowerW = Math.Max(0.0, m_AdditionalNoisePowerW);
         m_CfarGuardCells = Math.Clamp(m_CfarGuardCells, 0, 32);
@@ -360,6 +379,22 @@ class RDF_RadarSettings
     {
         m_EnableRangeAmbiguityFold = foldRange;
         m_EnableDopplerAmbiguityFold = foldDoppler;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Off-axis pattern floor + polarization match tables (default on).
+    void EnableAntennaPatternFidelity(bool sidelobeFloor, bool polarizationMatch)
+    {
+        m_EnableSidelobeFloor = sidelobeFloor;
+        m_EnablePolarizationMatch = polarizationMatch;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Segmented pattern LUT + optional fixed-site DEM path table.
+    void EnablePatternAndSiteLuts(bool patternLut, bool sitePathLut)
+    {
+        m_EnablePatternLut = patternLut;
+        m_EnableSitePathLut = sitePathLut;
     }
 
     //------------------------------------------------------------------------------------------------
