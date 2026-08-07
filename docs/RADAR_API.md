@@ -247,6 +247,8 @@ Enable only what you need. Defaults leave optional fidelity **off**.
 | `EnableAtmosphericRefraction()` | 4/3-Earth horizon soft factor + elevation bias |
 | `EnablePrfAmbiguityFolds(range, doppler)` | PRF ambiguity folds (Doppler skipped for WLR) |
 | `EnableAntennaPatternFidelity(sll, pol)` | Sidelobe floor + polarization match tables |
+| `m_EnableDualKnifeEdge` / `m_KnifeEdgeMinUSeparation` | Dual-dominant knife-edge (Deygout-lite) |
+| `m_EnableKnifeEdgeLut` | ν→factor LUT (`RDF_RadarKnifeEdgeLut`) |
 | `Hardware.m_PolarizationMode` | `RDF_POL_H` / `V` / `CIRCULAR` match table |
 | `Hardware.m_PolarizationFactor` | Extra linear trim on received power |
 | `Hardware.m_SidelobeLevelDb` | One-way sidelobe floor (two-way = lin²) |
@@ -728,6 +730,8 @@ sensor.SetMeasurementModel(new MyGameplayNoise());
 | `EnableAtmosphericRefraction()` | 4/3 地球地平线软衰减 + 俯仰偏置 |
 | `EnablePrfAmbiguityFolds(range, doppler)` | PRF 模糊折叠（WLR 跳过多普勒） |
 | `EnableAntennaPatternFidelity(sll, pol)` | 旁瓣地板 + 极化匹配表 |
+| `m_EnableDualKnifeEdge` / `m_KnifeEdgeMinUSeparation` | 双主导刃（Deygout-lite） |
+| `m_EnableKnifeEdgeLut` | ν→factor LUT（`RDF_RadarKnifeEdgeLut`） |
 | `Hardware.m_PolarizationMode` | `RDF_POL_H` / `V` / `CIRCULAR` 匹配表 |
 | `Hardware.m_PolarizationFactor` | 接收功率额外极化微调 |
 | `Hardware.m_SidelobeLevelDb` | 单程旁瓣地板（双程 = lin²） |

@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-08-07 — Enforce：双主导刃 + ν LUT + 旁瓣/极化
+
+- **双主导刃**（Deygout-lite）：`m_EnableDualKnifeEdge` / `m_KnifeEdgeMinUSeparation`；次刃因子下限 0.25
+- **ν→factor LUT**：`RDF_RadarKnifeEdgeLut`（运行时建表或 `$profile:RDF/RadarData/KnifeEdgeLut.json`）；`m_EnableKnifeEdgeLut` 默认开
+- 方向图旁瓣地板 + 极化 H/V/圆匹配表 + 可选 EW SLB（见下）
+- 离线：`knife-lut` → `calib/KnifeEdgeLut.json`（Enforce 瘦表）+ full table
+
 ## 2026-08-07 — 旁瓣地板 + 极化匹配 + 可选 SLB
 
 - 方向图：高斯主瓣 + `m_SidelobeLevelDb` 双程地板（`m_EnableSidelobeFloor`，默认开）

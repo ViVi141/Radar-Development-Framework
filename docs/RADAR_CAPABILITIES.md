@@ -30,7 +30,7 @@
 - **ESM 模式**（`RDF_RADAR_MODE_ESM`）：仅辐射源；单向 Friis 侦收功率；平台静默不登记发射
 - **反辐射瞄点 API**：`GetArmAim` / `LockArmTrackId`（关辐射丢锁）；不含导弹 prefab
 - **RWR**：被搜索 / 跟踪 / 锁定告警（`RDF_RadarRwr`）；无专用 UI，模组读 API
-- 通视：可选 **DEM HEIGHT 预检**（`m_EnableDemLosPrecheck`，默认开）地形刺穿则跳过 `TraceMove`；否则 `TraceMove`（`RDF_RadarScanGeometry`：`ANY_CONTACT` + `ExcludeArray` + 复用 TraceParam + 起点出壳）；遮挡时可选 **NLOS 地面反射弱检** + **单刃绕射**（DEM/`GetSurfaceY` 沿程，`/diff`）；可选 **DEM 柱 span 顶**（`m_EnableDemSpanOcclusion`，默认关，非 SURF）
+- 通视：可选 **DEM HEIGHT 预检**（`m_EnableDemLosPrecheck`，默认开）地形刺穿则跳过 `TraceMove`；否则 `TraceMove`（`RDF_RadarScanGeometry`：`ANY_CONTACT` + `ExcludeArray` + 复用 TraceParam + 起点出壳）；遮挡时可选 **NLOS 地面反射弱检** + **双主导刃绕射**（Deygout-lite；DEM/`GetSurfaceY` 沿程，`/diff`；ν LUT）；可选 **DEM 柱 span 顶**（`m_EnableDemSpanOcclusion`，默认关，非 SURF）
 - 可选粗 RD 图（`m_EnableCoarseRd`，默认关）与多雷达共用 discovery focus 调度
 - 硬件参数 → 雷达方程、多普勒、MTI（Two/ThreePulse + 可选参差消盲 / MTD bank）、处理增益、SNR 门限（辐射源在 `m_EnableEsmReceive` 下用 ESM 方程）
 - DEM σ⁰ **地面杂波**进入噪声分母（ESM 路径跳过）；可选 clutter-map EMA
@@ -75,7 +75,7 @@
 
 #### 传播与回波
 
-- 真多径级联仍缺；**LOS 双射线 + NLOS bounce/单刃**已接（非多刃/UTD）
+- 真多径级联仍缺；**LOS 双射线 + NLOS bounce/双主导刃**已接（非任意多刃/UTD）
 - **大气折射（4/3 地球）**已接简化版（地平线软衰减 + 俯仰偏置）；衰减与雨雾损耗见 §2
 - 距离门上的杂波谱（不只是 σ⁰ 功率进噪声；离线 PSD 标定可回灌 leakage）
 - 目标起伏（Swerling）已接简化版（0–4）；完整极化闪烁谱 / 散射矩阵仍缺（有模式匹配表 + 失配标量）
@@ -115,7 +115,7 @@
 #### 游戏内（推荐）
 
 1. **锁定层对接武器**（见 [VEHICLE_RADAR_LOCK_GUIDE.md](VEHICLE_RADAR_LOCK_GUIDE.md)）
-2. ~~更细多径/绕射近似~~ **单刃绕射已落地**；DEM span / 多刃仍场景驱动
+2. ~~更细多径/绕射近似~~ **双主导刃绕射已落地**；DEM span / 任意多刃仍场景驱动
 3. ~~联机：多雷达融合~~ **已落地**；~~带宽自适应~~ **第一版已接**（摘要/plots 分流 + 上限降频）
 
 #### 离线（Python + DEM）
@@ -184,7 +184,7 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 - **ESM mode** (`RDF_RADAR_MODE_ESM`): emitters only; one-way Friis receive power; platform stays silent (no transmit registration)
 - **Anti-radiation aim API**: `GetArmAim` / `LockArmTrackId` (lock drops when emission stops); no missile prefab included
 - **RWR**: search / track / lock warnings (`RDF_RadarRwr`); no dedicated UI — mods read the API
-- LOS: optional **DEM HEIGHT precheck** (`m_EnableDemLosPrecheck`, default on) skips `TraceMove` when terrain pierces geometric LOS; else `TraceMove` (`RDF_RadarScanGeometry`: `ANY_CONTACT` + `ExcludeArray` + reused TraceParam + start clearance); optional **NLOS ground-bounce** + **single knife-edge diffraction** when occluded (DEM/`GetSurfaceY` samples, `/diff`); optional **DEM column-span tops** (`m_EnableDemSpanOcclusion`, default off, non-SURF)
+- LOS: optional **DEM HEIGHT precheck** (`m_EnableDemLosPrecheck`, default on) skips `TraceMove` when terrain pierces geometric LOS; else `TraceMove` (`RDF_RadarScanGeometry`: `ANY_CONTACT` + `ExcludeArray` + reused TraceParam + start clearance); optional **NLOS ground-bounce** + **dual-dominant knife-edge** when occluded (Deygout-lite; DEM/`GetSurfaceY`, `/diff`; ν LUT); optional **DEM column-span tops** (`m_EnableDemSpanOcclusion`, default off, non-SURF)
 - Optional coarse RD map (`m_EnableCoarseRd`, default off) and shared multi-radar discovery focus scheduling
 - Hardware params → radar equation, Doppler, MTI / optional **MTD filter bank**, processing gain, SNR threshold (emitters use the ESM equation when `m_EnableEsmReceive` is on)
 - Default MTI remains two-pulse (`RDF_MTI_TWOPULSE`); `RDF_MTI_THREE_PULSE` uses sin⁴; classic paths score rotor spectrum + optional PRF-set max de-blind; `RDF_MTI_MTD_BANK` puts clutter in the near-zero bin and picks the best Doppler channel
@@ -229,7 +229,7 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 
 #### Propagation & returns
 
-- Cascaded multipath still missing; **LOS two-ray + NLOS bounce / single knife-edge shipped** (not multi-edge/UTD)
+- Cascaded multipath still missing; **LOS two-ray + NLOS bounce / dual-dominant knife-edge shipped** (not arbitrary multi-edge/UTD)
 - **Atmospheric refraction (4/3 Earth)** simplified (horizon soft factor + elevation bias); attenuation / rain-fog — see §2
 - Clutter spectrum on range gates (not only σ⁰ into noise; offline PSD calib can feed leakage)
 - Target fluctuation (Swerling) simplified (0–4); full polarization scintillation / scattering-matrix still missing (mode match table + trim scalar shipped)
@@ -269,7 +269,7 @@ Aligned with deferred items in [TODO.md](../TODO.md):
 #### In-game (recommended)
 
 1. **Lock layer → weapon integration** (see [VEHICLE_RADAR_LOCK_GUIDE.md](VEHICLE_RADAR_LOCK_GUIDE.md))
-2. ~~Finer multipath / diffraction~~ **single knife-edge shipped**; DEM span / multi-edge still scenario-driven
+2. ~~Finer multipath / diffraction~~ **dual-dominant knife-edge shipped**; DEM span / arbitrary multi-edge still scenario-driven
 3. ~~MP: multi-radar fusion~~ **shipped**; ~~bandwidth adaptation~~ **v1 shipped** (summary/plots split + caps/throttle)
 
 #### Offline (Python + DEM)

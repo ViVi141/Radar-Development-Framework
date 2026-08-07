@@ -6,10 +6,12 @@ from __future__ import annotations
 import unittest
 
 from rdf_radar_diffraction import (
+    dual_knife_edge_factor_from_geometry,
     fresnel_nu,
     knife_edge_factor_from_geometry,
     knife_edge_linear_factor,
     obstacle_height_above_los,
+    select_dual_dominant_edges,
 )
 
 
@@ -59,6 +61,36 @@ class TestFresnelGeometry(unittest.TestCase):
     def test_geometry_deep_block_rejects(self) -> None:
         f = knife_edge_factor_from_geometry(80.0, 2000.0, 0.5, 0.03, min_factor=0.008)
         self.assertEqual(f, 0.0)
+
+
+class TestDualKnifeEdge(unittest.TestCase):
+    def test_select_requires_separation(self) -> None:
+        edges = [(0.3, 10.0), (0.32, 9.0), (0.7, 8.0)]
+        picked = select_dual_dominant_edges(edges, min_u_sep=0.10)
+        self.assertEqual(len(picked), 2)
+        self.assertAlmostEqual(picked[0][0], 0.3, places=6)
+        self.assertAlmostEqual(picked[1][0], 0.7, places=6)
+
+    def test_select_single_when_clustered(self) -> None:
+        edges = [(0.4, 12.0), (0.42, 11.0), (0.45, 10.0)]
+        picked = select_dual_dominant_edges(edges, min_u_sep=0.10)
+        self.assertEqual(len(picked), 1)
+
+    def test_dual_weaker_than_single_main(self) -> None:
+        single = knife_edge_factor_from_geometry(3.0, 10000.0, 0.35, 0.3)
+        dual = dual_knife_edge_factor_from_geometry(
+            3.0, 0.35, 2.5, 0.70, 10000.0, 0.3
+        )
+        self.assertGreater(single, 0.0)
+        self.assertGreater(dual, 0.0)
+        self.assertLess(dual, single)
+
+    def test_dual_falls_back_when_not_separated(self) -> None:
+        single = knife_edge_factor_from_geometry(20.0, 4000.0, 0.40, 0.03)
+        dual = dual_knife_edge_factor_from_geometry(
+            20.0, 0.40, 18.0, 0.45, 4000.0, 0.03, min_u_sep=0.10
+        )
+        self.assertAlmostEqual(dual, single, places=9)
 
 
 if __name__ == "__main__":

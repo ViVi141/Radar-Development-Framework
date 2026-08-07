@@ -388,7 +388,8 @@ Output report:
 - Target candidates remain entity-first (scatterer registry). LOS: optional DEM
   HEIGHT precheck (`m_EnableDemLosPrecheck`) then `TraceLineOfSight` (`ANY_CONTACT`,
   reused TraceParam, ExcludeArray, start clearance); NLOS may use ground-bounce
-  weak detection + **single knife-edge diffraction** (not multi-edge/UTD).
+  weak detection + **dual-dominant knife-edge diffraction** (Deygout-lite; ν LUT;
+  not arbitrary multi-edge/UTD).
 - DEM / surface: prefer SURF+HEIGHT JSON RAM (`SURF+H`); V3 CSV is the dev fallback.
   Multiplayer parity for clutter still needs matching local SURF/DEM (or LIVE);
   detection **results** sync via `RDF_RadarNetworkComponent` (not a substitute

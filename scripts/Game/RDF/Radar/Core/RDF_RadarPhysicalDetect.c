@@ -680,7 +680,7 @@ class RDF_RadarPhysicalDetect
             settings.m_LosTwoRayMaxFactor);
     }
 
-    // NLOS: max(ground-bounce, single knife-edge). usedKnifeEdge true when
+    // NLOS: max(ground-bounce, knife-edge). usedKnifeEdge true when
     // diffraction path wins (or is the only surviving path).
     protected static float ComputeNlosMultipathFactor(
         vector origin,
@@ -790,7 +790,9 @@ class RDF_RadarPhysicalDetect
         return factor;
     }
 
-    // Single knife-edge over DEM/surface samples + Trace hitFraction candidate.
+    // Knife-edge over DEM/surface samples + Trace hitFraction candidate.
+    // Default: up to two dominant edges (Deygout-lite cascade). Optional
+    // legacy single worst-edge via settings.m_EnableDualKnifeEdge = false.
     protected static float ComputeKnifeEdgeFactor(
         vector origin,
         vector targetPos,
@@ -806,6 +808,8 @@ class RDF_RadarPhysicalDetect
         if (distance < 1.0)
             return 0.0;
 
+        RDF_RadarKnifeEdgeLut.SetEnabled(settings.m_EnableKnifeEdgeLut);
+
         float lambdaM = wavelengthM;
         if (lambdaM < 0.001)
             lambdaM = 0.001;
@@ -817,8 +821,8 @@ class RDF_RadarPhysicalDetect
             hitU = 0.95;
 
         float slackM = settings.m_KnifeEdgeClearanceSlackM;
-        float maxHObs = -1.0e9;
-        float maxU = hitU;
+        float bestH = -1.0e9;
+        float bestU = hitU;
 
         int samples = settings.m_KnifeEdgeMaxSamples;
         if (samples < 2)
@@ -836,10 +840,10 @@ class RDF_RadarPhysicalDetect
                 world,
                 settings,
                 demCache);
-            if (hObs > maxHObs)
+            if (hObs > bestH)
             {
-                maxHObs = hObs;
-                maxU = u;
+                bestH = hObs;
+                bestU = u;
             }
         }
 
@@ -851,30 +855,163 @@ class RDF_RadarPhysicalDetect
             world,
             settings,
             demCache);
-        if (hHit > maxHObs)
+        if (hHit > bestH)
         {
-            maxHObs = hHit;
-            maxU = hitU;
+            bestH = hHit;
+            bestU = hitU;
         }
 
         // No terrain above LOS → no knife-edge path (entity/building block stays
         // on bounce-only). Do not return 1.0 or Trace occlusion is ignored.
-        if (maxHObs <= 0.0)
+        if (bestH <= 0.0)
             return 0.0;
 
-        float d1 = maxU * distance;
+        // Second dominant edge: tallest sample with |Δu| >= min separation.
+        float minSep = settings.m_KnifeEdgeMinUSeparation;
+        float secondH = -1.0e9;
+        float secondU = bestU;
+        for (i = 1; i <= samples; i++)
+        {
+            float u2 = i / (samples + 1.0);
+            float h2 = ObstacleHeightAboveLos(
+                origin,
+                targetPos,
+                u2,
+                slackM,
+                world,
+                settings,
+                demCache);
+            float du = u2 - bestU;
+            if (du < 0.0)
+                du = -du;
+            if (du < minSep)
+                continue;
+            if (h2 > secondH)
+            {
+                secondH = h2;
+                secondU = u2;
+            }
+        }
+        float duHit = hitU - bestU;
+        if (duHit < 0.0)
+            duHit = -duHit;
+        if (duHit >= minSep && hHit > secondH)
+        {
+            secondH = hHit;
+            secondU = hitU;
+        }
+
+        float factor = 0.0;
+        if (!settings.m_EnableDualKnifeEdge || secondH <= 0.0)
+        {
+            factor = KnifeEdgeFactorOneEdge(bestH, bestU, distance, lambdaM);
+        }
+        else
+        {
+            factor = KnifeEdgeFactorTwoEdges(
+                bestH, bestU, secondH, secondU, distance, lambdaM);
+        }
+
+        if (factor < settings.m_NlosMinFactor)
+            return 0.0;
+        return factor;
+    }
+
+    protected static float KnifeEdgeFactorOneEdge(
+        float hObs,
+        float uEdge,
+        float distance,
+        float lambdaM)
+    {
+        float u = uEdge;
+        if (u < 0.05)
+            u = 0.05;
+        if (u > 0.95)
+            u = 0.95;
+        float d1 = u * distance;
         float d2 = distance - d1;
         if (d1 < 1.0)
             d1 = 1.0;
         if (d2 < 1.0)
             d2 = 1.0;
+        float nu = hObs * Math.Sqrt(2.0 * distance / (lambdaM * d1 * d2));
+        return KnifeEdgeLinearFactor(nu);
+    }
 
-        float nu = maxHObs * Math.Sqrt(
-            2.0 * distance / (lambdaM * d1 * d2));
-        float factor = KnifeEdgeLinearFactor(nu);
-        if (factor < settings.m_NlosMinFactor)
-            return 0.0;
-        return factor;
+    // Dual-dominant cascade (Deygout-lite):
+    // full-path factor on the stronger edge × local segment factor on the
+    // runner-up. Heights are above the radar→target LOS (engineering approx).
+    protected static float KnifeEdgeFactorTwoEdges(
+        float hA,
+        float uA,
+        float hB,
+        float uB,
+        float distance,
+        float lambdaM)
+    {
+        float u1;
+        float h1;
+        float u2;
+        float h2;
+        if (uA <= uB)
+        {
+            u1 = uA;
+            h1 = hA;
+            u2 = uB;
+            h2 = hB;
+        }
+        else
+        {
+            u1 = uB;
+            h1 = hB;
+            u2 = uA;
+            h2 = hA;
+        }
+
+        if (u1 < 0.05)
+            u1 = 0.05;
+        if (u2 > 0.95)
+            u2 = 0.95;
+        if (u2 <= u1 + 0.02)
+            return KnifeEdgeFactorOneEdge(hA, uA, distance, lambdaM);
+
+        float f1 = KnifeEdgeFactorOneEdge(h1, u1, distance, lambdaM);
+        float f2 = KnifeEdgeFactorOneEdge(h2, u2, distance, lambdaM);
+        float fMain = f1;
+        bool mainIsFirst = true;
+        if (f2 > f1)
+        {
+            fMain = f2;
+            mainIsFirst = false;
+        }
+
+        float dTxE1 = u1 * distance;
+        float dE1E2 = (u2 - u1) * distance;
+        float dE2Rx = (1.0 - u2) * distance;
+        if (dTxE1 < 1.0)
+            dTxE1 = 1.0;
+        if (dE1E2 < 1.0)
+            dE1E2 = 1.0;
+        if (dE2Rx < 1.0)
+            dE2Rx = 1.0;
+
+        float nuSec;
+        if (mainIsFirst)
+        {
+            float span2 = dE1E2 + dE2Rx;
+            nuSec = h2 * Math.Sqrt(2.0 * span2 / (lambdaM * dE1E2 * dE2Rx));
+        }
+        else
+        {
+            float span1 = dTxE1 + dE1E2;
+            nuSec = h1 * Math.Sqrt(2.0 * span1 / (lambdaM * dTxE1 * dE1E2));
+        }
+
+        float fSec = KnifeEdgeLinearFactor(nuSec);
+        // Keep secondary from wiping the main-edge path (min ~ -6 dB extra).
+        if (fSec < 0.25)
+            fSec = 0.25;
+        return fMain * fSec;
     }
 
     protected static float ObstacleHeightAboveLos(
@@ -954,25 +1091,10 @@ class RDF_RadarPhysicalDetect
     }
 
     // ITU-R P.526-ish approximate diffraction loss → linear power factor.
-    // nu <= -0.78 → ~1; larger nu (deeper obstacle) attenuates.
+    // Default path: RDF_RadarKnifeEdgeLut (ν grid / optional profile bake-back).
     protected static float KnifeEdgeLinearFactor(float nu)
     {
-        if (nu <= -0.78)
-            return 1.0;
-
-        float t = nu - 0.1;
-        float inner = Math.Sqrt(t * t + 1.0) + t;
-        if (inner < 0.001)
-            inner = 0.001;
-        float lossDb = 6.9 + 20.0 * Math.Log10(inner);
-        if (lossDb < 0.0)
-            lossDb = 0.0;
-        float factor = RDF_RadarClutterModel.DbToLin(-lossDb);
-        if (factor > 1.0)
-            factor = 1.0;
-        if (factor < 0.0)
-            factor = 0.0;
-        return factor;
+        return RDF_RadarKnifeEdgeLut.Eval(nu);
     }
 
     // One DEM sample → terrainY + columnTop. Reads DEM when clutter OR span is on.
