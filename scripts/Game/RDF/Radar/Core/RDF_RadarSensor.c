@@ -262,8 +262,9 @@ class RDF_RadarSensor
             s.m_Hardware.m_CoherentIntegration = true;
             s.m_Hardware.Validate();
         }
-        s.m_EnableClutterMap = true;
-        s.m_ClutterMapAlpha = 0.15;
+        // Asymmetric map EMA (fast down) + footprint σ⁰ mix sharpen class edges.
+        s.EnableClutterSharpen(true, 0.15, 0.45, true);
+        s.m_ClutterFootprintSamples = 5;
         // Coarse RD stays opt-in; enable explicitly for Perf / PD experiments.
         s.m_EnableCoarseRd = false;
         s.m_TrackCoastOnMiss = true;

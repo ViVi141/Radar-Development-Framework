@@ -9,6 +9,7 @@
 #   ./run_tools.sh knife-lut
 #   ./run_tools.sh pattern-site
 #   ./run_tools.sh voxel-em
+#   ./run_tools.sh clutter-sharpen
 
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -31,6 +32,7 @@ RDF tools/dem helper (catalog: ../README.md)
   ./run_tools.sh pattern-site  Pattern + site-path LUT bake
   ./run_tools.sh voxel-em   3D voxel EM power-field validation
   ./run_tools.sh quadtree   Quadtree vs dense memory measure
+  ./run_tools.sh clutter-sharpen  Asymmetric EMA + footprint σ⁰ checks
 
 Also common:
   python3 rdf_dem_pack_surface_json.py --world GM_Eden --from-bin
@@ -70,6 +72,9 @@ case "$cmd" in
     ;;
   quadtree)
     python3 rdf_voxel_quadtree_measure.py
+    ;;
+  clutter-sharpen)
+    python3 rdf_radar_clutter_sharpen.py
     ;;
   *)
     echo "unknown command: $cmd" >&2

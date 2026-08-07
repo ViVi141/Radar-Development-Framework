@@ -71,8 +71,17 @@ class RDF_RadarSurfaceTable
     protected static bool s_Loaded;
     protected static string s_Source;
     protected static string s_Band;
+    protected static int s_SeaState;
     protected static float s_ThetaRefRad;
     protected static ref array<ref RDF_RadarSurfaceParams> s_ById;
+    // Water σ⁰ dB offset vs sea_state=3 (matches tools/dem _SEA_STATE_WATER_DB).
+    protected static const float SEA_STATE_WATER_DB_0 = -8.0;
+    protected static const float SEA_STATE_WATER_DB_1 = -4.0;
+    protected static const float SEA_STATE_WATER_DB_2 = -1.0;
+    protected static const float SEA_STATE_WATER_DB_3 = 0.0;
+    protected static const float SEA_STATE_WATER_DB_4 = 2.0;
+    protected static const float SEA_STATE_WATER_DB_5 = 4.0;
+    protected static const float SEA_STATE_WATER_DB_6 = 6.0;
 
     //--------------------------------------------------------------------------------------------
     static void EnsureLoaded()
@@ -127,10 +136,26 @@ class RDF_RadarSurfaceTable
     }
 
     //--------------------------------------------------------------------------------------------
+    static int GetSeaState()
+    {
+        EnsureLoaded();
+        return s_SeaState;
+    }
+
+    //--------------------------------------------------------------------------------------------
     static float GetThetaRefRad()
     {
         EnsureLoaded();
         return s_ThetaRefRad;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    // Linear multiplier for water σ⁰ at the loaded sea_state (ss3 → 1.0).
+    static float GetSeaStateWaterScale()
+    {
+        EnsureLoaded();
+        float db = SeaStateWaterOffsetDb(s_SeaState);
+        return DbToLin(db);
     }
 
     //--------------------------------------------------------------------------------------------
@@ -152,7 +177,11 @@ class RDF_RadarSurfaceTable
         RDF_RadarSurfaceParams p = GetParams(surfaceClass);
         if (!p)
             return DbToLin(-18.0);
-        return p.m_Sigma0RefLin;
+        float refLin = p.m_Sigma0RefLin;
+        // Table water entries are authored at sea_state=3 reference; scale live.
+        if (surfaceClass == ERDF_DemSurfaceClass.RDF_DEM_SURF_WATER)
+            refLin = refLin * GetSeaStateWaterScale();
+        return refLin;
     }
 
     //--------------------------------------------------------------------------------------------
@@ -216,6 +245,7 @@ class RDF_RadarSurfaceTable
         s_Band = conf.m_sBand;
         if (s_Band.IsEmpty())
             s_Band = "X";
+        s_SeaState = ClampSeaState(conf.m_iSeaState);
         s_ThetaRefRad = conf.m_fThetaRefDeg * 0.017453292519943295;
         if (s_ThetaRefRad <= 0.0)
             s_ThetaRefRad = 0.523598775598;
@@ -256,6 +286,7 @@ class RDF_RadarSurfaceTable
         s_Band = doc.band;
         if (s_Band.IsEmpty())
             s_Band = "X";
+        s_SeaState = ClampSeaState(doc.sea_state);
         s_ThetaRefRad = doc.theta_ref_deg * 0.017453292519943295;
         if (s_ThetaRefRad <= 0.0)
             s_ThetaRefRad = 0.523598775598;
@@ -316,9 +347,39 @@ class RDF_RadarSurfaceTable
     }
 
     //--------------------------------------------------------------------------------------------
+    protected static int ClampSeaState(int seaState)
+    {
+        if (seaState < 0)
+            return 0;
+        if (seaState > 6)
+            return 6;
+        return seaState;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected static float SeaStateWaterOffsetDb(int seaState)
+    {
+        int ss = ClampSeaState(seaState);
+        if (ss == 0)
+            return SEA_STATE_WATER_DB_0;
+        if (ss == 1)
+            return SEA_STATE_WATER_DB_1;
+        if (ss == 2)
+            return SEA_STATE_WATER_DB_2;
+        if (ss == 3)
+            return SEA_STATE_WATER_DB_3;
+        if (ss == 4)
+            return SEA_STATE_WATER_DB_4;
+        if (ss == 5)
+            return SEA_STATE_WATER_DB_5;
+        return SEA_STATE_WATER_DB_6;
+    }
+
+    //--------------------------------------------------------------------------------------------
     protected static void InstallBuiltins()
     {
         s_Band = "X";
+        s_SeaState = 3;
         s_ThetaRefRad = 0.523598775598;
         SetBuiltin(0, "unknown", -18.0, 1.0, 1.0, 10.0, 0.08, 0.0);
         SetBuiltin(1, "water", -22.0, 1.4, 1.0, 80.0, 0.02, 0.0);

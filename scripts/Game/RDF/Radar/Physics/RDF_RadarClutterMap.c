@@ -1,12 +1,14 @@
 // Runtime range–azimuth clutter-map EMA. DEM σ⁰ seeds the cell; dwell updates
 // refine it so weak-clutter regions (water / clear air) do not keep a high floor.
+// Asymmetric α (fast down / slow up) sharpens land→water transitions.
 class RDF_RadarClutterMap
 {
     protected ref array<float> m_PowerEma;
     protected ref array<bool> m_Initialized;
     protected int m_AzBinCount;
     protected int m_RangeBinCount;
-    protected float m_Alpha;
+    protected float m_AlphaUp;
+    protected float m_AlphaDown;
     protected float m_MaxRangeM;
 
     void RDF_RadarClutterMap()
@@ -15,21 +17,39 @@ class RDF_RadarClutterMap
         m_Initialized = new array<bool>();
         m_AzBinCount = 0;
         m_RangeBinCount = 0;
-        m_Alpha = 0.15;
+        m_AlphaUp = 0.15;
+        m_AlphaDown = 0.15;
         m_MaxRangeM = 2000.0;
     }
 
+    // Symmetric configure (alphaUp == alphaDown). Kept for call-site compatibility.
     void Configure(int azBinCount, int rangeBinCount, float alpha, float maxRangeM)
+    {
+        ConfigureAsym(azBinCount, rangeBinCount, alpha, alpha, maxRangeM);
+    }
+
+    // Asymmetric EMA: rise uses alphaUp, fall uses alphaDown (typically larger).
+    void ConfigureAsym(
+        int azBinCount,
+        int rangeBinCount,
+        float alphaUp,
+        float alphaDown,
+        float maxRangeM)
     {
         if (azBinCount < 4)
             azBinCount = 4;
         if (rangeBinCount < 8)
             rangeBinCount = 8;
-        m_Alpha = alpha;
-        if (m_Alpha < 0.01)
-            m_Alpha = 0.01;
-        if (m_Alpha > 1.0)
-            m_Alpha = 1.0;
+        m_AlphaUp = alphaUp;
+        if (m_AlphaUp < 0.01)
+            m_AlphaUp = 0.01;
+        if (m_AlphaUp > 1.0)
+            m_AlphaUp = 1.0;
+        m_AlphaDown = alphaDown;
+        if (m_AlphaDown < 0.01)
+            m_AlphaDown = 0.01;
+        if (m_AlphaDown > 1.0)
+            m_AlphaDown = 1.0;
         m_MaxRangeM = maxRangeM;
         if (m_MaxRangeM < 1.0)
             m_MaxRangeM = 1.0;
@@ -64,7 +84,10 @@ class RDF_RadarClutterMap
         }
 
         float prev = m_PowerEma.Get(idx);
-        float next = prev * (1.0 - m_Alpha) + demClutterW * m_Alpha;
+        float alpha = m_AlphaUp;
+        if (demClutterW < prev)
+            alpha = m_AlphaDown;
+        float next = prev * (1.0 - alpha) + demClutterW * alpha;
         m_PowerEma.Set(idx, next);
         return next;
     }

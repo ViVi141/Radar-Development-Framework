@@ -9,10 +9,11 @@
 #   .\run_tools.ps1 pattern-site
 #   .\run_tools.ps1 voxel-em
 #   .\run_tools.ps1 quadtree
+#   .\run_tools.ps1 clutter-sharpen
 
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("help", "test", "full-sim", "demo", "knife-lut", "pattern-site", "voxel-em", "quadtree")]
+    [ValidateSet("help", "test", "full-sim", "demo", "knife-lut", "pattern-site", "voxel-em", "quadtree", "clutter-sharpen")]
     [string]$Command = "help",
 
     [switch]$Ew
@@ -34,6 +35,7 @@ RDF tools/dem helper (catalog: ..\README.md)
   .\run_tools.ps1 pattern-site  Pattern + site-path LUT bake
   .\run_tools.ps1 voxel-em   3D voxel EM power-field validation
   .\run_tools.ps1 quadtree   Quadtree vs dense memory measure
+  .\run_tools.ps1 clutter-sharpen  Asymmetric EMA + footprint σ⁰ checks
 
 Linux/macOS: ./run_tools.sh <same commands>
 
@@ -83,6 +85,10 @@ switch ($Command) {
     }
     "quadtree" {
         python rdf_voxel_quadtree_measure.py
+        exit $LASTEXITCODE
+    }
+    "clutter-sharpen" {
+        python rdf_radar_clutter_sharpen.py
         exit $LASTEXITCODE
     }
 }

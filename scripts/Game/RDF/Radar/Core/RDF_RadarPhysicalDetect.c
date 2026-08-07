@@ -503,6 +503,84 @@ class RDF_RadarPhysicalDetect
         return factor;
     }
 
+    // Average σ⁰ over a few DEM cells spanning the illuminated footprint.
+    // Center class remains the atten / truth label; only σ⁰ is mixed.
+    protected static float ResolveFootprintSigma0(
+        RDF_RadarTruthSample target,
+        vector origin,
+        float distance,
+        int centerSurfaceClass,
+        float grazingRad,
+        float azWidthM,
+        float rangeResolutionM,
+        RDF_RadarSettings settings,
+        RDF_DemRuntimeCache demCache)
+    {
+        float centerSigma0 = RDF_RadarClutterModel.GetSigma0(
+            centerSurfaceClass,
+            grazingRad);
+        if (!settings || !settings.m_EnableClutterFootprintMix)
+            return centerSigma0;
+        if (!target || !demCache)
+            return centerSigma0;
+        if (distance < 1.0)
+            return centerSigma0;
+
+        int samples = settings.m_ClutterFootprintSamples;
+        if (samples < 3)
+            samples = 3;
+        if (samples > 9)
+            samples = 9;
+
+        float dx = target.m_Position[0] - origin[0];
+        float dz = target.m_Position[2] - origin[2];
+        float horiz = Math.Sqrt(dx * dx + dz * dz);
+        if (horiz < 1.0)
+            return centerSigma0;
+        float ux = dx / horiz;
+        float uz = dz / horiz;
+        // Left-handed cross in XZ (perpendicular to radial).
+        float cx = -uz;
+        float cz = ux;
+
+        float halfAz = 0.5 * azWidthM;
+        float halfRg = 0.5 * rangeResolutionM;
+        float sum = centerSigma0;
+        int count = 1;
+        int i;
+        for (i = 0; i < samples; i++)
+        {
+            float t = 0.0;
+            if (samples > 1)
+                t = (i / (samples - 1.0)) * 2.0 - 1.0;
+            // Skip the exact center slot (already counted).
+            if (t > -0.001 && t < 0.001)
+                continue;
+            // Alternate range / cross offsets for odd samples; even stay near center.
+            float offR = 0.0;
+            float offC = 0.0;
+            if ((i % 2) == 0)
+                offC = t * halfAz;
+            else
+                offR = t * halfRg;
+
+            float sx = target.m_Position[0] + ux * offR + cx * offC;
+            float sz = target.m_Position[2] + uz * offR + cz * offC;
+            RDF_DemRuntimeCellSample demSample;
+            if (!demCache.TrySampleAt(sx, sz, demSample))
+                continue;
+            if (!demSample || !demSample.m_Valid)
+                continue;
+            float s0 = RDF_RadarClutterModel.GetSigma0(
+                demSample.m_SurfaceClass,
+                grazingRad);
+            sum = sum + s0;
+            count = count + 1;
+        }
+
+        return sum / count;
+    }
+
     protected static float ComputeDemClutterPower(
         RDF_RadarTruthSample target,
         vector origin,
@@ -549,13 +627,6 @@ class RDF_RadarPhysicalDetect
             radarAboveGround = -radarAboveGround;
         float grazingRad = Math.Atan2(radarAboveGround, Math.Max(1.0, distance));
 
-        float sigma0 = RDF_RadarClutterModel.GetSigma0(
-            surfaceClass,
-            grazingRad);
-        sigma0 = sigma0 * settings.m_DemClutterScale;
-        if (sigma0 <= 0.0)
-            return 0.0;
-
         float cellSizeM = demCache.GetCellSizeM();
 
         float azWidthM = distance * (hardware.m_AzimuthBeamwidthDeg * DEG_TO_RAD);
@@ -568,6 +639,20 @@ class RDF_RadarPhysicalDetect
         float minArea = cellSizeM * cellSizeM;
         if (areaM2 < minArea)
             areaM2 = minArea;
+
+        float sigma0 = ResolveFootprintSigma0(
+            target,
+            origin,
+            distance,
+            surfaceClass,
+            grazingRad,
+            azWidthM,
+            rangeResolutionM,
+            settings,
+            demCache);
+        sigma0 = sigma0 * settings.m_DemClutterScale;
+        if (sigma0 <= 0.0)
+            return 0.0;
 
         float clutterSigmaM2 = sigma0 * areaM2;
         float receivedClutter = RDF_RadarClutterModel.ReceivedPowerW(
