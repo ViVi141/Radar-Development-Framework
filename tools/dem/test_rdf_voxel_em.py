@@ -127,6 +127,22 @@ class TestFdtdToy(unittest.TestCase):
             occ["knife_edge_err_db"],
             occ["hard_los_err_db"] + 1e-6,
         )
+        self.assertLessEqual(
+            occ["max_fidelity_err_db"],
+            occ["hard_los_err_db"] + 1e-6,
+        )
+        self.assertIn("occlusion_two_edge", result.metrics)
+        two = result.metrics["occlusion_two_edge"]
+        self.assertLessEqual(
+            two["max_fidelity_err_db"],
+            two["hard_los_err_db"] + 1e-6,
+        )
+        gmf = result.metrics["game_max_fidelity"]
+        self.assertTrue(gmf["enable_dual_knife_edge"])
+        self.assertTrue(gmf["enable_knife_edge_lut"])
+        self.assertTrue(gmf["enable_los_two_ray"])
+        self.assertIn("los_two_ray", result.metrics)
+        self.assertIn("summary", result.metrics)
 
     def test_tiny_run_has_energy(self) -> None:
         cfg = FdtdConfig(
