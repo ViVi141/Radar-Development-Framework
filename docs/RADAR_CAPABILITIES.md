@@ -40,7 +40,8 @@
 - **大气 / 降雨 / 天气驱动损耗**：简化模型，按需 `EnableAtmosphericPathLoss`
 - **LOS 双射线多径** + **4/3 地球折射** + **PRF 距离/多普勒模糊折叠**（无波形仿真；按需 Enable*；WLR 跳过多普勒折叠）
 - **极化**：`Hardware.m_PolarizationMode`（H/V/圆）匹配表 × `m_PolarizationFactor` 微调；圆极化对雨杂波抑制（`m_EnablePolarizationMatch`，默认开）
-- **旁瓣地板**：高斯主瓣 + `m_SidelobeLevelDb` 双程地板进目标/杂波功率（`m_EnableSidelobeFloor`，默认开）；EW 可选 SLB（`m_EnableSlb`，默认关）
+- **旁瓣 / 方向图**：分段方位 LUT（主瓣+旁瓣峰+地板，`m_EnablePatternLut` 默认开）或高斯+`m_SidelobeLevelDb` 地板；EW 可选 SLB（默认关）
+- **固定站路径表**：极坐标 DEM 路径因子（`m_EnableSitePathLut`，默认关；需 bake `SitePathLut.json`）
 - **无理想/逼真双档**：需要什么开什么；AutoTest 用 `StabilizeForRegression()`
 - **散射体表拟真输入**：姿态方位+俯仰 RCS（AABB 投影）、Swerling 起伏、AGL、DEM 缓存、辐射源射频摘要；烘焙表优先读 `Signatures/*.conf`（工坊），profile CSV 回退
 - DEM / 地表：`GetSurfaceY` + SURF JSON；电磁参数优先 `RadarData/SurfaceTable.conf`
@@ -83,7 +84,7 @@
 #### 信号与检测
 
 - 训练级 RD 图 / 全脉冲 CFAR（当前为粗栅格 CA/GO/SO + 热填空）— **刻意不做波形仿真**
-- 方向图仍为高斯主瓣 + 旁瓣功率地板（非完整实测方向图 LUT）；EW 耦合 / 可选 SLB
+- 方向图为分段 LUT / 高斯+地板（非完整实测孔径变换）；EW 耦合 / 可选 SLB；固定站路径表为地形近似非全波
 - **距离/速度模糊折叠**已接（测量层 PRF fold；WLR 跳过多普勒折叠）
 - STAP 等更认真的杂波抑制（现有经典 Two/ThreePulse + 参差消盲 + MTD bank；非自适应阵列）
 
@@ -194,7 +195,8 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 - **Atmosphere / rain / weather-driven loss**: simplified; opt-in via `EnableAtmosphericPathLoss`
 - **LOS two-ray multipath** + **4/3-Earth refraction** + **PRF range/Doppler ambiguity fold** (no waveform sim; opt-in Enable*; WLR skips Doppler fold)
 - **Polarization**: `Hardware.m_PolarizationMode` (H/V/circular) match table × `m_PolarizationFactor` trim; circular rain-clutter reject (`m_EnablePolarizationMatch`, default on)
-- **Sidelobe floor**: Gaussian mainlobe + `m_SidelobeLevelDb` two-way floor into target/clutter power (`m_EnableSidelobeFloor`, default on); optional EW SLB (`m_EnableSlb`, default off)
+- **Pattern / sidelobes**: segmented az LUT (mainlobe+peaks+floor, `m_EnablePatternLut` default on) or Gaussian+`m_SidelobeLevelDb` floor; optional EW SLB (default off)
+- **Fixed-site path LUT**: polar DEM path factors (`m_EnableSitePathLut`, default off; needs baked `SitePathLut.json`)
 - **No ideal/realistic tiers**: enable what you need; AutoTest uses `StabilizeForRegression()`
 - **Scatterer-table fidelity inputs**: aspect azimuth + elevation RCS (AABB projection), Swerling fluctuation, AGL, DEM cache, emitter RF summary; baked tables prefer `Signatures/*.conf` (workshop), profile CSV fallback
 - DEM / surface: `GetSurfaceY` + SURF JSON; EM params prefer `RadarData/SurfaceTable.conf`
@@ -237,7 +239,7 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 #### Signal & detection
 
 - Training-grade RD maps / full-pulse CFAR (coarse-grid CA/GO/SO + thermal fill) — **waveform sim intentionally out of scope**
-- Pattern still Gaussian mainlobe + sidelobe power floor (not a measured full-pattern LUT); EW coupling / optional SLB
+- Pattern is segmented LUT / Gaussian+floor (not a measured aperture transform); EW coupling / optional SLB; site path table is terrain approx, not full-wave
 - **Range/velocity ambiguity fold** shipped (measurement-layer PRF fold; WLR skips Doppler fold)
 - More serious clutter rejection such as STAP (classic Two/ThreePulse + stagger de-blind + MTD bank are present; not adaptive array)
 

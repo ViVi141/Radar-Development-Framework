@@ -115,9 +115,18 @@ class RDF_RadarClutterModel
         if (!hardware || !hardware.m_ElevationBeams)
             return 0.0;
 
-        float azimuthGain = GaussianBeamGain(
-            azimuthOffsetDeg,
-            hardware.m_AzimuthBeamwidthDeg);
+        float azimuthGain;
+        if (RDF_RadarPatternLut.IsEnabled())
+        {
+            RDF_RadarPatternLut.EnsureReady(hardware);
+            azimuthGain = RDF_RadarPatternLut.EvalOneWay(azimuthOffsetDeg);
+        }
+        else
+        {
+            azimuthGain = GaussianBeamGain(
+                azimuthOffsetDeg,
+                hardware.m_AzimuthBeamwidthDeg);
+        }
         float strongest = 0.0;
 
         for (int i = 0; i < hardware.m_ElevationBeams.Count(); i++)

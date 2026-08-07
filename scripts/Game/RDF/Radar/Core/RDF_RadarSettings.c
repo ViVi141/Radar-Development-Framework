@@ -64,8 +64,14 @@ class RDF_RadarSettings
     int m_DemLosPrecheckSamples = 8;
     // Floor Gaussian two-way pattern to Hardware.m_SidelobeLevelDb^2.
     bool m_EnableSidelobeFloor = true;
+    // Azimuth segmented pattern LUT (mainlobe + sidelobe peaks); default on.
+    bool m_EnablePatternLut = true;
     // Apply Hardware.m_PolarizationMode match table × m_PolarizationFactor.
     bool m_EnablePolarizationMatch = true;
+    // Fixed-site DEM polar path LUT (opt-in; needs profile SitePathLut.json).
+    bool m_EnableSitePathLut = false;
+    // Max radar-origin drift vs bake origin before site LUT is ignored.
+    float m_SitePathMaxOriginDriftM = 5.0;
     // Optional receiver-side EW/noise injection after processing.
     float m_AdditionalNoisePowerW = 0.0;
     ref RDF_RadarEwStack m_EwStack;
@@ -227,6 +233,7 @@ class RDF_RadarSettings
         m_KnifeEdgeMaxSamples = Math.Clamp(m_KnifeEdgeMaxSamples, 2, 16);
         m_KnifeEdgeMinUSeparation = Math.Clamp(m_KnifeEdgeMinUSeparation, 0.05, 0.5);
         m_KnifeEdgeClearanceSlackM = Math.Clamp(m_KnifeEdgeClearanceSlackM, 0.0, 50.0);
+        m_SitePathMaxOriginDriftM = Math.Clamp(m_SitePathMaxOriginDriftM, 0.5, 200.0);
         m_DemLosPrecheckSamples = Math.Clamp(m_DemLosPrecheckSamples, 2, 24);
         m_AdditionalNoisePowerW = Math.Max(0.0, m_AdditionalNoisePowerW);
         m_CfarGuardCells = Math.Clamp(m_CfarGuardCells, 0, 32);
@@ -380,6 +387,14 @@ class RDF_RadarSettings
     {
         m_EnableSidelobeFloor = sidelobeFloor;
         m_EnablePolarizationMatch = polarizationMatch;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Segmented pattern LUT + optional fixed-site DEM path table.
+    void EnablePatternAndSiteLuts(bool patternLut, bool sitePathLut)
+    {
+        m_EnablePatternLut = patternLut;
+        m_EnableSitePathLut = sitePathLut;
     }
 
     //------------------------------------------------------------------------------------------------

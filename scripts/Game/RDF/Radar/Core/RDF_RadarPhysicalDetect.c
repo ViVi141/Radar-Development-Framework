@@ -99,6 +99,12 @@ class RDF_RadarPhysicalDetect
                 settings,
                 demCache,
                 usedKnifeEdge);
+            if (settings.m_EnableSitePathLut)
+            {
+                float siteF = EvalSitePathFactor(origin, target.m_Position, distance, settings);
+                if (siteF > target.m_MultipathFactor)
+                    target.m_MultipathFactor = siteF;
+            }
             if (target.m_MultipathFactor <= 0.0)
             {
                 target.m_Detected = false;
@@ -138,17 +144,23 @@ class RDF_RadarPhysicalDetect
             target.m_MultipathFactor = target.m_MultipathFactor * horizonFactor;
         }
 
+        RDF_RadarPatternLut.SetEnabled(settings.m_EnablePatternLut);
         string beamName;
         float patternGain = RDF_RadarClutterModel.GetStrongestBeamGain(
             hardware,
             azimuthOffsetDeg,
             elevationDeg,
             beamName);
+        // Pattern LUT already embeds the sidelobe floor; only apply the
+        // constant-floor clamp when using bare Gaussian azimuth.
         if (settings.m_EnableSidelobeFloor)
         {
-            patternGain = RDF_RadarClutterModel.ApplyTwoWaySidelobeFloor(
-                patternGain,
-                hardware.m_SidelobeLevelDb);
+            if (!settings.m_EnablePatternLut)
+            {
+                patternGain = RDF_RadarClutterModel.ApplyTwoWaySidelobeFloor(
+                    patternGain,
+                    hardware.m_SidelobeLevelDb);
+            }
         }
         target.m_BeamName = beamName;
         if (target.m_LosBlocked)
@@ -452,6 +464,21 @@ class RDF_RadarPhysicalDetect
         target.m_Detected = target.m_SnrDb >= settings.m_DetectionSnrDb;
 
         target.m_ScanNumber = scanNumberPre;
+    }
+
+    protected static float EvalSitePathFactor(
+        vector origin,
+        vector targetPos,
+        float distance,
+        RDF_RadarSettings settings)
+    {
+        if (!settings)
+            return 0.0;
+        RDF_RadarSitePathLut.SetEnabled(true);
+        if (!RDF_RadarSitePathLut.OriginMatches(origin, settings.m_SitePathMaxOriginDriftM))
+            return 0.0;
+        float worldAz = RDF_RadarSitePathLut.WorldAzimuthDeg(origin, targetPos);
+        return RDF_RadarSitePathLut.Eval(worldAz, distance);
     }
 
     protected static float ResolvePolarizationFactor(

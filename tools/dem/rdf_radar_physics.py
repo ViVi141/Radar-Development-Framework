@@ -91,6 +91,8 @@ class RadarHardware:
     polarization_factor: float = 1.0
     # When True, floor two-way pattern to sidelobe_level_db^2.
     enable_sidelobe_floor: bool = True
+    # When True, use segmented az pattern LUT (mainlobe + peaks + floor).
+    enable_pattern_lut: bool = True
     # When True, apply polarization_mode match table.
     enable_polarization_match: bool = True
     # Two-way atmospheric loss coefficient near surface [dB/km] one-way * 2 applied.
@@ -497,7 +499,16 @@ def elevation_beam_gains(
 ) -> dict[str, float]:
     """Return two-way gain for every configured elevation beam."""
     result: dict[str, float] = {}
-    az_gain = gaussian_beam_gain(az_offset_deg, hardware.az_beamwidth_deg)
+    if hardware.enable_pattern_lut:
+        from rdf_radar_pattern_lut import segmented_one_way_gain
+
+        az_gain = segmented_one_way_gain(
+            az_offset_deg,
+            hardware.az_beamwidth_deg,
+            hardware.sidelobe_level_db,
+        )
+    else:
+        az_gain = gaussian_beam_gain(az_offset_deg, hardware.az_beamwidth_deg)
     for beam in hardware.resolved_elevation_beams():
         el_gain = gaussian_beam_gain(
             elevation_deg - beam.boresight_deg,
@@ -540,7 +551,8 @@ def combined_two_way_pattern_gain(
     use_floor = apply_sidelobe_floor
     if use_floor is None:
         use_floor = hardware.enable_sidelobe_floor
-    if use_floor:
+    # Segmented pattern LUT already embeds the one-way floor.
+    if use_floor and (not hardware.enable_pattern_lut):
         strongest = apply_two_way_sidelobe_floor(
             strongest,
             hardware.sidelobe_level_db,

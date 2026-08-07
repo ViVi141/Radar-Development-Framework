@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2026-08-07 — 分段方向图 LUT + 固定站路径因子表
+
+- **PatternLut**：方位主瓣 + 旁瓣峰 + 地板（`m_EnablePatternLut` 默认开）；`RDF_RadarPatternLut` / `$profile:…/PatternLut.json`
+- **SitePathLut**：固定站极坐标 (az×range) DEM 路径因子（`m_EnableSitePathLut` 默认关）；NLOS 与活刀刃取 max
+- 离线：`pattern-site` → `calib/PatternLut.json` + `SitePathLut.json`（合成脊或 `--dem-dir`）
+
 ## 2026-08-07 — Enforce：双主导刃 + ν LUT + 旁瓣/极化
 
 - **双主导刃**（Deygout-lite）：`m_EnableDualKnifeEdge` / `m_KnifeEdgeMinUSeparation`；次刃因子下限 0.25

@@ -247,6 +247,9 @@ Enable only what you need. Defaults leave optional fidelity **off**.
 | `EnableAtmosphericRefraction()` | 4/3-Earth horizon soft factor + elevation bias |
 | `EnablePrfAmbiguityFolds(range, doppler)` | PRF ambiguity folds (Doppler skipped for WLR) |
 | `EnableAntennaPatternFidelity(sll, pol)` | Sidelobe floor + polarization match tables |
+| `EnablePatternAndSiteLuts(pattern, site)` | Segmented pattern LUT + fixed-site path LUT |
+| `m_EnablePatternLut` | Az segmented pattern (default on) |
+| `m_EnableSitePathLut` | Polar DEM path factors (default off; needs bake) |
 | `m_EnableDualKnifeEdge` / `m_KnifeEdgeMinUSeparation` | Dual-dominant knife-edge (Deygout-lite) |
 | `m_EnableKnifeEdgeLut` | ν→factor LUT (`RDF_RadarKnifeEdgeLut`) |
 | `Hardware.m_PolarizationMode` | `RDF_POL_H` / `V` / `CIRCULAR` match table |
@@ -730,6 +733,9 @@ sensor.SetMeasurementModel(new MyGameplayNoise());
 | `EnableAtmosphericRefraction()` | 4/3 地球地平线软衰减 + 俯仰偏置 |
 | `EnablePrfAmbiguityFolds(range, doppler)` | PRF 模糊折叠（WLR 跳过多普勒） |
 | `EnableAntennaPatternFidelity(sll, pol)` | 旁瓣地板 + 极化匹配表 |
+| `EnablePatternAndSiteLuts(pattern, site)` | 分段方向图 LUT + 固定站路径 LUT |
+| `m_EnablePatternLut` | 方位分段方向图（默认开） |
+| `m_EnableSitePathLut` | 极坐标 DEM 路径因子（默认关；需 bake） |
 | `m_EnableDualKnifeEdge` / `m_KnifeEdgeMinUSeparation` | 双主导刃（Deygout-lite） |
 | `m_EnableKnifeEdgeLut` | ν→factor LUT（`RDF_RadarKnifeEdgeLut`） |
 | `Hardware.m_PolarizationMode` | `RDF_POL_H` / `V` / `CIRCULAR` 匹配表 |

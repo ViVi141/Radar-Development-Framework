@@ -86,6 +86,8 @@ Generated files go to `tools/dem/out/` (gitignored except `.gitkeep`). Do not co
 | `rdf_radar_track.py` | NN association, α-β, WLR vacuum fit |
 | `rdf_radar_ew.py` | Noise / deception / hop schedule |
 | `rdf_radar_diffraction.py` | Knife-edge diffraction helpers |
+| `rdf_radar_pattern_lut.py` | Segmented az pattern LUT (mainlobe + peaks + floor) |
+| `rdf_radar_site_path_lut.py` | Fixed-site polar DEM path-factor LUT |
 | `rdf_radar_fusion.py` | Multi-radar associate / cross-fix |
 | `rdf_radar_systems.py` | Lock, ESM/RWR/ARM, GO/SO-CFAR, Network policy; `MeasurementModel` + optional `ChannelFidelity` folds |
 
@@ -100,6 +102,7 @@ Generated files go to `tools/dem/out/` (gitignored except `.gitkeep`). Do not co
 | `rdf_radar_mass_battle_sim.py` | Multi-radar DEM battle facade → `mass_battle/` |
 | `rdf_radar_hw_calibrate.py` | Offline HW bake-back → `calib/prf_clutter_*.json` |
 | `rdf_knife_edge_eden_validate.py` | Eden knife-edge validation helper |
+| `rdf_radar_pattern_site_validate.py` | Pattern + site-path LUT bake → `calib/PatternLut.json` / `SitePathLut.json` |
 
 ### Golden tests
 
@@ -110,6 +113,8 @@ Generated files go to `tools/dem/out/` (gitignored except `.gitkeep`). Do not co
 | `test_rdf_radar_track.py` | Association / α-β / vacuum fit |
 | `test_rdf_radar_ew.py` | Noise jam coupling / burn-through |
 | `test_rdf_radar_diffraction.py` | Knife-edge factors |
+| `test_rdf_radar_pattern_site_lut.py` | Pattern + site-path LUT |
+| `test_rdf_radar_antenna.py` | Sidelobe floor / polarization / SLB |
 | `test_rdf_radar_fusion.py` | Associate / cross-fix |
 | `test_rdf_radar_systems.py` | Systems + full_sim smoke |
 | `test_rdf_radar_mtd.py` | MTD bank / rotor micro-Doppler |

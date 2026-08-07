@@ -39,6 +39,7 @@ class TestSidelobeFloor(unittest.TestCase):
         hw = preset_shorad_x()
         hw.sidelobe_level_db = -25.0
         hw.enable_sidelobe_floor = True
+        hw.enable_pattern_lut = False
         g = combined_two_way_pattern_gain(hw, elevation_deg=hw.el_boresight_deg, az_offset_deg=90.0)
         floor = two_way_sidelobe_floor(-25.0)
         self.assertAlmostEqual(g, floor, places=10)
@@ -47,9 +48,23 @@ class TestSidelobeFloor(unittest.TestCase):
         hw = preset_shorad_x()
         hw.sidelobe_level_db = -25.0
         hw.enable_sidelobe_floor = False
+        hw.enable_pattern_lut = False
         g = combined_two_way_pattern_gain(hw, elevation_deg=hw.el_boresight_deg, az_offset_deg=90.0)
         floor = two_way_sidelobe_floor(-25.0)
         self.assertLess(g, floor * 0.01)
+
+    def test_pattern_lut_sidelobe_above_gauss_floor_path(self) -> None:
+        hw = preset_shorad_x()
+        hw.sidelobe_level_db = -25.0
+        hw.enable_pattern_lut = True
+        # Near first segmented peak (~2.2 * HPBW).
+        g = combined_two_way_pattern_gain(
+            hw,
+            elevation_deg=hw.el_boresight_deg,
+            az_offset_deg=2.2 * hw.az_beamwidth_deg,
+        )
+        floor = two_way_sidelobe_floor(-25.0)
+        self.assertGreater(g, floor)
 
     def test_apply_helper_monotonic(self) -> None:
         raw = gaussian_beam_gain(20.0, 2.0) ** 2
