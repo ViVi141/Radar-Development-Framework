@@ -213,6 +213,7 @@ cd tools\dem
 | `rdf_radar_mass_battle_sim.py` | 多雷达 DEM 战场 facade → `mass_battle/` |
 | `rdf_radar_hw_calibrate.py` | 离线 HW 回灌 → `calib/prf_clutter_*.json` |
 | `rdf_knife_edge_eden_validate.py` | Eden 刀刃绕射校验 |
+| `rdf_radar_pattern_site_validate.py` | 方向图 + 站点路径 LUT → `calib/PatternLut.json` / `SitePathLut.json` |
 
 ### Golden 测试
 
