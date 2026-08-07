@@ -393,10 +393,11 @@ class RDF_RadarScanner
         RefreshEwScanStats(origin, forward, range);
         if (m_ClutterMap && m_Settings.m_EnableClutterMap)
         {
-            m_ClutterMap.Configure(
-                36,
+            m_ClutterMap.ConfigureAsym(
+                m_Settings.m_ClutterMapAzBinCount,
                 m_Settings.m_RangeBinCount,
                 m_Settings.m_ClutterMapAlpha,
+                m_Settings.m_ClutterMapAlphaDown,
                 range);
         }
         if (m_CoarseRdMap && m_Settings.m_EnableCoarseRd)

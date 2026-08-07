@@ -149,6 +149,17 @@ _SEA_STATE_WATER_DB = {
     6: 6.0,
 }
 
+
+def water_offset_db(sea_state: int) -> float:
+    """Water σ⁰ dB offset vs sea_state=3 (Enforce SurfaceTable match)."""
+    sea = int(sea_state)
+    if sea < 0:
+        sea = 0
+    if sea > 6:
+        sea = 6
+    return float(_SEA_STATE_WATER_DB[sea])
+
+
 THETA_REF_RAD = math.radians(30.0)
 MIN_GRAZING_RAD = math.radians(0.5)
 MAX_SIGMA0 = 10.0
@@ -230,9 +241,11 @@ class Sigma0Table:
                     else:
                         continue
                 if "sigma0_ref_db" in entry:
-                    base.sigma0_ref_linear[sid] = _db_to_lin(
-                        float(entry["sigma0_ref_db"])
-                    )
+                    db = float(entry["sigma0_ref_db"])
+                    # Water rows are authored at sea_state=3; re-apply table ss.
+                    if sid == SURF_WATER:
+                        db = db + water_offset_db(sea_state)
+                    base.sigma0_ref_linear[sid] = _db_to_lin(db)
                 if "gamma_k" in entry:
                     base.exponent[sid] = float(entry["gamma_k"])
                 scale = float(entry.get("clutter_scale", 1.0))

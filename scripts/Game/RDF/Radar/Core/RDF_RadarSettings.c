@@ -146,7 +146,17 @@ class RDF_RadarSettings
     float m_TrackCoastMaxSec = 0.0;
     // Runtime clutter-map EMA over DEM σ⁰ (per range–az cell).
     bool m_EnableClutterMap = false;
+    // Rise rate (slow) when DEM clutter increases.
     float m_ClutterMapAlpha = 0.15;
+    // Fall rate when DEM clutter drops (land→water). Default equals Alpha →
+    // symmetric EMA (legacy behaviour). PulseDoppler sets a higher value.
+    float m_ClutterMapAlphaDown = 0.15;
+    // Azimuth bins for the clutter map grid (Scanner Configure).
+    int m_ClutterMapAzBinCount = 36;
+    // Average σ⁰ across a few DEM cells in the illuminated footprint
+    // (sharper class boundaries than under-target point sample). Default OFF.
+    bool m_EnableClutterFootprintMix = false;
+    int m_ClutterFootprintSamples = 5;
     // Coarse range–Doppler map (default OFF). Amortized deposits only — not a
     // full RD cube. Enable explicitly when needed.
     bool m_EnableCoarseRd = false;
@@ -247,6 +257,9 @@ class RDF_RadarSettings
         m_TrackCoastGateGrowPerMiss = Math.Clamp(m_TrackCoastGateGrowPerMiss, 0.0, 5.0);
         m_TrackCoastMaxSec = Math.Clamp(m_TrackCoastMaxSec, 0.0, 120.0);
         m_ClutterMapAlpha = Math.Clamp(m_ClutterMapAlpha, 0.01, 1.0);
+        m_ClutterMapAlphaDown = Math.Clamp(m_ClutterMapAlphaDown, 0.01, 1.0);
+        m_ClutterMapAzBinCount = Math.Clamp(m_ClutterMapAzBinCount, 4, 180);
+        m_ClutterFootprintSamples = Math.Clamp(m_ClutterFootprintSamples, 3, 9);
         m_RdCellsPerScan = Math.Clamp(m_RdCellsPerScan, 1, 512);
         m_RdMapAlpha = Math.Clamp(m_RdMapAlpha, 0.01, 1.0);
         m_RdDecayPerScan = Math.Clamp(m_RdDecayPerScan, 0.5, 1.0);
@@ -398,6 +411,20 @@ class RDF_RadarSettings
     }
 
     //------------------------------------------------------------------------------------------------
+    // Clutter-boundary sharpening: asymmetric map EMA + optional footprint σ⁰ mix.
+    void EnableClutterSharpen(
+        bool clutterMap,
+        float alphaUp,
+        float alphaDown,
+        bool footprintMix)
+    {
+        m_EnableClutterMap = clutterMap;
+        m_ClutterMapAlpha = alphaUp;
+        m_ClutterMapAlphaDown = alphaDown;
+        m_EnableClutterFootprintMix = footprintMix;
+    }
+
+    //------------------------------------------------------------------------------------------------
     // AutoTest / Debugger helper: turn OFF optional fidelity extras that make
     // logic-loop assertions flaky. Not a gameplay "ideal tier" — mods should
     // Enable* only what they need. Does not force CFAR on/off.
@@ -415,6 +442,7 @@ class RDF_RadarSettings
         m_EnableDopplerAmbiguityFold = false;
         m_EnableCoarseRd = false;
         m_EnableDemSpanOcclusion = false;
+        m_EnableClutterFootprintMix = false;
     }
 
     //------------------------------------------------------------------------------------------------

@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 2026-08-07 — 杂波边界锐化（非对称 EMA + 足迹 σ⁰ + sea_state）
+
+- **ClutterMap**：`ConfigureAsym` / `m_ClutterMapAlphaDown`（快降慢升）；PulseDoppler 默认 α_up=0.15、α_down=0.45
+- **足迹 σ⁰ 混合**：`m_EnableClutterFootprintMix`（SEARCH 默认关；PD 开）在波束脚印内平均 3–5 个 DEM 类
+- **sea_state**：Enforce `SurfaceTable` 对水面 σ⁰ 施加与 Python 一致的 ss0–6 偏移；JSON 加载不再丢掉海况
+- Settings：`EnableClutterSharpen`；`m_ClutterMapAzBinCount` 可配
+- 离线：`clutter-sharpen` / `test_rdf_radar_clutter_sharpen.py`
+
 ## 2026-08-07 — 玩具 FDTD vs 最高精度游戏路径对照
 
 - `fdtd_vs_game_accuracy`：拉开游戏侧衍射/双射线精度（双主导刃 + ν LUT + LOS two-ray）与玩具 3D Yee FDTD 比相对误差
