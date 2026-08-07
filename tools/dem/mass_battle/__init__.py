@@ -19,7 +19,9 @@ def __getattr__(name: str) -> Any:
         from mass_battle.cli import main as _main
 
         return _main
-    if name.startswith("_"):
+    # unittest discover probes packages for load_tests via getattr — must not
+    # pull in _impl (matplotlib) during discovery.
+    if name == "load_tests" or name.startswith("_"):
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     impl = importlib.import_module("mass_battle._impl")
     if hasattr(impl, name):
