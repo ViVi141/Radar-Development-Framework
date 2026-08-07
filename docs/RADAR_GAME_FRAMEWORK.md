@@ -104,7 +104,8 @@ RDF_RadarNoiseJammerEffect jammer = new RDF_RadarNoiseJammerEffect();
 jammer.m_Position = jammerWorldPosition;
 jammer.m_ErpW = 10000.0;
 jammer.m_BandwidthHz = 5000000.0;
-// Default: SEARCH_AVG + -40 dB sidelobe (playable soft). Hard stare:
+// Default: SEARCH_AVG + -40 dB sidelobe (playable soft). Optional SLB:
+// jammer.EnableSlb(true) blanks sidelobe-only coupling. Hard stare:
 // jammer.ConfigurePhysicsBeam(-25.0);
 // Mainlobe sector only: jammer.ConfigureMainlobeOnly();
 // Extra soft knob: jammer.m_CouplingGain = 0.25;
