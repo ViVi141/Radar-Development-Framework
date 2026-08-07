@@ -172,6 +172,34 @@ def main(argv: list[str] | None = None) -> int:
                 "knife_edge=",
                 round(occ["knife_edge_err_db"], 2),
             )
+            two = row["metrics"].get("occlusion_two_edge")
+            if two:
+                print(
+                    "    two-edge FDTD ratio=",
+                    round(two["fdtd_shadow_over_lit"], 6),
+                    "single=",
+                    round(two["game_single_knife_shadow_over_lit"], 6),
+                    "dual=",
+                    round(two["game_dual_knife_shadow_over_lit"], 6),
+                )
+                print(
+                    "    err_db single=",
+                    round(two["single_knife_err_db"], 2),
+                    "dual=",
+                    round(two["dual_knife_err_db"], 2),
+                )
+        if row["name"] == "quadtree_memory":
+            qt = row["metrics"]["quadtree"]
+            print(
+                "    quad MiB=",
+                round(qt["mib_est"], 3),
+                " dense@min MiB=",
+                round(row["metrics"]["dense_at_min_leaf"]["mib"], 3),
+                " ratio=",
+                round(row["metrics"]["quad_over_dense_min_leaf"], 4),
+                " savings%=",
+                round(100.0 * row["metrics"]["savings_frac_vs_dense_min"], 1),
+            )
     if artifacts:
         for path in artifacts:
             print(" artifact", path)

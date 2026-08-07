@@ -493,11 +493,13 @@ def run_validation_suite(include_fdtd: bool = True) -> dict:
         case_fdtd_propagation,
         case_fdtd_vs_game_accuracy,
     )
+    from rdf_voxel_quadtree import case_quadtree_memory
 
     cases = [
         case_free_space_agreement(),
         case_occlusion_shadow(),
         case_scale_report(),
+        case_quadtree_memory(),
     ]
     if include_fdtd:
         cases.append(case_fdtd_propagation())
@@ -516,7 +518,7 @@ def run_validation_suite(include_fdtd: bool = True) -> dict:
             }
         )
     not_modeled = ["polarization", "diffraction_fill", "map_scale_fdtd"]
-    models = ["engineering_power_voxel_los_friis"]
+    models = ["engineering_power_voxel_los_friis", "xz_quadtree_memory"]
     if include_fdtd:
         models.append("toy_yee_fdtd_3d")
     return {

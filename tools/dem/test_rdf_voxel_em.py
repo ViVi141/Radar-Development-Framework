@@ -107,6 +107,7 @@ class TestValidationCases(unittest.TestCase):
         self.assertIn("fdtd_propagation", names)
         self.assertIn("fdtd_pec_shadow", names)
         self.assertIn("fdtd_vs_game_accuracy", names)
+        self.assertIn("quadtree_memory", names)
 
 
 class TestFdtdToy(unittest.TestCase):

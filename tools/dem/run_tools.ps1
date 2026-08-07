@@ -8,10 +8,11 @@
 #   .\run_tools.ps1 knife-lut
 #   .\run_tools.ps1 pattern-site
 #   .\run_tools.ps1 voxel-em
+#   .\run_tools.ps1 quadtree
 
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("help", "test", "full-sim", "demo", "knife-lut", "pattern-site", "voxel-em")]
+    [ValidateSet("help", "test", "full-sim", "demo", "knife-lut", "pattern-site", "voxel-em", "quadtree")]
     [string]$Command = "help",
 
     [switch]$Ew
@@ -32,6 +33,7 @@ RDF tools/dem helper (catalog: ..\README.md)
   .\run_tools.ps1 knife-lut  Knife-edge ν LUT bake + Enforce profile
   .\run_tools.ps1 pattern-site  Pattern + site-path LUT bake
   .\run_tools.ps1 voxel-em   3D voxel EM power-field validation
+  .\run_tools.ps1 quadtree   Quadtree vs dense memory measure
 
 Linux/macOS: ./run_tools.sh <same commands>
 
@@ -77,6 +79,10 @@ switch ($Command) {
     }
     "voxel-em" {
         python rdf_voxel_em_validate.py --plot
+        exit $LASTEXITCODE
+    }
+    "quadtree" {
+        python rdf_voxel_quadtree_measure.py
         exit $LASTEXITCODE
     }
 }

@@ -30,6 +30,7 @@ RDF tools/dem helper (catalog: ../README.md)
   ./run_tools.sh knife-lut  Knife-edge ν LUT bake + Enforce profile
   ./run_tools.sh pattern-site  Pattern + site-path LUT bake
   ./run_tools.sh voxel-em   3D voxel EM power-field validation
+  ./run_tools.sh quadtree   Quadtree vs dense memory measure
 
 Also common:
   python3 rdf_dem_pack_surface_json.py --world GM_Eden --from-bin
@@ -66,6 +67,9 @@ case "$cmd" in
     ;;
   voxel-em)
     python3 rdf_voxel_em_validate.py --plot
+    ;;
+  quadtree)
+    python3 rdf_voxel_quadtree_measure.py
     ;;
   *)
     echo "unknown command: $cmd" >&2
