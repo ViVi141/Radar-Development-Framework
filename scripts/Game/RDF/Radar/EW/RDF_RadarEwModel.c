@@ -73,6 +73,9 @@ class RDF_RadarNoiseJammerEffect : RDF_RadarEwEffect
     float m_CouplingGain = 1.0;
     // SEARCH_AVG duty override; <0 → az_beamwidth_deg / 360.
     float m_SearchDutyOverride = -1.0;
+    // Sidelobe blanking: drop sidelobe-only jam coupling (default off — keeps
+    // SEARCH_AVG soft path; enable for harder anti-jam).
+    bool m_EnableSlb = false;
 
     // Instantaneous beam coupling (legacy hard path).
     void ConfigurePhysicsBeam(float sidelobeLevelDb = -25.0)
@@ -102,6 +105,11 @@ class RDF_RadarNoiseJammerEffect : RDF_RadarEwEffect
         m_SearchDutyOverride = -1.0;
     }
 
+    void EnableSlb(bool enable)
+    {
+        m_EnableSlb = enable;
+    }
+
     protected float ResolveCoupling(
         vector radarOrigin,
         vector scanForward,
@@ -125,6 +133,8 @@ class RDF_RadarNoiseJammerEffect : RDF_RadarEwEffect
                 duty = 0.0;
             if (duty > 1.0)
                 duty = 1.0;
+            if (m_EnableSlb)
+                return duty;
             return duty * 1.0 + (1.0 - duty) * sideLin;
         }
 
@@ -152,6 +162,8 @@ class RDF_RadarNoiseJammerEffect : RDF_RadarEwEffect
         // BEAM (default legacy).
         if (inMain)
             return 1.0;
+        if (m_EnableSlb)
+            return 0.0;
         return sideLin;
     }
 

@@ -98,6 +98,8 @@ class NoiseJammer:
     coupling_gain: float = 1.0
     # SEARCH_AVG duty; None → az_beamwidth_deg / 360.
     search_duty: float | None = None
+    # Sidelobe blanking (default off; mirrors Enforce m_EnableSlb).
+    enable_slb: bool = False
 
     def configure_physics_beam(self, sidelobe_level_db: float = -25.0) -> None:
         self.coupling_mode = NoiseJamCoupling.BEAM
@@ -119,6 +121,9 @@ class NoiseJammer:
         self.coupling_mode = NoiseJamCoupling.MAINLOBE_ONLY
         self.coupling_gain = 1.0
         self.search_duty = None
+
+    def enable_sidelobe_blanking(self, enable: bool = True) -> None:
+        self.enable_slb = enable
 
     def peak_jammer_power_w(self, context: EWContext) -> float:
         """Isotropic peak jammer power into the receiver (coupling = 1)."""
@@ -175,7 +180,10 @@ class NoiseJammer:
             if duty is None:
                 duty = context.hardware.az_beamwidth_deg / 360.0
             duty = float(np.clip(duty, 0.0, 1.0))
-            value = duty * 1.0 + (1.0 - duty) * sidelobe
+            if self.enable_slb:
+                value = duty
+            else:
+                value = duty * 1.0 + (1.0 - duty) * sidelobe
             return np.full(az.shape, value, dtype=np.float64)
 
         dx = self.x_m - context.radar_x_m
@@ -186,6 +194,11 @@ class NoiseJammer:
         in_main = az_delta <= half_beam
 
         if self.coupling_mode == NoiseJamCoupling.MAINLOBE_ONLY:
+            coupling = np.zeros(az.shape, dtype=np.float64)
+            coupling[in_main] = 1.0
+            return coupling
+
+        if self.enable_slb:
             coupling = np.zeros(az.shape, dtype=np.float64)
             coupling[in_main] = 1.0
             return coupling

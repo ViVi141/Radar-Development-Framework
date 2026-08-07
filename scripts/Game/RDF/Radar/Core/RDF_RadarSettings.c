@@ -55,6 +55,10 @@ class RDF_RadarSettings
     bool m_EnableDemLosPrecheck = true;
     // Interior samples along radar→target for DEM precheck (endpoints skipped).
     int m_DemLosPrecheckSamples = 8;
+    // Floor Gaussian two-way pattern to Hardware.m_SidelobeLevelDb^2.
+    bool m_EnableSidelobeFloor = true;
+    // Apply Hardware.m_PolarizationMode match table × m_PolarizationFactor.
+    bool m_EnablePolarizationMatch = true;
     // Optional receiver-side EW/noise injection after processing.
     float m_AdditionalNoisePowerW = 0.0;
     ref RDF_RadarEwStack m_EwStack;
@@ -360,6 +364,14 @@ class RDF_RadarSettings
     {
         m_EnableRangeAmbiguityFold = foldRange;
         m_EnableDopplerAmbiguityFold = foldDoppler;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Off-axis pattern floor + polarization match tables (default on).
+    void EnableAntennaPatternFidelity(bool sidelobeFloor, bool polarizationMatch)
+    {
+        m_EnableSidelobeFloor = sidelobeFloor;
+        m_EnablePolarizationMatch = polarizationMatch;
     }
 
     //------------------------------------------------------------------------------------------------

@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-08-07 — 旁瓣地板 + 极化匹配 + 可选 SLB
+
+- 方向图：高斯主瓣 + `m_SidelobeLevelDb` 双程地板（`m_EnableSidelobeFloor`，默认开）
+- 极化：`ERDF_RadarPolarization`（H/V/圆）匹配表 × `m_PolarizationFactor`；圆极化雨杂波抑制标量
+- EW：`NoiseJammerEffect.m_EnableSlb`（默认关）旁瓣耦合消隐；`EnableSlb(true)` 开启
+- Python：`test_rdf_radar_antenna`；Settings `EnableAntennaPatternFidelity`
+
 ## 2026-08-07 — 正演 TruthSample ↔ 反演 Observation 切开
 
 - 新增 `RDF_RadarTruthSample`：Scanner / `PhysicalDetect` / reuse 缓存只写正演真值

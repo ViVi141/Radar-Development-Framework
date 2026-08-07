@@ -144,6 +144,12 @@ class RDF_RadarPhysicalDetect
             azimuthOffsetDeg,
             elevationDeg,
             beamName);
+        if (settings.m_EnableSidelobeFloor)
+        {
+            patternGain = RDF_RadarClutterModel.ApplyTwoWaySidelobeFloor(
+                patternGain,
+                hardware.m_SidelobeLevelDb);
+        }
         target.m_BeamName = beamName;
         if (target.m_LosBlocked)
         {
@@ -192,7 +198,10 @@ class RDF_RadarPhysicalDetect
                 emitStrength,
                 patternGain);
             target.m_ReceivedPowerW = target.m_ReceivedPowerW * target.m_MultipathFactor;
-            float polEsm = hardware.m_PolarizationFactor;
+            float polEsm = ResolvePolarizationFactor(
+                hardware,
+                settings,
+                target.m_Type);
             if (polEsm > 0.0)
             {
                 if (polEsm < 1.0)
@@ -255,7 +264,10 @@ class RDF_RadarPhysicalDetect
             distance,
             patternGain);
         target.m_ReceivedPowerW = target.m_ReceivedPowerW * target.m_MultipathFactor;
-        float polFactor = hardware.m_PolarizationFactor;
+        float polFactor = ResolvePolarizationFactor(
+            hardware,
+            settings,
+            target.m_Type);
         if (polFactor > 0.0)
         {
             if (polFactor < 1.0)
@@ -387,7 +399,8 @@ class RDF_RadarPhysicalDetect
                 hardware,
                 processingGain,
                 settings,
-                demCache);
+                demCache,
+                scanRainLossDbPerKm);
             if (settings.m_EnableClutterMap && clutterMap)
             {
                 clutterPower = clutterMap.UpdateAndGet(
@@ -441,6 +454,28 @@ class RDF_RadarPhysicalDetect
         target.m_ScanNumber = scanNumberPre;
     }
 
+    protected static float ResolvePolarizationFactor(
+        RDF_RadarHardware hardware,
+        RDF_RadarSettings settings,
+        ERDF_RadarTargetType targetType)
+    {
+        if (!hardware)
+            return 1.0;
+        float factor = hardware.m_PolarizationFactor;
+        if (settings && settings.m_EnablePolarizationMatch)
+        {
+            float match = RDF_RadarClutterModel.PolarizationMatchFactor(
+                hardware.m_PolarizationMode,
+                targetType);
+            factor = factor * match;
+        }
+        if (factor < 0.05)
+            factor = 0.05;
+        if (factor > 1.0)
+            factor = 1.0;
+        return factor;
+    }
+
     protected static float ComputeDemClutterPower(
         RDF_RadarTruthSample target,
         vector origin,
@@ -451,7 +486,8 @@ class RDF_RadarPhysicalDetect
         RDF_RadarHardware hardware,
         float processingGain,
         RDF_RadarSettings settings,
-        RDF_DemRuntimeCache demCache)
+        RDF_DemRuntimeCache demCache,
+        float scanRainLossDbPerKm)
     {
         if (!target || !hardware || !demCache || !settings)
             return 0.0;
@@ -515,6 +551,14 @@ class RDF_RadarPhysicalDetect
             clutterSigmaM2,
             distance,
             patternGain);
+        if (settings.m_EnablePolarizationMatch)
+        {
+            float polClutter = RDF_RadarClutterModel.PolarizationClutterFactor(
+                hardware.m_PolarizationMode,
+                scanRainLossDbPerKm);
+            if (polClutter < 1.0)
+                receivedClutter = receivedClutter * polClutter;
+        }
         float surfaceAttenDbPerKm =
             RDF_RadarClutterModel.GetSurfaceAttenuationDbPerKm(surfaceClass);
         if (surfaceAttenDbPerKm > 0.0)

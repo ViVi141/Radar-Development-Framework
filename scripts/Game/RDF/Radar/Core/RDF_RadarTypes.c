@@ -36,6 +36,14 @@ enum ERDF_NoiseJamCoupling
     RDF_JAM_COUPLE_MAINLOBE_ONLY
 }
 
+// Transmit / receive polarization mode (engineering match tables, not Stokes).
+enum ERDF_RadarPolarization
+{
+    RDF_POL_H,
+    RDF_POL_V,
+    RDF_POL_CIRCULAR
+}
+
 // Forward-only truth sample for PhysicalDetect. Never publish to Tracker/Lock.
 // Entity and DEM/LOS inputs live here; inverse path must not read this type.
 class RDF_RadarTruthSample
