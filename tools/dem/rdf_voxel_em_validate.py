@@ -152,12 +152,32 @@ def main(argv: list[str] | None = None) -> int:
         if row["name"] == "fdtd_vs_game_accuracy":
             fs = row["metrics"]["free_space"]
             occ = row["metrics"]["occlusion"]
+            gmf = row["metrics"].get("game_max_fidelity", {})
+            summary = row["metrics"].get("summary", {})
+            print(
+                "    game_max: dual=",
+                gmf.get("enable_dual_knife_edge"),
+                "knife_lut=",
+                gmf.get("enable_knife_edge_lut"),
+                "two_ray=",
+                gmf.get("enable_los_two_ray"),
+            )
             print(
                 "    free-space max_rel_err=",
                 round(fs["max_rel_err"], 4),
                 "mean=",
                 round(fs["mean_rel_err"], 4),
             )
+            tr = row["metrics"].get("los_two_ray")
+            if tr:
+                print(
+                    "    los_two_ray friis_max_rel_err=",
+                    round(tr["friis_max_rel_err"], 4),
+                    "two_ray_max_rel_err=",
+                    round(tr["two_ray_max_rel_err"], 4),
+                    "two_ray_closer=",
+                    tr["two_ray_closer_than_friis"],
+                )
             print(
                 "    occlusion FDTD ratio=",
                 round(occ["fdtd_shadow_over_lit"], 6),
@@ -165,12 +185,18 @@ def main(argv: list[str] | None = None) -> int:
                 round(occ["game_hard_los_shadow_over_lit"], 6),
                 "knife=",
                 round(occ["game_knife_edge_shadow_over_lit"], 6),
+                "max=",
+                round(occ.get("game_max_fidelity_shadow_over_lit", 0.0), 6),
             )
             print(
                 "    err_db hard_los=",
                 round(occ["hard_los_err_db"], 2),
                 "knife_edge=",
                 round(occ["knife_edge_err_db"], 2),
+                "max_fidelity=",
+                round(occ.get("max_fidelity_err_db", 0.0), 2),
+                "closest=",
+                occ.get("closest_to_fdtd"),
             )
             two = row["metrics"].get("occlusion_two_edge")
             if two:
@@ -181,12 +207,30 @@ def main(argv: list[str] | None = None) -> int:
                     round(two["game_single_knife_shadow_over_lit"], 6),
                     "dual=",
                     round(two["game_dual_knife_shadow_over_lit"], 6),
+                    "max=",
+                    round(two.get("game_max_fidelity_shadow_over_lit", 0.0), 6),
                 )
                 print(
                     "    err_db single=",
                     round(two["single_knife_err_db"], 2),
                     "dual=",
                     round(two["dual_knife_err_db"], 2),
+                    "max_fidelity=",
+                    round(two.get("max_fidelity_err_db", 0.0), 2),
+                    "closest=",
+                    two.get("closest_to_fdtd"),
+                )
+            if summary:
+                print(
+                    "    summary one_edge=",
+                    summary.get("one_edge_closest"),
+                    "@",
+                    round(summary.get("one_edge_closest_err_db", 0.0), 2),
+                    "dB; two_edge=",
+                    summary.get("two_edge_closest"),
+                    "@",
+                    round(summary.get("two_edge_closest_err_db", 0.0), 2),
+                    "dB",
                 )
         if row["name"] == "quadtree_memory":
             qt = row["metrics"]["quadtree"]

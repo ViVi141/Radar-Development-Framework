@@ -131,6 +131,8 @@
 - FDTD / 全场电磁波  
 - 训练级信号处理整链每帧跑满  
 
+离线对照：`tools/dem` 玩具 Yee FDTD 可与最高精度游戏路径（双主导刃 + ν LUT + 可选 LOS 双射线）比相对误差（`fdtd_vs_game_accuracy` / `./run_tools.sh voxel-em`）；**不进游戏运行时**。
+
 ---
 
 ### 5. 建议优先级（只选三条时）
@@ -285,6 +287,8 @@ Aligned with deferred items in [TODO.md](../TODO.md):
 
 - FDTD / full-field EM waves  
 - Running a full training-grade signal-processing chain every frame  
+
+Offline cross-check: toy Yee FDTD in `tools/dem` can be compared against the highest game path math (dual-dominant knife-edge + ν LUT + optional LOS two-ray) via `fdtd_vs_game_accuracy` / `./run_tools.sh voxel-em`. **Not used at runtime.**
 
 ---
 

@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2026-08-07 — 玩具 FDTD vs 最高精度游戏路径对照
+
+- `fdtd_vs_game_accuracy`：拉开游戏侧衍射/双射线精度（双主导刃 + ν LUT + LOS two-ray）与玩具 3D Yee FDTD 比相对误差
+- 新增单刃 / 双刃遮挡场景与 `summary`（closest-to-FDTD）；`./run_tools.sh voxel-em` 打印对照表
+- 结论口径：硬 LOS 阴影误差大；刀刃/双刃+LUT 远近 FDTD 泄漏；玩具尺度双射线与脉冲峰值不可直接当精度证明
+
 ## 2026-08-07 — 分段方向图 LUT + 固定站路径因子表
 
 - **PatternLut**：方位主瓣 + 旁瓣峰 + 地板（`m_EnablePatternLut` 默认开）；`RDF_RadarPatternLut` / `$profile:…/PatternLut.json`
