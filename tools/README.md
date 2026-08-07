@@ -197,6 +197,8 @@ cd tools\dem
 | `rdf_radar_track.py` | 最近邻关联、α-β、WLR 真空拟合 |
 | `rdf_radar_ew.py` | 噪声 / 欺骗 / 跳频表 |
 | `rdf_radar_diffraction.py` | 刀刃绕射辅助 |
+| `rdf_radar_pattern_lut.py` | 分段方位方向图 LUT（主瓣+旁瓣峰+地板） |
+| `rdf_radar_site_path_lut.py` | 固定站极坐标 DEM 路径因子 LUT |
 | `rdf_radar_fusion.py` | 多雷达关联 / 交会 |
 | `rdf_radar_systems.py` | 锁定、ESM/RWR/ARM、GO/SO-CFAR、Network 策略；`MeasurementModel` + 可选 `ChannelFidelity` 折叠 |
 
@@ -221,6 +223,8 @@ cd tools\dem
 | `test_rdf_radar_track.py` | 关联 / α-β / 真空拟合 |
 | `test_rdf_radar_ew.py` | 噪声耦合 / 烧穿 |
 | `test_rdf_radar_diffraction.py` | 刀刃因子 |
+| `test_rdf_radar_pattern_site_lut.py` | 方向图 + 站点路径 LUT |
+| `test_rdf_radar_antenna.py` | 旁瓣地板 / 极化 / SLB |
 | `test_rdf_radar_fusion.py` | 关联 / 交会 |
 | `test_rdf_radar_systems.py` | systems + full_sim 冒烟 |
 | `test_rdf_radar_mtd.py` | MTD 滤波器组 / 旋翼微多普勒 |
