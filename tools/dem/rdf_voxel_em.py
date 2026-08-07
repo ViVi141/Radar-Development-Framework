@@ -485,13 +485,19 @@ def case_scale_report() -> ValidationCaseResult:
     )
 
 
-def run_validation_suite() -> dict:
+def run_validation_suite(include_fdtd: bool = True) -> dict:
     """Run all validation cases and return a JSON-serializable report."""
+    # Local import keeps power-field path usable if FDTD module is edited alone.
+    from rdf_voxel_fdtd import case_fdtd_pec_shadow, case_fdtd_propagation
+
     cases = [
         case_free_space_agreement(),
         case_occlusion_shadow(),
         case_scale_report(),
     ]
+    if include_fdtd:
+        cases.append(case_fdtd_propagation())
+        cases.append(case_fdtd_pec_shadow())
     results = []
     all_ok = True
     for case in cases:
@@ -504,10 +510,14 @@ def run_validation_suite() -> dict:
                 "metrics": case.metrics,
             }
         )
+    not_modeled = ["polarization", "diffraction_fill", "map_scale_fdtd"]
+    models = ["engineering_power_voxel_los_friis"]
+    if include_fdtd:
+        models.append("toy_yee_fdtd_3d")
     return {
         "all_ok": all_ok,
-        "model": "engineering_power_voxel_los_friis",
-        "not_modeled": ["maxwell_fdtd", "polarization", "diffraction_fill"],
+        "model": "+".join(models),
+        "not_modeled": not_modeled,
         "results": results,
     }
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI validation for offline 3D voxel EM power fields.
+"""CLI validation for offline 3D voxel EM power fields + toy FDTD.
 
 Writes JSON (and optional PNG slices) under tools/dem/out/.
 Does not drive in-game detection — calibration / feasibility only.
@@ -23,6 +23,7 @@ from rdf_voxel_em import (  # noqa: E402
     horizontal_slice_db,
     run_validation_suite,
 )
+from rdf_voxel_fdtd import run_fdtd_demo_slice  # noqa: E402
 
 
 def _ensure_out_dir(path: str) -> None:
@@ -38,7 +39,7 @@ def _write_report(path: str, report: dict) -> None:
         handle.write("\n")
 
 
-def _maybe_write_slices(out_dir: str) -> list[str]:
+def _maybe_write_power_slice(out_dir: str) -> list[str]:
     """Build a small occluded scene and dump horizontal power slices."""
     try:
         import matplotlib
@@ -77,9 +78,39 @@ def _maybe_write_slices(out_dir: str) -> list[str]:
     return [png_path]
 
 
+def _maybe_write_fdtd_slice(out_dir: str) -> list[str]:
+    try:
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        return []
+
+    img, meta = run_fdtd_demo_slice()
+    os.makedirs(out_dir, exist_ok=True)
+    png_path = os.path.join(out_dir, "voxel_em_fdtd_ez_slice.png")
+    fig, ax = plt.subplots(figsize=(7.0, 6.0))
+    mesh = ax.imshow(
+        img,
+        origin="lower",
+        extent=meta["extent"],
+        cmap="magma",
+        aspect="equal",
+    )
+    ax.set_xlabel("X (m)")
+    ax.set_ylabel("Z (m)")
+    ax.set_title("Toy 3D FDTD |Ez| mid-slice (PEC wall)")
+    fig.colorbar(mesh, ax=ax, fraction=0.046, label="|Ez| (a.u.)")
+    fig.tight_layout()
+    fig.savefig(png_path, dpi=120)
+    plt.close(fig)
+    return [png_path]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Validate 3D voxel EM power-field feasibility (offline)."
+        description="Validate 3D voxel EM power-field + toy FDTD (offline)."
     )
     parser.add_argument(
         "--out",
@@ -89,15 +120,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--plot",
         action="store_true",
-        help="Write optional matplotlib power-slice PNG under out/",
+        help="Write optional matplotlib PNG slices under out/",
+    )
+    parser.add_argument(
+        "--no-fdtd",
+        action="store_true",
+        help="Skip toy Yee FDTD cases (power-field only).",
     )
     args = parser.parse_args(argv)
 
-    report = run_validation_suite()
+    include_fdtd = True
+    if args.no_fdtd:
+        include_fdtd = False
+    report = run_validation_suite(include_fdtd=include_fdtd)
     artifacts = []
     if args.plot:
         out_dir = os.path.dirname(os.path.abspath(args.out))
-        artifacts = _maybe_write_slices(out_dir)
+        artifacts.extend(_maybe_write_power_slice(out_dir))
+        if include_fdtd:
+            artifacts.extend(_maybe_write_fdtd_slice(out_dir))
     report["artifacts"] = artifacts
     _write_report(args.out, report)
 

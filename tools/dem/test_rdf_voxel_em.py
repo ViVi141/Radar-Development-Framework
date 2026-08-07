@@ -23,6 +23,12 @@ from rdf_voxel_em import (
     run_validation_suite,
     sample_unit_directions,
 )
+from rdf_voxel_fdtd import (
+    FdtdConfig,
+    FdtdGrid3D,
+    case_fdtd_pec_shadow,
+    case_fdtd_propagation,
+)
 
 
 class TestVoxelGrid(unittest.TestCase):
@@ -91,12 +97,40 @@ class TestValidationCases(unittest.TestCase):
         self.assertGreater(fdtd["gib_fields"], 1.0)
 
     def test_suite_all_ok(self) -> None:
-        report = run_validation_suite()
+        report = run_validation_suite(include_fdtd=True)
         self.assertTrue(report["all_ok"], msg=str(report))
         names = {row["name"] for row in report["results"]}
         self.assertIn("free_space_agreement", names)
         self.assertIn("occlusion_shadow", names)
         self.assertIn("scale_report", names)
+        self.assertIn("fdtd_propagation", names)
+        self.assertIn("fdtd_pec_shadow", names)
+
+
+class TestFdtdToy(unittest.TestCase):
+    def test_propagation_case(self) -> None:
+        result = case_fdtd_propagation()
+        self.assertTrue(result.ok, msg=str(result.metrics))
+
+    def test_pec_shadow_case(self) -> None:
+        result = case_fdtd_pec_shadow()
+        self.assertTrue(result.ok, msg=str(result.metrics))
+
+    def test_tiny_run_has_energy(self) -> None:
+        cfg = FdtdConfig(
+            nx=24,
+            ny=24,
+            nz=24,
+            dx_m=0.05,
+            n_steps=40,
+            src_i=6,
+            src_j=12,
+            src_k=12,
+        )
+        grid = FdtdGrid3D(cfg)
+        info = grid.run()
+        self.assertGreater(info["energy_peak"], 0.0)
+        self.assertGreater(info["bytes"], 0)
 
 
 class TestCostEstimates(unittest.TestCase):
