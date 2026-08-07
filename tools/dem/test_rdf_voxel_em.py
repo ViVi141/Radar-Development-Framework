@@ -28,6 +28,7 @@ from rdf_voxel_fdtd import (
     FdtdGrid3D,
     case_fdtd_pec_shadow,
     case_fdtd_propagation,
+    case_fdtd_vs_game_accuracy,
 )
 
 
@@ -105,6 +106,7 @@ class TestValidationCases(unittest.TestCase):
         self.assertIn("scale_report", names)
         self.assertIn("fdtd_propagation", names)
         self.assertIn("fdtd_pec_shadow", names)
+        self.assertIn("fdtd_vs_game_accuracy", names)
 
 
 class TestFdtdToy(unittest.TestCase):
@@ -115,6 +117,15 @@ class TestFdtdToy(unittest.TestCase):
     def test_pec_shadow_case(self) -> None:
         result = case_fdtd_pec_shadow()
         self.assertTrue(result.ok, msg=str(result.metrics))
+
+    def test_vs_game_accuracy_case(self) -> None:
+        result = case_fdtd_vs_game_accuracy()
+        self.assertTrue(result.ok, msg=str(result.metrics))
+        occ = result.metrics["occlusion"]
+        self.assertLessEqual(
+            occ["knife_edge_err_db"],
+            occ["hard_los_err_db"] + 1e-6,
+        )
 
     def test_tiny_run_has_energy(self) -> None:
         cfg = FdtdConfig(

@@ -78,7 +78,7 @@ Generated files go to `tools/dem/out/` (gitignored except `.gitkeep`). Do not co
 | Script | Purpose |
 |--------|---------|
 | `rdf_voxel_em.py` | Offline 3D voxel EM **power-field** helpers (LOS Friis + atten) |
-| `rdf_voxel_fdtd.py` | Toy 3D Yee FDTD (propagation / PEC shadow; map-scale still out of scope) |
+| `rdf_voxel_fdtd.py` | Toy 3D Yee FDTD + accuracy vs game Friis/LOS/knife-edge (map-scale still out of scope) |
 | `rdf_radar_physics.py` | Hardware, radar equation, MTI / MTD bank, CA-CFAR |
 | `rdf_radar_materials.py` | Band / sea-state σ⁰ tables |
 | `rdf_radar_channel.py` | Retune, Swerling, aspect RCS; `ChannelFidelity` opt-in (LOS two-ray, 4/3 refraction, PRF folds; default off) |
@@ -193,7 +193,7 @@ cd tools\dem
 | 脚本 | 用途 |
 |------|------|
 | `rdf_voxel_em.py` | 离线 3D 体素电磁**功率场**（LOS Friis + 衰减） |
-| `rdf_voxel_fdtd.py` | 玩具级 3D Yee FDTD（传播 / PEC 阴影；地图尺度仍不做） |
+| `rdf_voxel_fdtd.py` | 玩具级 3D Yee FDTD + 与游戏 Friis/LOS/单刃精度对比（地图尺度仍不做） |
 | `rdf_radar_physics.py` | 硬件、雷达方程、MTI / MTD、CA-CFAR |
 | `rdf_radar_materials.py` | 频段 / 海况 σ⁰ 表 |
 | `rdf_radar_channel.py` | 重调、Swerling、方位 RCS；`ChannelFidelity` 按需开启（LOS 双射线、4/3 折射、PRF 折叠；默认关） |

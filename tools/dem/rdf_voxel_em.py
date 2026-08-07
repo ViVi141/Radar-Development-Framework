@@ -488,7 +488,11 @@ def case_scale_report() -> ValidationCaseResult:
 def run_validation_suite(include_fdtd: bool = True) -> dict:
     """Run all validation cases and return a JSON-serializable report."""
     # Local import keeps power-field path usable if FDTD module is edited alone.
-    from rdf_voxel_fdtd import case_fdtd_pec_shadow, case_fdtd_propagation
+    from rdf_voxel_fdtd import (
+        case_fdtd_pec_shadow,
+        case_fdtd_propagation,
+        case_fdtd_vs_game_accuracy,
+    )
 
     cases = [
         case_free_space_agreement(),
@@ -498,6 +502,7 @@ def run_validation_suite(include_fdtd: bool = True) -> dict:
     if include_fdtd:
         cases.append(case_fdtd_propagation())
         cases.append(case_fdtd_pec_shadow())
+        cases.append(case_fdtd_vs_game_accuracy())
     results = []
     all_ok = True
     for case in cases:

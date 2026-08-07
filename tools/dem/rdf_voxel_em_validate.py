@@ -149,6 +149,29 @@ def main(argv: list[str] | None = None) -> int:
         if not row["ok"]:
             status = "FAIL"
         print(" ", status, row["name"])
+        if row["name"] == "fdtd_vs_game_accuracy":
+            fs = row["metrics"]["free_space"]
+            occ = row["metrics"]["occlusion"]
+            print(
+                "    free-space max_rel_err=",
+                round(fs["max_rel_err"], 4),
+                "mean=",
+                round(fs["mean_rel_err"], 4),
+            )
+            print(
+                "    occlusion FDTD ratio=",
+                round(occ["fdtd_shadow_over_lit"], 6),
+                "hard_los=",
+                round(occ["game_hard_los_shadow_over_lit"], 6),
+                "knife=",
+                round(occ["game_knife_edge_shadow_over_lit"], 6),
+            )
+            print(
+                "    err_db hard_los=",
+                round(occ["hard_los_err_db"], 2),
+                "knife_edge=",
+                round(occ["knife_edge_err_db"], 2),
+            )
     if artifacts:
         for path in artifacts:
             print(" artifact", path)
