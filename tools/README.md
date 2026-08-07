@@ -77,6 +77,9 @@ Generated files go to `tools/dem/out/` (gitignored except `.gitkeep`). Do not co
 
 | Script | Purpose |
 |--------|---------|
+| `rdf_voxel_em.py` | Offline 3D voxel EM **power-field** helpers (LOS Friis + atten) |
+| `rdf_voxel_fdtd.py` | Toy 3D Yee FDTD + accuracy vs game Friis/LOS/knife-edge (map-scale still out of scope) |
+| `rdf_voxel_quadtree.py` | XZ quadtree memory-block measure (air/obstacle/ROI leaves + short Y columns) |
 | `rdf_radar_physics.py` | Hardware, radar equation, MTI / MTD bank, CA-CFAR |
 | `rdf_radar_materials.py` | Band / sea-state σ⁰ tables |
 | `rdf_radar_channel.py` | Retune, Swerling, aspect RCS; `ChannelFidelity` opt-in (LOS two-ray, 4/3 refraction, PRF folds; default off) |
@@ -103,11 +106,14 @@ Generated files go to `tools/dem/out/` (gitignored except `.gitkeep`). Do not co
 | `rdf_radar_hw_calibrate.py` | Offline HW bake-back → `calib/prf_clutter_*.json` |
 | `rdf_knife_edge_eden_validate.py` | Eden knife-edge validation helper |
 | `rdf_radar_pattern_site_validate.py` | Pattern + site-path LUT bake → `calib/PatternLut.json` / `SitePathLut.json` |
+| `rdf_voxel_em_validate.py` | 3D voxel EM feasibility suite → `out/voxel_em_report.json` |
+| `rdf_voxel_quadtree_measure.py` | Quadtree vs dense memory report → `out/voxel_quadtree_measure.json` |
 
 ### Golden tests
 
 | Script | Purpose |
 |--------|---------|
+| `test_rdf_voxel_em.py` | Voxel EM free-space / occlusion / scale report |
 | `test_rdf_radar_ballistics.py` | Ballistics / wind / drag / DEM hit |
 | `test_rdf_radar_cfar.py` | CA-CFAR golden + Enforce CA parity |
 | `test_rdf_radar_track.py` | Association / α-β / vacuum fit |
@@ -188,6 +194,9 @@ cd tools\dem
 
 | 脚本 | 用途 |
 |------|------|
+| `rdf_voxel_em.py` | 离线 3D 体素电磁**功率场**（LOS Friis + 衰减） |
+| `rdf_voxel_fdtd.py` | 玩具级 3D Yee FDTD + 与游戏 Friis/LOS/单刃精度对比（地图尺度仍不做） |
+| `rdf_voxel_quadtree.py` | XZ 四叉树内存区块测量（air/obstacle/ROI 叶 + 短 Y 柱） |
 | `rdf_radar_physics.py` | 硬件、雷达方程、MTI / MTD、CA-CFAR |
 | `rdf_radar_materials.py` | 频段 / 海况 σ⁰ 表 |
 | `rdf_radar_channel.py` | 重调、Swerling、方位 RCS；`ChannelFidelity` 按需开启（LOS 双射线、4/3 折射、PRF 折叠；默认关） |
@@ -214,11 +223,14 @@ cd tools\dem
 | `rdf_radar_hw_calibrate.py` | 离线 HW 回灌 → `calib/prf_clutter_*.json` |
 | `rdf_knife_edge_eden_validate.py` | Eden 刀刃绕射校验 |
 | `rdf_radar_pattern_site_validate.py` | 方向图 + 站点路径 LUT → `calib/PatternLut.json` / `SitePathLut.json` |
+| `rdf_voxel_em_validate.py` | 3D 体素 EM 可行性套件 → `out/voxel_em_report.json` |
+| `rdf_voxel_quadtree_measure.py` | 四叉树 vs 均匀体素内存报告 → `out/voxel_quadtree_measure.json` |
 
 ### Golden 测试
 
 | 脚本 | 用途 |
 |------|------|
+| `test_rdf_voxel_em.py` | 体素 EM 自由空间 / 遮挡 / 尺度报告 |
 | `test_rdf_radar_ballistics.py` | 弹道 / 风 / 阻 / DEM 交点 |
 | `test_rdf_radar_cfar.py` | CA-CFAR golden + Enforce CA 对齐 |
 | `test_rdf_radar_track.py` | 关联 / α-β / 真空拟合 |
