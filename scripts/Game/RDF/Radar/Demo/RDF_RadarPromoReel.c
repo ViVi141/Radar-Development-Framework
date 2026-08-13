@@ -1,26 +1,42 @@
 // Cinematic promo reel for screen recording.
-// Linear script, one causal chain: the radar sees the fight, then solves a round.
+// Linear script of the RDF sensor stack (not a feature gallery):
 //
-//   Act I  DETECT (SEARCH)
-//     1 COLD      empty fan, the radar is waiting
-//     2 SECTOR    crane slam, the fan lights the ground
-//     3 GROUND    column enters the fan; PPI grows plots
-//   Act II COMMIT (STARE)
-//     4 AIR       hard cut to Mi-8 in the same sector
-//     5 LOCK      crash zoom; the system chooses
-//   Act III SOLVE (WLR)
-//     6 LAUNCH    the round leaves the tube
-//     7 TRACK     ride the shell; the predicted arc is already ahead
-//     8 SOLVE     pull to god view: origin, arc, impact together
-//     9 IMPACT    slam to the cyan circle; the round arrives
-//    10 COVERAGE  pull back; the radar is still watching
+//   Act I  SEE — SEARCH
+//     1 COLD      empty fan
+//     2 SECTOR    crane slam, fan on the ground
+//     3 GROUND    column in the fan (vehicle plots)
+//     4 AIR       Mi-8 in the same sector
+//   Act II COMMIT — same sector, then choose the mover
+//     5 DOPPLER   mixed plots → PD drops the column, both helis stay
+//     6 LOCK      lock beam on engage Mi-8
+//     7 ENGAGE    Hydra70 into the locked Mi-8
+//   Act III LOCATE — WLR
+//     8 LAUNCH    mortar leaves the tube
+//     9 TRACK     ride the shell; predicted arc already ahead
+//    10 SOLVE     pull to god: origin + arc + impact
+//    11 IMPACT    slam to the cyan circle
+//   Act IV CONTESTED — picture dies, then listen
+//    12 EW        clean search returns → second Mi-8 jams, ghosts flood
+//    13 ESM       stop painting; magenta listen to the jammer
+//    14 COVERAGE  search picture restored
+//   Act III LOCATE — WLR
+//     8 LAUNCH    mortar leaves the tube
+//     9 TRACK     ride the shell; predicted arc already ahead
+//    10 SOLVE     pull to god: origin + arc + impact
+//    11 IMPACT    slam to the cyan circle
+//   Act IV CONTESTED — picture dies, then listen
+//    12 EW        clean search returns → jam wipes truth, ghosts flood
+//    13 ESM       stop painting; magenta listen to the jammer
+//    14 COVERAGE  search picture restored
+//
+// Staged from live APIs. Not in this reel (need extra stations / terrain /
+// UI the radar module does not own): dual-radar fusion, SAM salvo, RWR panel,
+// DEM ridge NLOS, LiDAR sister module.
 //
 // Workbench Play → Script Debugger:
 //   RDF_RadarPromoReel.Start();
 //   RDF_RadarPromoReel.StartLoop();
 //   RDF_RadarPromoReel.Stop();
-//
-// Start recording on shot 1 COLD. Titles go to the PPI HUD.
 class RDF_RadarPromoCamDriverClass : GenericEntityClass
 {
 }
@@ -61,10 +77,16 @@ class RDF_RadarPromoReel
     protected static const int CAM_LAUNCH = 8;
     protected static const int CAM_ARC = 9;
     protected static const int CAM_IMPACT = 10;
+    protected static const int CAM_ROCKET = 11;
+    protected static const int CAM_JAM = 12;
+    protected static const int CAM_ESM_LOOK = 13;
 
     protected static const int MODE_SEARCH = 0;
     protected static const int MODE_STARE = 1;
     protected static const int MODE_WLR = 2;
+    protected static const int MODE_PD = 3;
+    protected static const int MODE_EW = 4;
+    protected static const int MODE_ESM = 5;
 
     protected static const ResourceName GROUND_PREFAB =
         "{259EE7B78C51B624}Prefabs/Vehicles/Wheeled/UAZ469/UAZ469.et";
@@ -72,6 +94,12 @@ class RDF_RadarPromoReel
         "{6BDF7D3E72D31F29}Prefabs/Scenarios/SP01/SP01_Mi8MT_unarmed_transport.et";
     protected static const ResourceName SHELL_PREFAB =
         "{98EC9C526AFBA282}Prefabs/Weapons/Ammo/Ammo_Shell_82mm_HE_O832DU.et";
+    protected static const ResourceName ROCKET_PREFAB =
+        "{ECD8628EBF7E5F6B}Prefabs/Weapons/Ammo/Ammo_Rocket_Hydra70.et";
+    protected static const ResourceName MORTAR_PREFAB =
+        "{D1FFE458E8AC4BDB}Prefabs/Weapons/Mortars/2B14/Mortar_2B14.et";
+    protected static const ResourceName MORTAR_GUNNER_PREFAB =
+        "{DCB41B3746FDD1BE}Prefabs/Characters/Factions/OPFOR/USSR_Army/Character_USSR_Rifleman.et";
 
     protected static const int GROUND_COUNT = 4;
     protected static const float UAZ_RANGE0_M = 95.0;
@@ -82,6 +110,7 @@ class RDF_RadarPromoReel
     protected static const float AIR_ORBIT_ALT_M = 95.0;
     protected static const float AIR_ORBIT_RATE_RAD_S = 0.30;
     protected static const float AIR_ORBIT_DEPTH_FRAC = 0.22;
+    protected static const float AIR_JAM_PHASE = 3.14159265;
     protected static const float LAUNCH_FWD_M = 22.0;
     protected static const float LAUNCH_AGL_M = 8.0;
     protected static const float LOOK_SEARCH_FWD_M = 155.0;
@@ -89,7 +118,13 @@ class RDF_RadarPromoReel
     protected static const float SHELL_SPEED_COEF = 1.736;
     protected static const float SHELL_ELEVATION_DEG = 55.0;
     protected static const float SHELL_INIT_SPEED_MS = 76.0;
-    protected static const float SHELL_FIRE_DELAY_S = 0.28;
+    protected static const float SHELL_FIRE_DELAY_S = 0.20;
+    protected static const float ROCKET_FIRE_DELAY_S = 0.40;
+    protected static const float ROCKET_LAUNCH_MS = 180.0;
+    protected static const float PD_FILTER_S = 2.2;
+    protected static const float JAM_ON_S = 2.8;
+    protected static const float ESM_LISTEN_S = 1.5;
+    protected static const float PROMO_MIN_RANGE_M = 50.0;
     protected static const float SHELL_IMPACT_HOLD_S = 3.5;
     protected static const float SHELL_TOF_FALLBACK_S = 18.5;
     protected static const float TICK_MS = 33.0;
@@ -118,6 +153,7 @@ class RDF_RadarPromoReel
     protected bool m_CamSmoothInit;
     protected int m_CamSmoothShot;
     protected IEntity m_AirTarget;
+    protected IEntity m_JamHeli;
     protected ref array<IEntity> m_GroundTargets;
     protected ref array<IEntity> m_LiveShells;
     protected vector m_RadarAnchor;
@@ -130,6 +166,14 @@ class RDF_RadarPromoReel
     protected vector m_ShellApexPos;
     protected bool m_ShellApexValid;
     protected IEntity m_ActiveShell;
+    protected IEntity m_Mortar;
+    protected ChimeraCharacter m_MortarGunner;
+    protected IEntity m_MortarHeldShell;
+    protected bool m_DidStartMortarLoad;
+    protected IEntity m_Rocket;
+    protected ref RDF_RadarRocketGuidanceState m_RocketGuide;
+    protected bool m_DidFireRocket;
+    protected bool m_EmitterArmed;
     protected vector m_ShellImpactPos;
     protected bool m_ShellImpactValid;
     protected bool m_DidFireShell;
@@ -144,11 +188,15 @@ class RDF_RadarPromoReel
     protected IEntity m_PrevSubjectOverride;
     protected ref array<vector> m_ShellPath;
     protected ref array<vector> m_ShellLiveTrail;
+    protected ref array<vector> m_RocketTrail;
     protected ref RDF_DebugShapeManager m_ShellOverlay;
     protected vector m_ShellMuzzleVel;
     protected vector m_HeliSmoothPos;
     protected vector m_HeliSmoothFwd;
     protected bool m_HeliSmoothInit;
+    protected vector m_JamSmoothPos;
+    protected vector m_JamSmoothFwd;
+    protected bool m_JamSmoothInit;
     protected vector m_ConvoyLookPos;
     protected bool m_ConvoyLookInit;
 
@@ -201,6 +249,7 @@ class RDF_RadarPromoReel
         m_Shots = new array<ref RDF_RadarPromoShot>();
         m_ShellPath = new array<vector>();
         m_ShellLiveTrail = new array<vector>();
+        m_RocketTrail = new array<vector>();
         m_ShellOverlay = new RDF_DebugShapeManager();
         m_AppliedRadarMode = -1;
         m_LastSlateSecond = -1;
@@ -213,9 +262,13 @@ class RDF_RadarPromoReel
         m_ConvoyLookInit = false;
         m_ShellImpactValid = false;
         m_DidFireShell = false;
+        m_DidStartMortarLoad = false;
+        m_DidFireRocket = false;
+        m_EmitterArmed = false;
         m_DidLiveSolve = false;
         m_ShellApexValid = false;
         m_HeliSmoothInit = false;
+        m_JamSmoothInit = false;
         m_ShellTofS = SHELL_TOF_FALLBACK_S;
     }
 
@@ -264,8 +317,10 @@ class RDF_RadarPromoReel
         }
 
         SpawnGroundTargets();
-        if (!SpawnAirTarget())
+        if (!SpawnAirTargets())
             Print("[RDF Promo] Mi-8 spawn failed — continuing without air target.", LogLevel.WARNING);
+        if (!SpawnPromoMortarCrew())
+            Print("[RDF Promo] 2B14/AI spawn failed — shell will fall back to script launch.", LogLevel.WARNING);
 
         RDF_RadarAutoRunner.SetScanSubjectOverride(m_RadarVan);
         RDF_RadarAutoRunner.SetForceLocalScan(true);
@@ -313,7 +368,7 @@ class RDF_RadarPromoReel
         }
 
         Print("[RDF Promo] ========== START RECORDING NOW ==========");
-        Print("[RDF Promo] 剧本: 发现(空扇面→地面) → 选择(空中锁定) → 解算(离膛→跟踪→落点)");
+        Print("[RDF Promo] 剧本: 发现 → 锁一架打一架 → 反炮兵 → 另一架干扰后改听");
         Print("[RDF Promo] Stop() 结束。loop=" + loop.ToString());
         AnnounceShot();
     }
@@ -326,11 +381,18 @@ class RDF_RadarPromoReel
         DeleteSpawned();
         m_RadarVan = null;
         m_AirTarget = null;
+        m_JamHeli = null;
         m_ActiveShell = null;
+        m_Rocket = null;
+        m_RocketGuide = null;
         m_ShellImpactValid = false;
         m_DidFireShell = false;
+        m_DidStartMortarLoad = false;
+        m_DidFireRocket = false;
+        m_EmitterArmed = false;
         m_DidLiveSolve = false;
         m_HeliSmoothInit = false;
+        m_JamSmoothInit = false;
         m_CamSmoothInit = false;
         m_ConvoyLookInit = false;
         RDF_RadarAutoRunner.SetScanSubjectOverride(m_PrevSubjectOverride);
@@ -380,15 +442,19 @@ class RDF_RadarPromoReel
     {
         m_Shots.Clear();
         m_Shots.Insert(MakeShot("1  COLD  空扇面", 3.0, CAM_HOLD, MODE_SEARCH, 56.0));
-        m_Shots.Insert(MakeShot("2  SECTOR  扇面铺开", 5.5, CAM_CRANE, MODE_SEARCH, 48.0));
-        m_Shots.Insert(MakeShot("3  GROUND  地面进扇", 5.0, CAM_LOW, MODE_SEARCH, 32.0));
-        m_Shots.Insert(MakeShot("4  AIR  空中入画", 6.5, CAM_CHASE, MODE_STARE, 28.0));
-        m_Shots.Insert(MakeShot("5  LOCK  锁定", 3.6, CAM_LOCK, MODE_STARE, 20.0));
-        m_Shots.Insert(MakeShot("6  LAUNCH  弹丸离膛", 3.2, CAM_LAUNCH, MODE_WLR, 28.0));
-        m_Shots.Insert(MakeShot("7  TRACK  弹道跟踪", 6.0, CAM_ARC, MODE_WLR, 34.0));
-        m_Shots.Insert(MakeShot("8  SOLVE  解算", 7.5, CAM_SHELL, MODE_WLR, 64.0));
-        m_Shots.Insert(MakeShot("9  IMPACT  落点确认", 4.0, CAM_IMPACT, MODE_WLR, 36.0));
-        m_Shots.Insert(MakeShot("10 COVERAGE  全图", 5.5, CAM_PULLBACK, MODE_SEARCH, 52.0));
+        m_Shots.Insert(MakeShot("2  SECTOR  扇面铺开", 5.0, CAM_CRANE, MODE_SEARCH, 48.0));
+        m_Shots.Insert(MakeShot("3  GROUND  地面进扇", 4.5, CAM_LOW, MODE_SEARCH, 32.0));
+        m_Shots.Insert(MakeShot("4  AIR  空中入画", 5.0, CAM_CHASE, MODE_SEARCH, 28.0));
+        m_Shots.Insert(MakeShot("5  DOPPLER  滤掉地面", 7.0, CAM_CHASE, MODE_PD, 34.0));
+        m_Shots.Insert(MakeShot("6  LOCK  锁定空中", 4.2, CAM_LOCK, MODE_STARE, 20.0));
+        m_Shots.Insert(MakeShot("7  ENGAGE  制导交战", 8.0, CAM_ROCKET, MODE_STARE, 26.0));
+        m_Shots.Insert(MakeShot("8  LAUNCH  弹丸离膛", 4.5, CAM_LAUNCH, MODE_WLR, 28.0));
+        m_Shots.Insert(MakeShot("9  TRACK  弹道跟踪", 5.5, CAM_ARC, MODE_WLR, 34.0));
+        m_Shots.Insert(MakeShot("10 SOLVE  解算", 6.5, CAM_SHELL, MODE_WLR, 64.0));
+        m_Shots.Insert(MakeShot("11 IMPACT  落点确认", 3.5, CAM_IMPACT, MODE_WLR, 36.0));
+        m_Shots.Insert(MakeShot("12 EW  画面被淹没", 8.0, CAM_JAM, MODE_EW, 42.0));
+        m_Shots.Insert(MakeShot("13 ESM  改听辐射源", 6.5, CAM_ESM_LOOK, MODE_ESM, 32.0));
+        m_Shots.Insert(MakeShot("14 COVERAGE  全图", 5.5, CAM_PULLBACK, MODE_SEARCH, 52.0));
     }
 
     protected RDF_RadarPromoShot MakeShot(
@@ -452,20 +518,30 @@ class RDF_RadarPromoReel
             shotT = 0.0;
         }
 
-        if (m_AppliedRadarMode != shot.m_RadarMode)
+        int wantMode = DesiredRadarMode(shot, shotT);
+        if (m_AppliedRadarMode != wantMode)
         {
-            ApplyRadarMode(shot.m_RadarMode);
-            m_AppliedRadarMode = shot.m_RadarMode;
+            ApplyRadarMode(wantMode);
+            m_AppliedRadarMode = wantMode;
         }
 
         if (shot.m_CamStyle == CAM_LAUNCH)
             MaybeFireShell(shotT);
+        if (shot.m_CamStyle == CAM_ROCKET)
+            MaybeFireRocket(shotT);
+        UpdateRocketGuidance();
+        IgnorePromoArtillery();
+        IgnoreRocketChildren();
+        if (m_AppliedRadarMode == MODE_STARE)
+            ForceLockHeli();
+        if (shot.m_CamStyle == CAM_ESM_LOOK && shotT >= ESM_LISTEN_S)
+            ArmPromoEmitter(true);
+        else if (m_EmitterArmed)
+            ArmPromoEmitter(false);
 
+        UpdatePromoHudTitle(shot, shotT);
         DrawSlate(shot, shotT);
-        if (ShotDrawsShell(shot.m_CamStyle))
-            DrawShellOverlay();
-        else if (m_ShellOverlay)
-            m_ShellOverlay.Clear();
+        DrawPromoOverlay(shot, shotT);
         RDF_RadarAutoRunner.RefreshPresentation(false);
         ApplyCameraForShot(shot, shotT, elapsedS);
     }
@@ -532,8 +608,15 @@ class RDF_RadarPromoReel
         {
             BuildShotList();
             ClearEntityArray(m_LiveShells);
+            ClearRocket();
             m_ActiveShell = null;
             m_DidFireShell = false;
+            m_DidStartMortarLoad = false;
+            m_DidFireRocket = false;
+            m_EmitterArmed = false;
+            m_Rocket = null;
+            m_RocketGuide = null;
+            PrepareMortarHeldShell();
             m_DidLiveSolve = false;
             if (m_ShellLiveTrail)
                 m_ShellLiveTrail.Clear();
@@ -561,6 +644,54 @@ class RDF_RadarPromoReel
         Print("[RDF Promo] " + shot.m_Title
             + "  " + shot.m_DurationS.ToString() + "s");
         RDF_RadarHUD.SetModeOverride(shot.m_Title);
+    }
+
+    protected int DesiredRadarMode(RDF_RadarPromoShot shot, float shotT)
+    {
+        if (!shot)
+            return MODE_SEARCH;
+        if (shot.m_CamStyle == CAM_CHASE && shot.m_RadarMode == MODE_PD)
+        {
+            if (shotT < PD_FILTER_S)
+                return MODE_SEARCH;
+            return MODE_PD;
+        }
+        if (shot.m_CamStyle == CAM_JAM)
+        {
+            if (shotT < JAM_ON_S)
+                return MODE_SEARCH;
+            return MODE_EW;
+        }
+        return shot.m_RadarMode;
+    }
+
+    protected void UpdatePromoHudTitle(RDF_RadarPromoShot shot, float shotT)
+    {
+        if (!shot)
+            return;
+        string title = shot.m_Title;
+        if (shot.m_CamStyle == CAM_CHASE && shot.m_RadarMode == MODE_PD)
+        {
+            if (shotT < PD_FILTER_S)
+                title = "5  搜索  地面和空中混在一起";
+            else
+                title = "5  多普勒  地面被滤掉";
+        }
+        else if (shot.m_CamStyle == CAM_JAM)
+        {
+            if (shotT < JAM_ON_S)
+                title = "12  搜索  画面回来了";
+            else
+                title = "12  干扰  真目标被抹掉";
+        }
+        else if (shot.m_CamStyle == CAM_ESM_LOOK)
+        {
+            if (shotT < ESM_LISTEN_S)
+                title = "13  静默  停发";
+            else
+                title = "13  侦收  抓住辐射源";
+        }
+        RDF_RadarHUD.SetModeOverride(title);
     }
 
     protected void DrawSlate(RDF_RadarPromoShot shot, float shotT)
@@ -824,6 +955,11 @@ class RDF_RadarPromoReel
         m_ShellApexValid = true;
     }
 
+    protected vector RadarScanOrigin()
+    {
+        return m_RadarAnchor + Vector(0.0, 4.0, 0.0);
+    }
+
     protected vector StagePoint(float fwdM, float rightM, float aglM)
     {
         vector pos = Vector(
@@ -916,35 +1052,52 @@ class RDF_RadarPromoReel
         Print("[RDF Promo] ground=" + m_GroundTargets.Count().ToString());
     }
 
-    protected bool SpawnAirTarget()
+    protected bool SpawnAirTargets()
     {
-        vector pos = ComputeOrbitPos(0.0);
-        m_AirTarget = SpawnPrefabAt(AIR_PREFAB, pos);
-        if (!m_AirTarget)
-            return false;
-        m_HeliSmoothPos = pos;
-        m_HeliSmoothFwd = ComputeOrbitTangent(0.0);
-        m_HeliSmoothInit = true;
-        OrientEntityAlong(m_AirTarget, m_HeliSmoothFwd, pos);
-        PreparePromoHeliRotors(m_AirTarget);
-        Print("[RDF Promo] Mi-8 at " + pos.ToString());
-        return true;
+        bool ok = false;
+        vector posA = ComputeOrbitPos(0.0, 0.0);
+        m_AirTarget = SpawnPrefabAt(AIR_PREFAB, posA);
+        if (m_AirTarget)
+        {
+            m_HeliSmoothPos = posA;
+            m_HeliSmoothFwd = ComputeOrbitTangent(0.0, 0.0);
+            m_HeliSmoothInit = true;
+            OrientEntityAlong(m_AirTarget, m_HeliSmoothFwd, posA);
+            PreparePromoHeliRotors(m_AirTarget);
+            Print("[RDF Promo] engage Mi-8 at " + posA.ToString());
+            ok = true;
+        }
+
+        vector posB = ComputeOrbitPos(0.0, AIR_JAM_PHASE);
+        m_JamHeli = SpawnPrefabAt(AIR_PREFAB, posB);
+        if (m_JamHeli)
+        {
+            m_JamSmoothPos = posB;
+            m_JamSmoothFwd = ComputeOrbitTangent(0.0, AIR_JAM_PHASE);
+            m_JamSmoothInit = true;
+            OrientEntityAlong(m_JamHeli, m_JamSmoothFwd, posB);
+            PreparePromoHeliRotors(m_JamHeli);
+            Print("[RDF Promo] jam Mi-8 at " + posB.ToString());
+        }
+        else
+            Print("[RDF Promo] jam Mi-8 spawn failed.", LogLevel.WARNING);
+        return ok;
     }
 
-    protected vector ComputeOrbitPos(float elapsedS)
+    protected vector ComputeOrbitPos(float elapsedS, float phaseOffset)
     {
-        float phase = elapsedS * AIR_ORBIT_RATE_RAD_S;
+        float phase = elapsedS * AIR_ORBIT_RATE_RAD_S + phaseOffset;
         float lat = Math.Cos(phase) * AIR_ORBIT_RADIUS_M;
         float depth = Math.Sin(phase) * AIR_ORBIT_RADIUS_M * AIR_ORBIT_DEPTH_FRAC;
         return Vector(
             m_OrbitCenter[0] + m_FlatRight[0] * lat + m_FlatFwd[0] * depth,
-            m_OrbitCenter[1] + 8.0 * Math.Sin(elapsedS * 0.07),
+            m_OrbitCenter[1] + 8.0 * Math.Sin(elapsedS * 0.07 + phaseOffset),
             m_OrbitCenter[2] + m_FlatRight[2] * lat + m_FlatFwd[2] * depth);
     }
 
-    protected vector ComputeOrbitTangent(float elapsedS)
+    protected vector ComputeOrbitTangent(float elapsedS, float phaseOffset)
     {
-        float phase = elapsedS * AIR_ORBIT_RATE_RAD_S;
+        float phase = elapsedS * AIR_ORBIT_RATE_RAD_S + phaseOffset;
         vector t = m_FlatRight * (-Math.Sin(phase) * AIR_ORBIT_RADIUS_M)
             + m_FlatFwd * (Math.Cos(phase) * AIR_ORBIT_RADIUS_M * AIR_ORBIT_DEPTH_FRAC);
         float len = t.Length();
@@ -953,51 +1106,62 @@ class RDF_RadarPromoReel
         return t / len;
     }
 
-    protected void UpdateAirMotion(float elapsedS)
+    protected void StepHeliOrbit(
+        IEntity heli,
+        inout vector smoothPos,
+        inout vector smoothFwd,
+        inout bool smoothInit,
+        float elapsedS,
+        float phaseOffset)
     {
-        if (!m_AirTarget)
-        {
-            SpawnAirTarget();
+        if (!heli)
             return;
-        }
 
-        vector target = ComputeOrbitPos(elapsedS);
-        vector wantTan = ComputeOrbitTangent(elapsedS);
-        if (!m_HeliSmoothInit)
+        vector target = ComputeOrbitPos(elapsedS, phaseOffset);
+        vector wantTan = ComputeOrbitTangent(elapsedS, phaseOffset);
+        if (!smoothInit)
         {
-            m_HeliSmoothPos = m_AirTarget.GetOrigin();
-            m_HeliSmoothFwd = wantTan;
-            m_HeliSmoothInit = true;
+            smoothPos = heli.GetOrigin();
+            smoothFwd = wantTan;
+            smoothInit = true;
         }
 
         float follow = 0.12;
-        vector prev = m_HeliSmoothPos;
-        m_HeliSmoothPos = m_HeliSmoothPos + (target - m_HeliSmoothPos) * follow;
-        m_HeliSmoothFwd = m_HeliSmoothFwd + (wantTan - m_HeliSmoothFwd) * 0.10;
-        float fwdLen = m_HeliSmoothFwd.Length();
+        vector prev = smoothPos;
+        smoothPos = smoothPos + (target - smoothPos) * follow;
+        smoothFwd = smoothFwd + (wantTan - smoothFwd) * 0.10;
+        float fwdLen = smoothFwd.Length();
         if (fwdLen > 0.001)
-            m_HeliSmoothFwd = m_HeliSmoothFwd / fwdLen;
+            smoothFwd = smoothFwd / fwdLen;
         else
-            m_HeliSmoothFwd = wantTan;
+            smoothFwd = wantTan;
 
-        float yaw = Math.Atan2(m_HeliSmoothFwd[0], m_HeliSmoothFwd[2]) * Math.RAD2DEG;
+        float yaw = Math.Atan2(smoothFwd[0], smoothFwd[2]) * Math.RAD2DEG;
         float bank = 0.0;
-        vector delta = m_HeliSmoothPos - prev;
-        float side = delta[0] * m_HeliSmoothFwd[2] - delta[2] * m_HeliSmoothFwd[0];
+        vector delta = smoothPos - prev;
+        float side = delta[0] * smoothFwd[2] - delta[2] * smoothFwd[0];
         bank = Math.Clamp(-side * 18.0, -12.0, 12.0);
 
         vector mat[4];
         Math3D.AnglesToMatrix(Vector(yaw, 0.0, bank), mat);
-        mat[3] = m_HeliSmoothPos;
-        m_AirTarget.SetTransform(mat);
+        mat[3] = smoothPos;
+        heli.SetTransform(mat);
 
-        Physics physics = m_AirTarget.GetPhysics();
+        Physics physics = heli.GetPhysics();
         if (physics)
         {
             physics.EnableGravity(false);
             physics.SetVelocity(Vector(0.0, 0.0, 0.0));
             physics.SetAngularVelocity(Vector(0.0, 0.0, 0.0));
         }
+    }
+
+    protected void UpdateAirMotion(float elapsedS)
+    {
+        StepHeliOrbit(
+            m_AirTarget, m_HeliSmoothPos, m_HeliSmoothFwd, m_HeliSmoothInit, elapsedS, 0.0);
+        StepHeliOrbit(
+            m_JamHeli, m_JamSmoothPos, m_JamSmoothFwd, m_JamSmoothInit, elapsedS, AIR_JAM_PHASE);
     }
 
     protected IEntity SpawnPrefabAt(ResourceName prefabName, vector pos)
@@ -1018,28 +1182,223 @@ class RDF_RadarPromoReel
         return ent;
     }
 
+    protected bool SpawnPromoMortarCrew()
+    {
+        vector mortarPos = StagePoint(LAUNCH_FWD_M, 0.0, 0.05);
+        IEntity mortar = SpawnPrefabAt(MORTAR_PREFAB, mortarPos);
+        if (!mortar)
+            return false;
+
+        vector mat[4];
+        Math3D.DirectionAndUpMatrix(m_FlatFwd, vector.Up, mat);
+        mat[3] = mortarPos;
+        mortar.SetTransform(mat);
+        m_Mortar = mortar;
+
+        TurretControllerComponent turret = TurretControllerComponent.Cast(
+            mortar.FindComponent(TurretControllerComponent));
+        if (turret)
+        {
+            turret.AssembleTurret();
+            float pitchRad = SHELL_ELEVATION_DEG * Math.DEG2RAD;
+            turret.SetAimingAngles(0.0, pitchRad);
+        }
+
+        HookMortarFired();
+        RefreshMuzzleLaunchPos();
+        PredictShellArc();
+
+        vector gunnerPos = mortarPos + m_FlatRight * 1.45;
+        IEntity gunnerEnt = SpawnPrefabAt(MORTAR_GUNNER_PREFAB, gunnerPos);
+        ChimeraCharacter gunner = ChimeraCharacter.Cast(gunnerEnt);
+        if (!gunner)
+        {
+            Print("[RDF Promo] gunner prefab is not ChimeraCharacter.", LogLevel.WARNING);
+            return true;
+        }
+
+        vector toMortar = mortarPos - gunnerPos;
+        OrientEntityAlong(gunner, toMortar, gunnerPos);
+        m_MortarGunner = gunner;
+
+        AIControlComponent aiControl = AIControlComponent.Cast(
+            gunner.FindComponent(AIControlComponent));
+        if (aiControl)
+        {
+            aiControl.ActivateAI();
+            AIAgent agent = aiControl.GetAIAgent();
+            if (agent)
+                agent.PreventMaxLOD();
+        }
+
+        if (!PrepareMortarHeldShell())
+            Print("[RDF Promo] failed to put O832DU in AI hands.", LogLevel.WARNING);
+
+        IgnorePromoArtillery();
+        Print("[RDF Promo] 2B14 + AI loader at " + mortarPos.ToString());
+        return true;
+    }
+
+    protected bool PrepareMortarHeldShell()
+    {
+        if (!m_MortarGunner)
+            return false;
+
+        BaseWorld world = GetGame().GetWorld();
+        if (!world)
+            return false;
+
+        Resource prefabRes = Resource.Load(SHELL_PREFAB);
+        if (!prefabRes || !prefabRes.IsValid())
+            return false;
+
+        EntitySpawnParams spawnParams = new EntitySpawnParams();
+        Math3D.AnglesToMatrix(Vector(0, 0, 0), spawnParams.Transform);
+        spawnParams.Transform[3] = m_MortarGunner.GetOrigin() + Vector(0.0, 0.8, 0.0);
+        IEntity shell = GetGame().SpawnEntityPrefab(prefabRes, world, spawnParams);
+        if (!shell)
+            return false;
+
+        ApplyPromoShellCharge(shell, null);
+
+        InventoryStorageManagerComponent inv = InventoryStorageManagerComponent.Cast(
+            m_MortarGunner.FindComponent(InventoryStorageManagerComponent));
+        if (inv)
+            inv.TryInsertItem(shell);
+
+        SCR_GadgetManagerComponent gadgetMgr = SCR_GadgetManagerComponent.GetGadgetManager(m_MortarGunner);
+        if (gadgetMgr)
+            gadgetMgr.SetGadgetMode(shell, EGadgetMode.IN_HAND, false);
+
+        CharacterControllerComponent charCtrl = m_MortarGunner.GetCharacterController();
+        SCR_MortarShellGadgetComponent gadget = SCR_MortarShellGadgetComponent.Cast(
+            shell.FindComponent(SCR_MortarShellGadgetComponent));
+        if (charCtrl && gadget)
+            charCtrl.TakeGadgetInLeftHand(shell, gadget.GetAnimVariable(), false, true);
+
+        m_MortarHeldShell = shell;
+        return true;
+    }
+
+    protected void HookMortarFired()
+    {
+        if (!m_Mortar)
+            return;
+        SCR_MortarMuzzleComponent muzzle = SCR_MortarMuzzleComponent.Cast(
+            m_Mortar.FindComponent(SCR_MortarMuzzleComponent));
+        SCR_MuzzleEffectComponent fx;
+        if (muzzle)
+            fx = SCR_MuzzleEffectComponent.Cast(muzzle.FindComponent(SCR_MuzzleEffectComponent));
+        if (!fx)
+            fx = SCR_MuzzleEffectComponent.Cast(m_Mortar.FindComponent(SCR_MuzzleEffectComponent));
+        if (!fx)
+            return;
+        fx.GetOnWeaponFired().Insert(OnPromoMortarFired);
+    }
+
+    protected void UnhookMortarFired()
+    {
+        if (!m_Mortar)
+            return;
+        SCR_MortarMuzzleComponent muzzle = SCR_MortarMuzzleComponent.Cast(
+            m_Mortar.FindComponent(SCR_MortarMuzzleComponent));
+        SCR_MuzzleEffectComponent fx;
+        if (muzzle)
+            fx = SCR_MuzzleEffectComponent.Cast(muzzle.FindComponent(SCR_MuzzleEffectComponent));
+        if (!fx)
+            fx = SCR_MuzzleEffectComponent.Cast(m_Mortar.FindComponent(SCR_MuzzleEffectComponent));
+        if (!fx)
+            return;
+        fx.GetOnWeaponFired().Remove(OnPromoMortarFired);
+    }
+
+    protected void RefreshMuzzleLaunchPos()
+    {
+        if (!m_Mortar)
+            return;
+        TurretControllerComponent turret = TurretControllerComponent.Cast(
+            m_Mortar.FindComponent(TurretControllerComponent));
+        if (turret)
+        {
+            BaseWeaponManagerComponent weapons = turret.GetWeaponManager();
+            if (weapons)
+            {
+                vector transform[4];
+                weapons.GetCurrentMuzzleTransform(transform);
+                m_LaunchPos = transform[3];
+                return;
+            }
+        }
+        m_LaunchPos = m_Mortar.GetOrigin() + Vector(0.0, 1.1, 0.0);
+    }
+
     protected void MaybeFireShell(float shotT)
     {
         if (shotT < SHELL_FIRE_DELAY_S)
             return;
         if (m_DidFireShell)
             return;
-        TryFireShell();
+        if (m_DidStartMortarLoad)
+            return;
+        m_DidStartMortarLoad = true;
+        if (TryAiMortarFire())
+            return;
+        Print("[RDF Promo] AI mortar load failed — muzzle fallback.", LogLevel.WARNING);
+        TryFireShellFromMuzzle();
     }
 
-    protected void TryFireShell()
+    protected bool TryAiMortarFire()
+    {
+        if (!m_Mortar || !m_MortarGunner)
+            return false;
+
+        SCR_MortarMuzzleComponent muzzle = SCR_MortarMuzzleComponent.Cast(
+            m_Mortar.FindComponent(SCR_MortarMuzzleComponent));
+        if (!muzzle)
+            return false;
+
+        if (!m_MortarHeldShell)
+        {
+            if (!PrepareMortarHeldShell())
+                return false;
+        }
+
+        SCR_MortarShellGadgetComponent gadget = SCR_MortarShellGadgetComponent.Cast(
+            m_MortarHeldShell.FindComponent(SCR_MortarShellGadgetComponent));
+        if (!gadget)
+            return false;
+
+        ApplyPromoShellCharge(m_MortarHeldShell, null);
+        RefreshMuzzleLaunchPos();
+        muzzle.LoadShell(gadget, m_MortarGunner, -1, false);
+        GetGame().GetCallqueue().CallLater(FallbackMuzzleLaunchIfNeeded, 2300, false);
+        Print("[RDF Promo] AI loading 2B14");
+        return true;
+    }
+
+    protected void FallbackMuzzleLaunchIfNeeded()
+    {
+        if (!m_Running)
+            return;
+        if (m_DidFireShell)
+            return;
+        Print("[RDF Promo] mortar anim missed fire — launching from 2B14 muzzle.", LogLevel.WARNING);
+        TryFireShellFromMuzzle();
+    }
+
+    protected void TryFireShellFromMuzzle()
     {
         BaseWorld world = GetGame().GetWorld();
         if (!world)
             return;
+        if (m_DidFireShell)
+            return;
+
+        RefreshMuzzleLaunchPos();
+        vector dir = PromoMuzzleDir();
         Resource prefabRes = Resource.Load(SHELL_PREFAB);
         if (!prefabRes || !prefabRes.IsValid())
             return;
-
-        float elevRad = SHELL_ELEVATION_DEG * Math.DEG2RAD;
-        float c = Math.Cos(elevRad);
-        float s = Math.Sin(elevRad);
-        vector dir = Vector(m_FlatFwd[0] * c, s, m_FlatFwd[2] * c);
 
         EntitySpawnParams spawnParams = new EntitySpawnParams();
         Math3D.AnglesToMatrix(Vector(0, 0, 0), spawnParams.Transform);
@@ -1064,27 +1423,41 @@ class RDF_RadarPromoReel
         ApplyPromoShellCharge(shell, move);
         move.EnableSimulation(shell);
         move.SetBulletCoef(SHELL_SPEED_COEF);
-        move.Launch(dir, vector.Zero, 1.0, shell, null, null, null, null);
+        move.Launch(dir, vector.Zero, 1.0, shell, null, m_MortarGunner, null, null);
+        BindLiveShell(shell, move);
+    }
+
+    protected void BindLiveShell(IEntity shell, ProjectileMoveComponent move)
+    {
+        if (!shell)
+            return;
         m_LiveShells.Insert(shell);
         m_ActiveShell = shell;
+        RDF_RadarScattererRegistry.Unignore(shell);
         m_DidFireShell = true;
         m_DidLiveSolve = false;
         if (m_ShellLiveTrail)
             m_ShellLiveTrail.Clear();
 
-        float liveCoef = move.GetBulletSpeedCoef();
-        if (liveCoef < 0.2)
-            liveCoef = SHELL_SPEED_COEF;
-        vector liveVel = move.GetVelocity();
-        float liveSpeed = liveVel.Length();
-        if (liveSpeed < 10.0)
+        vector dir = PromoMuzzleDir();
+        float liveCoef = SHELL_SPEED_COEF;
+        vector liveVel = dir * (SHELL_INIT_SPEED_MS * liveCoef);
+        if (move)
         {
-            liveVel = dir * (SHELL_INIT_SPEED_MS * liveCoef);
-            liveSpeed = liveVel.Length();
+            liveCoef = move.GetBulletSpeedCoef();
+            if (liveCoef < 0.2)
+                liveCoef = SHELL_SPEED_COEF;
+            liveVel = move.GetVelocity();
+            float liveSpeed = liveVel.Length();
+            if (liveSpeed < 10.0)
+                liveVel = dir * (SHELL_INIT_SPEED_MS * liveCoef);
         }
         m_ShellMuzzleVel = liveVel;
 
-        bool usedEngine = ApplyEngineSimImpact(move, liveSpeed);
+        float liveSpeedBind = liveVel.Length();
+        bool usedEngine = false;
+        if (move)
+            usedEngine = ApplyEngineSimImpact(move, liveSpeedBind);
         if (usedEngine)
             m_DidLiveSolve = true;
         else
@@ -1093,7 +1466,7 @@ class RDF_RadarPromoReel
         Print("[RDF Promo] fired coef="
             + FormatOneDecimal(liveCoef)
             + " speed="
-            + FormatOneDecimal(liveSpeed)
+            + FormatOneDecimal(liveVel.Length())
             + "m/s tof="
             + FormatOneDecimal(m_ShellTofS)
             + "s impact="
@@ -1102,6 +1475,42 @@ class RDF_RadarPromoReel
         RDF_RadarPromoShot shot = CurrentShot();
         if (shot)
             StretchShellCoverage();
+    }
+
+    protected void OnPromoMortarFired(IEntity effectEntity, BaseMuzzleComponent muzzle, IEntity projectileEntity)
+    {
+        if (!m_Running)
+            return;
+        if (!projectileEntity)
+            return;
+        if (m_DidFireShell)
+            return;
+
+        RefreshMuzzleLaunchPos();
+        ProjectileMoveComponent move = ProjectileMoveComponent.Cast(
+            projectileEntity.FindComponent(ProjectileMoveComponent));
+        BindLiveShell(projectileEntity, move);
+        Print("[RDF Promo] 2B14 muzzle fired live shell");
+    }
+
+    protected vector PromoMuzzleDir()
+    {
+        if (m_Mortar)
+        {
+            SCR_MortarMuzzleComponent muzzle = SCR_MortarMuzzleComponent.Cast(
+                m_Mortar.FindComponent(SCR_MortarMuzzleComponent));
+            if (muzzle)
+            {
+                vector dir = muzzle.GetMuzzleDirection();
+                if (dir.LengthSq() > 0.01)
+                    return dir;
+            }
+        }
+        float elevRad = SHELL_ELEVATION_DEG * Math.DEG2RAD;
+        return Vector(
+            m_FlatFwd[0] * Math.Cos(elevRad),
+            Math.Sin(elevRad),
+            m_FlatFwd[2] * Math.Cos(elevRad));
     }
 
     protected float CurrentShotDuration()
@@ -1131,6 +1540,197 @@ class RDF_RadarPromoReel
             m_ActiveShell = null;
     }
 
+    protected void MaybeFireRocket(float shotT)
+    {
+        if (shotT < ROCKET_FIRE_DELAY_S)
+            return;
+        if (m_DidFireRocket)
+            return;
+        if (m_Rocket)
+            return;
+
+        IEntity locked;
+        vector aimPos;
+        bool haveAim = false;
+        RDF_RadarSensor sensor = RDF_RadarAutoRunner.GetSensor();
+        if (sensor && sensor.GetLockedTarget(locked, aimPos))
+            haveAim = true;
+        else if (m_AirTarget)
+        {
+            locked = m_AirTarget;
+            aimPos = FollowHeliPos();
+            haveAim = true;
+        }
+        if (!haveAim)
+            return;
+        if (!TryFireRocket(aimPos, locked))
+            return;
+        m_DidFireRocket = true;
+    }
+
+    protected bool TryFireRocket(vector aimPos, IEntity lockedTarget)
+    {
+        BaseWorld world = GetGame().GetWorld();
+        if (!world)
+            return false;
+        Resource prefabRes = Resource.Load(ROCKET_PREFAB);
+        if (!prefabRes)
+            return false;
+        if (!prefabRes.IsValid())
+            return false;
+
+        vector launchPos = m_RadarAnchor + Vector(0.0, 4.5, 0.0) + m_FlatFwd * 6.0;
+        vector toAim = aimPos - launchPos;
+        float dist = toAim.Length();
+        if (dist < 1.0)
+            return false;
+        vector dir = toAim * (1.0 / dist);
+
+        EntitySpawnParams spawnParams = new EntitySpawnParams();
+        Math3D.AnglesToMatrix(Vector(0, 0, 0), spawnParams.Transform);
+        spawnParams.Transform[3] = launchPos;
+        IEntity rocket = GetGame().SpawnEntityPrefab(prefabRes, world, spawnParams);
+        if (!rocket)
+            return false;
+
+        vector basis[4];
+        Math3D.DirectionAndUpMatrix(dir, vector.Up, basis);
+        basis[3] = launchPos;
+        rocket.SetTransform(basis);
+
+        MissileMoveComponent missile = MissileMoveComponent.Cast(
+            rocket.FindComponent(MissileMoveComponent));
+        if (!missile)
+        {
+            SCR_EntityHelper.DeleteEntityAndChildren(rocket);
+            return false;
+        }
+
+        missile.EnableSimulation(rocket);
+        missile.Launch(dir, vector.Zero, 1.0, rocket, null, m_RadarVan, lockedTarget, null);
+        missile.SetVelocity(dir * ROCKET_LAUNCH_MS);
+
+        m_Rocket = rocket;
+        m_RocketGuide = new RDF_RadarRocketGuidanceState();
+        m_RocketGuide.Begin(System.GetTickCount() * 0.001);
+        if (!m_RocketTrail)
+            m_RocketTrail = new array<vector>();
+        m_RocketTrail.Clear();
+        m_RocketTrail.Insert(launchPos);
+        Print("[RDF Promo] Hydra70 engage range=" + FormatOneDecimal(dist) + "m");
+        return true;
+    }
+
+    protected void UpdateRocketGuidance()
+    {
+        if (!m_Rocket)
+            return;
+        if (!m_RocketGuide)
+            return;
+
+        float dt = TICK_MS * 0.001;
+        float nowS = System.GetTickCount() * 0.001;
+        vector aimPos = FollowHeliPos();
+        vector aimVel = m_HeliSmoothFwd * (AIR_ORBIT_RATE_RAD_S * AIR_ORBIT_RADIUS_M);
+        IEntity locked;
+        vector lockPos;
+        RDF_RadarSensor sensor = RDF_RadarAutoRunner.GetSensor();
+        if (sensor && sensor.GetLockedTarget(locked, lockPos))
+        {
+            if (locked == m_AirTarget)
+                aimPos = lockPos;
+        }
+
+        RDF_RadarRocketGuidance.Update(m_Rocket, aimPos, aimVel, dt, nowS, m_RocketGuide);
+
+        vector rocketPos = m_Rocket.GetOrigin();
+        if (!m_RocketTrail)
+            m_RocketTrail = new array<vector>();
+        if (m_RocketTrail.Count() == 0)
+            m_RocketTrail.Insert(rocketPos);
+        else
+        {
+            vector last = m_RocketTrail.Get(m_RocketTrail.Count() - 1);
+            if (vector.DistanceSq(last, rocketPos) > 25.0)
+                m_RocketTrail.Insert(rocketPos);
+            while (m_RocketTrail.Count() > 40)
+                m_RocketTrail.RemoveOrdered(0);
+        }
+    }
+
+    protected void ClearRocket()
+    {
+        if (m_Rocket)
+        {
+            RDF_RadarScattererRegistry.Unregister(m_Rocket);
+            SCR_EntityHelper.DeleteEntityAndChildren(m_Rocket);
+            m_Rocket = null;
+        }
+        m_RocketGuide = null;
+        if (m_RocketTrail)
+            m_RocketTrail.Clear();
+    }
+
+    protected void ForceLockHeli()
+    {
+        if (!m_AirTarget)
+            return;
+        RDF_RadarSensor sensor = RDF_RadarAutoRunner.GetSensor();
+        if (!sensor)
+            return;
+        RDF_RadarLockManager lockMgr = sensor.GetLockManager();
+        if (!lockMgr)
+            return;
+
+        IEntity locked;
+        vector lockPos;
+        if (sensor.GetLockedTarget(locked, lockPos))
+        {
+            if (locked == m_AirTarget)
+                return;
+        }
+
+        array<ref RDF_RadarTrack> tracks = sensor.GetTracks();
+        if (!tracks)
+            return;
+        int i;
+        for (i = 0; i < tracks.Count(); i++)
+        {
+            RDF_RadarTrack tr = tracks.Get(i);
+            if (!tr)
+                continue;
+            if (tr.m_Entity != m_AirTarget)
+                continue;
+            lockMgr.LockTrackId(tr.m_TrackId);
+            return;
+        }
+    }
+
+    protected void ArmPromoEmitter(bool on)
+    {
+        IEntity emitter = m_JamHeli;
+        if (!emitter)
+            emitter = m_AirTarget;
+        if (!emitter)
+            return;
+        vector pos = FollowJamHeliPos();
+        if (on)
+        {
+            RDF_RadarEmitterRegistry.RegisterWithRadio(
+                emitter,
+                pos,
+                true,
+                1.0,
+                9000000000.0,
+                120000.0,
+                32.0);
+            m_EmitterArmed = true;
+            return;
+        }
+        RDF_RadarEmitterRegistry.SetEmitting(emitter, false);
+        m_EmitterArmed = false;
+    }
+
     protected void ApplyRadarMode(int mode)
     {
         RDF_RadarSettings cfg;
@@ -1138,8 +1738,17 @@ class RDF_RadarPromoReel
             cfg = BuildStareConfig();
         else if (mode == MODE_WLR)
             cfg = BuildWlrConfig();
+        else if (mode == MODE_PD)
+            cfg = BuildPulseDopplerConfig();
+        else if (mode == MODE_EW)
+            cfg = BuildEwConfig();
+        else if (mode == MODE_ESM)
+            cfg = BuildEsmConfig();
         else
             cfg = BuildSearchConfig();
+
+        if (mode == MODE_WLR)
+            ClearRocket();
 
         ApplySensorConfig(cfg);
         RDF_RadarSensor sensor = RDF_RadarAutoRunner.GetSensor();
@@ -1149,31 +1758,88 @@ class RDF_RadarPromoReel
             RDF_RadarHUD.SetDisplayRangeCap(2000.0);
         else if (mode == MODE_STARE)
             RDF_RadarHUD.SetDisplayRangeCap(420.0);
+        else if (mode == MODE_PD)
+            RDF_RadarHUD.SetDisplayRangeCap(640.0);
+        else if (mode == MODE_ESM)
+            RDF_RadarHUD.SetDisplayRangeCap(1400.0);
         else
             RDF_RadarHUD.SetDisplayRangeCap(720.0);
         RDF_RadarVisualSettings vis = RDF_RadarAutoRunner.GetVisualSettings();
         if (vis)
         {
+            vis.m_HideFalsePlots = true;
+            vis.m_DrawSectorSweep = true;
+            vis.m_DrawRangeRings = true;
             if (mode == MODE_WLR)
             {
                 vis.m_SectorVisualRangeM = 1400.0;
                 vis.m_DrawTrackRibbon = true;
-                vis.m_ProjectilePointSize = 3.6;
+                vis.m_PointSize = 0.85;
+                vis.m_ProjectilePointSize = 0.55;
+                vis.m_CollapsePlotsByEntity = true;
+                vis.m_DrawAfterglow = false;
+                vis.m_DrawRays = false;
+            }
+            else if (mode == MODE_PD)
+            {
+                vis.m_SectorVisualRangeM = 900.0;
+                vis.m_DrawTrackRibbon = true;
+                vis.m_DrawAfterglow = true;
+                vis.m_DrawRays = true;
+                vis.m_DrawLockBeam = true;
+                vis.m_PointSize = 1.6;
+                vis.m_RayAlpha = 0.55;
+                vis.m_LockBeamEndRadiusM = 14.0;
+                vis.m_LockBeamAlpha = 0.55;
+            }
+            else if (mode == MODE_EW)
+            {
+                vis.m_HideFalsePlots = false;
+                vis.m_SectorVisualRangeM = 900.0;
+                vis.m_DrawRays = true;
+                vis.m_DrawAfterglow = true;
+                vis.m_DrawTrackRibbon = false;
+                vis.m_PointSize = 2.2;
+                vis.m_RayAlpha = 0.70;
+            }
+            else if (mode == MODE_ESM)
+            {
+                vis.m_SectorVisualRangeM = 1100.0;
+                vis.m_DrawSectorSweep = false;
+                vis.m_DrawRangeRings = false;
+                vis.m_DrawRays = false;
+                vis.m_DrawLockBeam = false;
+                vis.m_DrawTrackRibbon = false;
+                vis.m_DrawAfterglow = false;
+                vis.m_PointSize = 3.2;
             }
             else
             {
                 vis.m_SectorVisualRangeM = 750.0;
                 vis.m_DrawTrackRibbon = false;
+                vis.m_DrawRays = false;
+                vis.m_PointSize = 0.85;
+                vis.m_ProjectilePointSize = 0.55;
             }
             if (mode == MODE_STARE)
             {
-                vis.m_LockBeamEndRadiusM = 9.0;
-                vis.m_LockBeamAlpha = 0.62;
+                vis.m_LockBeamEndRadiusM = 22.0;
+                vis.m_LockBeamAlpha = 0.82;
+                vis.m_DrawLockBeam = true;
+                vis.m_DrawRays = true;
+                vis.m_RayAlpha = 0.45;
+                vis.m_PointSize = 0.85;
+                vis.m_ProjectilePointSize = 0.55;
+                vis.m_CollapsePlotsByEntity = true;
+                vis.m_DrawAfterglow = false;
             }
-            else
+            else if (mode != MODE_PD)
             {
-                vis.m_LockBeamEndRadiusM = 4.2;
-                vis.m_LockBeamAlpha = 0.42;
+                if (mode != MODE_ESM)
+                {
+                    vis.m_LockBeamEndRadiusM = 4.2;
+                    vis.m_LockBeamAlpha = 0.42;
+                }
             }
         }
         if (mode == MODE_STARE && sensor)
@@ -1222,6 +1888,86 @@ class RDF_RadarPromoReel
         hw.Validate();
         cfg.m_Hardware = hw;
         cfg.m_KeepEntityTruth = true;
+        cfg.m_MinDistance = PROMO_MIN_RANGE_M;
+        cfg.Validate();
+        return cfg;
+    }
+
+    protected RDF_RadarSettings BuildPulseDopplerConfig()
+    {
+        RDF_RadarSettings cfg = RDF_RadarSensor.CreatePulseDopplerSettings(96);
+        cfg.m_Range = 3000.0;
+        cfg.m_SectorHalfAngleDeg = 42.0;
+        cfg.m_UpdateInterval = 0.18;
+        cfg.m_IncludeVehicles = false;
+        cfg.m_IncludeProjectiles = false;
+        cfg.m_EnablePhysicalDetection = true;
+        cfg.m_EnableDemClutter = true;
+        cfg.m_DetectionSnrDb = 2.0;
+        cfg.m_KeepEntityTruth = true;
+        cfg.m_KeepUndetected = false;
+        cfg.m_EnableCfarGate = false;
+        cfg.m_EnableMeasurementSynthesis = false;
+        cfg.m_OriginOffset = Vector(0.0, 4.0, 0.0);
+        cfg.m_MaxLosTracesPerScan = 96;
+        cfg.m_ScattererClassifyPerTick = 256;
+        cfg.m_ScattererRefreshPerTick = 512;
+        cfg.m_MinDistance = PROMO_MIN_RANGE_M;
+        cfg.Validate();
+        return cfg;
+    }
+
+    protected RDF_RadarSettings BuildEwConfig()
+    {
+        RDF_RadarSettings cfg = BuildSearchConfig();
+        cfg.m_DetectionSnrDb = 8.0;
+        cfg.m_KeepUndetected = false;
+        if (!cfg.m_EwStack)
+            cfg.m_EwStack = new RDF_RadarEwStack();
+        cfg.m_EwStack.Clear();
+
+        RDF_RadarNoiseJammerEffect jam = new RDF_RadarNoiseJammerEffect();
+        jam.m_Enabled = true;
+        jam.m_ErpW = 80000.0;
+        jam.m_BandwidthHz = 8000000.0;
+        jam.ConfigurePhysicsBeam(-18.0);
+        if (m_JamHeli)
+            jam.m_Position = FollowJamHeliPos();
+        else if (m_AirTarget)
+            jam.m_Position = FollowHeliPos();
+        else
+            jam.m_Position = StagePoint(380.0, 40.0, 40.0);
+        cfg.m_EwStack.Add(jam);
+
+        RDF_RadarDeceptionJammerEffect decoy = new RDF_RadarDeceptionJammerEffect();
+        decoy.m_Enabled = true;
+        decoy.AddFalsePlot(180.0, -22.0, 0.08, 12.0, 8.0);
+        decoy.AddFalsePlot(260.0, -8.0, 0.08, 18.0, 10.0);
+        decoy.AddFalsePlot(340.0, 6.0, 0.10, 8.0, 12.0);
+        decoy.AddFalsePlot(420.0, 16.0, 0.08, 22.0, 9.0);
+        decoy.AddFalsePlot(510.0, -14.0, 0.07, -6.0, 11.0);
+        decoy.AddFalsePlot(620.0, 28.0, 0.09, 14.0, 8.0);
+        cfg.m_EwStack.Add(decoy);
+        cfg.Validate();
+        return cfg;
+    }
+
+    protected RDF_RadarSettings BuildEsmConfig()
+    {
+        RDF_RadarSettings cfg = RDF_RadarSensor.CreateEsmSettings(96);
+        cfg.m_Range = 5000.0;
+        cfg.m_SectorHalfAngleDeg = 70.0;
+        cfg.m_UpdateInterval = 0.2;
+        cfg.m_DetectionSnrDb = 0.0;
+        cfg.m_KeepUndetected = false;
+        cfg.m_KeepEntityTruth = true;
+        cfg.m_EnableCfarGate = false;
+        cfg.m_EnableMeasurementSynthesis = false;
+        cfg.m_OriginOffset = Vector(0.0, 4.0, 0.0);
+        cfg.m_MaxLosTracesPerScan = 96;
+        cfg.m_ScattererClassifyPerTick = 256;
+        cfg.m_ScattererRefreshPerTick = 512;
+        cfg.m_MinDistance = PROMO_MIN_RANGE_M;
         cfg.Validate();
         return cfg;
     }
@@ -1257,6 +2003,7 @@ class RDF_RadarPromoReel
         hw.Validate();
         cfg.m_Hardware = hw;
         cfg.m_KeepEntityTruth = true;
+        cfg.m_MinDistance = PROMO_MIN_RANGE_M;
         cfg.Validate();
         return cfg;
     }
@@ -1288,6 +2035,7 @@ class RDF_RadarPromoReel
         cfg.m_WeaponLocateMinSpanS = 0.8;
         cfg.m_EnableBallisticPrediction = true;
         cfg.m_ShellAirDrag = RDF_RadarBallistics.AIR_DRAG_SHELL_82MM_HE;
+        cfg.m_MinDistance = PROMO_MIN_RANGE_M;
         cfg.Validate();
         return cfg;
     }
@@ -1334,14 +2082,27 @@ class RDF_RadarPromoReel
         }
         else if (style == CAM_CHASE)
         {
-            ChaseCamera(eye, lookAt, shotT, elapsedS, u);
-            fov = Math.Lerp(22.0, 38.0, u);
+            if (shot.m_RadarMode == MODE_PD)
+            {
+                DopplerCamera(eye, lookAt, elapsedS, u);
+                fov = Math.Lerp(42.0, 34.0, u);
+            }
+            else
+            {
+                ChaseCamera(eye, lookAt, shotT, elapsedS, u);
+                fov = Math.Lerp(22.0, 38.0, u);
+            }
         }
         else if (style == CAM_LOCK)
         {
             float punch = EaseInCubic(uLin);
             LockPunchCamera(eye, lookAt, elapsedS, punch);
-            fov = Math.Lerp(32.0, 16.0, punch);
+            fov = Math.Lerp(38.0, 22.0, punch);
+        }
+        else if (style == CAM_ROCKET)
+        {
+            RideRocketCamera(eye, lookAt, u);
+            fov = Math.Lerp(32.0, 24.0, u);
         }
         else if (style == CAM_LAUNCH)
         {
@@ -1363,6 +2124,36 @@ class RDF_RadarPromoReel
             float slam = EaseInCubic(uLin);
             ImpactCamera(eye, lookAt, slam);
             fov = Math.Lerp(48.0, 28.0, slam);
+        }
+        else if (style == CAM_JAM)
+        {
+            float jamU = 0.0;
+            if (shotT > JAM_ON_S)
+            {
+                float span = shot.m_DurationS - JAM_ON_S;
+                if (span > 0.001)
+                    jamU = (shotT - JAM_ON_S) / span;
+                if (jamU > 1.0)
+                    jamU = 1.0;
+                jamU = Smooth01(jamU);
+            }
+            JamCamera(eye, lookAt, jamU);
+            fov = Math.Lerp(38.0, 32.0, jamU);
+        }
+        else if (style == CAM_ESM_LOOK)
+        {
+            float listenU = 0.0;
+            if (shotT > ESM_LISTEN_S)
+            {
+                float span = shot.m_DurationS - ESM_LISTEN_S;
+                if (span > 0.001)
+                    listenU = (shotT - ESM_LISTEN_S) / span;
+                if (listenU > 1.0)
+                    listenU = 1.0;
+                listenU = Smooth01(listenU);
+            }
+            EsmCamera(eye, lookAt, listenU);
+            fov = Math.Lerp(40.0, 28.0, listenU);
         }
         else
         {
@@ -1411,6 +2202,12 @@ class RDF_RadarPromoReel
             return 0.05;
         if (style == CAM_SHELL)
             return 0.12;
+        if (style == CAM_ROCKET)
+            return 0.08;
+        if (style == CAM_JAM)
+            return 0.10;
+        if (style == CAM_ESM_LOOK)
+            return 0.12;
         if (style == CAM_CRANE)
             return 0.08;
         return 0.06;
@@ -1455,6 +2252,15 @@ class RDF_RadarPromoReel
         if (m_AirTarget)
             return m_AirTarget.GetOrigin();
         return m_OrbitCenter;
+    }
+
+    protected vector FollowJamHeliPos()
+    {
+        if (m_JamSmoothInit)
+            return m_JamSmoothPos;
+        if (m_JamHeli)
+            return m_JamHeli.GetOrigin();
+        return FollowHeliPos();
     }
 
     protected void CommitCamera()
@@ -1554,6 +2360,329 @@ class RDF_RadarPromoReel
         if (style == CAM_IMPACT)
             return true;
         return false;
+    }
+
+    protected vector FalsePlotWorld(float rangeM, float azimuthDeg, float elevationDeg)
+    {
+        float az = azimuthDeg * Math.DEG2RAD;
+        float el = elevationDeg * Math.DEG2RAD;
+        vector flat = m_FlatFwd * Math.Cos(az) + m_FlatRight * Math.Sin(az);
+        float flatLen = flat.Length();
+        if (flatLen > 0.001)
+            flat = flat * (1.0 / flatLen);
+        else
+            flat = m_FlatFwd;
+        vector origin = RadarScanOrigin();
+        return origin + flat * (rangeM * Math.Cos(el)) + Vector(0.0, rangeM * Math.Sin(el), 0.0);
+    }
+
+    protected void DrawPromoOverlay(RDF_RadarPromoShot shot, float shotT)
+    {
+        if (!shot)
+            return;
+        if (ShotDrawsShell(shot.m_CamStyle))
+        {
+            DrawShellOverlay();
+            return;
+        }
+
+        if (!m_ShellOverlay)
+            m_ShellOverlay = new RDF_DebugShapeManager();
+        m_ShellOverlay.Clear();
+
+        ShapeFlags flags = ShapeFlags.NOOUTLINE | ShapeFlags.NOZBUFFER | ShapeFlags.TRANSP;
+        int style = shot.m_CamStyle;
+        if (shot.m_RadarMode == MODE_PD)
+            DrawDopplerOverlay(flags, shotT);
+        if (m_AppliedRadarMode == MODE_STARE)
+            DrawLockConeOverlay(flags);
+        if (style == CAM_ROCKET)
+            DrawRocketOverlay(flags);
+        if (m_AppliedRadarMode == MODE_EW)
+            DrawEwOverlay(flags);
+        if (m_AppliedRadarMode == MODE_ESM)
+        {
+            if (m_EmitterArmed)
+                DrawEsmOverlay(flags);
+        }
+    }
+
+    protected void DrawVelocityStreak(
+        vector pos,
+        vector velDir,
+        float lengthM,
+        float headR,
+        int color,
+        ShapeFlags flags)
+    {
+        float dirLen = velDir.Length();
+        if (dirLen < 0.001)
+            return;
+        vector dir = velDir * (1.0 / dirLen);
+        vector tail = pos - dir * lengthM;
+        m_ShellOverlay.AddLine(pos, tail, color, flags);
+        m_ShellOverlay.AddSphere(pos, headR, color, flags);
+        m_ShellOverlay.AddSphere(pos - dir * (lengthM * 0.38), headR * 0.62, color, flags);
+        m_ShellOverlay.AddSphere(tail, headR * 0.32, color, flags);
+    }
+
+    protected void DrawBeamCone(
+        vector origin,
+        vector aim,
+        float endRadiusM,
+        int coreColor,
+        int wallColor,
+        ShapeFlags flags)
+    {
+        vector toAim = aim - origin;
+        float dist = toAim.Length();
+        if (dist < 1.0)
+            return;
+        vector dir = toAim * (1.0 / dist);
+        vector side = Vector(dir[2], 0.0, -dir[0]);
+        float sideLen = side.Length();
+        if (sideLen < 0.001)
+            side = Vector(1.0, 0.0, 0.0);
+        else
+            side = side * (1.0 / sideLen);
+        vector binormal = Vector(
+            dir[1] * side[2] - dir[2] * side[1],
+            dir[2] * side[0] - dir[0] * side[2],
+            dir[0] * side[1] - dir[1] * side[0]);
+        float binLen = binormal.Length();
+        if (binLen > 0.001)
+            binormal = binormal * (1.0 / binLen);
+
+        m_ShellOverlay.AddLine(origin, aim, coreColor, flags);
+
+        int spokes = 10;
+        int i;
+        for (i = 0; i < spokes; i++)
+        {
+            float ang = (Math.PI2 * i) / spokes;
+            vector offset = side * (Math.Cos(ang) * endRadiusM)
+                + binormal * (Math.Sin(ang) * endRadiusM);
+            m_ShellOverlay.AddLine(origin, aim + offset, wallColor, flags);
+        }
+
+        int ring;
+        for (ring = 1; ring <= 3; ring++)
+        {
+            float t = ring / 3.0;
+            vector centre = origin + dir * (dist * t);
+            float r = endRadiusM * t;
+            m_ShellOverlay.AddCircleXZ(centre, r, wallColor, 16, flags);
+        }
+        m_ShellOverlay.AddSphere(aim, 4.8, coreColor, flags);
+        m_ShellOverlay.AddSphere(aim, 2.0, ARGBF(1.0, 1.0, 0.92, 0.55), flags);
+    }
+
+    protected void DrawAlivePlot(vector pos, ShapeFlags flags)
+    {
+        vector drop = pos;
+        BaseWorld world = GetGame().GetWorld();
+        if (world)
+            drop[1] = world.GetSurfaceY(pos[0], pos[2]) + 0.6;
+        else
+            drop[1] = m_RadarAnchor[1];
+        m_ShellOverlay.AddSphere(pos, 4.2, ARGBF(0.9, 0.2, 1.0, 0.35), flags);
+        m_ShellOverlay.AddLine(pos, drop, ARGBF(0.7, 0.3, 1.0, 0.4), flags);
+        m_ShellOverlay.AddCircleXZ(drop, 5.0, ARGBF(0.65, 0.25, 1.0, 0.35), 10, flags);
+    }
+
+    protected void DrawClutterReject(vector pos, ShapeFlags flags)
+    {
+        vector drop = pos;
+        BaseWorld world = GetGame().GetWorld();
+        if (world)
+            drop[1] = world.GetSurfaceY(pos[0], pos[2]) + 0.6;
+        else
+            drop[1] = m_RadarAnchor[1];
+        int grey = ARGBF(0.7, 0.45, 0.45, 0.45);
+        m_ShellOverlay.AddSphere(pos, 3.4, grey, flags);
+        vector a = pos + m_FlatRight * 5.5 + Vector(0.0, 5.5, 0.0);
+        vector b = pos - m_FlatRight * 5.5 - Vector(0.0, 5.5, 0.0);
+        vector c = pos + m_FlatRight * 5.5 - Vector(0.0, 5.5, 0.0);
+        vector d = pos - m_FlatRight * 5.5 + Vector(0.0, 5.5, 0.0);
+        m_ShellOverlay.AddLine(a, b, grey, flags);
+        m_ShellOverlay.AddLine(c, d, grey, flags);
+        m_ShellOverlay.AddLine(pos, drop, ARGBF(0.4, 0.4, 0.4, 0.4), flags);
+    }
+
+    protected void DrawAirDopplerMark(
+        vector pos,
+        vector velDir,
+        bool filtered,
+        bool selected,
+        ShapeFlags flags)
+    {
+        if (!filtered)
+        {
+            DrawAlivePlot(pos, flags);
+            return;
+        }
+
+        vector dir = velDir;
+        float dirLen = dir.Length();
+        if (dirLen < 0.001)
+            dir = m_FlatFwd;
+        DrawVelocityStreak(
+            pos,
+            dir,
+            48.0,
+            4.2,
+            ARGBF(0.95, 0.15, 0.95, 1.0),
+            flags);
+        if (selected)
+            m_ShellOverlay.AddCircleXZ(
+                pos,
+                14.0,
+                ARGBF(0.75, 0.2, 0.85, 1.0),
+                16,
+                flags);
+    }
+
+    protected void DrawDopplerOverlay(ShapeFlags flags, float shotT)
+    {
+        bool filtered = false;
+        if (shotT >= PD_FILTER_S)
+            filtered = true;
+
+        DrawAirDopplerMark(
+            FollowHeliPos() + Vector(0.0, 1.4, 0.0),
+            m_HeliSmoothFwd,
+            filtered,
+            true,
+            flags);
+        if (m_JamHeli)
+            DrawAirDopplerMark(
+                FollowJamHeliPos() + Vector(0.0, 1.4, 0.0),
+                m_JamSmoothFwd,
+                filtered,
+                false,
+                flags);
+
+        if (!m_GroundTargets)
+            return;
+        int i;
+        for (i = 0; i < m_GroundTargets.Count(); i++)
+        {
+            IEntity ent = m_GroundTargets.Get(i);
+            if (!ent)
+                continue;
+            vector pos = ent.GetOrigin() + Vector(0.0, 1.4, 0.0);
+            if (filtered)
+                DrawClutterReject(pos, flags);
+            else
+                DrawAlivePlot(pos, flags);
+        }
+    }
+
+    protected void DrawLockConeOverlay(ShapeFlags flags)
+    {
+        vector origin = RadarScanOrigin();
+        vector aim = FollowHeliPos();
+        IEntity locked;
+        vector lockPos;
+        RDF_RadarSensor sensor = RDF_RadarAutoRunner.GetSensor();
+        if (sensor && sensor.GetLockedTarget(locked, lockPos))
+            aim = lockPos;
+        DrawBeamCone(
+            origin,
+            aim,
+            20.0,
+            ARGBF(0.95, 1.0, 0.28, 0.12),
+            ARGBF(0.55, 1.0, 0.22, 0.10),
+            flags);
+    }
+
+    protected void DrawRocketOverlay(ShapeFlags flags)
+    {
+        vector rocketPos = m_RadarAnchor + m_FlatFwd * 8.0 + Vector(0.0, 6.0, 0.0);
+        if (m_Rocket)
+            rocketPos = m_Rocket.GetOrigin();
+        m_ShellOverlay.AddSphere(rocketPos, 1.15, ARGBF(0.92, 1.0, 0.45, 0.08), flags);
+        m_ShellOverlay.AddSphere(rocketPos, 0.45, ARGBF(1.0, 1.0, 0.85, 0.35), flags);
+        if (m_RocketTrail && m_RocketTrail.Count() >= 2)
+            m_ShellOverlay.AddPolyLine(m_RocketTrail, ARGBF(1.0, 1.0, 0.35, 0.08), flags);
+
+        vector drop = rocketPos;
+        BaseWorld world = GetGame().GetWorld();
+        if (world)
+            drop[1] = world.GetSurfaceY(rocketPos[0], rocketPos[2]) + 0.6;
+        else
+            drop[1] = m_RadarAnchor[1];
+        m_ShellOverlay.AddLine(rocketPos, drop, ARGBF(0.55, 1.0, 0.7, 0.25), flags);
+        m_ShellOverlay.AddCircleXZ(drop, 2.4, ARGBF(0.6, 1.0, 0.55, 0.12), 10, flags);
+    }
+
+    protected void DrawEwOverlay(ShapeFlags flags)
+    {
+        vector origin = RadarScanOrigin();
+        vector heli = FollowJamHeliPos();
+        m_ShellOverlay.AddSphere(heli, 10.0, ARGBF(0.72, 1.0, 0.45, 0.08), flags);
+        m_ShellOverlay.AddSphere(heli, 4.5, ARGBF(0.95, 1.0, 0.22, 0.06), flags);
+        m_ShellOverlay.AddLine(heli, origin, ARGBF(0.55, 1.0, 0.4, 0.08), flags);
+
+        int ghostCount = 0;
+        RDF_RadarSensor sensor = RDF_RadarAutoRunner.GetSensor();
+        if (sensor)
+        {
+            array<ref RDF_RadarTarget> plots = sensor.GetPlots();
+            if (plots)
+            {
+                int i;
+                for (i = 0; i < plots.Count(); i++)
+                {
+                    RDF_RadarTarget t = plots.Get(i);
+                    if (!t)
+                        continue;
+                    if (!t.m_IsFalsePlot)
+                        continue;
+                    DrawFalsePlotMarker(t.m_Position, origin, flags);
+                    ghostCount = ghostCount + 1;
+                }
+            }
+        }
+        if (ghostCount > 0)
+            return;
+
+        DrawFalsePlotMarker(FalsePlotWorld(180.0, -22.0, 8.0), origin, flags);
+        DrawFalsePlotMarker(FalsePlotWorld(260.0, -8.0, 10.0), origin, flags);
+        DrawFalsePlotMarker(FalsePlotWorld(340.0, 6.0, 12.0), origin, flags);
+        DrawFalsePlotMarker(FalsePlotWorld(420.0, 16.0, 9.0), origin, flags);
+        DrawFalsePlotMarker(FalsePlotWorld(510.0, -14.0, 11.0), origin, flags);
+        DrawFalsePlotMarker(FalsePlotWorld(620.0, 28.0, 8.0), origin, flags);
+    }
+
+    protected void DrawFalsePlotMarker(vector pos, vector origin, ShapeFlags flags)
+    {
+        vector drop = pos;
+        BaseWorld world = GetGame().GetWorld();
+        if (world)
+            drop[1] = world.GetSurfaceY(pos[0], pos[2]) + 0.7;
+        else
+            drop[1] = m_RadarAnchor[1];
+        m_ShellOverlay.AddSphere(pos, 7.0, ARGBF(0.88, 0.95, 0.95, 1.0), flags);
+        m_ShellOverlay.AddSphere(pos, 3.0, ARGBF(1.0, 1.0, 1.0, 1.0), flags);
+        m_ShellOverlay.AddLine(pos, drop, ARGBF(0.8, 0.9, 0.9, 1.0), flags);
+        m_ShellOverlay.AddLine(origin, pos, ARGBF(0.35, 0.85, 0.85, 1.0), flags);
+        m_ShellOverlay.AddCircleXZ(drop, 10.0, ARGBF(0.7, 0.9, 0.9, 1.0), 12, flags);
+    }
+
+    protected void DrawEsmOverlay(ShapeFlags flags)
+    {
+        vector origin = RadarScanOrigin();
+        vector heli = FollowJamHeliPos();
+        DrawBeamCone(
+            origin,
+            heli,
+            16.0,
+            ARGBF(0.95, 0.95, 0.15, 0.85),
+            ARGBF(0.55, 0.85, 0.12, 0.75),
+            flags);
+        m_ShellOverlay.AddSphere(heli, 8.0, ARGBF(0.8, 0.95, 0.2, 0.85), flags);
+        m_ShellOverlay.AddSphere(origin, 3.2, ARGBF(0.9, 0.9, 0.2, 0.8), flags);
     }
 
     protected void StretchShellCoverage()
@@ -1782,7 +2911,7 @@ class RDF_RadarPromoReel
         if (m_HeliSmoothInit)
             tan = m_HeliSmoothFwd;
         else
-            tan = ComputeOrbitTangent(elapsedS);
+            tan = ComputeOrbitTangent(elapsedS, 0.0);
         vector right = Vector(tan[2], 0.0, -tan[0]);
         float dist = Math.Lerp(16.0, 38.0, u);
         float height = Math.Lerp(4.2, 14.0, u);
@@ -1794,24 +2923,85 @@ class RDF_RadarPromoReel
 
     protected void LockPunchCamera(out vector eye, out vector lookAt, float elapsedS, float u)
     {
+        vector origin = RadarScanOrigin();
         vector heli = FollowHeliPos();
-        vector tan = m_FlatFwd;
-        if (m_HeliSmoothInit)
-            tan = m_HeliSmoothFwd;
+        vector toHeli = heli - origin;
+        float dist = toHeli.Length();
+        if (dist < 8.0)
+            dist = 8.0;
+        vector dir = toHeli * (1.0 / dist);
+        vector side = Vector(dir[2], 0.0, -dir[0]);
+        float sideLen = side.Length();
+        if (sideLen > 0.001)
+            side = side * (1.0 / sideLen);
         else
-            tan = ComputeOrbitTangent(elapsedS);
-        vector right = Vector(tan[2], 0.0, -tan[0]);
-        float dist = Math.Lerp(26.0, 9.5, u);
-        float height = Math.Lerp(7.5, 3.2, u);
-        eye = heli - tan * dist + right * 4.0 + Vector(0.0, height, 0.0);
-        lookAt = heli + Vector(0.0, 0.6, 0.0);
+            side = m_FlatRight;
+
+        float along = Math.Lerp(dist * 0.10, dist * 0.72, u);
+        float lateral = Math.Lerp(22.0, 7.0, u);
+        float height = Math.Lerp(10.0, 4.0, u);
+        eye = origin + dir * along + side * lateral + Vector(0.0, height, 0.0);
+        lookAt = heli + Vector(0.0, 1.2, 0.0);
+        eye = LiftEye(eye);
+    }
+
+    protected void DopplerCamera(out vector eye, out vector lookAt, float elapsedS, float u)
+    {
+        vector heli = FollowHeliPos();
+        vector jam = FollowJamHeliPos();
+        vector convoy = StagePoint(140.0, 0.0, 1.4);
+        if (m_GroundTargets)
+        {
+            if (m_GroundTargets.Count() > 1)
+            {
+                IEntity lead = m_GroundTargets.Get(1);
+                if (lead)
+                    convoy = lead.GetOrigin() + Vector(0.0, 1.2, 0.0);
+            }
+        }
+
+        vector eye0 = StagePoint(28.0, -92.0, 16.0);
+        vector eye1 = StagePoint(110.0, -78.0, 38.0);
+        eye = LerpVec(eye0, eye1, u);
+        vector airMid = LerpVec(heli, jam, 0.42);
+        vector look0 = convoy;
+        vector look1 = LerpVec(airMid, convoy, 0.18);
+        lookAt = LerpVec(look0, look1, u);
+        eye = LiftEyeMin(eye, 2.0);
+    }
+
+    protected void JamCamera(out vector eye, out vector lookAt, float u)
+    {
+        vector sector = StagePoint(220.0, 8.0, 10.0);
+        vector heli = FollowJamHeliPos();
+        lookAt = LerpVec(sector, heli, u * 0.62);
+        eye = StagePoint(
+            Math.Lerp(55.0, 130.0, u),
+            -102.0,
+            Math.Lerp(22.0, 40.0, u));
+        eye = LiftEye(eye);
+    }
+
+    protected void EsmCamera(out vector eye, out vector lookAt, float u)
+    {
+        vector sector = StagePoint(210.0, 0.0, 10.0);
+        vector origin = RadarScanOrigin();
+        vector heli = FollowJamHeliPos();
+        vector mid = LerpVec(origin, heli, 0.58);
+        lookAt = LerpVec(sector, mid, u);
+        eye = StagePoint(
+            Math.Lerp(70.0, 150.0, u),
+            -98.0,
+            Math.Lerp(20.0, 34.0, u));
         eye = LiftEye(eye);
     }
 
     protected void LaunchCamera(out vector eye, out vector lookAt, float u)
     {
-        eye = StagePoint(LAUNCH_FWD_M - 5.5, -4.2, 1.35);
-        lookAt = m_LaunchPos + Vector(0.0, 6.0 + u * 22.0, 0.0);
+        eye = StagePoint(LAUNCH_FWD_M - 6.5, -5.0, 1.45);
+        lookAt = m_LaunchPos + Vector(0.0, 2.2 + u * 16.0, 0.0);
+        if (m_Mortar)
+            lookAt = LerpVec(m_Mortar.GetOrigin() + Vector(0.0, 1.4, 0.0), lookAt, u * 0.55);
         if (m_ActiveShell)
             lookAt = LerpVec(m_LaunchPos + Vector(0.0, 4.0, 0.0), m_ActiveShell.GetOrigin(), 0.35 + u * 0.65);
         eye = LiftEyeMin(eye, 1.1);
@@ -1832,6 +3022,48 @@ class RDF_RadarPromoReel
             + right * Math.Lerp(22.0, 16.0, u)
             + Vector(0.0, Math.Lerp(5.0, 12.0, u), 0.0);
         lookAt = shell + tan * 40.0 + Vector(0.0, 4.0, 0.0);
+        eye = LiftEyeMin(eye, 2.0);
+    }
+
+    protected void RideRocketCamera(out vector eye, out vector lookAt, float u)
+    {
+        vector heli = FollowHeliPos();
+        vector rocketPos = m_RadarAnchor + m_FlatFwd * 8.0 + Vector(0.0, 6.0, 0.0);
+        if (m_Rocket)
+            rocketPos = m_Rocket.GetOrigin();
+
+        vector tan = m_FlatFwd;
+        if (m_Rocket)
+        {
+            MissileMoveComponent missile = MissileMoveComponent.Cast(
+                m_Rocket.FindComponent(MissileMoveComponent));
+            if (missile)
+            {
+                vector vel = missile.GetVelocity();
+                float speed = vel.Length();
+                if (speed > 8.0)
+                    tan = vel * (1.0 / speed);
+            }
+        }
+        vector right = Vector(tan[2], 0.0, -tan[0]);
+        float rightLen = right.Length();
+        if (rightLen > 0.001)
+            right = right * (1.0 / rightLen);
+        else
+            right = m_FlatRight;
+
+        float along = vector.Dot(heli - rocketPos, tan);
+        bool passed = false;
+        if (along < 6.0)
+            passed = true;
+
+        eye = rocketPos - tan * Math.Lerp(22.0, 14.0, u)
+            + right * 11.0
+            + Vector(0.0, Math.Lerp(4.5, 7.0, u), 0.0);
+        if (passed)
+            lookAt = rocketPos + tan * 36.0;
+        else
+            lookAt = LerpVec(rocketPos + tan * 18.0, heli, 0.55);
         eye = LiftEyeMin(eye, 2.0);
     }
 
@@ -1965,8 +3197,6 @@ class RDF_RadarPromoReel
         if (!m_ShellImpactValid)
             impact = StagePoint(LAUNCH_FWD_M + 900.0, 0.0, 0.5);
 
-        m_ShellOverlay.AddSphere(m_LaunchPos, 4.0, ARGBF(0.95, 1.0, 0.55, 0.12), flags);
-        m_ShellOverlay.AddSphere(impact, 5.0, ARGBF(0.95, 0.15, 0.85, 1.0), flags);
         m_ShellOverlay.AddLine(m_LaunchPos, impact, ARGBF(0.45, 0.85, 0.85, 0.85), flags);
 
         vector launchGround = m_LaunchPos;
@@ -1995,10 +3225,10 @@ class RDF_RadarPromoReel
         else
             drop[1] = m_RadarAnchor[1];
 
-        m_ShellOverlay.AddSphere(shellPos, 5.0, ARGBF(1.0, 1.0, 0.25, 0.08), flags);
-        m_ShellOverlay.AddSphere(shellPos, 2.2, ARGBF(1.0, 1.0, 0.85, 0.35), flags);
+        m_ShellOverlay.AddSphere(shellPos, 1.35, ARGBF(1.0, 1.0, 0.25, 0.08), flags);
+        m_ShellOverlay.AddSphere(shellPos, 0.55, ARGBF(1.0, 1.0, 0.85, 0.35), flags);
         m_ShellOverlay.AddLine(shellPos, drop, ARGBF(0.9, 1.0, 0.9, 0.35), flags);
-        m_ShellOverlay.AddCircleXZ(drop, 6.0, ARGBF(0.85, 1.0, 0.85, 0.25), 12, flags);
+        m_ShellOverlay.AddCircleXZ(drop, 3.0, ARGBF(0.85, 1.0, 0.85, 0.25), 12, flags);
     }
 
     protected void UpdateLiveShellPrediction()
@@ -2086,8 +3316,75 @@ class RDF_RadarPromoReel
         return (a + b) * 0.5;
     }
 
+    protected bool IsLivePromoShell(IEntity ent)
+    {
+        if (!ent || !m_LiveShells)
+            return false;
+        if (m_LiveShells.Find(ent) >= 0)
+            return true;
+        return false;
+    }
+
+    protected void IgnoreEntityTree(IEntity ent)
+    {
+        if (!ent)
+            return;
+        if (IsLivePromoShell(ent))
+            return;
+        RDF_RadarScattererRegistry.Ignore(ent);
+        IEntity child = ent.GetChildren();
+        while (child)
+        {
+            IgnoreEntityTree(child);
+            child = child.GetSibling();
+        }
+    }
+
+    protected void IgnorePromoArtillery()
+    {
+        IgnoreEntityTree(m_Mortar);
+        IgnoreEntityTree(m_MortarGunner);
+        if (m_MortarHeldShell)
+        {
+            if (!IsLivePromoShell(m_MortarHeldShell))
+                RDF_RadarScattererRegistry.Ignore(m_MortarHeldShell);
+        }
+    }
+
+    protected void IgnoreRocketChildren()
+    {
+        if (!m_Rocket)
+            return;
+        IEntity child = m_Rocket.GetChildren();
+        while (child)
+        {
+            IgnoreEntityTree(child);
+            child = child.GetSibling();
+        }
+    }
+
     protected void DeleteSpawned()
     {
+        ClearRocket();
+        UnhookMortarFired();
+        if (m_MortarGunner)
+        {
+            RDF_RadarScattererRegistry.Unregister(m_MortarGunner);
+            SCR_EntityHelper.DeleteEntityAndChildren(m_MortarGunner);
+            m_MortarGunner = null;
+        }
+        m_MortarHeldShell = null;
+        if (m_Mortar)
+        {
+            RDF_RadarScattererRegistry.Unregister(m_Mortar);
+            SCR_EntityHelper.DeleteEntityAndChildren(m_Mortar);
+            m_Mortar = null;
+        }
+        if (m_JamHeli)
+            RDF_RadarEmitterRegistry.SetEmitting(m_JamHeli, false);
+        if (m_AirTarget)
+            RDF_RadarEmitterRegistry.SetEmitting(m_AirTarget, false);
+        m_EmitterArmed = false;
         ClearEntityArray(m_GroundTargets);
         ClearEntityArray(m_LiveShells);
         if (m_AirTarget)
@@ -2095,6 +3392,12 @@ class RDF_RadarPromoReel
             RDF_RadarScattererRegistry.Unregister(m_AirTarget);
             SCR_EntityHelper.DeleteEntityAndChildren(m_AirTarget);
             m_AirTarget = null;
+        }
+        if (m_JamHeli)
+        {
+            RDF_RadarScattererRegistry.Unregister(m_JamHeli);
+            SCR_EntityHelper.DeleteEntityAndChildren(m_JamHeli);
+            m_JamHeli = null;
         }
         if (m_RadarVan)
         {

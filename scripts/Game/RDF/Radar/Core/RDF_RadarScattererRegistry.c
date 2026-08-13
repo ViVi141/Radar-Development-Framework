@@ -72,6 +72,7 @@ class RDF_RadarScattererRegistry
     // spawned target waits behind a backlog that never drains.
     protected static ref map<IEntity, bool> s_Seen;
     protected static ref array<IEntity> s_SeenPruneScratch;
+    protected static ref map<IEntity, bool> s_Ignored;
     protected static ref map<string, ref array<ref RDF_RadarScatterer>> s_CellBuckets;
 
     protected static float s_GridCellSizeM = 256.0;
@@ -336,6 +337,32 @@ class RDF_RadarScattererRegistry
     }
 
     //------------------------------------------------------------------------------------------------
+    //! Keep this entity out of discovery / scan. Survives Unregister.
+    static void Ignore(IEntity entity)
+    {
+        if (!entity)
+            return;
+        Unregister(entity);
+        EnsureContainers();
+        if (!s_Ignored.Contains(entity))
+            s_Ignored.Insert(entity, true);
+        if (!s_Seen.Contains(entity))
+            s_Seen.Insert(entity, true);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    //! Allow discovery again (e.g. a shell after it leaves the tube).
+    static void Unignore(IEntity entity)
+    {
+        if (!entity)
+            return;
+        EnsureContainers();
+        if (s_Ignored.Contains(entity))
+            s_Ignored.Remove(entity);
+        ForgetSeen(entity);
+    }
+
+    //------------------------------------------------------------------------------------------------
     static void SetEmitting(IEntity entity, bool emitting)
     {
         RDF_RadarScatterer entry = Find(entity);
@@ -383,6 +410,8 @@ class RDF_RadarScattererRegistry
         s_ByEntity.Clear();
         s_Pending.Clear();
         s_Seen.Clear();
+        if (s_Ignored)
+            s_Ignored.Clear();
         s_CellBuckets.Clear();
         s_RefreshCursor = 0;
         s_LastDiscoveryTime = -1000.0;
@@ -609,6 +638,8 @@ class RDF_RadarScattererRegistry
     {
         if (!entity)
             return;
+        if (s_Ignored && s_Ignored.Contains(entity))
+            return;
         if (s_Seen.Contains(entity))
             return;
         s_Seen.Insert(entity, true);
@@ -628,6 +659,8 @@ class RDF_RadarScattererRegistry
             processed = processed + 1;
 
             if (!ent)
+                continue;
+            if (s_Ignored && s_Ignored.Contains(ent))
                 continue;
             if (Find(ent))
                 continue;
@@ -1105,6 +1138,8 @@ class RDF_RadarScattererRegistry
             s_DiscoveryScratch = new array<IEntity>();
         if (!s_Seen)
             s_Seen = new map<IEntity, bool>();
+        if (!s_Ignored)
+            s_Ignored = new map<IEntity, bool>();
         if (!s_SeenPruneScratch)
             s_SeenPruneScratch = new array<IEntity>();
         if (!s_CellBuckets)

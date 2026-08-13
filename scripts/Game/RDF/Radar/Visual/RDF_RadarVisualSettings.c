@@ -132,7 +132,7 @@ class RDF_RadarVisualSettings
         m_SweepNeedlePeriodS = 1.25;
         m_CollapsePlotsByEntity = true;
         m_HideFalsePlots = true;
-        m_ProjectilePointSize = 3.2;
+        m_ProjectilePointSize = 0.55;
         m_DrawTrackRibbon = false;
         m_TrackRibbonStride = 1;
         m_DrawWeaponLocate = false;

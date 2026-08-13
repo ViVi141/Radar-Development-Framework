@@ -490,8 +490,8 @@ class RDF_RadarVisualizer
         if (pointSize < 0.2)
             pointSize = 0.2;
         float projSize = m_Settings.m_ProjectilePointSize;
-        if (projSize < pointSize)
-            projSize = pointSize;
+        if (projSize < 0.15)
+            projSize = 0.15;
 
         float visSq = visRange * visRange * 1.35;
         if (visSq < 100.0)
