@@ -175,6 +175,21 @@
 3. **调参**：`rdf_radar_hw_calibrate.py` 产出回灌 Hardware；粗 RD 仅 Perf 对照后显式打开。  
 4. **工程**：本地 Play + `RunAutoTestSuite.flag` 批跑（非无头 CI）。
 
+#### 9 — 系统层纵深（资源管理 / 关联 / ECCM，2026-08-14）
+
+原则：电磁/传播层已到诚实边界（受世界数据限制），信号处理层已到工程最优（稀疏 RD 图形态）。下一片蓝海不是「模拟得更深」，而是「模拟得更系统」——把波束时间、关联逻辑、ECCM 当一等公民；纯逻辑、Enforce 扛得住、且玩家摸得到「这是一部真雷达」。
+
+| 档 | 项 | 收益 | 成本 | 状态 |
+|----|----|------|------|------|
+| **S1** | 相控阵驻留 / 资源管理（波束时间预算 + TWS 边扫边跟 + 搜索/跟踪驻留交织 + 威胁优先级） | 「真雷达」体感最强 | 中高 | 未开始 |
+| **S2** | 多假设关联 / JPDA（替换最近邻单假设） | 密集多目标不互吃 | 高 | 未开始 |
+| **S3** | ECCM 决策层（检测压制 → 自适应 PRF/频率捷变 / SLB / 烧穿策略） | EW 博弈由被动转主动 | 中 | 未开始 |
+
+- [ ] **S1** 驻留/资源管理：beam 时间当预算，TWS，搜索/跟踪驻留交织，按威胁优先级调度
+- [ ] **S2** 多假设关联 / JPDA：密集多目标下替换最近邻（保留 coast 波门作回退；Python 先做 golden）
+- [ ] **S3** ECCM 决策：识别噪声/欺骗压制 → 自适应响应（PRF 捷变 / 频率捷变 / SLB / 烧穿）
+- [ ] 完整 DRFM（相干距离门拖引）仍留停车场（§5 / 明确不做）；现有拖距/角闪烁/间歇已覆盖玩法层
+
 #### 6 — MTD 深化（补简化实现，2026-08-01）
 
 原则：仍目标级近似；让已有字段真干活；离线标定可回灌局内；不做训练级 RD。
@@ -435,6 +450,21 @@ Deepen target-level equations / measurement layer; **no** waveform → RD / full
 2. **Scenario**: enable `m_EnableDemSpanOcclusion` when non-SURF V3/CSV canopy data exists.  
 3. **Tuning**: bake Hardware via `rdf_radar_hw_calibrate.py`; turn coarse RD on only after Perf checks.  
 4. **Engineering**: local Play + `RunAutoTestSuite.flag` (not headless CI).
+
+#### 9 — System-layer depth (resource management / association / ECCM, 2026-08-14)
+
+Principle: EM/propagation is at its honest boundary (world-data limited); signal processing is at engineering-optimal (sparse RD-map form). The next blue ocean is not “simulate deeper” but “simulate more systemically” — treat beam time, association, and ECCM as first-class. Pure logic, Enforce-viable, and players can feel “this is a real radar”.
+
+| Tier | Item | Benefit | Cost | Status |
+|------|------|---------|------|--------|
+| **S1** | Phased-array dwell / resource management (beam-time budget + TWS + search/track interleave + threat priority) | Strongest “real radar” feel | Med–high | Not started |
+| **S2** | Multi-hypothesis association / JPDA (replace nearest-neighbor) | Dense multi-target no longer steals | High | Not started |
+| **S3** | ECCM decision layer (detect jam → adaptive PRF/frequency agility / SLB / burn-through) | EW contest turns active | Med | Not started |
+
+- [ ] **S1** Dwell/resource management: beam time as budget, TWS, search/track dwell interleave, threat-priority scheduling
+- [ ] **S2** Multi-hypothesis association / JPDA: replace nearest-neighbor under dense targets (keep coast gates as fallback; Python golden first)
+- [ ] **S3** ECCM decision: detect noise/deception jamming → adaptive response (PRF agility / frequency agility / SLB / burn-through)
+- [ ] Full DRFM (coherent range-gate pull-off) stays in parking lot (§5 / out of scope); current range walk-off / scintillation / intermittent already cover the gameplay layer
 
 #### 6 — MTD deepen (fill simplified stubs, 2026-08-01)
 
