@@ -115,24 +115,24 @@ class RDF_RadarVisualSettings
     void ApplyPromoDefaults()
     {
         ApplyShowcaseDefaults();
-        m_PointSize = 2.2;
-        m_AfterglowPointSize = 0.55;
-        m_AfterglowSec = 1.4;
+        m_PointSize = 0.85;
+        m_AfterglowPointSize = 0.32;
+        m_AfterglowSec = 1.2;
         m_AfterglowMaxBlips = 28;
-        m_LockBeamEndRadiusM = 2.8;
-        m_LockBeamAlpha = 0.28;
+        m_LockBeamEndRadiusM = 4.2;
+        m_LockBeamAlpha = 0.42;
         m_SectorSweepSegments = 16;
-        m_SectorSweepAlpha = 0.09;
-        m_SectorSweepEdgeAlpha = 0.62;
+        m_SectorSweepAlpha = 0.13;
+        m_SectorSweepEdgeAlpha = 0.72;
         m_SectorHeightM = 3.0;
         m_SectorFarTiltM = 0.0;
         m_SectorVisualRangeM = 750.0;
         m_LockSectorToBoresight = true;
         m_AnimateSweepNeedle = true;
-        m_SweepNeedlePeriodS = 2.0;
+        m_SweepNeedlePeriodS = 1.25;
         m_CollapsePlotsByEntity = true;
         m_HideFalsePlots = true;
-        m_ProjectilePointSize = 14.0;
+        m_ProjectilePointSize = 3.2;
         m_DrawTrackRibbon = false;
         m_TrackRibbonStride = 1;
         m_DrawWeaponLocate = false;

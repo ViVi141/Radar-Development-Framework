@@ -4,7 +4,7 @@
 // (ground-hugging sector, one plot per entity, overhead WLR overlay).
 //
 // Workbench Play → Script Debugger:
-//   RDF_RadarPromoReel.Start();       // ~96 s (SHELL 俯视弹道至落地), then stops
+//   RDF_RadarPromoReel.Start();       // ~80 s, 10 镜切到落地, then stops
 //   RDF_RadarPromoReel.StartLoop();   // repeats until Stop()
 //   RDF_RadarPromoReel.Stop();
 //
@@ -24,7 +24,7 @@ class RDF_RadarPromoCamDriver : GenericEntity
 
     override void EOnPostFrame(IEntity owner, float timeSlice)
     {
-        RDF_RadarPromoReel.GetInstance().OnPostFrame();
+        RDF_RadarPromoReel.GetInstance().OnPostFrame(timeSlice);
     }
 }
 
@@ -45,6 +45,11 @@ class RDF_RadarPromoReel
     protected static const int CAM_CHASE = 3;
     protected static const int CAM_SHELL = 4;
     protected static const int CAM_PULLBACK = 5;
+    protected static const int CAM_LOW = 6;
+    protected static const int CAM_LOCK = 7;
+    protected static const int CAM_LAUNCH = 8;
+    protected static const int CAM_ARC = 9;
+    protected static const int CAM_IMPACT = 10;
 
     protected static const int MODE_SEARCH = 0;
     protected static const int MODE_STARE = 1;
@@ -64,7 +69,7 @@ class RDF_RadarPromoReel
     protected static const float AIR_ORBIT_RANGE_M = 400.0;
     protected static const float AIR_ORBIT_RADIUS_M = 80.0;
     protected static const float AIR_ORBIT_ALT_M = 95.0;
-    protected static const float AIR_ORBIT_RATE_RAD_S = 0.16;
+    protected static const float AIR_ORBIT_RATE_RAD_S = 0.22;
     protected static const float AIR_ORBIT_DEPTH_FRAC = 0.22;
     protected static const float LAUNCH_FWD_M = 22.0;
     protected static const float LAUNCH_AGL_M = 8.0;
@@ -73,8 +78,8 @@ class RDF_RadarPromoReel
     protected static const float SHELL_SPEED_COEF = 1.736;
     protected static const float SHELL_ELEVATION_DEG = 55.0;
     protected static const float SHELL_INIT_SPEED_MS = 76.0;
-    protected static const float SHELL_FIRE_DELAY_S = 0.25;
-    protected static const float SHELL_IMPACT_HOLD_S = 4.0;
+    protected static const float SHELL_FIRE_DELAY_S = 0.85;
+    protected static const float SHELL_IMPACT_HOLD_S = 3.5;
     protected static const float SHELL_TOF_FALLBACK_S = 18.5;
     protected static const float TICK_MS = 33.0;
 
@@ -96,6 +101,11 @@ class RDF_RadarPromoReel
     protected vector m_CamEye;
     protected vector m_CamLookAt;
     protected float m_CamFovDeg;
+    protected vector m_CamEyeDesired;
+    protected vector m_CamLookDesired;
+    protected float m_CamFovDesired;
+    protected bool m_CamSmoothInit;
+    protected int m_CamSmoothShot;
     protected IEntity m_AirTarget;
     protected ref array<IEntity> m_GroundTargets;
     protected ref array<IEntity> m_LiveShells;
@@ -125,6 +135,11 @@ class RDF_RadarPromoReel
     protected ref array<vector> m_ShellLiveTrail;
     protected ref RDF_DebugShapeManager m_ShellOverlay;
     protected vector m_ShellMuzzleVel;
+    protected vector m_HeliSmoothPos;
+    protected vector m_HeliSmoothFwd;
+    protected bool m_HeliSmoothInit;
+    protected vector m_ConvoyLookPos;
+    protected bool m_ConvoyLookInit;
 
     static RDF_RadarPromoReel GetInstance()
     {
@@ -179,12 +194,17 @@ class RDF_RadarPromoReel
         m_AppliedRadarMode = -1;
         m_LastSlateSecond = -1;
         m_CamFovDeg = 48.0;
+        m_CamFovDesired = 48.0;
         m_CamEye = "0 0 0";
         m_CamLookAt = "0 0 1";
+        m_CamSmoothInit = false;
+        m_CamSmoothShot = -1;
+        m_ConvoyLookInit = false;
         m_ShellImpactValid = false;
         m_DidFireShell = false;
         m_DidLiveSolve = false;
         m_ShellApexValid = false;
+        m_HeliSmoothInit = false;
         m_ShellTofS = SHELL_TOF_FALLBACK_S;
     }
 
@@ -218,6 +238,12 @@ class RDF_RadarPromoReel
 
         CraneEnds(m_CamEye, m_CamLookAt, 0.0);
         m_CamFovDeg = 48.0;
+        m_CamEyeDesired = m_CamEye;
+        m_CamLookDesired = m_CamLookAt;
+        m_CamFovDesired = m_CamFovDeg;
+        m_CamSmoothInit = false;
+        m_CamSmoothShot = -1;
+        m_ConvoyLookInit = false;
 
         if (!SpawnRadarVan())
         {
@@ -292,6 +318,9 @@ class RDF_RadarPromoReel
         m_ShellImpactValid = false;
         m_DidFireShell = false;
         m_DidLiveSolve = false;
+        m_HeliSmoothInit = false;
+        m_CamSmoothInit = false;
+        m_ConvoyLookInit = false;
         RDF_RadarAutoRunner.SetScanSubjectOverride(m_PrevSubjectOverride);
         RDF_RadarHUD.SetModeOverride("");
         RDF_RadarHUD.SetDisplayRangeCap(0.0);
@@ -338,13 +367,16 @@ class RDF_RadarPromoReel
     protected void BuildShotList()
     {
         m_Shots.Clear();
-        m_Shots.Insert(MakeShot("1/7 COUNTDOWN  开录", 4.0, CAM_HOLD, MODE_SEARCH, 48.0));
-        m_Shots.Insert(MakeShot("2/7 CRANE  搜索扇面入画", 12.0, CAM_CRANE, MODE_SEARCH, 46.0));
-        m_Shots.Insert(MakeShot("3/7 ORBIT  地面目标+PPI", 14.0, CAM_ORBIT, MODE_SEARCH, 50.0));
-        m_Shots.Insert(MakeShot("4/7 CHASE  锁定 Mi-8", 18.0, CAM_CHASE, MODE_STARE, 40.0));
-        m_Shots.Insert(MakeShot("5/7 SHELL  俯视弹道", 24.0, CAM_SHELL, MODE_WLR, 68.0));
-        m_Shots.Insert(MakeShot("6/7 WIDE  战场回拉", 12.0, CAM_ORBIT, MODE_SEARCH, 52.0));
-        m_Shots.Insert(MakeShot("7/7 PULLBACK  收束", 12.0, CAM_PULLBACK, MODE_SEARCH, 48.0));
+        m_Shots.Insert(MakeShot("1/10 STANDBY  开录", 4.0, CAM_HOLD, MODE_SEARCH, 50.0));
+        m_Shots.Insert(MakeShot("2/10 CRANE  雷达入画", 8.0, CAM_CRANE, MODE_SEARCH, 46.0));
+        m_Shots.Insert(MakeShot("3/10 CONVOY  地面点迹", 7.0, CAM_LOW, MODE_SEARCH, 38.0));
+        m_Shots.Insert(MakeShot("4/10 CHASE  跟飞 Mi-8", 10.0, CAM_CHASE, MODE_STARE, 34.0));
+        m_Shots.Insert(MakeShot("5/10 LOCK  锁定", 5.0, CAM_LOCK, MODE_STARE, 26.0));
+        m_Shots.Insert(MakeShot("6/10 FIRE  迫击炮发射", 4.5, CAM_LAUNCH, MODE_WLR, 40.0));
+        m_Shots.Insert(MakeShot("7/10 ARC  弹道侧视", 7.5, CAM_ARC, MODE_WLR, 48.0));
+        m_Shots.Insert(MakeShot("8/10 GOD  俯视解算", 11.0, CAM_SHELL, MODE_WLR, 62.0));
+        m_Shots.Insert(MakeShot("9/10 IMPACT  落点", 4.5, CAM_IMPACT, MODE_WLR, 42.0));
+        m_Shots.Insert(MakeShot("10/10 PULLBACK  收束", 8.0, CAM_PULLBACK, MODE_SEARCH, 50.0));
     }
 
     protected RDF_RadarPromoShot MakeShot(
@@ -385,6 +417,7 @@ class RDF_RadarPromoReel
             elapsedS = 0.0;
 
         UpdateAirMotion(elapsedS);
+        UpdateGroundMotion(elapsedS);
         UpdateShells();
 
         RDF_RadarPromoShot shot = CurrentShot();
@@ -413,11 +446,11 @@ class RDF_RadarPromoReel
             m_AppliedRadarMode = shot.m_RadarMode;
         }
 
-        if (shot.m_RadarMode == MODE_WLR)
+        if (shot.m_CamStyle == CAM_LAUNCH)
             MaybeFireShell(shotT);
 
         DrawSlate(shot, shotT);
-        if (shot.m_CamStyle == CAM_SHELL)
+        if (ShotDrawsShell(shot.m_CamStyle))
             DrawShellOverlay();
         else if (m_ShellOverlay)
             m_ShellOverlay.Clear();
@@ -425,10 +458,11 @@ class RDF_RadarPromoReel
         ApplyCameraForShot(shot, shotT, elapsedS);
     }
 
-    void OnPostFrame()
+    void OnPostFrame(float timeSlice)
     {
         if (!m_Running)
             return;
+        StepCameraSmooth(timeSlice);
         CommitCamera();
     }
 
@@ -475,6 +509,7 @@ class RDF_RadarPromoReel
         m_ShotIndex = m_ShotIndex + 1;
         m_ShotStartWallS = System.GetTickCount() * 0.001;
         m_LastSlateSecond = -1;
+        m_CamSmoothInit = false;
         if (CurrentShot())
             AnnounceShot();
     }
@@ -495,6 +530,8 @@ class RDF_RadarPromoReel
             m_StartWallS = m_ShotStartWallS;
             m_AppliedRadarMode = -1;
             m_LastSlateSecond = -1;
+            m_CamSmoothInit = false;
+            m_ConvoyLookInit = false;
             Print("[RDF Promo] loop restart.");
             AnnounceShot();
             return;
@@ -736,49 +773,43 @@ class RDF_RadarPromoReel
         vector pathVel = m_ShellMuzzleVel;
         if (pathVel.LengthSq() < 1.0)
             pathVel = ShellMuzzleVel();
-        float apexT = m_ShellTofS * 0.46;
-        m_ShellApexPos = RDF_RadarBallistics.IntegrateForDuration(
-            m_LaunchPos,
-            pathVel,
-            apexT,
-            RDF_RadarBallistics.AIR_DRAG_SHELL_82MM_HE,
-            wind);
-        m_ShellApexValid = true;
         RebuildShellPath(pathVel, m_ShellTofS);
     }
 
+    // Orange overlay: parabola that lands on the accurate impact, not AirDrag.
     protected void RebuildShellPath(vector muzzleVel, float tofS)
     {
         if (!m_ShellPath)
             m_ShellPath = new array<vector>();
         m_ShellPath.Clear();
         m_ShellMuzzleVel = muzzleVel;
+        if (!m_ShellImpactValid)
+            return;
 
-        RDF_RadarGlobalWind wind = RDF_RadarBallistics.SampleGlobalWind();
-        int segs = 28;
-        if (tofS < 1.0)
-            tofS = 1.0;
-        float step = tofS / segs;
-        for (int i = 0; i <= segs; i++)
+        vector impact = m_ShellImpactPos;
+        float dx = impact[0] - m_LaunchPos[0];
+        float dz = impact[2] - m_LaunchPos[2];
+        float distM = Math.Sqrt(dx * dx + dz * dz);
+        if (distM < 10.0)
+            distM = 10.0;
+
+        float elevRad = SHELL_ELEVATION_DEG * Math.DEG2RAD;
+        float apexBoost = distM * Math.Tan(elevRad) * 0.25;
+        int segs = 32;
+        int i;
+        for (i = 0; i <= segs; i++)
         {
-            float t = step * i;
-            vector p = RDF_RadarBallistics.IntegrateForDuration(
-                m_LaunchPos,
-                muzzleVel,
-                t,
-                RDF_RadarBallistics.AIR_DRAG_SHELL_82MM_HE,
-                wind);
+            float u = i / (segs * 1.0);
+            vector p = m_LaunchPos + (impact - m_LaunchPos) * u;
+            p[1] = m_LaunchPos[1] + (impact[1] - m_LaunchPos[1]) * u
+                + 4.0 * apexBoost * u * (1.0 - u);
             m_ShellPath.Insert(p);
+            if (i == 0)
+                m_ShellApexPos = p;
+            else if (p[1] >= m_ShellApexPos[1])
+                m_ShellApexPos = p;
         }
-        if (m_ShellImpactValid)
-        {
-            int last = m_ShellPath.Count() - 1;
-            if (last >= 0)
-            {
-                m_ShellPath.Remove(last);
-                m_ShellPath.Insert(m_ShellImpactPos);
-            }
-        }
+        m_ShellApexValid = true;
     }
 
     protected vector StagePoint(float fwdM, float rightM, float aglM)
@@ -859,7 +890,11 @@ class RDF_RadarPromoReel
             vector pos = StagePoint(rangeM, lateral, 0.5);
             IEntity ent = SpawnPrefabAt(GROUND_PREFAB, pos);
             if (ent)
+            {
                 m_GroundTargets.Insert(ent);
+                OrientEntityAlong(ent, m_FlatFwd, pos);
+                PreparePromoCarDrive(ent);
+            }
         }
         Print("[RDF Promo] ground=" + m_GroundTargets.Count().ToString());
     }
@@ -870,6 +905,11 @@ class RDF_RadarPromoReel
         m_AirTarget = SpawnPrefabAt(AIR_PREFAB, pos);
         if (!m_AirTarget)
             return false;
+        m_HeliSmoothPos = pos;
+        m_HeliSmoothFwd = ComputeOrbitTangent(0.0);
+        m_HeliSmoothInit = true;
+        OrientEntityAlong(m_AirTarget, m_HeliSmoothFwd, pos);
+        PreparePromoHeliRotors(m_AirTarget);
         Print("[RDF Promo] Mi-8 at " + pos.ToString());
         return true;
     }
@@ -904,17 +944,43 @@ class RDF_RadarPromoReel
             return;
         }
 
-        vector pos = ComputeOrbitPos(elapsedS);
-        vector tan = ComputeOrbitTangent(elapsedS);
+        vector target = ComputeOrbitPos(elapsedS);
+        vector wantTan = ComputeOrbitTangent(elapsedS);
+        if (!m_HeliSmoothInit)
+        {
+            m_HeliSmoothPos = m_AirTarget.GetOrigin();
+            m_HeliSmoothFwd = wantTan;
+            m_HeliSmoothInit = true;
+        }
+
+        float follow = 0.12;
+        vector prev = m_HeliSmoothPos;
+        m_HeliSmoothPos = m_HeliSmoothPos + (target - m_HeliSmoothPos) * follow;
+        m_HeliSmoothFwd = m_HeliSmoothFwd + (wantTan - m_HeliSmoothFwd) * 0.10;
+        float fwdLen = m_HeliSmoothFwd.Length();
+        if (fwdLen > 0.001)
+            m_HeliSmoothFwd = m_HeliSmoothFwd / fwdLen;
+        else
+            m_HeliSmoothFwd = wantTan;
+
+        float yaw = Math.Atan2(m_HeliSmoothFwd[0], m_HeliSmoothFwd[2]) * Math.RAD2DEG;
+        float bank = 0.0;
+        vector delta = m_HeliSmoothPos - prev;
+        float side = delta[0] * m_HeliSmoothFwd[2] - delta[2] * m_HeliSmoothFwd[0];
+        bank = Math.Clamp(-side * 18.0, -12.0, 12.0);
+
         vector mat[4];
-        Math3D.DirectionAndUpMatrix(tan, vector.Up, mat);
-        mat[3] = pos;
+        Math3D.AnglesToMatrix(Vector(yaw, 0.0, bank), mat);
+        mat[3] = m_HeliSmoothPos;
         m_AirTarget.SetTransform(mat);
-        float vx = tan[0] * AIR_ORBIT_RADIUS_M * AIR_ORBIT_RATE_RAD_S;
-        float vz = tan[2] * AIR_ORBIT_RADIUS_M * AIR_ORBIT_RATE_RAD_S;
+
         Physics physics = m_AirTarget.GetPhysics();
         if (physics)
-            physics.SetVelocity(Vector(vx, 0.0, vz));
+        {
+            physics.EnableGravity(false);
+            physics.SetVelocity(Vector(0.0, 0.0, 0.0));
+            physics.SetAngularVelocity(Vector(0.0, 0.0, 0.0));
+        }
     }
 
     protected IEntity SpawnPrefabAt(ResourceName prefabName, vector pos)
@@ -1018,11 +1084,7 @@ class RDF_RadarPromoReel
 
         RDF_RadarPromoShot shot = CurrentShot();
         if (shot)
-        {
-            float needed = SHELL_FIRE_DELAY_S + m_ShellTofS + SHELL_IMPACT_HOLD_S;
-            if (shot.m_DurationS < needed)
-                shot.m_DurationS = needed;
-        }
+            StretchShellCoverage();
     }
 
     protected float CurrentShotDuration()
@@ -1067,9 +1129,11 @@ class RDF_RadarPromoReel
         if (sensor)
             sensor.ResetSession();
         if (mode == MODE_WLR)
-            RDF_RadarHUD.SetDisplayRangeCap(1100.0);
+            RDF_RadarHUD.SetDisplayRangeCap(1800.0);
+        else if (mode == MODE_STARE)
+            RDF_RadarHUD.SetDisplayRangeCap(520.0);
         else
-            RDF_RadarHUD.SetDisplayRangeCap(800.0);
+            RDF_RadarHUD.SetDisplayRangeCap(720.0);
         RDF_RadarVisualSettings vis = RDF_RadarAutoRunner.GetVisualSettings();
         if (vis)
         {
@@ -1213,28 +1277,44 @@ class RDF_RadarPromoReel
         else if (style == CAM_CRANE)
         {
             CraneEnds(eye, lookAt, u);
+            fov = Math.Lerp(50.0, 42.0, u);
         }
         else if (style == CAM_ORBIT)
         {
-            FrontArcCamera(eye, lookAt, u, m_ShotIndex >= 5);
+            FrontArcCamera(eye, lookAt, u, false);
+        }
+        else if (style == CAM_LOW)
+        {
+            ConvoyCamera(eye, lookAt, u);
         }
         else if (style == CAM_CHASE)
         {
-            vector heli = m_OrbitCenter;
-            vector tan = m_FlatFwd;
-            if (m_AirTarget)
-            {
-                heli = m_AirTarget.GetOrigin();
-                tan = ComputeOrbitTangent(elapsedS);
-            }
-            vector right = Vector(tan[2], 0.0, -tan[0]);
-            eye = heli - tan * 46.0 + right * 20.0 + Vector(0.0, 14.0, 0.0);
-            lookAt = heli + Vector(0.0, 1.2, 0.0);
-            fov = Math.Lerp(40.0, 36.0, u);
+            ChaseCamera(eye, lookAt, shotT, elapsedS, u);
+            fov = Math.Lerp(36.0, 30.0, u);
+        }
+        else if (style == CAM_LOCK)
+        {
+            LockPunchCamera(eye, lookAt, elapsedS, u);
+            fov = Math.Lerp(28.0, 22.0, u);
+        }
+        else if (style == CAM_LAUNCH)
+        {
+            LaunchCamera(eye, lookAt, u);
+            fov = Math.Lerp(42.0, 34.0, u);
+        }
+        else if (style == CAM_ARC)
+        {
+            ArcCamera(eye, lookAt, u);
+            fov = Math.Lerp(50.0, 44.0, u);
         }
         else if (style == CAM_SHELL)
         {
             ShellCamera(eye, lookAt, shotT);
+        }
+        else if (style == CAM_IMPACT)
+        {
+            ImpactCamera(eye, lookAt, u);
+            fov = Math.Lerp(52.0, 38.0, u);
         }
         else
         {
@@ -1254,10 +1334,76 @@ class RDF_RadarPromoReel
 
     protected void ApplyWorldCamera(vector eye, vector lookAt, float fovDeg)
     {
-        m_CamEye = eye;
-        m_CamLookAt = lookAt;
-        m_CamFovDeg = fovDeg;
-        CommitCamera();
+        m_CamEyeDesired = eye;
+        m_CamLookDesired = lookAt;
+        m_CamFovDesired = fovDeg;
+        if (!m_PromoCamera)
+        {
+            m_CamEye = eye;
+            m_CamLookAt = lookAt;
+            m_CamFovDeg = fovDeg;
+            CommitCamera();
+        }
+    }
+
+    protected float CameraFollowTau(int style)
+    {
+        if (style == CAM_CHASE)
+            return 0.18;
+        if (style == CAM_LOCK)
+            return 0.16;
+        if (style == CAM_LOW)
+            return 0.20;
+        if (style == CAM_LAUNCH)
+            return 0.14;
+        if (style == CAM_ARC)
+            return 0.16;
+        if (style == CAM_IMPACT)
+            return 0.10;
+        if (style == CAM_SHELL)
+            return 0.08;
+        return 0.06;
+    }
+
+    protected void StepCameraSmooth(float dt)
+    {
+        if (dt < 0.0)
+            dt = 0.0;
+        if (dt > 0.05)
+            dt = 0.05;
+
+        RDF_RadarPromoShot shot = CurrentShot();
+        int style = CAM_HOLD;
+        if (shot)
+            style = shot.m_CamStyle;
+
+        bool snap = !m_CamSmoothInit;
+        if (m_CamSmoothShot != m_ShotIndex)
+            snap = true;
+        if (snap)
+        {
+            m_CamEye = m_CamEyeDesired;
+            m_CamLookAt = m_CamLookDesired;
+            m_CamFovDeg = m_CamFovDesired;
+            m_CamSmoothInit = true;
+            m_CamSmoothShot = m_ShotIndex;
+            return;
+        }
+
+        float tau = CameraFollowTau(style);
+        float a = dt / (tau + dt);
+        m_CamEye = m_CamEye + (m_CamEyeDesired - m_CamEye) * a;
+        m_CamLookAt = m_CamLookAt + (m_CamLookDesired - m_CamLookAt) * a;
+        m_CamFovDeg = m_CamFovDeg + (m_CamFovDesired - m_CamFovDeg) * a;
+    }
+
+    protected vector FollowHeliPos()
+    {
+        if (m_HeliSmoothInit)
+            return m_HeliSmoothPos;
+        if (m_AirTarget)
+            return m_AirTarget.GetOrigin();
+        return m_OrbitCenter;
     }
 
     protected void CommitCamera()
@@ -1343,6 +1489,312 @@ class RDF_RadarPromoReel
         eye = LiftEye(lookAt - boomDir * boom + Vector(0.0, height, 0.0));
     }
 
+    protected bool ShotDrawsShell(int style)
+    {
+        if (style == CAM_LAUNCH)
+            return true;
+        if (style == CAM_ARC)
+            return true;
+        if (style == CAM_SHELL)
+            return true;
+        if (style == CAM_IMPACT)
+            return true;
+        return false;
+    }
+
+    protected void StretchShellCoverage()
+    {
+        float shotT = System.GetTickCount() * 0.001 - m_ShotStartWallS;
+        if (shotT < 0.0)
+            shotT = 0.0;
+        float remain = 0.0;
+        int i;
+        for (i = m_ShotIndex; i < m_Shots.Count(); i++)
+        {
+            RDF_RadarPromoShot s = m_Shots.Get(i);
+            if (!s)
+                continue;
+            if (s.m_RadarMode != MODE_WLR)
+                break;
+            remain = remain + s.m_DurationS;
+        }
+        remain = remain - shotT;
+        float need = m_ShellTofS + SHELL_IMPACT_HOLD_S;
+        float extra = need - remain;
+        if (extra <= 0.0)
+            return;
+        for (i = m_Shots.Count() - 1; i >= m_ShotIndex; i--)
+        {
+            RDF_RadarPromoShot s = m_Shots.Get(i);
+            if (!s)
+                continue;
+            if (s.m_RadarMode != MODE_WLR)
+                continue;
+            s.m_DurationS = s.m_DurationS + extra;
+            Print("[RDF Promo] stretch impact hold +"
+                + FormatOneDecimal(extra)
+                + "s");
+            return;
+        }
+    }
+
+    protected void UpdateGroundMotion(float elapsedS)
+    {
+        if (!m_GroundTargets)
+            return;
+        int i;
+        for (i = 0; i < m_GroundTargets.Count(); i++)
+        {
+            IEntity ent = m_GroundTargets.Get(i);
+            if (!ent)
+                continue;
+            DrivePromoUaz(ent, i);
+        }
+    }
+
+    protected void OrientEntityAlong(IEntity ent, vector fwd, vector pos)
+    {
+        if (!ent)
+            return;
+        vector dir = Vector(fwd[0], 0.0, fwd[2]);
+        float len = dir.Length();
+        if (len < 0.001)
+            dir = Vector(0.0, 0.0, 1.0);
+        else
+            dir = dir / len;
+        vector mat[4];
+        Math3D.DirectionAndUpMatrix(dir, vector.Up, mat);
+        mat[3] = pos;
+        ent.SetTransform(mat);
+    }
+
+    protected void PreparePromoCarDrive(IEntity ent)
+    {
+        if (!ent)
+            return;
+        Vehicle veh = Vehicle.Cast(ent);
+        if (veh)
+        {
+            VehicleControllerComponent controller = veh.GetVehicleController();
+            if (controller)
+            {
+                if (!controller.IsEngineOn())
+                    controller.ForceStartEngine();
+            }
+        }
+
+        CarControllerComponent carCtrl = CarControllerComponent.Cast(
+            ent.FindComponent(CarControllerComponent));
+        if (!carCtrl)
+            return;
+        carCtrl.SetPersistentHandBrake(false);
+        VehicleWheeledSimulation sim = carCtrl.GetSimulation();
+        if (!sim)
+            sim = VehicleWheeledSimulation.Cast(ent.FindComponent(VehicleWheeledSimulation));
+        if (!sim)
+            return;
+        sim.ForceEnableSimulation();
+        if (!sim.EngineIsOn())
+            sim.EngineStart();
+        sim.SetBreak(0.0, false);
+        sim.SetClutch(1.0);
+        sim.GearboxSetEfficiencyState(1.0);
+        int gear = sim.GetGear();
+        if (gear < 2)
+            sim.SetGear(2);
+    }
+
+    protected void DrivePromoUaz(IEntity ent, int index)
+    {
+        PreparePromoCarDrive(ent);
+
+        vector mat[4];
+        ent.GetWorldTransform(mat);
+        vector fwd = mat[2];
+        fwd[1] = 0.0;
+        float fwdLen = fwd.Length();
+        if (fwdLen < 0.001)
+            fwd = m_FlatFwd;
+        else
+            fwd = fwd / fwdLen;
+
+        float cross = fwd[0] * m_FlatFwd[2] - fwd[2] * m_FlatFwd[0];
+        float steer = -cross * 1.6;
+        if (steer > 0.4)
+            steer = 0.4;
+        if (steer < -0.4)
+            steer = -0.4;
+
+        vector pos = mat[3];
+        vector delta = pos - m_RadarAnchor;
+        float lat = delta[0] * m_FlatRight[0] + delta[2] * m_FlatRight[2];
+        float wantLat = UAZ_LATERAL_M;
+        if ((index / 2) * 2 == index)
+            wantLat = -UAZ_LATERAL_M;
+        float latErr = lat - wantLat;
+        steer = steer - latErr * 0.012;
+        if (steer > 0.45)
+            steer = 0.45;
+        if (steer < -0.45)
+            steer = -0.45;
+
+        CarControllerComponent carCtrl = CarControllerComponent.Cast(
+            ent.FindComponent(CarControllerComponent));
+        if (carCtrl)
+        {
+            VehicleWheeledSimulation sim = carCtrl.GetSimulation();
+            if (!sim)
+                sim = VehicleWheeledSimulation.Cast(ent.FindComponent(VehicleWheeledSimulation));
+            if (sim)
+            {
+                sim.SetBreak(0.0, false);
+                sim.SetClutch(1.0);
+                sim.SetThrottle(0.28);
+                sim.SetSteering(steer);
+            }
+        }
+
+        Physics phys = ent.GetPhysics();
+        if (!phys)
+            return;
+        vector vel = phys.GetVelocity();
+        float along = vel[0] * fwd[0] + vel[2] * fwd[2];
+        if (along < 0.8)
+        {
+            vector crawl = fwd * 4.5;
+            crawl[1] = vel[1];
+            phys.SetVelocity(crawl);
+        }
+    }
+
+    protected void PreparePromoHeliRotors(IEntity heli)
+    {
+        if (!heli)
+            return;
+        HelicopterControllerComponent heliCtrl = HelicopterControllerComponent.Cast(
+            heli.FindComponent(HelicopterControllerComponent));
+        if (!heliCtrl)
+            return;
+        VehicleHelicopterSimulation hsim = heliCtrl.GetSimulation();
+        if (!hsim)
+            return;
+        if (!hsim.EngineIsOn())
+            hsim.EngineStart();
+        hsim.SetThrottle(0.45);
+    }
+
+    protected void ConvoyCamera(out vector eye, out vector lookAt, float u)
+    {
+        lookAt = StagePoint(Math.Lerp(90.0, 210.0, u), 0.0, 1.4);
+        if (m_GroundTargets)
+        {
+            if (m_GroundTargets.Count() > 1)
+            {
+                IEntity lead = m_GroundTargets.Get(1);
+                if (lead)
+                {
+                    vector raw = lead.GetOrigin() + Vector(0.0, 1.2, 0.0);
+                    if (!m_ConvoyLookInit)
+                    {
+                        m_ConvoyLookPos = raw;
+                        m_ConvoyLookInit = true;
+                    }
+                    else
+                    {
+                        m_ConvoyLookPos = m_ConvoyLookPos + (raw - m_ConvoyLookPos) * 0.18;
+                    }
+                    lookAt = m_ConvoyLookPos;
+                }
+            }
+        }
+        eye = lookAt - m_FlatFwd * 14.0 - m_FlatRight * 22.0 + Vector(0.0, 2.6, 0.0);
+        eye = LiftEye(eye);
+    }
+
+    protected void ChaseCamera(
+        out vector eye,
+        out vector lookAt,
+        float shotT,
+        float elapsedS,
+        float u)
+    {
+        vector heli = FollowHeliPos();
+        vector tan = m_FlatFwd;
+        if (m_HeliSmoothInit)
+            tan = m_HeliSmoothFwd;
+        else
+            tan = ComputeOrbitTangent(elapsedS);
+        vector right = Vector(tan[2], 0.0, -tan[0]);
+        float swing = Math.Sin(shotT * 0.28) * 5.0;
+        float dist = Math.Lerp(40.0, 26.0, u);
+        float height = Math.Lerp(12.0, 6.5, u);
+        eye = heli - tan * dist + right * (14.0 + swing) + Vector(0.0, height, 0.0);
+        lookAt = heli + Vector(0.0, 1.4, 0.0);
+        eye = LiftEye(eye);
+    }
+
+    protected void LockPunchCamera(out vector eye, out vector lookAt, float elapsedS, float u)
+    {
+        vector heli = FollowHeliPos();
+        vector tan = m_FlatFwd;
+        if (m_HeliSmoothInit)
+            tan = m_HeliSmoothFwd;
+        else
+            tan = ComputeOrbitTangent(elapsedS);
+        vector right = Vector(tan[2], 0.0, -tan[0]);
+        eye = heli - tan * Math.Lerp(24.0, 16.0, u) + right * 5.0 + Vector(0.0, 4.5, 0.0);
+        lookAt = heli + Vector(0.0, 0.8, 0.0);
+        eye = LiftEye(eye);
+    }
+
+    protected void LaunchCamera(out vector eye, out vector lookAt, float u)
+    {
+        eye = StagePoint(LAUNCH_FWD_M - 11.0, -8.0, 1.7);
+        lookAt = m_LaunchPos + Vector(0.0, 10.0 + u * 18.0, 0.0);
+        if (m_ActiveShell)
+            lookAt = LerpVec(lookAt, m_ActiveShell.GetOrigin(), u);
+        eye = LiftEye(eye);
+    }
+
+    protected void ArcCamera(out vector eye, out vector lookAt, float u)
+    {
+        vector impact = m_ShellImpactPos;
+        if (!m_ShellImpactValid)
+            impact = StagePoint(LAUNCH_FWD_M + 900.0, 0.0, 0.5);
+        vector mid = LerpVec(m_LaunchPos, impact, 0.38);
+        float apexY = mid[1] + 160.0;
+        if (m_ShellApexValid)
+            apexY = m_ShellApexPos[1];
+        float dx = impact[0] - m_LaunchPos[0];
+        float dz = impact[2] - m_LaunchPos[2];
+        float span = Math.Sqrt(dx * dx + dz * dz);
+        if (span < 200.0)
+            span = 200.0;
+        float side = span * Math.Lerp(0.42, 0.28, u);
+        eye = LiftEye(mid + m_FlatRight * side + Vector(0.0, apexY * 0.18, 0.0));
+        lookAt = mid + Vector(0.0, (apexY - mid[1]) * 0.35, 0.0);
+        if (m_ActiveShell)
+            lookAt = LerpVec(lookAt, m_ActiveShell.GetOrigin(), 0.55);
+    }
+
+    protected void ImpactCamera(out vector eye, out vector lookAt, float u)
+    {
+        vector impact = m_ShellImpactPos;
+        if (!m_ShellImpactValid)
+            impact = StagePoint(LAUNCH_FWD_M + 900.0, 0.0, 0.5);
+        vector high = LiftEye(
+            impact - m_FlatFwd * 80.0 + m_FlatRight * 30.0 + Vector(0.0, 140.0, 0.0));
+        vector low = LiftEye(
+            impact - m_FlatFwd * 16.0 + m_FlatRight * 8.0 + Vector(0.0, 18.0, 0.0));
+        eye = LerpVec(high, low, u);
+        lookAt = impact + Vector(0.0, 1.0, 0.0);
+        if (m_ActiveShell)
+        {
+            if (u < 0.45)
+                lookAt = LerpVec(m_ActiveShell.GetOrigin(), impact, u / 0.45);
+        }
+    }
+
     protected void ShellCamera(out vector eye, out vector lookAt, float shotT)
     {
         vector impact = m_ShellImpactPos;
@@ -1371,7 +1823,7 @@ class RDF_RadarPromoReel
         if (dur > 0.001)
             u = shotT / dur;
         u = Smooth01(u);
-        float yaw = Math.Lerp(-0.10, 0.16, u);
+        float yaw = Math.Lerp(-0.42, 0.38, u);
         float c = Math.Cos(yaw);
         float s = Math.Sin(yaw);
         vector back = Vector(
@@ -1396,8 +1848,8 @@ class RDF_RadarPromoReel
         if (!m_ShellImpactValid)
             impact = StagePoint(LAUNCH_FWD_M + 900.0, 0.0, 0.5);
 
-        m_ShellOverlay.AddSphere(m_LaunchPos, 10.0, ARGBF(0.95, 1.0, 0.55, 0.12), flags);
-        m_ShellOverlay.AddSphere(impact, 12.0, ARGBF(0.95, 0.15, 0.85, 1.0), flags);
+        m_ShellOverlay.AddSphere(m_LaunchPos, 4.0, ARGBF(0.95, 1.0, 0.55, 0.12), flags);
+        m_ShellOverlay.AddSphere(impact, 5.0, ARGBF(0.95, 0.15, 0.85, 1.0), flags);
         m_ShellOverlay.AddLine(m_LaunchPos, impact, ARGBF(0.45, 0.85, 0.85, 0.85), flags);
 
         vector launchGround = m_LaunchPos;
@@ -1408,8 +1860,8 @@ class RDF_RadarPromoReel
             launchGround[1] = world.GetSurfaceY(m_LaunchPos[0], m_LaunchPos[2]) + 0.8;
             impactGround[1] = world.GetSurfaceY(impact[0], impact[2]) + 0.8;
         }
-        m_ShellOverlay.AddCircleXZ(launchGround, 28.0, ARGBF(0.8, 1.0, 0.5, 0.12), 16, flags);
-        m_ShellOverlay.AddCircleXZ(impactGround, 32.0, ARGBF(0.8, 0.2, 0.75, 1.0), 16, flags);
+        m_ShellOverlay.AddCircleXZ(launchGround, 12.0, ARGBF(0.8, 1.0, 0.5, 0.12), 16, flags);
+        m_ShellOverlay.AddCircleXZ(impactGround, 14.0, ARGBF(0.8, 0.2, 0.75, 1.0), 16, flags);
 
         if (m_ShellLiveTrail && m_ShellLiveTrail.Count() >= 2)
             m_ShellOverlay.AddPolyLine(m_ShellLiveTrail, ARGBF(1.0, 1.0, 0.2, 0.08), flags);
@@ -1426,10 +1878,10 @@ class RDF_RadarPromoReel
         else
             drop[1] = m_RadarAnchor[1];
 
-        m_ShellOverlay.AddSphere(shellPos, 16.0, ARGBF(1.0, 1.0, 0.25, 0.08), flags);
-        m_ShellOverlay.AddSphere(shellPos, 6.0, ARGBF(1.0, 1.0, 0.85, 0.35), flags);
+        m_ShellOverlay.AddSphere(shellPos, 5.0, ARGBF(1.0, 1.0, 0.25, 0.08), flags);
+        m_ShellOverlay.AddSphere(shellPos, 2.2, ARGBF(1.0, 1.0, 0.85, 0.35), flags);
         m_ShellOverlay.AddLine(shellPos, drop, ARGBF(0.9, 1.0, 0.9, 0.35), flags);
-        m_ShellOverlay.AddCircleXZ(drop, 14.0, ARGBF(0.85, 1.0, 0.85, 0.25), 12, flags);
+        m_ShellOverlay.AddCircleXZ(drop, 6.0, ARGBF(0.85, 1.0, 0.85, 0.25), 12, flags);
     }
 
     protected void UpdateLiveShellPrediction()
@@ -1460,11 +1912,7 @@ class RDF_RadarPromoReel
         {
             m_ShellImpactPos = Vector(shellPos[0], groundY + 0.4, shellPos[2]);
             m_ShellImpactValid = true;
-            if (m_ShellPath && m_ShellPath.Count() > 0)
-            {
-                int last = m_ShellPath.Count() - 1;
-                m_ShellPath.Set(last, m_ShellImpactPos);
-            }
+            RebuildShellPath(m_ShellMuzzleVel, m_ShellTofS);
             return;
         }
 
