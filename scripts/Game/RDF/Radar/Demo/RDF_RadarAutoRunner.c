@@ -229,13 +229,7 @@ class RDF_RadarAutoRunner
             return;
         }
 
-        IEntity subject = s_ScanSubjectOverride;
-        if (!subject)
-            subject = RDF_LidarSubjectResolver.ResolveLocalSubject(true);
-        if (subject)
-            m_LastSubject = subject;
-        else
-            subject = m_LastSubject;
+        IEntity subject = ResolveTickSubject();
         if (!subject)
         {
             FinishTickTiming(wall0);
@@ -319,6 +313,29 @@ class RDF_RadarAutoRunner
         s_LastTickDurationMs = ms;
     }
 
+    protected IEntity ResolveTickSubject()
+    {
+        IEntity subject = s_ScanSubjectOverride;
+        if (!subject)
+            subject = RDF_LidarSubjectResolver.ResolveLocalSubject(true);
+        if (subject)
+            m_LastSubject = subject;
+        else
+            subject = m_LastSubject;
+        return subject;
+    }
+
+    static void RefreshPresentation(bool fullDynamic)
+    {
+        RDF_RadarAutoRunner inst = GetInstance();
+        if (!inst.m_Running)
+            return;
+        IEntity subject = inst.ResolveTickSubject();
+        if (!subject)
+            return;
+        inst.RenderPresentation(subject, fullDynamic);
+    }
+
     protected void RenderPresentation(IEntity subject, bool fullDynamic)
     {
         if (!m_Visualizer || !m_VisualSettings || !m_Sensor)
@@ -331,7 +348,8 @@ class RDF_RadarAutoRunner
             || m_VisualSettings.m_DrawLockBeam
             || m_VisualSettings.m_DrawAfterglow
             || m_VisualSettings.m_DrawRangeRings
-            || m_VisualSettings.m_DrawTrackRibbon;
+            || m_VisualSettings.m_DrawTrackRibbon
+            || m_VisualSettings.m_AnimateSweepNeedle;
         bool drawWlr = m_VisualSettings.m_DrawWeaponLocate;
 
         if (drawWorld)

@@ -23,8 +23,25 @@ class RDF_RadarVisualSettings
     float m_SectorSweepAlpha = 0.10;
     //! Sector edge / arc alpha.
     float m_SectorSweepEdgeAlpha = 0.55;
-    //! Lift fan so it reads above terrain (metres along world up).
-    float m_SectorHeightM = 40.0;
+    //! Horizontal fan plane lift above scan origin (metres). Keep small so
+    //! the sector reads as a ground slab, not a sheet floating in the sky.
+    float m_SectorHeightM = 8.0;
+    //! Extra Y added at the fan far edge. 0 = flat slab.
+    float m_SectorFarTiltM = 0.0;
+    //! Cap drawn sector / rings (0 = use radar range). Promo uses ~750 m so
+    //! the fan fills the frame instead of a 3 km sliver.
+    float m_SectorVisualRangeM = 0.0;
+    //! If true, fan boresight follows the platform, not the mechanical beam.
+    bool m_LockSectorToBoresight = false;
+    //! Rotating sweep needle inside the sector (visual only, per presentation tick).
+    bool m_AnimateSweepNeedle = false;
+    float m_SweepNeedlePeriodS = 2.2;
+    //! One plot sphere per entity (scatterer clouds otherwise swallow aircraft).
+    bool m_CollapsePlotsByEntity = false;
+    //! Hide EW deception plots. Inverse-path ANONYMOUS skin returns still draw.
+    bool m_HideFalsePlots = false;
+    //! World-marker radius for projectile plots (shells are tiny).
+    float m_ProjectilePointSize = 8.0;
 
     //! Showcase: STT / lock beam toward locked aim point.
     bool m_DrawLockBeam = true;
@@ -56,7 +73,7 @@ class RDF_RadarVisualSettings
     //! Alert ring polyline segments (independent of m_RangeRingSegments).
     int m_WeaponLocateAlertSegments = 12;
     //! Draw subsampled projectile track history ribbons.
-    bool m_DrawTrackRibbon = true;
+    bool m_DrawTrackRibbon = false;
     //! Subsample track history when drawing ribbon (1 = every sample).
     int m_TrackRibbonStride = 2;
 
@@ -70,6 +87,14 @@ class RDF_RadarVisualSettings
         m_DrawOriginAxis = false;
         m_DrawSectorSweep = true;
         m_SectorSweepSegments = 12;
+        m_SectorHeightM = 8.0;
+        m_SectorFarTiltM = 0.0;
+        m_SectorVisualRangeM = 0.0;
+        m_LockSectorToBoresight = false;
+        m_AnimateSweepNeedle = false;
+        m_CollapsePlotsByEntity = false;
+        m_HideFalsePlots = false;
+        m_ProjectilePointSize = 8.0;
         m_DrawLockBeam = true;
         m_DrawAfterglow = true;
         m_AfterglowMaxBlips = 80;
@@ -83,6 +108,35 @@ class RDF_RadarVisualSettings
         // still grows; enable explicitly when debugging projectile paths.
         m_DrawTrackRibbon = false;
         m_TrackRibbonStride = 2;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    //! Promo reel: small markers, ground-hugging fan, smooth sweep, readable WLR.
+    void ApplyPromoDefaults()
+    {
+        ApplyShowcaseDefaults();
+        m_PointSize = 2.2;
+        m_AfterglowPointSize = 0.55;
+        m_AfterglowSec = 1.4;
+        m_AfterglowMaxBlips = 28;
+        m_LockBeamEndRadiusM = 2.8;
+        m_LockBeamAlpha = 0.28;
+        m_SectorSweepSegments = 16;
+        m_SectorSweepAlpha = 0.09;
+        m_SectorSweepEdgeAlpha = 0.62;
+        m_SectorHeightM = 3.0;
+        m_SectorFarTiltM = 0.0;
+        m_SectorVisualRangeM = 750.0;
+        m_LockSectorToBoresight = true;
+        m_AnimateSweepNeedle = true;
+        m_SweepNeedlePeriodS = 2.0;
+        m_CollapsePlotsByEntity = true;
+        m_HideFalsePlots = true;
+        m_ProjectilePointSize = 14.0;
+        m_DrawTrackRibbon = false;
+        m_TrackRibbonStride = 1;
+        m_DrawWeaponLocate = false;
+        m_RangeRingSegments = 32;
     }
 
     //------------------------------------------------------------------------------------------------

@@ -304,6 +304,47 @@ class RDF_RadarBallistics
         return outP;
     }
 
+    protected static float SampleIntersectionGroundYM(
+        float worldX,
+        float worldZ,
+        float fallbackYM,
+        bool useWorldSurface)
+    {
+        if (useWorldSurface)
+        {
+            BaseWorld world = GetGame().GetWorld();
+            if (world)
+                return world.GetSurfaceY(worldX, worldZ);
+            return fallbackYM;
+        }
+        return SampleGroundYM(worldX, worldZ, fallbackYM);
+    }
+
+    // Forward hit against live GetSurfaceY (not DEM / not a flat launch plane).
+    static RDF_RadarGroundHit FindWorldSurfaceIntersection(
+        vector pos,
+        vector vel,
+        float airDrag,
+        RDF_RadarGlobalWind wind,
+        float gravityMs2 = GRAVITY_M_S2)
+    {
+        float groundYM = pos[1];
+        BaseWorld world = GetGame().GetWorld();
+        if (world)
+            groundYM = world.GetSurfaceY(pos[0], pos[2]);
+        return FindGroundIntersection(
+            pos,
+            vel,
+            groundYM,
+            airDrag,
+            wind,
+            false,
+            gravityMs2,
+            MAX_INTEGRATE_S,
+            DEFAULT_DT_S,
+            true);
+    }
+
     static RDF_RadarGroundHit FindGroundIntersection(
         vector pos,
         vector vel,
@@ -313,7 +354,8 @@ class RDF_RadarBallistics
         bool backward,
         float gravityMs2 = GRAVITY_M_S2,
         float maxTimeS = MAX_INTEGRATE_S,
-        float dtS = DEFAULT_DT_S)
+        float dtS = DEFAULT_DT_S,
+        bool useWorldSurface = false)
     {
         RDF_RadarGroundHit hit = new RDF_RadarGroundHit();
         if (dtS < 0.0001)
@@ -322,7 +364,7 @@ class RDF_RadarBallistics
         if (backward)
             direction = -1.0;
 
-        float ground0 = SampleGroundYM(pos[0], pos[2], groundYM);
+        float ground0 = SampleIntersectionGroundYM(pos[0], pos[2], groundYM, useWorldSurface);
         float height0 = pos[1] - ground0;
         float vy = vel[1];
         if (height0 <= 0.05)
@@ -356,7 +398,8 @@ class RDF_RadarBallistics
             vector pPrev = p;
             vector vPrev = v;
             float tPrev = t;
-            float groundPrev = SampleGroundYM(pPrev[0], pPrev[2], groundYM);
+            float groundPrev = SampleIntersectionGroundYM(
+                pPrev[0], pPrev[2], groundYM, useWorldSurface);
             float heightPrev = pPrev[1] - groundPrev;
 
             vector nextP;
@@ -366,7 +409,8 @@ class RDF_RadarBallistics
             v = nextV;
             t = t + step;
 
-            float ground = SampleGroundYM(p[0], p[2], groundYM);
+            float ground = SampleIntersectionGroundYM(
+                p[0], p[2], groundYM, useWorldSurface);
             float height = p[1] - ground;
 
             bool crossedDown = false;
@@ -389,7 +433,7 @@ class RDF_RadarBallistics
 
             float hitX = pPrev[0] + (p[0] - pPrev[0]) * alpha;
             float hitZ = pPrev[2] + (p[2] - pPrev[2]) * alpha;
-            float hitY = SampleGroundYM(hitX, hitZ, groundYM);
+            float hitY = SampleIntersectionGroundYM(hitX, hitZ, groundYM, useWorldSurface);
 
             hit.m_Valid = true;
             hit.m_TimeOffsetS = tPrev + alpha * step;

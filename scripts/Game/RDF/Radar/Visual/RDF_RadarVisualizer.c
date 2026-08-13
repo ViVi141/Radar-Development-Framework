@@ -13,6 +13,8 @@ class RDF_RadarVisualizer
     protected ref RDF_DebugShapeManager m_AfterglowShapes;
     //! WLR markers — separate so light ticks can refresh without wiping plots.
     protected ref RDF_DebugShapeManager m_WlrShapes;
+    //! Sweep needle — rebuilt on presentation ticks, not only on new scans.
+    protected ref RDF_DebugShapeManager m_SweepShapes;
     protected ref array<ref RDF_RadarAfterglowBlip> m_Afterglow;
     protected int m_LastAfterglowScanSerial;
     protected int m_AfterglowWrite;
@@ -41,6 +43,7 @@ class RDF_RadarVisualizer
         m_DynamicShapes = new RDF_DebugShapeManager();
         m_AfterglowShapes = new RDF_DebugShapeManager();
         m_WlrShapes = new RDF_DebugShapeManager();
+        m_SweepShapes = new RDF_DebugShapeManager();
         m_Afterglow = new array<ref RDF_RadarAfterglowBlip>();
         m_LastAfterglowScanSerial = -1;
         m_AfterglowWrite = 0;
@@ -66,6 +69,8 @@ class RDF_RadarVisualizer
             m_AfterglowShapes.Clear();
         if (m_WlrShapes)
             m_WlrShapes.Clear();
+        if (m_SweepShapes)
+            m_SweepShapes.Clear();
         ClearAfterglow();
         m_LastAfterglowScanSerial = -1;
         m_StaticValid = false;
@@ -101,6 +106,8 @@ class RDF_RadarVisualizer
             m_DynamicShapes = new RDF_DebugShapeManager();
         if (!m_AfterglowShapes)
             m_AfterglowShapes = new RDF_DebugShapeManager();
+        if (!m_SweepShapes)
+            m_SweepShapes = new RDF_DebugShapeManager();
 
         bool anyStatic = m_Settings.m_DrawOriginAxis
             || m_Settings.m_DrawSectorSweep
@@ -110,7 +117,8 @@ class RDF_RadarVisualizer
             || m_Settings.m_DrawLockBeam
             || m_Settings.m_DrawAfterglow
             || m_Settings.m_DrawTrackRibbon;
-        if (!anyStatic && !anyDynamic)
+        bool anySweep = m_Settings.m_DrawSectorSweep && m_Settings.m_AnimateSweepNeedle;
+        if (!anyStatic && !anyDynamic && !anySweep)
             return;
 
         if (origin.LengthSq() < 0.0001 && subject)
@@ -122,14 +130,23 @@ class RDF_RadarVisualizer
         else
             forward = forward / flen;
 
+        vector boresight = ResolveBoresight(subject, forward);
+
         if (rangeM < 10.0)
             rangeM = 10.0;
+        float visRange = ResolveVisualRange(rangeM);
 
         float nowS = System.GetTickCount() * 0.001;
         ShapeFlags shapeFlags = ShapeFlags.NOOUTLINE | ShapeFlags.DOUBLESIDE;
 
-        if (anyStatic && IsStaticDirty(origin, forward, rangeM, sectorHalfAngleDeg))
-            RebuildStaticShapes(subject, origin, forward, rangeM, sectorHalfAngleDeg, shapeFlags);
+        if (anyStatic && IsStaticDirty(origin, boresight, visRange, sectorHalfAngleDeg))
+            RebuildStaticShapes(subject, origin, boresight, visRange, sectorHalfAngleDeg, shapeFlags);
+
+        if (anySweep)
+        {
+            m_SweepShapes.Clear();
+            DrawSweepNeedle(origin, boresight, visRange, sectorHalfAngleDeg, nowS, shapeFlags);
+        }
 
         if (!anyDynamic)
             return;
@@ -145,7 +162,7 @@ class RDF_RadarVisualizer
             m_DynamicShapes.Clear();
 
             if (targets && m_Settings.m_DrawPoints)
-                DrawPlotMarkers(targets, shapeFlags);
+                DrawPlotMarkers(targets, origin, visRange, shapeFlags);
 
             if (targets && m_Settings.m_DrawRays)
                 DrawPlotRays(origin, forward, targets, shapeFlags);
@@ -368,22 +385,27 @@ class RDF_RadarVisualizer
         if (segs > MAX_SECTOR_SEGMENTS)
             segs = MAX_SECTOR_SEGMENTS;
 
-        float height = m_Settings.m_SectorHeightM;
-        if (height < 1.0)
-            height = 1.0;
-        vector upLift = Vector(0.0, height, 0.0);
-        vector originHi = origin + upLift * 0.35;
+        float lift = m_Settings.m_SectorHeightM;
+        if (lift < 0.5)
+            lift = 0.5;
+        float farTilt = m_Settings.m_SectorFarTiltM;
+        if (farTilt < 0.0)
+            farTilt = 0.0;
+        vector originHi = origin + Vector(0.0, lift, 0.0);
 
         float edgeA = m_Settings.m_SectorSweepEdgeAlpha;
         float fillA = m_Settings.m_SectorSweepAlpha;
         int edgeColor = ARGBF(edgeA, 0.35, 1.0, 0.55);
         int fillColor = ARGBF(fillA, 0.15, 0.85, 0.4);
-        int sweepColor = ARGBF(0.85, 0.55, 1.0, 0.75);
 
-        vector sweepEnd = originHi
-            + Vector(Math.Cos(yaw), 0.0, Math.Sin(yaw)) * rangeM
-            + upLift * 0.15;
-        m_StaticShapes.AddLine(originHi, sweepEnd, sweepColor, shapeFlags);
+        if (!m_Settings.m_AnimateSweepNeedle)
+        {
+            int sweepColor = ARGBF(0.85, 0.55, 1.0, 0.75);
+            vector sweepEnd = originHi
+                + Vector(Math.Cos(yaw), 0.0, Math.Sin(yaw)) * rangeM
+                + Vector(0.0, farTilt, 0.0);
+            m_StaticShapes.AddLine(originHi, sweepEnd, sweepColor, shapeFlags);
+        }
 
         float leftYaw = yaw - halfRad;
         float rightYaw = yaw + halfRad;
@@ -420,11 +442,64 @@ class RDF_RadarVisualizer
             originHi, leftYaw, 2.0 * halfRad, rangeM, edgeColor, segs, shapeFlags);
     }
 
-    protected void DrawPlotMarkers(array<ref RDF_RadarTarget> targets, ShapeFlags shapeFlags)
+    protected void DrawSweepNeedle(
+        vector origin,
+        vector boresight,
+        float rangeM,
+        float halfAngleDeg,
+        float nowS,
+        ShapeFlags shapeFlags)
+    {
+        float halfRad = halfAngleDeg * DEG_TO_RAD;
+        if (halfRad < 0.02)
+            halfRad = 0.02;
+        if (halfRad > 3.14159)
+            halfRad = 3.14159;
+
+        float period = m_Settings.m_SweepNeedlePeriodS;
+        if (period < 0.4)
+            period = 0.4;
+        float phase = Math.Repeat(nowS, period);
+        float u = phase / period;
+
+        float yaw = Math.Atan2(boresight[2], boresight[0]);
+        float needleYaw = yaw - halfRad + (2.0 * halfRad * u);
+
+        float lift = m_Settings.m_SectorHeightM;
+        if (lift < 0.5)
+            lift = 0.5;
+        vector originHi = origin + Vector(0.0, lift + 0.4, 0.0);
+        vector needleDir = Vector(Math.Cos(needleYaw), 0.0, Math.Sin(needleYaw));
+        vector needleEnd = originHi + needleDir * rangeM;
+
+        m_SweepShapes.AddLine(originHi, needleEnd, ARGBF(0.92, 0.55, 1.0, 0.75), shapeFlags);
+        m_SweepShapes.AddLine(
+            originHi,
+            originHi + needleDir * (rangeM * 0.22),
+            ARGBF(1.0, 0.85, 1.0, 0.95),
+            shapeFlags);
+    }
+
+    protected void DrawPlotMarkers(
+        array<ref RDF_RadarTarget> targets,
+        vector origin,
+        float visRange,
+        ShapeFlags shapeFlags)
     {
         float pointSize = m_Settings.m_PointSize;
         if (pointSize < 0.2)
             pointSize = 0.2;
+        float projSize = m_Settings.m_ProjectilePointSize;
+        if (projSize < pointSize)
+            projSize = pointSize;
+
+        float visSq = visRange * visRange * 1.35;
+        if (visSq < 100.0)
+            visSq = 100.0;
+
+        array<IEntity> drawn = null;
+        if (m_Settings.m_CollapsePlotsByEntity)
+            drawn = new array<IEntity>();
 
         for (int i = 0; i < targets.Count(); i++)
         {
@@ -433,8 +508,37 @@ class RDF_RadarVisualizer
                 continue;
             if (!t.m_Detected)
                 continue;
+            if (m_Settings.m_HideFalsePlots)
+            {
+                if (t.m_IsFalsePlot)
+                    continue;
+            }
+
+            vector pos = t.m_Position;
+            IEntity ent = t.m_Entity;
+            if (ent)
+                pos = ent.GetOrigin();
+
+            vector delta = pos - origin;
+            delta[1] = 0.0;
+            if (delta.LengthSq() > visSq)
+                continue;
+
+            if (drawn)
+            {
+                if (ent)
+                {
+                    if (drawn.Find(ent) >= 0)
+                        continue;
+                    drawn.Insert(ent);
+                }
+            }
+
+            float size = pointSize;
+            if (t.m_Type == ERDF_RadarTargetType.RDF_RADAR_TARGET_PROJECTILE)
+                size = projSize;
             int color = GetColorForType(t.m_Type);
-            m_DynamicShapes.AddSphere(t.m_Position, pointSize, color, shapeFlags);
+            m_DynamicShapes.AddSphere(pos, size, color, shapeFlags);
         }
     }
 
@@ -516,8 +620,13 @@ class RDF_RadarVisualizer
             m_DynamicShapes.AddLine(origin, aimPos + offset, beamColor, shapeFlags);
         }
 
+        float aimRad = endR * 0.22;
+        if (aimRad > 1.4)
+            aimRad = 1.4;
+        if (aimRad < 0.6)
+            aimRad = 0.6;
         m_DynamicShapes.AddSphere(
-            aimPos, endR * 0.35, ARGBF(0.9, 1.0, 0.35, 0.15), shapeFlags);
+            aimPos, aimRad, ARGBF(0.9, 1.0, 0.35, 0.15), shapeFlags);
     }
 
     protected void IngestPlotsForAfterglow(array<ref RDF_RadarTarget> targets, float nowS)
@@ -529,11 +638,31 @@ class RDF_RadarVisualizer
         if (maxBlips < 16)
             maxBlips = 16;
 
+        array<IEntity> drawn = null;
+        if (m_Settings.m_CollapsePlotsByEntity)
+            drawn = new array<IEntity>();
+
         for (int i = 0; i < targets.Count(); i++)
         {
             RDF_RadarTarget t = targets.Get(i);
             if (!t || !t.m_Detected)
                 continue;
+            if (m_Settings.m_HideFalsePlots)
+            {
+                if (t.m_IsFalsePlot)
+                    continue;
+            }
+
+            IEntity ent = t.m_Entity;
+            if (drawn)
+            {
+                if (ent)
+                {
+                    if (drawn.Find(ent) >= 0)
+                        continue;
+                    drawn.Insert(ent);
+                }
+            }
 
             float r;
             float g;
@@ -559,7 +688,10 @@ class RDF_RadarVisualizer
                 m_AfterglowWrite = m_AfterglowWrite + 1;
             }
 
-            blip.m_Pos = t.m_Position;
+            vector blipPos = t.m_Position;
+            if (m_Settings.m_CollapsePlotsByEntity && t.m_Entity)
+                blipPos = t.m_Entity.GetOrigin();
+            blip.m_Pos = blipPos;
             blip.m_BirthS = nowS;
             blip.m_R = r;
             blip.m_G = g;
@@ -641,6 +773,31 @@ class RDF_RadarVisualizer
         vector worldMat[4];
         subject.GetWorldTransform(worldMat);
         return worldMat[3];
+    }
+
+    protected vector ResolveBoresight(IEntity subject, vector forward)
+    {
+        if (!m_Settings.m_LockSectorToBoresight)
+            return forward;
+        if (!subject)
+            return forward;
+        vector worldMat[4];
+        subject.GetWorldTransform(worldMat);
+        vector fwd = worldMat[2];
+        float len = Math.Sqrt(fwd[0] * fwd[0] + fwd[2] * fwd[2]);
+        if (len < 0.001)
+            return forward;
+        return Vector(fwd[0] / len, 0.0, fwd[2] / len);
+    }
+
+    protected float ResolveVisualRange(float rangeM)
+    {
+        float cap = m_Settings.m_SectorVisualRangeM;
+        if (cap < 10.0)
+            return rangeM;
+        if (cap < rangeM)
+            return cap;
+        return rangeM;
     }
 
     protected void GetRgbForType(ERDF_RadarTargetType type, out float r, out float g, out float b)

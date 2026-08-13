@@ -79,6 +79,8 @@ class RDF_RadarAutoTestSuite
             RDF_RadarStressAutoTest.Stop();
         if (RDF_RadarDemLosBenchAutoTest.IsRunning())
             RDF_RadarDemLosBenchAutoTest.Stop();
+        if (RDF_RadarPromoReel.IsRunning())
+            RDF_RadarPromoReel.Stop();
     }
 
     protected static void BeginSuite()

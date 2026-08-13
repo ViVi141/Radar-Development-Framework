@@ -78,6 +78,8 @@ class RDF_RadarHUD
     protected TextWidget   m_wStats;
     protected TextWidget   m_wLegend;
     protected TextWidget   m_wRingLabel;
+    protected string m_ModeOverride;
+    protected float m_DisplayRangeCap;
 
     protected ref array<ref CanvasWidgetCommand> m_StaticCmds;
     protected ref array<ref CanvasWidgetCommand> m_AllCmds;
@@ -132,8 +134,29 @@ class RDF_RadarHUD
     static void SetMode(string name)
     {
         RDF_RadarHUD inst = GetInstance();
-        if (inst && inst.m_wMode)
+        if (!inst || !inst.m_wMode)
+            return;
+        if (inst.m_ModeOverride != "")
+            inst.m_wMode.SetText(inst.m_ModeOverride);
+        else
             inst.m_wMode.SetText(name);
+    }
+
+    static void SetModeOverride(string name)
+    {
+        RDF_RadarHUD inst = GetInstance();
+        inst.m_ModeOverride = name;
+        if (inst.m_wMode)
+        {
+            if (name != "")
+                inst.m_wMode.SetText(name);
+        }
+    }
+
+    static void SetDisplayRangeCap(float rangeM)
+    {
+        RDF_RadarHUD inst = GetInstance();
+        inst.m_DisplayRangeCap = rangeM;
     }
 
     static void SetDisplayRange(float rangeM)
@@ -194,6 +217,11 @@ class RDF_RadarHUD
     {
         if (range > 0.0)
             m_DisplayRange = range;
+        if (m_DisplayRangeCap > 10.0)
+        {
+            if (m_DisplayRange > m_DisplayRangeCap)
+                m_DisplayRange = m_DisplayRangeCap;
+        }
 
         float now = System.GetTickCount() * 0.001;
         if (now - m_LastUpdateTime < UPDATE_INTERVAL)
