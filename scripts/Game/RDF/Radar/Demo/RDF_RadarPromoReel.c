@@ -1,15 +1,26 @@
 // Cinematic promo reel for screen recording.
-// Spawns the same Play / Lock / ShellFire toys, then drives the world camera
-// through a shot list. PPI HUD stays on. World markers use promo visuals
-// (ground-hugging sector, one plot per entity, overhead WLR overlay).
+// Linear script, one causal chain: the radar sees the fight, then solves a round.
+//
+//   Act I  DETECT (SEARCH)
+//     1 COLD      empty fan, the radar is waiting
+//     2 SECTOR    crane slam, the fan lights the ground
+//     3 GROUND    column enters the fan; PPI grows plots
+//   Act II COMMIT (STARE)
+//     4 AIR       hard cut to Mi-8 in the same sector
+//     5 LOCK      crash zoom; the system chooses
+//   Act III SOLVE (WLR)
+//     6 LAUNCH    the round leaves the tube
+//     7 TRACK     ride the shell; the predicted arc is already ahead
+//     8 SOLVE     pull to god view: origin, arc, impact together
+//     9 IMPACT    slam to the cyan circle; the round arrives
+//    10 COVERAGE  pull back; the radar is still watching
 //
 // Workbench Play → Script Debugger:
-//   RDF_RadarPromoReel.Start();       // ~80 s, 10 镜切到落地, then stops
-//   RDF_RadarPromoReel.StartLoop();   // repeats until Stop()
+//   RDF_RadarPromoReel.Start();
+//   RDF_RadarPromoReel.StartLoop();
 //   RDF_RadarPromoReel.Stop();
 //
-// Start recording during the 4 s COUNTDOWN slate (console). Shot titles
-// go to the PPI HUD, not DbgUI.
+// Start recording on shot 1 COLD. Titles go to the PPI HUD.
 class RDF_RadarPromoCamDriverClass : GenericEntityClass
 {
 }
@@ -69,7 +80,7 @@ class RDF_RadarPromoReel
     protected static const float AIR_ORBIT_RANGE_M = 400.0;
     protected static const float AIR_ORBIT_RADIUS_M = 80.0;
     protected static const float AIR_ORBIT_ALT_M = 95.0;
-    protected static const float AIR_ORBIT_RATE_RAD_S = 0.22;
+    protected static const float AIR_ORBIT_RATE_RAD_S = 0.30;
     protected static const float AIR_ORBIT_DEPTH_FRAC = 0.22;
     protected static const float LAUNCH_FWD_M = 22.0;
     protected static const float LAUNCH_AGL_M = 8.0;
@@ -78,7 +89,7 @@ class RDF_RadarPromoReel
     protected static const float SHELL_SPEED_COEF = 1.736;
     protected static const float SHELL_ELEVATION_DEG = 55.0;
     protected static const float SHELL_INIT_SPEED_MS = 76.0;
-    protected static const float SHELL_FIRE_DELAY_S = 0.85;
+    protected static const float SHELL_FIRE_DELAY_S = 0.28;
     protected static const float SHELL_IMPACT_HOLD_S = 3.5;
     protected static const float SHELL_TOF_FALLBACK_S = 18.5;
     protected static const float TICK_MS = 33.0;
@@ -302,7 +313,8 @@ class RDF_RadarPromoReel
         }
 
         Print("[RDF Promo] ========== START RECORDING NOW ==========");
-        Print("[RDF Promo] 倒计时 4s 后运镜开始；Stop() 结束。loop=" + loop.ToString());
+        Print("[RDF Promo] 剧本: 发现(空扇面→地面) → 选择(空中锁定) → 解算(离膛→跟踪→落点)");
+        Print("[RDF Promo] Stop() 结束。loop=" + loop.ToString());
         AnnounceShot();
     }
 
@@ -367,16 +379,16 @@ class RDF_RadarPromoReel
     protected void BuildShotList()
     {
         m_Shots.Clear();
-        m_Shots.Insert(MakeShot("1/10 STANDBY  开录", 4.0, CAM_HOLD, MODE_SEARCH, 50.0));
-        m_Shots.Insert(MakeShot("2/10 CRANE  雷达入画", 8.0, CAM_CRANE, MODE_SEARCH, 46.0));
-        m_Shots.Insert(MakeShot("3/10 CONVOY  地面点迹", 7.0, CAM_LOW, MODE_SEARCH, 38.0));
-        m_Shots.Insert(MakeShot("4/10 CHASE  跟飞 Mi-8", 10.0, CAM_CHASE, MODE_STARE, 34.0));
-        m_Shots.Insert(MakeShot("5/10 LOCK  锁定", 5.0, CAM_LOCK, MODE_STARE, 26.0));
-        m_Shots.Insert(MakeShot("6/10 FIRE  迫击炮发射", 4.5, CAM_LAUNCH, MODE_WLR, 40.0));
-        m_Shots.Insert(MakeShot("7/10 ARC  弹道侧视", 7.5, CAM_ARC, MODE_WLR, 48.0));
-        m_Shots.Insert(MakeShot("8/10 GOD  俯视解算", 11.0, CAM_SHELL, MODE_WLR, 62.0));
-        m_Shots.Insert(MakeShot("9/10 IMPACT  落点", 4.5, CAM_IMPACT, MODE_WLR, 42.0));
-        m_Shots.Insert(MakeShot("10/10 PULLBACK  收束", 8.0, CAM_PULLBACK, MODE_SEARCH, 50.0));
+        m_Shots.Insert(MakeShot("1  COLD  空扇面", 3.0, CAM_HOLD, MODE_SEARCH, 56.0));
+        m_Shots.Insert(MakeShot("2  SECTOR  扇面铺开", 5.5, CAM_CRANE, MODE_SEARCH, 48.0));
+        m_Shots.Insert(MakeShot("3  GROUND  地面进扇", 5.0, CAM_LOW, MODE_SEARCH, 32.0));
+        m_Shots.Insert(MakeShot("4  AIR  空中入画", 6.5, CAM_CHASE, MODE_STARE, 28.0));
+        m_Shots.Insert(MakeShot("5  LOCK  锁定", 3.6, CAM_LOCK, MODE_STARE, 20.0));
+        m_Shots.Insert(MakeShot("6  LAUNCH  弹丸离膛", 3.2, CAM_LAUNCH, MODE_WLR, 28.0));
+        m_Shots.Insert(MakeShot("7  TRACK  弹道跟踪", 6.0, CAM_ARC, MODE_WLR, 34.0));
+        m_Shots.Insert(MakeShot("8  SOLVE  解算", 7.5, CAM_SHELL, MODE_WLR, 64.0));
+        m_Shots.Insert(MakeShot("9  IMPACT  落点确认", 4.0, CAM_IMPACT, MODE_WLR, 36.0));
+        m_Shots.Insert(MakeShot("10 COVERAGE  全图", 5.5, CAM_PULLBACK, MODE_SEARCH, 52.0));
     }
 
     protected RDF_RadarPromoShot MakeShot(
@@ -828,10 +840,15 @@ class RDF_RadarPromoReel
 
     protected vector LiftEye(vector eye)
     {
+        return LiftEyeMin(eye, 4.0);
+    }
+
+    protected vector LiftEyeMin(vector eye, float aglM)
+    {
         BaseWorld world = GetGame().GetWorld();
         if (!world)
             return eye;
-        float minY = world.GetSurfaceY(eye[0], eye[2]) + 4.0;
+        float minY = world.GetSurfaceY(eye[0], eye[2]) + aglM;
         if (eye[1] < minY)
             eye[1] = minY;
         return eye;
@@ -1129,18 +1146,35 @@ class RDF_RadarPromoReel
         if (sensor)
             sensor.ResetSession();
         if (mode == MODE_WLR)
-            RDF_RadarHUD.SetDisplayRangeCap(1800.0);
+            RDF_RadarHUD.SetDisplayRangeCap(2000.0);
         else if (mode == MODE_STARE)
-            RDF_RadarHUD.SetDisplayRangeCap(520.0);
+            RDF_RadarHUD.SetDisplayRangeCap(420.0);
         else
             RDF_RadarHUD.SetDisplayRangeCap(720.0);
         RDF_RadarVisualSettings vis = RDF_RadarAutoRunner.GetVisualSettings();
         if (vis)
         {
             if (mode == MODE_WLR)
-                vis.m_SectorVisualRangeM = 1100.0;
+            {
+                vis.m_SectorVisualRangeM = 1400.0;
+                vis.m_DrawTrackRibbon = true;
+                vis.m_ProjectilePointSize = 3.6;
+            }
             else
+            {
                 vis.m_SectorVisualRangeM = 750.0;
+                vis.m_DrawTrackRibbon = false;
+            }
+            if (mode == MODE_STARE)
+            {
+                vis.m_LockBeamEndRadiusM = 9.0;
+                vis.m_LockBeamAlpha = 0.62;
+            }
+            else
+            {
+                vis.m_LockBeamEndRadiusM = 4.2;
+                vis.m_LockBeamAlpha = 0.42;
+            }
         }
         if (mode == MODE_STARE && sensor)
         {
@@ -1260,24 +1294,34 @@ class RDF_RadarPromoReel
 
     protected void ApplyCameraForShot(RDF_RadarPromoShot shot, float shotT, float elapsedS)
     {
-        float u = 0.0;
+        float uLin = 0.0;
         if (shot.m_DurationS > 0.001)
-            u = shotT / shot.m_DurationS;
-        u = Smooth01(u);
+            uLin = shotT / shot.m_DurationS;
+        if (uLin < 0.0)
+            uLin = 0.0;
+        if (uLin > 1.0)
+            uLin = 1.0;
 
         vector eye;
         vector lookAt;
         float fov = shot.m_FovDeg;
         int style = shot.m_CamStyle;
+        float u = Smooth01(uLin);
 
         if (style == CAM_HOLD)
         {
             CraneEnds(eye, lookAt, 0.0);
+            vector dir = lookAt - eye;
+            float dirLen = dir.Length();
+            if (dirLen > 0.05)
+                eye = eye + (dir / dirLen) * (shotT * 1.4);
+            fov = Math.Lerp(58.0, 52.0, u);
         }
         else if (style == CAM_CRANE)
         {
-            CraneEnds(eye, lookAt, u);
-            fov = Math.Lerp(50.0, 42.0, u);
+            float dive = EaseInCubic(uLin);
+            CraneEnds(eye, lookAt, dive);
+            fov = Math.Lerp(62.0, 34.0, dive);
         }
         else if (style == CAM_ORBIT)
         {
@@ -1286,35 +1330,39 @@ class RDF_RadarPromoReel
         else if (style == CAM_LOW)
         {
             ConvoyCamera(eye, lookAt, u);
+            fov = Math.Lerp(36.0, 26.0, u);
         }
         else if (style == CAM_CHASE)
         {
             ChaseCamera(eye, lookAt, shotT, elapsedS, u);
-            fov = Math.Lerp(36.0, 30.0, u);
+            fov = Math.Lerp(22.0, 38.0, u);
         }
         else if (style == CAM_LOCK)
         {
-            LockPunchCamera(eye, lookAt, elapsedS, u);
-            fov = Math.Lerp(28.0, 22.0, u);
+            float punch = EaseInCubic(uLin);
+            LockPunchCamera(eye, lookAt, elapsedS, punch);
+            fov = Math.Lerp(32.0, 16.0, punch);
         }
         else if (style == CAM_LAUNCH)
         {
             LaunchCamera(eye, lookAt, u);
-            fov = Math.Lerp(42.0, 34.0, u);
+            fov = Math.Lerp(30.0, 22.0, u);
         }
         else if (style == CAM_ARC)
         {
-            ArcCamera(eye, lookAt, u);
-            fov = Math.Lerp(50.0, 44.0, u);
+            RideShellCamera(eye, lookAt, u);
+            fov = Math.Lerp(30.0, 36.0, u);
         }
         else if (style == CAM_SHELL)
         {
             ShellCamera(eye, lookAt, shotT);
+            fov = Math.Lerp(42.0, 66.0, EaseOutCubic(uLin));
         }
         else if (style == CAM_IMPACT)
         {
-            ImpactCamera(eye, lookAt, u);
-            fov = Math.Lerp(52.0, 38.0, u);
+            float slam = EaseInCubic(uLin);
+            ImpactCamera(eye, lookAt, slam);
+            fov = Math.Lerp(48.0, 28.0, slam);
         }
         else
         {
@@ -1322,11 +1370,12 @@ class RDF_RadarPromoReel
             vector nearLook;
             CraneEnds(nearEye, nearLook, 1.0);
             vector farEye = LiftEye(
-                m_RadarAnchor - m_FlatFwd * 70.0 + m_FlatRight * 48.0 + Vector(0.0, 110.0, 0.0));
+                m_RadarAnchor - m_FlatFwd * 90.0 + m_FlatRight * 56.0 + Vector(0.0, 130.0, 0.0));
             vector farLook = m_LookAtWide;
-            eye = LerpVec(nearEye, farEye, u);
-            lookAt = LerpVec(nearLook, farLook, u);
-            fov = Math.Lerp(42.0, 52.0, u);
+            float pull = EaseOutCubic(uLin);
+            eye = LerpVec(nearEye, farEye, pull);
+            lookAt = LerpVec(nearLook, farLook, pull);
+            fov = Math.Lerp(34.0, 58.0, pull);
         }
 
         ApplyWorldCamera(eye, lookAt, fov);
@@ -1349,18 +1398,20 @@ class RDF_RadarPromoReel
     protected float CameraFollowTau(int style)
     {
         if (style == CAM_CHASE)
-            return 0.18;
-        if (style == CAM_LOCK)
-            return 0.16;
-        if (style == CAM_LOW)
-            return 0.20;
-        if (style == CAM_LAUNCH)
-            return 0.14;
-        if (style == CAM_ARC)
-            return 0.16;
-        if (style == CAM_IMPACT)
             return 0.10;
+        if (style == CAM_LOCK)
+            return 0.06;
+        if (style == CAM_LOW)
+            return 0.12;
+        if (style == CAM_LAUNCH)
+            return 0.08;
+        if (style == CAM_ARC)
+            return 0.10;
+        if (style == CAM_IMPACT)
+            return 0.05;
         if (style == CAM_SHELL)
+            return 0.12;
+        if (style == CAM_CRANE)
             return 0.08;
         return 0.06;
     }
@@ -1456,11 +1507,14 @@ class RDF_RadarPromoReel
     protected void CraneEnds(out vector eye, out vector lookAt, float u)
     {
         vector high = LiftEye(
-            m_RadarAnchor - m_FlatFwd * 85.0 + m_FlatRight * 26.0 + Vector(0.0, 52.0, 0.0));
-        vector low = LiftEye(
-            m_RadarAnchor - m_FlatFwd * 22.0 + m_FlatRight * 9.0 + Vector(0.0, 7.5, 0.0));
+            m_RadarAnchor - m_FlatFwd * 130.0 + m_FlatRight * 42.0 + Vector(0.0, 98.0, 0.0));
+        vector low = LiftEyeMin(
+            m_RadarAnchor - m_FlatFwd * 12.0 + m_FlatRight * 4.5 + Vector(0.0, 3.8, 0.0),
+            2.2);
+        vector lookHigh = m_LookAtWide;
+        vector lookLow = m_RadarAnchor + m_FlatFwd * 36.0 + Vector(0.0, 3.2, 0.0);
         eye = LerpVec(high, low, u);
-        lookAt = m_LookAtSearch;
+        lookAt = LerpVec(lookHigh, lookLow, u);
     }
 
     protected void FrontArcCamera(out vector eye, out vector lookAt, float u, bool wide)
@@ -1649,7 +1703,7 @@ class RDF_RadarPromoReel
             {
                 sim.SetBreak(0.0, false);
                 sim.SetClutch(1.0);
-                sim.SetThrottle(0.28);
+                sim.SetThrottle(0.55);
                 sim.SetSteering(steer);
             }
         }
@@ -1659,9 +1713,9 @@ class RDF_RadarPromoReel
             return;
         vector vel = phys.GetVelocity();
         float along = vel[0] * fwd[0] + vel[2] * fwd[2];
-        if (along < 0.8)
+        if (along < 1.2)
         {
-            vector crawl = fwd * 4.5;
+            vector crawl = fwd * 7.0;
             crawl[1] = vel[1];
             phys.SetVelocity(crawl);
         }
@@ -1685,7 +1739,7 @@ class RDF_RadarPromoReel
 
     protected void ConvoyCamera(out vector eye, out vector lookAt, float u)
     {
-        lookAt = StagePoint(Math.Lerp(90.0, 210.0, u), 0.0, 1.4);
+        vector leadPos = StagePoint(Math.Lerp(110.0, 200.0, u), -UAZ_LATERAL_M, 1.2);
         if (m_GroundTargets)
         {
             if (m_GroundTargets.Count() > 1)
@@ -1693,7 +1747,7 @@ class RDF_RadarPromoReel
                 IEntity lead = m_GroundTargets.Get(1);
                 if (lead)
                 {
-                    vector raw = lead.GetOrigin() + Vector(0.0, 1.2, 0.0);
+                    vector raw = lead.GetOrigin() + Vector(0.0, 1.15, 0.0);
                     if (!m_ConvoyLookInit)
                     {
                         m_ConvoyLookPos = raw;
@@ -1703,12 +1757,17 @@ class RDF_RadarPromoReel
                     {
                         m_ConvoyLookPos = m_ConvoyLookPos + (raw - m_ConvoyLookPos) * 0.18;
                     }
-                    lookAt = m_ConvoyLookPos;
+                    leadPos = m_ConvoyLookPos;
                 }
             }
         }
-        eye = lookAt - m_FlatFwd * 14.0 - m_FlatRight * 22.0 + Vector(0.0, 2.6, 0.0);
-        eye = LiftEye(eye);
+
+        vector vanLook = m_RadarAnchor + Vector(0.0, 2.4, 0.0);
+        lookAt = LerpVec(leadPos, vanLook, 0.18 + u * 0.22);
+        eye = leadPos + m_FlatFwd * Math.Lerp(14.0, 22.0, u)
+            - m_FlatRight * Math.Lerp(9.0, 14.0, u)
+            + Vector(0.0, Math.Lerp(1.5, 2.4, u), 0.0);
+        eye = LiftEyeMin(eye, 1.15);
     }
 
     protected void ChaseCamera(
@@ -1725,11 +1784,11 @@ class RDF_RadarPromoReel
         else
             tan = ComputeOrbitTangent(elapsedS);
         vector right = Vector(tan[2], 0.0, -tan[0]);
-        float swing = Math.Sin(shotT * 0.28) * 5.0;
-        float dist = Math.Lerp(40.0, 26.0, u);
-        float height = Math.Lerp(12.0, 6.5, u);
-        eye = heli - tan * dist + right * (14.0 + swing) + Vector(0.0, height, 0.0);
-        lookAt = heli + Vector(0.0, 1.4, 0.0);
+        float dist = Math.Lerp(16.0, 38.0, u);
+        float height = Math.Lerp(4.2, 14.0, u);
+        float side = Math.Lerp(6.0, 18.0, u);
+        eye = heli - tan * dist + right * side + Vector(0.0, height, 0.0);
+        lookAt = heli + Vector(0.0, 1.2, 0.0);
         eye = LiftEye(eye);
     }
 
@@ -1742,39 +1801,43 @@ class RDF_RadarPromoReel
         else
             tan = ComputeOrbitTangent(elapsedS);
         vector right = Vector(tan[2], 0.0, -tan[0]);
-        eye = heli - tan * Math.Lerp(24.0, 16.0, u) + right * 5.0 + Vector(0.0, 4.5, 0.0);
-        lookAt = heli + Vector(0.0, 0.8, 0.0);
+        float dist = Math.Lerp(26.0, 9.5, u);
+        float height = Math.Lerp(7.5, 3.2, u);
+        eye = heli - tan * dist + right * 4.0 + Vector(0.0, height, 0.0);
+        lookAt = heli + Vector(0.0, 0.6, 0.0);
         eye = LiftEye(eye);
     }
 
     protected void LaunchCamera(out vector eye, out vector lookAt, float u)
     {
-        eye = StagePoint(LAUNCH_FWD_M - 11.0, -8.0, 1.7);
-        lookAt = m_LaunchPos + Vector(0.0, 10.0 + u * 18.0, 0.0);
+        eye = StagePoint(LAUNCH_FWD_M - 5.5, -4.2, 1.35);
+        lookAt = m_LaunchPos + Vector(0.0, 6.0 + u * 22.0, 0.0);
         if (m_ActiveShell)
-            lookAt = LerpVec(lookAt, m_ActiveShell.GetOrigin(), u);
-        eye = LiftEye(eye);
+            lookAt = LerpVec(m_LaunchPos + Vector(0.0, 4.0, 0.0), m_ActiveShell.GetOrigin(), 0.35 + u * 0.65);
+        eye = LiftEyeMin(eye, 1.1);
+    }
+
+    protected void RideShellCamera(out vector eye, out vector lookAt, float u)
+    {
+        vector shell = LiveShellPos(u);
+        vector tan = ShellTangent();
+        vector right = Vector(tan[2], 0.0, -tan[0]);
+        float rightLen = right.Length();
+        if (rightLen < 0.001)
+            right = m_FlatRight;
+        else
+            right = right / rightLen;
+
+        eye = shell - tan * Math.Lerp(12.0, 8.0, u)
+            + right * Math.Lerp(22.0, 16.0, u)
+            + Vector(0.0, Math.Lerp(5.0, 12.0, u), 0.0);
+        lookAt = shell + tan * 40.0 + Vector(0.0, 4.0, 0.0);
+        eye = LiftEyeMin(eye, 2.0);
     }
 
     protected void ArcCamera(out vector eye, out vector lookAt, float u)
     {
-        vector impact = m_ShellImpactPos;
-        if (!m_ShellImpactValid)
-            impact = StagePoint(LAUNCH_FWD_M + 900.0, 0.0, 0.5);
-        vector mid = LerpVec(m_LaunchPos, impact, 0.38);
-        float apexY = mid[1] + 160.0;
-        if (m_ShellApexValid)
-            apexY = m_ShellApexPos[1];
-        float dx = impact[0] - m_LaunchPos[0];
-        float dz = impact[2] - m_LaunchPos[2];
-        float span = Math.Sqrt(dx * dx + dz * dz);
-        if (span < 200.0)
-            span = 200.0;
-        float side = span * Math.Lerp(0.42, 0.28, u);
-        eye = LiftEye(mid + m_FlatRight * side + Vector(0.0, apexY * 0.18, 0.0));
-        lookAt = mid + Vector(0.0, (apexY - mid[1]) * 0.35, 0.0);
-        if (m_ActiveShell)
-            lookAt = LerpVec(lookAt, m_ActiveShell.GetOrigin(), 0.55);
+        RideShellCamera(eye, lookAt, u);
     }
 
     protected void ImpactCamera(out vector eye, out vector lookAt, float u)
@@ -1782,16 +1845,18 @@ class RDF_RadarPromoReel
         vector impact = m_ShellImpactPos;
         if (!m_ShellImpactValid)
             impact = StagePoint(LAUNCH_FWD_M + 900.0, 0.0, 0.5);
+
         vector high = LiftEye(
-            impact - m_FlatFwd * 80.0 + m_FlatRight * 30.0 + Vector(0.0, 140.0, 0.0));
-        vector low = LiftEye(
-            impact - m_FlatFwd * 16.0 + m_FlatRight * 8.0 + Vector(0.0, 18.0, 0.0));
+            impact - m_FlatFwd * 70.0 + m_FlatRight * 22.0 + Vector(0.0, 90.0, 0.0));
+        vector low = LiftEyeMin(
+            impact - m_FlatFwd * 11.0 + m_FlatRight * 4.0 + Vector(0.0, 2.4, 0.0),
+            1.4);
         eye = LerpVec(high, low, u);
-        lookAt = impact + Vector(0.0, 1.0, 0.0);
+        lookAt = impact + Vector(0.0, 1.2, 0.0);
         if (m_ActiveShell)
         {
-            if (u < 0.45)
-                lookAt = LerpVec(m_ActiveShell.GetOrigin(), impact, u / 0.45);
+            vector incoming = m_ActiveShell.GetOrigin();
+            lookAt = LerpVec(incoming, impact, u * 0.72);
         }
     }
 
@@ -1812,28 +1877,80 @@ class RDF_RadarPromoReel
         if (m_ShellApexValid)
             apexY = m_ShellApexPos[1];
 
-        float height = span * 0.78;
-        if (height < 420.0)
-            height = 420.0;
-        if (height > 980.0)
-            height = 980.0;
+        float height = span * 0.72;
+        if (height < 380.0)
+            height = 380.0;
+        if (height > 920.0)
+            height = 920.0;
 
-        float u = 0.0;
+        float uLin = 0.0;
         float dur = CurrentShotDuration();
         if (dur > 0.001)
-            u = shotT / dur;
-        u = Smooth01(u);
-        float yaw = Math.Lerp(-0.42, 0.38, u);
+            uLin = shotT / dur;
+        float u = EaseOutCubic(uLin);
+
+        vector shell = LiveShellPos(uLin);
+        vector closeEye = LiftEye(
+            shell + m_FlatRight * 48.0 - m_FlatFwd * 24.0 + Vector(0.0, 28.0, 0.0));
+        vector closeLook = shell + m_FlatFwd * 80.0;
+
+        float yaw = Math.Lerp(-0.18, 0.42, u);
         float c = Math.Cos(yaw);
         float s = Math.Sin(yaw);
         vector back = Vector(
             m_FlatFwd[0] * c + m_FlatRight[0] * s,
             0.0,
             m_FlatFwd[2] * c + m_FlatRight[2] * s);
+        vector farEye = LiftEye(
+            mid - back * (span * 0.08) + Vector(0.0, height, 0.0));
+        vector farLook = Vector(mid[0], (mid[1] + apexY) * 0.5, mid[2]);
 
-        eye = LiftEye(
-            mid - back * (span * 0.06) + m_FlatRight * (span * 0.03) + Vector(0.0, height, 0.0));
-        lookAt = Vector(mid[0], (mid[1] + apexY) * 0.5, mid[2]);
+        eye = LerpVec(closeEye, farEye, u);
+        lookAt = LerpVec(closeLook, farLook, u);
+    }
+
+    protected vector LiveShellPos(float u)
+    {
+        if (m_ActiveShell)
+            return m_ActiveShell.GetOrigin();
+        if (m_ShellPath)
+        {
+            int n = m_ShellPath.Count();
+            if (n > 1)
+            {
+                float f = u * (n - 1);
+                int i0 = f;
+                if (i0 < 0)
+                    i0 = 0;
+                if (i0 > n - 2)
+                    i0 = n - 2;
+                float frac = f - i0;
+                return LerpVec(m_ShellPath.Get(i0), m_ShellPath.Get(i0 + 1), frac);
+            }
+        }
+        return m_LaunchPos + Vector(0.0, 8.0, 0.0);
+    }
+
+    protected vector ShellTangent()
+    {
+        if (m_ActiveShell)
+        {
+            ProjectileMoveComponent move = ProjectileMoveComponent.Cast(
+                m_ActiveShell.FindComponent(ProjectileMoveComponent));
+            if (move)
+            {
+                vector vel = move.GetVelocity();
+                if (vel.LengthSq() > 25.0)
+                {
+                    vector tan = vel;
+                    tan[1] = 0.0;
+                    float len = tan.Length();
+                    if (len > 0.001)
+                        return tan / len;
+                }
+            }
+        }
+        return m_FlatFwd;
     }
 
     protected void DrawShellOverlay()
@@ -1938,6 +2055,25 @@ class RDF_RadarPromoReel
         if (t > 1.0)
             t = 1.0;
         return t * t * (3.0 - 2.0 * t);
+    }
+
+    protected float EaseInCubic(float t)
+    {
+        if (t < 0.0)
+            t = 0.0;
+        if (t > 1.0)
+            t = 1.0;
+        return t * t * t;
+    }
+
+    protected float EaseOutCubic(float t)
+    {
+        if (t < 0.0)
+            t = 0.0;
+        if (t > 1.0)
+            t = 1.0;
+        float inv = 1.0 - t;
+        return 1.0 - inv * inv * inv;
     }
 
     protected vector LerpVec(vector a, vector b, float t)
