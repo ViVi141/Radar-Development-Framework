@@ -117,6 +117,7 @@ class RDF_RadarMeasurement
             rangeBin = 0;
         float quantizedRange = (rangeBin + 0.5) * rangeBinM;
         float measuredRange = quantizedRange + settings.m_MeasRangeBiasM;
+        // Math.RandomGaussFloat(stdDev, mean): sigma first, then the mean (0.0).
         if (rangeSigma > 0.0)
             measuredRange = measuredRange + Math.RandomGaussFloat(rangeSigma, 0.0);
         if (measuredRange < settings.m_MinDistance)
@@ -188,12 +189,19 @@ class RDF_RadarMeasurement
         // Only radial component is observable; Cartesian velocity is reconstructed along LOS.
         target.m_Velocity = los * (-measuredRadial);
 
-        // Inverse DTO: never carry the scatterer entity.
-        target.m_Entity = null;
-        if (target.m_Type != ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER)
+        // Inverse DTO: by default never carry the scatterer entity and
+        // re-anonymize non-emitter types. When m_KeepEntityTruth is set (debug /
+        // PPI type colours / test assertions), preserve both so projectile and
+        // vehicle identity survives synthesis (ShellFire WLR depends on the
+        // PROJECTILE type staying intact through FilterUpdate).
+        if (!settings.m_KeepEntityTruth)
         {
-            target.m_IsAnonymous = true;
-            target.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_ANONYMOUS;
+            target.m_Entity = null;
+            if (target.m_Type != ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER)
+            {
+                target.m_IsAnonymous = true;
+                target.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_ANONYMOUS;
+            }
         }
     }
 

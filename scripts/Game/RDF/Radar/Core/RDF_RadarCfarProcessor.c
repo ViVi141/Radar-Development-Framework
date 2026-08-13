@@ -276,6 +276,10 @@ class RDF_RadarCfarProcessor
         vector scanForward,
         RDF_RadarSettings settings)
     {
+        // Thermal + EW noise floor only. DEM clutter is intentionally omitted
+        // here: the SNR gate (RDF_RadarPhysicalDetect) already folds clutter into
+        // the detection decision, and this coarse az/range grid does not resolve
+        // per-cell clutter. CFAR acts as a false-alarm gate, not clutter-adaptive.
         if (!settings || !settings.m_Hardware)
             return 0.000000000000000000000000000001;
 
