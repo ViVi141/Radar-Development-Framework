@@ -15,19 +15,11 @@
 //     9 TRACK     ride the shell; predicted arc already ahead
 //    10 SOLVE     pull to god: origin + arc + impact
 //    11 IMPACT    slam to the cyan circle
-//   Act IV CONTESTED — picture dies, then listen
+//   Act IV CONTESTED — picture dies, then listen, then shoot the emitter
 //    12 EW        clean search returns → second Mi-8 jams, ghosts flood
 //    13 ESM       stop painting; magenta listen to the jammer
-//    14 COVERAGE  search picture restored
-//   Act III LOCATE — WLR
-//     8 LAUNCH    mortar leaves the tube
-//     9 TRACK     ride the shell; predicted arc already ahead
-//    10 SOLVE     pull to god: origin + arc + impact
-//    11 IMPACT    slam to the cyan circle
-//   Act IV CONTESTED — picture dies, then listen
-//    12 EW        clean search returns → jam wipes truth, ghosts flood
-//    13 ESM       stop painting; magenta listen to the jammer
-//    14 COVERAGE  search picture restored
+//    14 ARM       Hydra along the listen beam into the jammer
+//    15 COVERAGE  search picture restored
 //
 // Staged from live APIs. Not in this reel (need extra stations / terrain /
 // UI the radar module does not own): dual-radar fusion, SAM salvo, RWR panel,
@@ -80,6 +72,7 @@ class RDF_RadarPromoReel
     protected static const int CAM_ROCKET = 11;
     protected static const int CAM_JAM = 12;
     protected static const int CAM_ESM_LOOK = 13;
+    protected static const int CAM_ARM = 14;
 
     protected static const int MODE_SEARCH = 0;
     protected static const int MODE_STARE = 1;
@@ -120,10 +113,13 @@ class RDF_RadarPromoReel
     protected static const float SHELL_INIT_SPEED_MS = 76.0;
     protected static const float SHELL_FIRE_DELAY_S = 0.20;
     protected static const float ROCKET_FIRE_DELAY_S = 0.40;
+    protected static const float ARM_FIRE_DELAY_S = 0.80;
     protected static const float ROCKET_LAUNCH_MS = 180.0;
     protected static const float PD_FILTER_S = 2.2;
     protected static const float JAM_ON_S = 2.8;
     protected static const float ESM_LISTEN_S = 1.5;
+    protected static const float HELI_RELEASE_DELAY_S = 2.0;
+    protected static const float HELI_ROCKET_HIT_M = 16.0;
     protected static const float PROMO_MIN_RANGE_M = 50.0;
     protected static const float SHELL_IMPACT_HOLD_S = 3.5;
     protected static const float SHELL_TOF_FALLBACK_S = 18.5;
@@ -173,6 +169,7 @@ class RDF_RadarPromoReel
     protected IEntity m_Rocket;
     protected ref RDF_RadarRocketGuidanceState m_RocketGuide;
     protected bool m_DidFireRocket;
+    protected bool m_DidFireArm;
     protected bool m_EmitterArmed;
     protected vector m_ShellImpactPos;
     protected bool m_ShellImpactValid;
@@ -194,9 +191,13 @@ class RDF_RadarPromoReel
     protected vector m_HeliSmoothPos;
     protected vector m_HeliSmoothFwd;
     protected bool m_HeliSmoothInit;
+    protected bool m_AirReleased;
+    protected float m_AirHitWallS;
     protected vector m_JamSmoothPos;
     protected vector m_JamSmoothFwd;
     protected bool m_JamSmoothInit;
+    protected bool m_JamReleased;
+    protected float m_JamHitWallS;
     protected vector m_ConvoyLookPos;
     protected bool m_ConvoyLookInit;
 
@@ -264,11 +265,16 @@ class RDF_RadarPromoReel
         m_DidFireShell = false;
         m_DidStartMortarLoad = false;
         m_DidFireRocket = false;
+        m_DidFireArm = false;
         m_EmitterArmed = false;
         m_DidLiveSolve = false;
         m_ShellApexValid = false;
         m_HeliSmoothInit = false;
         m_JamSmoothInit = false;
+        m_AirReleased = false;
+        m_JamReleased = false;
+        m_AirHitWallS = -1.0;
+        m_JamHitWallS = -1.0;
         m_ShellTofS = SHELL_TOF_FALLBACK_S;
     }
 
@@ -368,7 +374,7 @@ class RDF_RadarPromoReel
         }
 
         Print("[RDF Promo] ========== START RECORDING NOW ==========");
-        Print("[RDF Promo] 剧本: 发现 → 锁一架打一架 → 反炮兵 → 另一架干扰后改听");
+        Print("[RDF Promo] 剧本: 发现 → 锁一架打一架 → 反炮兵 → 另一架干扰后改听并反辐射");
         Print("[RDF Promo] Stop() 结束。loop=" + loop.ToString());
         AnnounceShot();
     }
@@ -389,10 +395,15 @@ class RDF_RadarPromoReel
         m_DidFireShell = false;
         m_DidStartMortarLoad = false;
         m_DidFireRocket = false;
+        m_DidFireArm = false;
         m_EmitterArmed = false;
         m_DidLiveSolve = false;
         m_HeliSmoothInit = false;
         m_JamSmoothInit = false;
+        m_AirReleased = false;
+        m_JamReleased = false;
+        m_AirHitWallS = -1.0;
+        m_JamHitWallS = -1.0;
         m_CamSmoothInit = false;
         m_ConvoyLookInit = false;
         RDF_RadarAutoRunner.SetScanSubjectOverride(m_PrevSubjectOverride);
@@ -454,7 +465,8 @@ class RDF_RadarPromoReel
         m_Shots.Insert(MakeShot("11 IMPACT  落点确认", 3.5, CAM_IMPACT, MODE_WLR, 36.0));
         m_Shots.Insert(MakeShot("12 EW  画面被淹没", 8.0, CAM_JAM, MODE_EW, 42.0));
         m_Shots.Insert(MakeShot("13 ESM  改听辐射源", 6.5, CAM_ESM_LOOK, MODE_ESM, 32.0));
-        m_Shots.Insert(MakeShot("14 COVERAGE  全图", 5.5, CAM_PULLBACK, MODE_SEARCH, 52.0));
+        m_Shots.Insert(MakeShot("14 ARM  顺着辐射打回去", 7.5, CAM_ARM, MODE_ESM, 26.0));
+        m_Shots.Insert(MakeShot("15 COVERAGE  全图", 5.5, CAM_PULLBACK, MODE_SEARCH, 52.0));
     }
 
     protected RDF_RadarPromoShot MakeShot(
@@ -529,12 +541,22 @@ class RDF_RadarPromoReel
             MaybeFireShell(shotT);
         if (shot.m_CamStyle == CAM_ROCKET)
             MaybeFireRocket(shotT);
+        if (shot.m_CamStyle == CAM_ARM)
+            MaybeFireArmRocket(shotT);
         UpdateRocketGuidance();
         IgnorePromoArtillery();
         IgnoreRocketChildren();
         if (m_AppliedRadarMode == MODE_STARE)
             ForceLockHeli();
+        if (m_AppliedRadarMode == MODE_ESM)
+            ForceLockArm();
+
+        bool wantEmitter = false;
         if (shot.m_CamStyle == CAM_ESM_LOOK && shotT >= ESM_LISTEN_S)
+            wantEmitter = true;
+        if (shot.m_CamStyle == CAM_ARM)
+            wantEmitter = true;
+        if (wantEmitter)
             ArmPromoEmitter(true);
         else if (m_EmitterArmed)
             ArmPromoEmitter(false);
@@ -613,6 +635,7 @@ class RDF_RadarPromoReel
             m_DidFireShell = false;
             m_DidStartMortarLoad = false;
             m_DidFireRocket = false;
+            m_DidFireArm = false;
             m_EmitterArmed = false;
             m_Rocket = null;
             m_RocketGuide = null;
@@ -690,6 +713,13 @@ class RDF_RadarPromoReel
                 title = "13  静默  停发";
             else
                 title = "13  侦收  抓住辐射源";
+        }
+        else if (shot.m_CamStyle == CAM_ARM)
+        {
+            if (m_Rocket)
+                title = "14  ARM  顺着辐射打回去";
+            else
+                title = "14  ARM  锁定辐射源";
         }
         RDF_RadarHUD.SetModeOverride(title);
     }
@@ -1062,6 +1092,8 @@ class RDF_RadarPromoReel
             m_HeliSmoothPos = posA;
             m_HeliSmoothFwd = ComputeOrbitTangent(0.0, 0.0);
             m_HeliSmoothInit = true;
+            m_AirReleased = false;
+            m_AirHitWallS = -1.0;
             OrientEntityAlong(m_AirTarget, m_HeliSmoothFwd, posA);
             PreparePromoHeliRotors(m_AirTarget);
             Print("[RDF Promo] engage Mi-8 at " + posA.ToString());
@@ -1075,6 +1107,8 @@ class RDF_RadarPromoReel
             m_JamSmoothPos = posB;
             m_JamSmoothFwd = ComputeOrbitTangent(0.0, AIR_JAM_PHASE);
             m_JamSmoothInit = true;
+            m_JamReleased = false;
+            m_JamHitWallS = -1.0;
             OrientEntityAlong(m_JamHeli, m_JamSmoothFwd, posB);
             PreparePromoHeliRotors(m_JamHeli);
             Print("[RDF Promo] jam Mi-8 at " + posB.ToString());
@@ -1158,10 +1192,112 @@ class RDF_RadarPromoReel
 
     protected void UpdateAirMotion(float elapsedS)
     {
+        TickPromoHeli(
+            m_AirTarget,
+            m_AirReleased,
+            m_AirHitWallS,
+            m_HeliSmoothPos,
+            m_HeliSmoothFwd,
+            m_HeliSmoothInit,
+            elapsedS,
+            0.0);
+        TickPromoHeli(
+            m_JamHeli,
+            m_JamReleased,
+            m_JamHitWallS,
+            m_JamSmoothPos,
+            m_JamSmoothFwd,
+            m_JamSmoothInit,
+            elapsedS,
+            AIR_JAM_PHASE);
+    }
+
+    protected void TickPromoHeli(
+        IEntity heli,
+        inout bool released,
+        inout float hitWallS,
+        inout vector smoothPos,
+        inout vector smoothFwd,
+        inout bool smoothInit,
+        float elapsedS,
+        float phaseOffset)
+    {
+        if (!heli)
+            return;
+        if (released)
+            return;
+
+        float nowS = System.GetTickCount() * 0.001;
+        if (hitWallS < 0.0)
+        {
+            if (IsHeliStruck(heli))
+                hitWallS = nowS;
+        }
+        if (hitWallS >= 0.0)
+        {
+            if (nowS - hitWallS >= HELI_RELEASE_DELAY_S)
+            {
+                ReleaseHeliControl(heli, smoothFwd);
+                released = true;
+                smoothInit = false;
+                return;
+            }
+        }
+
         StepHeliOrbit(
-            m_AirTarget, m_HeliSmoothPos, m_HeliSmoothFwd, m_HeliSmoothInit, elapsedS, 0.0);
-        StepHeliOrbit(
-            m_JamHeli, m_JamSmoothPos, m_JamSmoothFwd, m_JamSmoothInit, elapsedS, AIR_JAM_PHASE);
+            heli, smoothPos, smoothFwd, smoothInit, elapsedS, phaseOffset);
+    }
+
+    protected bool IsHeliStruck(IEntity heli)
+    {
+        if (!heli)
+            return false;
+
+        SCR_DamageManagerComponent dmg = SCR_DamageManagerComponent.GetDamageManager(heli);
+        if (dmg)
+        {
+            if (dmg.IsDestroyed())
+                return true;
+            if (dmg.GetHealthScaled() < 0.85)
+                return true;
+        }
+
+        if (!m_Rocket)
+            return false;
+        float dist = vector.Distance(m_Rocket.GetOrigin(), heli.GetOrigin());
+        if (dist <= HELI_ROCKET_HIT_M)
+            return true;
+        return false;
+    }
+
+    protected void ReleaseHeliControl(IEntity heli, vector lastFwd)
+    {
+        if (!heli)
+            return;
+
+        HelicopterControllerComponent heliCtrl = HelicopterControllerComponent.Cast(
+            heli.FindComponent(HelicopterControllerComponent));
+        if (heliCtrl)
+        {
+            VehicleHelicopterSimulation hsim = heliCtrl.GetSimulation();
+            if (hsim)
+            {
+                hsim.SetThrottle(0.0);
+                if (hsim.EngineIsOn())
+                    hsim.EngineStop();
+            }
+        }
+
+        Physics physics = heli.GetPhysics();
+        if (physics)
+        {
+            physics.EnableGravity(true);
+            vector vel = lastFwd * (AIR_ORBIT_RATE_RAD_S * AIR_ORBIT_RADIUS_M);
+            vel[1] = vel[1] - 4.0;
+            physics.SetVelocity(vel);
+            physics.SetAngularVelocity(Vector(0.15, 0.35, 0.20));
+        }
+        Print("[RDF Promo] heli released to physics");
     }
 
     protected IEntity SpawnPrefabAt(ResourceName prefabName, vector pos)
@@ -1568,6 +1704,36 @@ class RDF_RadarPromoReel
         m_DidFireRocket = true;
     }
 
+    protected void MaybeFireArmRocket(float shotT)
+    {
+        if (shotT < ARM_FIRE_DELAY_S)
+            return;
+        if (m_DidFireArm)
+            return;
+        if (m_Rocket)
+            return;
+
+        IEntity locked;
+        vector aimPos;
+        bool haveAim = false;
+        bool radiating;
+        RDF_RadarSensor sensor = RDF_RadarAutoRunner.GetSensor();
+        if (sensor && sensor.GetArmAim(locked, aimPos, radiating))
+            haveAim = true;
+        else if (m_JamHeli)
+        {
+            locked = m_JamHeli;
+            aimPos = FollowJamHeliPos();
+            haveAim = true;
+        }
+        if (!haveAim)
+            return;
+        if (!TryFireRocket(aimPos, locked))
+            return;
+        m_DidFireArm = true;
+        Print("[RDF Promo] ARM along emitter beam");
+    }
+
     protected bool TryFireRocket(vector aimPos, IEntity lockedTarget)
     {
         BaseWorld world = GetGame().GetWorld();
@@ -1632,13 +1798,33 @@ class RDF_RadarPromoReel
         float nowS = System.GetTickCount() * 0.001;
         vector aimPos = FollowHeliPos();
         vector aimVel = m_HeliSmoothFwd * (AIR_ORBIT_RATE_RAD_S * AIR_ORBIT_RADIUS_M);
-        IEntity locked;
-        vector lockPos;
-        RDF_RadarSensor sensor = RDF_RadarAutoRunner.GetSensor();
-        if (sensor && sensor.GetLockedTarget(locked, lockPos))
+        RDF_RadarPromoShot shot = CurrentShot();
+        bool armShot = false;
+        if (shot)
         {
-            if (locked == m_AirTarget)
-                aimPos = lockPos;
+            if (shot.m_CamStyle == CAM_ARM)
+                armShot = true;
+        }
+        RDF_RadarSensor sensor = RDF_RadarAutoRunner.GetSensor();
+        if (armShot)
+        {
+            aimPos = FollowJamHeliPos();
+            aimVel = m_JamSmoothFwd * (AIR_ORBIT_RATE_RAD_S * AIR_ORBIT_RADIUS_M);
+            IEntity armEnt;
+            vector armPos;
+            bool radiating;
+            if (sensor && sensor.GetArmAim(armEnt, armPos, radiating))
+                aimPos = armPos;
+        }
+        else
+        {
+            IEntity locked;
+            vector lockPos;
+            if (sensor && sensor.GetLockedTarget(locked, lockPos))
+            {
+                if (locked == m_AirTarget)
+                    aimPos = lockPos;
+            }
         }
 
         RDF_RadarRocketGuidance.Update(m_Rocket, aimPos, aimVel, dt, nowS, m_RocketGuide);
@@ -1704,6 +1890,57 @@ class RDF_RadarPromoReel
             lockMgr.LockTrackId(tr.m_TrackId);
             return;
         }
+    }
+
+    protected void ForceLockArm()
+    {
+        RDF_RadarSensor sensor = RDF_RadarAutoRunner.GetSensor();
+        if (!sensor)
+            return;
+        RDF_RadarLockManager lockMgr = sensor.GetLockManager();
+        if (!lockMgr)
+            return;
+
+        IEntity armEnt;
+        vector armPos;
+        bool radiating;
+        if (sensor.GetArmAim(armEnt, armPos, radiating))
+        {
+            if (!m_JamHeli)
+                return;
+            if (armEnt == m_JamHeli)
+                return;
+        }
+
+        array<ref RDF_RadarTrack> tracks = sensor.GetTracks();
+        if (!tracks)
+            return;
+        int jamTrackId = -1;
+        int emitterTrackId = -1;
+        int i;
+        for (i = 0; i < tracks.Count(); i++)
+        {
+            RDF_RadarTrack tr = tracks.Get(i);
+            if (!tr)
+                continue;
+            if (m_JamHeli)
+            {
+                if (tr.m_Entity == m_JamHeli)
+                    jamTrackId = tr.m_TrackId;
+            }
+            if (tr.m_Type == ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER)
+            {
+                if (emitterTrackId < 0)
+                    emitterTrackId = tr.m_TrackId;
+            }
+        }
+        if (jamTrackId >= 0)
+        {
+            lockMgr.LockArmTrackId(jamTrackId);
+            return;
+        }
+        if (emitterTrackId >= 0)
+            lockMgr.LockArmTrackId(emitterTrackId);
     }
 
     protected void ArmPromoEmitter(bool on)
@@ -1842,13 +2079,31 @@ class RDF_RadarPromoReel
                 }
             }
         }
-        if (mode == MODE_STARE && sensor)
+        if (sensor)
         {
             RDF_RadarLockManager lockMgr = sensor.GetLockManager();
             if (lockMgr)
             {
-                lockMgr.SetAutoAcquire(true);
-                lockMgr.SetTypeFilter(true, false, false);
+                if (mode == MODE_STARE)
+                {
+                    lockMgr.SetAutoAcquire(true);
+                    lockMgr.SetTypeFilter(true, false, false);
+                    lockMgr.SetArmRequireLiveEmitter(false);
+                }
+                else if (mode == MODE_ESM)
+                {
+                    lockMgr.SetAutoAcquire(true);
+                    lockMgr.SetTypeFilter(false, false, true);
+                    lockMgr.SetArmRequireLiveEmitter(true);
+                    lockMgr.SetAcquireHits(1);
+                    lockMgr.SetMaxLockRange(5000.0);
+                    lockMgr.SetLockSector(0.0);
+                }
+                else
+                {
+                    lockMgr.SetArmRequireLiveEmitter(false);
+                    lockMgr.SetTypeFilter(true, false, false);
+                }
             }
         }
     }
@@ -2101,7 +2356,7 @@ class RDF_RadarPromoReel
         }
         else if (style == CAM_ROCKET)
         {
-            RideRocketCamera(eye, lookAt, u);
+            RideRocketCamera(eye, lookAt, u, FollowHeliPos());
             fov = Math.Lerp(32.0, 24.0, u);
         }
         else if (style == CAM_LAUNCH)
@@ -2155,6 +2410,19 @@ class RDF_RadarPromoReel
             EsmCamera(eye, lookAt, listenU);
             fov = Math.Lerp(40.0, 28.0, listenU);
         }
+        else if (style == CAM_ARM)
+        {
+            if (m_Rocket)
+            {
+                RideRocketCamera(eye, lookAt, u, FollowJamHeliPos());
+                fov = Math.Lerp(32.0, 24.0, u);
+            }
+            else
+            {
+                EsmCamera(eye, lookAt, 1.0);
+                fov = 28.0;
+            }
+        }
         else
         {
             vector nearEye;
@@ -2204,6 +2472,8 @@ class RDF_RadarPromoReel
             return 0.12;
         if (style == CAM_ROCKET)
             return 0.08;
+        if (style == CAM_ARM)
+            return 0.08;
         if (style == CAM_JAM)
             return 0.10;
         if (style == CAM_ESM_LOOK)
@@ -2247,6 +2517,12 @@ class RDF_RadarPromoReel
 
     protected vector FollowHeliPos()
     {
+        if (m_AirReleased)
+        {
+            if (m_AirTarget)
+                return m_AirTarget.GetOrigin();
+            return m_OrbitCenter;
+        }
         if (m_HeliSmoothInit)
             return m_HeliSmoothPos;
         if (m_AirTarget)
@@ -2256,6 +2532,12 @@ class RDF_RadarPromoReel
 
     protected vector FollowJamHeliPos()
     {
+        if (m_JamReleased)
+        {
+            if (m_JamHeli)
+                return m_JamHeli.GetOrigin();
+            return FollowHeliPos();
+        }
         if (m_JamSmoothInit)
             return m_JamSmoothPos;
         if (m_JamHeli)
@@ -2397,6 +2679,8 @@ class RDF_RadarPromoReel
         if (m_AppliedRadarMode == MODE_STARE)
             DrawLockConeOverlay(flags);
         if (style == CAM_ROCKET)
+            DrawRocketOverlay(flags);
+        if (style == CAM_ARM)
             DrawRocketOverlay(flags);
         if (m_AppliedRadarMode == MODE_EW)
             DrawEwOverlay(flags);
@@ -3025,9 +3309,8 @@ class RDF_RadarPromoReel
         eye = LiftEyeMin(eye, 2.0);
     }
 
-    protected void RideRocketCamera(out vector eye, out vector lookAt, float u)
+    protected void RideRocketCamera(out vector eye, out vector lookAt, float u, vector heli)
     {
-        vector heli = FollowHeliPos();
         vector rocketPos = m_RadarAnchor + m_FlatFwd * 8.0 + Vector(0.0, 6.0, 0.0);
         if (m_Rocket)
             rocketPos = m_Rocket.GetOrigin();
