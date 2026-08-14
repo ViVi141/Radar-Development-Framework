@@ -66,6 +66,31 @@ Workbench 中可直接编辑 `.conf`；改完后确保 Resource Browser 仍已 R
 3. `$profile` V3 CSV（开发全量 DEM）
 4. 皆无 → `mode=LIVE`（仅 `GetSurfaceY`，地表类 = UNKNOWN）
 
+### 支持的世界（官方三图）
+
+仓库已内置三张官方地图的 SURF+HEIGHT 包（`DemData/<world>/`）：
+
+| 世界 | SURF | HEIGHT |
+|------|------|--------|
+| `GM_Eden` | ✅ | ✅ |
+| `GM_Cain` | ✅ | ✅ |
+| `GM_Arland` | ✅ | ✅ |
+
+### 无烘焙地图（其他模组图）的回退表现
+
+用其他模组地图但没有对应 `DemData/<world>/` 烘焙文件时：
+
+1. 运行时查找走到底 → `mode=LIVE`，HUD 显示 `LIVE`
+2. **高度仍可用**：回退 `BaseWorld.GetSurfaceY`（live 地形），通视遮挡 / WLR 地面采样照常
+3. **地表类 = UNKNOWN** → 无 DEM σ⁰ 杂波：
+   - 雷达**仍能检测目标**（物理检测 + Trace 通视 + SNR 门限都正常）
+   - 但**没有地面杂波压制**——杂波不会掩埋/压掉目标，检测偏「容易」、SNR 更高
+   - 噪声分母只剩热噪声 + EW 噪声
+4. **DEM-LOS 预检空操作**：无 HEIGHT RAM，回退纯 `TraceMove`（稍慢但正确）
+5. **无烘焙 HEIGHT RAM**：高度走 live `GetSurfaceY`（无 RAM 优化）
+
+一句话：雷达功能完整，但少了「地面杂波」这一层真实度——检测更干净也更容易，通视优化退化为纯 Trace。
+
 采样时：HEIGHT+SURF 常驻后**只读 RAM**（不再 `GetSurfaceY`）。预热未完成或仅有 SURF、无 HEIGHT 包时，才允许 live Y。  
 HUD：`SURF+H` = 两者皆 RAM；`SURF RAM` = 仅地表类（高度仍可能 live）。
 
@@ -194,6 +219,31 @@ You can edit `.conf` directly in Workbench; after changes, ensure Resource Brows
 2. Mod `DemData/<world>/surf_manifest.json` (**workshop recommended**)
 3. `$profile` V3 CSV (full DEM for development)
 4. None of the above → `mode=LIVE` (`GetSurfaceY` only; surface class = UNKNOWN)
+
+### Supported worlds (official)
+
+The repo ships SURF+HEIGHT packs for the three official maps under `DemData/<world>/`:
+
+| World | SURF | HEIGHT |
+|-------|------|--------|
+| `GM_Eden` | ✅ | ✅ |
+| `GM_Cain` | ✅ | ✅ |
+| `GM_Arland` | ✅ | ✅ |
+
+### Fallback on unbaked maps (other mod maps)
+
+On a mod map with no matching `DemData/<world>/` bake files:
+
+1. Runtime lookup bottoms out → `mode=LIVE`, HUD shows `LIVE`
+2. **Height still works**: falls back to `BaseWorld.GetSurfaceY` (live terrain); LOS occlusion / WLR ground sampling are unaffected
+3. **Surface class = UNKNOWN** → no DEM σ⁰ clutter:
+   - Radar **still detects targets** (physical detection + Trace LOS + SNR gate all work)
+   - But **no ground-clutter suppression** — clutter never buries/suppresses targets; detection is "easier" with higher SNR
+   - The noise denominator is thermal + EW noise only
+4. **DEM-LOS precheck is a no-op**: no HEIGHT RAM, falls back to pure `TraceMove` (slightly slower but correct)
+5. **No baked HEIGHT RAM**: height uses live `GetSurfaceY` (no RAM optimization)
+
+In short: radar is fully functional, but the "ground clutter" fidelity layer is missing — detection is cleaner/easier, and the LOS optimization degrades to pure Trace.
 
 When sampling: once SURF+HEIGHT are resident, **read RAM only** (no `GetSurfaceY`). Live Y is allowed only while warming or when no HEIGHT pack ships.
 
