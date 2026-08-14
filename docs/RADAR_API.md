@@ -303,6 +303,31 @@ candidate
 No HEIGHT pack → precheck is a **no-op** (same as old Trace-only path).  
 In-game matrix bench: Debugger `RDF_RadarDemLosBenchAutoTest.Start()` → [AUTOTEST_CI_LIMITS.md](AUTOTEST_CI_LIMITS.md).
 
+### Mechanical-scan phase offset (paused-antenna resume)
+
+`m_EnableMechanicalScan` drives `GetScanForward` from the **world clock**:
+`angle = worldTime * ScanRpm * 2π/60`. `RDF_RadarSettings.m_ScanPhaseOffsetRad`
+(default **0**) is added to that angle, letting a mod freeze the antenna
+visually (stop driving its bone / yaw) while the sensor is disabled, then
+resume from the frozen bearing instead of snapping to the world-clock angle:
+
+```c
+// pause: record the frozen bearing, disable the sensor (no scan, no emission)
+float frozenRad = ...;                    // antenna bearing at pause
+sensor.SetEnabled(false);
+
+// resume: offset so the first scan starts at the frozen bearing
+settings.m_ScanPhaseOffsetRad = frozenRad - world.GetWorldTime() * 0.001
+    * settings.m_Hardware.m_ScanRpm * Math.PI * 2.0 / 60.0;
+sensor.Configure(settings);
+sensor.SetEnabled(true);
+```
+
+The offset applies to `GetScanForward` only (mechanical mode, `ScanRpm > 0`);
+`Validate()` leaves it untouched, and 0 reproduces the stock world-clock scan.
+Keep antenna visuals on the same formula so the mesh and the scan beam stay in
+sync across pause/resume cycles.
+
 ---
 
 ### Dwell / resource management (phased-array beam-time budget)
@@ -872,6 +897,29 @@ cfg.Validate();
 
 无 HEIGHT 包 → 预检是**空操作**（与旧版纯 Trace 相同）。  
 游戏内四象限基准：Debugger `RDF_RadarDemLosBenchAutoTest.Start()` → [AUTOTEST_CI_LIMITS.md](AUTOTEST_CI_LIMITS.md)。
+
+### 机械扫描相位偏移（暂停天线续转）
+
+`m_EnableMechanicalScan` 时 `GetScanForward` 用**世界钟**定角度：
+`angle = worldTime * ScanRpm * 2π/60`。`RDF_RadarSettings.m_ScanPhaseOffsetRad`
+（默认 **0**）叠加到该角度上，让模组在 Sensor 禁用期间冻结天线视觉
+（停止驱动骨骼/偏航），恢复时从冻结方位续转，而不是跳到世界钟角度：
+
+```c
+// 暂停：记录冻结方位并禁用 Sensor（不扫描、不辐射）
+float frozenRad = ...;                    // 暂停时的天线方位（弧度）
+sensor.SetEnabled(false);
+
+// 恢复：偏移使首次扫描从冻结方位开始
+settings.m_ScanPhaseOffsetRad = frozenRad - world.GetWorldTime() * 0.001
+    * settings.m_Hardware.m_ScanRpm * Math.PI * 2.0 / 60.0;
+sensor.Configure(settings);
+sensor.SetEnabled(true);
+```
+
+偏移只作用于 `GetScanForward`（机械模式且 `ScanRpm > 0`）；`Validate()` 不动它，
+0 即原世界钟扫描。天线视觉应使用同一公式，保证网格与扫描波束在暂停/恢复
+循环中始终同步。
 
 ---
 

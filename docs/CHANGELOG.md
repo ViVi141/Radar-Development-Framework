@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-08-14 — 机械扫描相位偏移（可恢复暂停天线）
+
+- **Settings**：`RDF_RadarSettings.m_ScanPhaseOffsetRad`（默认 0 = 原世界钟绝对角度，向后兼容）
+- **Scanner**：`RDF_RadarScanner.GetScanForward` 在 `worldTime * rpm * 2π/60` 上叠加偏移
+- **用途**：模组在禁用 Sensor（暂停）时记录天线冻结方位，恢复时把偏移写回，使恢复后首次扫描从冻结方位续转，而不是跳到世界钟角度；天线视觉与 RDF 扫描方向保持同步
+- **约定**：偏移应在 Sensor 禁用期间更新（`m_ScanPhaseOffsetRad`），重新启用后生效；启用期间改动会使扫描角度瞬时跳变
+
 ## 1.0.0 — 2026-08-14
 
 系统层纵深（§9）三线全部落地：S1 驻留/资源管理、S3 ECCM 决策、S2 JPDA 软关联（离线金标 + C 端口 + 游戏内 AutoTest 全 PASS）。产品形态「可信的军武传感器玩法」达成。

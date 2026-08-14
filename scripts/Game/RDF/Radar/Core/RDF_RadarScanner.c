@@ -1224,7 +1224,10 @@ class RDF_RadarScanner
         if (rpm <= 0.0)
             return GetSubjectForward(subject);
 
-        float angle = worldTime * rpm * Math.PI * 2.0 / 60.0;
+        // World-time absolute scan angle plus an optional phase offset. The
+        // offset lets a mod resume a paused (disabled) antenna from its frozen
+        // bearing; with 0 it is the stock world-clock scan.
+        float angle = worldTime * rpm * Math.PI * 2.0 / 60.0 + m_Settings.m_ScanPhaseOffsetRad;
         angle = NormalizeAngleRad(angle);
         return Vector(Math.Cos(angle), 0.0, Math.Sin(angle));
     }

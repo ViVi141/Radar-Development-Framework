@@ -28,6 +28,12 @@ class RDF_RadarSettings
     ref RDF_RadarHardware m_Hardware;
     bool m_EnablePhysicalDetection = true;
     bool m_EnableMechanicalScan = false;
+    // Mechanical-scan phase offset (radians) added to GetScanForward's
+    // world-time angle. Lets mods resume a paused antenna from its frozen
+    // bearing instead of snapping to the world-clock angle. 0 = stock
+    // (world-time absolute). Mods should update it while the sensor is
+    // disabled so the first scan after re-enable starts at the frozen angle.
+    float m_ScanPhaseOffsetRad = 0.0;
     float m_DetectionSnrDb = 8.0;
     bool m_KeepUndetected = false;
     bool m_EnableDemClutter = true;
