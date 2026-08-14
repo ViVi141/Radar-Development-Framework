@@ -44,6 +44,17 @@ observations) are split: Tracker / Lock consume observations only.
 12. Optional lock layer (`RDF_RadarLockManager`) on tracks for SEARCH →
     ACQUIRING → TRACKING → COAST; exposed via `RDF_RadarSensor.GetLockedTarget`.
 
+Opt-in system layer (see [RADAR_API.md](RADAR_API.md) § Dwell / ECCM / JPDA):
+
+- `m_EnableDwellScheduler` — before the scan, schedule fire-control / track dwells
+  within a beam-time budget; scheduled scatterers get a full update (SEARCH stays
+  on the fair cursor).
+- `m_EnableEccmDecision` — after the scan, read EW observables (J/N, false-plot
+  count, lock state, mainlobe fraction) and auto-toggle SLB / report PRF·frequency
+  agility + burn-through.
+- `m_EnableJpda` — in the tracker, replace GNN with JPDA soft association
+  (gate + union-find cluster + joint-event enumeration + weighted alpha-beta).
+
 ## Main configuration
 
 `RDF_RadarSettings`:
@@ -79,6 +90,12 @@ observations) are split: Tracker / Lock consume observations only.
 - `m_EnableRwrReporting` (publish SEARCH/TRACK/LOCK threats after each dwell)
 - `m_FairScanCursor` (fair round-robin dwell cursor; default true)
 - Include* flags (`m_IncludeVehicles` / projectiles / emitters, etc.)
+- System layer: `m_EnableDwellScheduler`, `m_DwellBudgetMs`,
+  `m_FireControlDwellPeriodS`/`m_FireControlDwellMs`,
+  `m_TrackDwellPeriodS`/`m_TrackDwellMs`
+- ECCM decision: `m_EnableEccmDecision`, `m_EccmJnOnDb`, `m_EccmJnHysteresisDb`,
+  `m_EccmSidelobeCouplingOn`
+- JPDA: `m_EnableJpda`, `m_JpdaPd`
 
 `RDF_RadarHardware`:
 
@@ -336,6 +353,9 @@ RDF_RadarHeliDuelAutoTest.Start();       // heli vs heli + intercept
 RDF_RadarSamEngageAutoTest.Start();      // ground SAM search / ID / engage demo
 RDF_RadarFusionAutoTest.Start();         // datalink Hub + fusion / cross-fix
 RDF_RadarStressAutoTest.Start();         // heavy soak load
+RDF_RadarDwellAutoTest.Start();          // dwell/resource scheduler
+RDF_RadarEccmAutoTest.Start();           // ECCM decision layer
+RDF_RadarJpdaAutoTest.Start();           // JPDA soft association (tight cluster)
 ```
 
 Offline Python capability suite (no DEM required):
@@ -702,6 +722,9 @@ RDF_RadarHeliDuelAutoTest.Start();       // 机打机 + 拦截
 RDF_RadarSamEngageAutoTest.Start();      // 地面 SAM 搜索/识别/打击演示
 RDF_RadarFusionAutoTest.Start();         // 数据链 Hub + 融合 / 交会
 RDF_RadarStressAutoTest.Start();         // 重负载 soak
+RDF_RadarDwellAutoTest.Start();          // 驻留/资源调度
+RDF_RadarEccmAutoTest.Start();           // ECCM 决策层
+RDF_RadarJpdaAutoTest.Start();           // JPDA 软关联（密集簇）
 ```
 
 离线 Python 全能力套件（无需 DEM）：

@@ -147,6 +147,9 @@ Standalone regressions:
 | Heli Duel | Heli vs heli + intercept inbound missiles |
 | SAM Engage | Ground SAM search / ID / engage demo |
 | Fusion | Datalink Hub + multi-radar association / cross-fix |
+| Dwell | Beam-time budget: fire-control + track dwells keep targets alive under contention |
+| ECCM | Sidelobe noise → SLB; deception → PRF agility |
+| JPDA | Tight cluster: soft association keeps every target confirmed |
 
 Test rule: **do not give detection assists to objects under test** — no emitter tags, no RCS edits, no pre-writing into the scatterer table.
 Targets must be found by discovery sweep and detected from their own returns. Each test's `discovered_unaided` check enforces this line.
@@ -207,7 +210,7 @@ python tools\dem\rdf_dem_pack.py --world GM_Eden
 
 ### Contributing
 
-PRs and Issues welcome. Contact: 747384120@qq.com
+PRs and Issues welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). Contact: 747384120@qq.com
 
 ---
 
@@ -363,6 +366,9 @@ python -m unittest discover -s . -p "test_rdf_*.py" -v
 | Heli Duel | 机打机 + 拦截来袭导弹 |
 | SAM Engage | 地面 SAM 搜索 / 识别 / 打击演示 |
 | Fusion | 数据链 Hub + 多雷达关联 / 交会 |
+| Dwell | 波束时间预算：火控+跟踪驻留在争抢下保活目标 |
+| ECCM | 旁瓣噪声→SLB；欺骗→PRF 捷变 |
+| JPDA | 密集簇：软关联保持每个目标确认航迹 |
 
 测试约定：**不得给被探测物体添加任何探测助攻** —— 不加辐射源标记、不改 RCS、不预先写进散射体表。
 目标必须由发现扫掠自行找到，并靠自身回波被检测。各测试的 `discovered_unaided` 检查即用于守住这条线。
@@ -423,4 +429,4 @@ python tools\dem\rdf_dem_pack.py --world GM_Eden
 
 ### 贡献
 
-欢迎 PR / Issue。联系：747384120@qq.com
+欢迎 PR / Issue。见 [CONTRIBUTING.md](CONTRIBUTING.md)。联系：747384120@qq.com

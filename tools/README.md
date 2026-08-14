@@ -93,6 +93,9 @@ Generated files go to `tools/dem/out/` (gitignored except `.gitkeep`). Do not co
 | `rdf_radar_site_path_lut.py` | Fixed-site polar DEM path-factor LUT |
 | `rdf_radar_fusion.py` | Multi-radar associate / cross-fix |
 | `rdf_radar_systems.py` | Lock, ESM/RWR/ARM, GO/SO-CFAR, Network policy; `MeasurementModel` + optional `ChannelFidelity` folds |
+| `rdf_radar_dwell.py` | Phased-array dwell / resource-management scheduler (TODO §9 S1) |
+| `rdf_radar_eccm.py` | ECCM decision layer — hysteresis jam detect → SLB / freq / PRF / burn-through (S3) |
+| `rdf_radar_jpda.py` | JPDA soft association — gate + union-find cluster + joint events + marginalization (S2) |
 
 ### CLI demos / validation
 
@@ -129,6 +132,9 @@ Generated files go to `tools/dem/out/` (gitignored except `.gitkeep`). Do not co
 | `test_rdf_radar_hw_calibrate.py` | HW calib suggest / preset JSON |
 | `test_rdf_radar_sig_pack.py` | Signature pack / rotor fields |
 | `test_rdf_sig_patch_heli_rotors.py` | Heli rotor conf patch |
+| `test_rdf_radar_dwell.py` | Dwell scheduler priority / EDF / budget / deadline-miss |
+| `test_rdf_radar_eccm.py` | ECCM decision mapping + hysteresis |
+| `test_rdf_radar_jpda.py` | JPDA marginalization / soft split / clustering |
 
 ```powershell
 cd tools\dem
@@ -210,6 +216,9 @@ cd tools\dem
 | `rdf_radar_site_path_lut.py` | 固定站极坐标 DEM 路径因子 LUT |
 | `rdf_radar_fusion.py` | 多雷达关联 / 交会 |
 | `rdf_radar_systems.py` | 锁定、ESM/RWR/ARM、GO/SO-CFAR、Network 策略；`MeasurementModel` + 可选 `ChannelFidelity` 折叠 |
+| `rdf_radar_dwell.py` | 相控阵驻留 / 资源管理调度（TODO §9 S1） |
+| `rdf_radar_eccm.py` | ECCM 决策层——滞回压制检测 → SLB / 频率 / PRF / 烧穿（S3） |
+| `rdf_radar_jpda.py` | JPDA 软关联——门控 + 并查集聚类 + 联合事件 + 边缘化（S2） |
 
 ### CLI / 校验
 
@@ -246,6 +255,9 @@ cd tools\dem
 | `test_rdf_radar_hw_calibrate.py` | HW 标定 suggest / 预设 JSON |
 | `test_rdf_radar_sig_pack.py` | 签名打包 / 旋翼字段 |
 | `test_rdf_sig_patch_heli_rotors.py` | 旋翼 conf 填数补丁 |
+| `test_rdf_radar_dwell.py` | 驻留调度优先级 / EDF / 预算 / 截止错过 |
+| `test_rdf_radar_eccm.py` | ECCM 决策映射 + 滞回 |
+| `test_rdf_radar_jpda.py` | JPDA 边缘化 / 软分配 / 聚类 |
 
 ```powershell
 cd tools\dem

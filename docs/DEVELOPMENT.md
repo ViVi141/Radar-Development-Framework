@@ -114,7 +114,9 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarWeaponBridge.c         火控桥 FireSolution / 发射门控 / 中段上行
 │   ├── RDF_RadarWeaponComponent.c      载具挂载入口 GuideRocket
 │   ├── RDF_RadarRwr.c                  被搜索/跟踪/锁定告警
-│   └── RDF_RadarSensor.c               公共门面 SEARCH/STARE/WLR/ESM/PULSE_DOPPLER → Plots/Tracks/Lock/ARM/RWR
+│   ├── RDF_RadarSensor.c               公共门面 SEARCH/STARE/WLR/ESM/PULSE_DOPPLER → Plots/Tracks/Lock/ARM/RWR
+│   ├── RDF_DwellScheduler.c           驻留/资源管理调度（TODO §9 S1）
+│   └── RDF_JpdaAssociator.c           JPDA 软关联（TODO §9 S2）
 ├── Physics/
 │   ├── RDF_RadarRcsModel.c / RDF_RadarBallistics.c / RDF_RadarSignatureLibrary.c
 │   ├── RDF_RadarSignatureTableConf.c / RDF_RadarSurfaceTable.c / RDF_RadarSurfaceTableConf.c
@@ -126,7 +128,8 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarMeasurementModel.c     CFAR 后 / Tracker 前可扩展测量误差
 │   └── RDF_RadarCfarGate.c             粗栅格 CA/GO/SO-CFAR 判检
 ├── EW/
-│   └── RDF_RadarEwModel.c              噪声（SEARCH_AVG/BEAM/MAINLOBE）+ 欺骗（假点/拖距/角闪烁/间歇）
+│   ├── RDF_RadarEwModel.c              噪声（SEARCH_AVG/BEAM/MAINLOBE）+ 欺骗（假点/拖距/角闪烁/间歇）
+│   └── RDF_EccmDecisionLayer.c         ECCM 决策层（TODO §9 S3）
 ├── Network/
 │   ├── RDF_RadarNetworkAPI.c           基类（含 intentional no-op；SetEnabled/SetConfig）
 │   ├── RDF_RadarNetworkComponent.c     服务器权威同步（挂 Sensor；发布到 DatalinkHub）
@@ -157,6 +160,9 @@ scripts/Game/RDF/Radar/
     ├── RDF_RadarRwrAutoTest.c          RWR 告警（独立）
     ├── RDF_RadarEsmArmAutoTest.c       ESM + GetArmAim（独立）
     ├── RDF_RadarFusionAutoTest.c       数据链融合 / 交会（独立）
+    ├── RDF_RadarDwellAutoTest.c        驻留/资源调度（独立）
+    ├── RDF_RadarEccmAutoTest.c         ECCM 决策（独立）
+    ├── RDF_RadarJpdaAutoTest.c         JPDA 软关联（独立）
     ├── RDF_RadarRocketLockFireAutoTest.c / RDF_RadarRocketGuidance.c  锁定→制导（独立）
     ├── RDF_RadarHeliDuelAutoTest.c     机打机 + 拦截导弹（独立）
     └── RDF_RadarSamEngageAutoTest.c    地面 SAM（BTR）扫描/识别/打击 6×Mi-8（独立）
@@ -446,7 +452,9 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarWeaponBridge.c         火控桥 FireSolution / 发射门控 / 中段上行
 │   ├── RDF_RadarWeaponComponent.c      载具挂载入口 GuideRocket
 │   ├── RDF_RadarRwr.c                  被搜索/跟踪/锁定告警
-│   └── RDF_RadarSensor.c               公共门面 SEARCH/STARE/WLR/ESM/PULSE_DOPPLER → Plots/Tracks/Lock/ARM/RWR
+│   ├── RDF_RadarSensor.c               公共门面 SEARCH/STARE/WLR/ESM/PULSE_DOPPLER → Plots/Tracks/Lock/ARM/RWR
+│   ├── RDF_DwellScheduler.c           驻留/资源管理调度（TODO §9 S1）
+│   └── RDF_JpdaAssociator.c           JPDA 软关联（TODO §9 S2）
 ├── Physics/
 │   ├── RDF_RadarRcsModel.c / RDF_RadarBallistics.c / RDF_RadarSignatureLibrary.c
 │   ├── RDF_RadarSignatureTableConf.c / RDF_RadarSurfaceTable.c / RDF_RadarSurfaceTableConf.c
@@ -458,7 +466,8 @@ scripts/Game/RDF/Radar/
 │   ├── RDF_RadarMeasurementModel.c     CFAR 后 / Tracker 前可扩展测量误差
 │   └── RDF_RadarCfarGate.c             粗栅格 CA/GO/SO-CFAR 判检
 ├── EW/
-│   └── RDF_RadarEwModel.c              噪声（SEARCH_AVG/BEAM/MAINLOBE）+ 欺骗（假点/拖距/角闪烁/间歇）
+│   ├── RDF_RadarEwModel.c              噪声（SEARCH_AVG/BEAM/MAINLOBE）+ 欺骗（假点/拖距/角闪烁/间歇）
+│   └── RDF_EccmDecisionLayer.c         ECCM 决策层（TODO §9 S3）
 ├── Network/
 │   ├── RDF_RadarNetworkAPI.c           基类（含 intentional no-op；SetEnabled/SetConfig）
 │   ├── RDF_RadarNetworkComponent.c     服务器权威同步（挂 Sensor；发布到 DatalinkHub）
@@ -489,6 +498,9 @@ scripts/Game/RDF/Radar/
     ├── RDF_RadarRwrAutoTest.c          RWR 告警（独立）
     ├── RDF_RadarEsmArmAutoTest.c       ESM + GetArmAim（独立）
     ├── RDF_RadarFusionAutoTest.c       数据链融合 / 交会（独立）
+    ├── RDF_RadarDwellAutoTest.c        驻留/资源调度（独立）
+    ├── RDF_RadarEccmAutoTest.c         ECCM 决策（独立）
+    ├── RDF_RadarJpdaAutoTest.c         JPDA 软关联（独立）
     ├── RDF_RadarRocketLockFireAutoTest.c / RDF_RadarRocketGuidance.c  锁定→制导（独立）
     ├── RDF_RadarHeliDuelAutoTest.c     机打机 + 拦截导弹（独立）
     └── RDF_RadarSamEngageAutoTest.c    地面 SAM（BTR）扫描/识别/打击 6×Mi-8（独立）
