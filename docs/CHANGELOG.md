@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 1.0.0 — 2026-08-14
+
+系统层纵深（§9）三线全部落地：S1 驻留/资源管理、S3 ECCM 决策、S2 JPDA 软关联（离线金标 + C 端口 + 游戏内 AutoTest 全 PASS）。产品形态「可信的军武传感器玩法」达成。
+
 ## 2026-08-14 — JPDA 软关联（层叠，默认关）
 
 - **JpdaAssociator**：`RDF_JpdaAssociator` / `RDF_JpdaPoint`；门控 + 并查集聚类 + 递归联合事件枚举 + 边缘化（β_ij + miss β_i0）；簇 >4×4 回退 GNN 硬指派

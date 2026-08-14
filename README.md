@@ -9,6 +9,7 @@ Modular sensor framework for Arma Reforger: **LiDAR**, **Radar**, and **DEM bake
 - **Repository**: [Radar-Development-Framework](https://github.com/ViVi141/Radar-Development-Framework)
 - **Contact**: 747384120@qq.com
 - **License**: Apache-2.0
+- **Version**: 1.0.0
 
 ---
 
@@ -17,7 +18,7 @@ Modular sensor framework for Arma Reforger: **LiDAR**, **Radar**, and **DEM bake
 | Module | Status | Notes |
 |--------|--------|-------|
 | LiDAR | Maintaining | Ray point cloud, Showcase (afterglow/rings/sweep), PPI phosphor HUD, CSV, multiplayer sync |
-| Radar | Shipped | Entity scan, physical detect, DEM clutter, knife-edge NLOS, PPI, ESM/RWR/ARM, EW soft jam + burn-through, Network (typed Rpc + Reliable summary / Unreliable plots), datalink Hub + fusion, automated tests |
+| Radar | Shipped | Entity scan, physical detect, DEM clutter, knife-edge NLOS, PPI, ESM/RWR/ARM, EW soft jam + burn-through, Network, datalink Hub + fusion, system layer (dwell/resource mgmt + ECCM decision + JPDA soft association), automated tests |
 | DEM | Shipped | Bake V3 CSV; publish SURF (+ optional HEIGHT) JSON; runtime SURF/HEIGHT RAM or GetSurfaceY fallback |
 
 ---
@@ -219,6 +220,7 @@ Arma Reforger 用的模块化传感器开发框架：**LiDAR**、**雷达**、**
 - **Repository**: [Radar-Development-Framework](https://github.com/ViVi141/Radar-Development-Framework)
 - **Contact**: 747384120@qq.com
 - **License**: Apache-2.0
+- **版本**：1.0.0
 
 ---
 
@@ -227,7 +229,7 @@ Arma Reforger 用的模块化传感器开发框架：**LiDAR**、**雷达**、**
 | 模块 | 状态 | 说明 |
 |------|------|------|
 | LiDAR | 维护中 | 射线点云、Showcase（余晖/环/扇面）、PPI 磷光 HUD、CSV、联机同步 |
-| Radar | 已落地 | 实体扫描、物理检测、DEM 杂波、刀刃 NLOS、PPI、ESM/RWR/ARM、EW 软压制+烧穿、Network（类型化 Rpc + Reliable 摘要 / Unreliable plots）、数据链 Hub+融合、自动化测试 |
+| Radar | 已落地 | 实体扫描、物理检测、DEM 杂波、刀刃 NLOS、PPI、ESM/RWR/ARM、EW 软压制+烧穿、Network、数据链 Hub+融合、系统层（驻留/资源管理 + ECCM 决策 + JPDA 软关联）、自动化测试 |
 | DEM | 已落地 | 烘焙 V3 CSV；发布 SURF（+ 可选 HEIGHT）JSON；运行时 SURF/HEIGHT RAM 或 GetSurfaceY 回退 |
 
 ---

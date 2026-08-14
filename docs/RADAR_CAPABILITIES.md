@@ -64,6 +64,12 @@
 - DEM/SURF 默认可全图预载入 RAM（`m_DemPreloadAll`，HUD 显示 `SURF RAM`）
 - **公共门面** `RDF_RadarSensor`（SEARCH / STARE / WLR / ESM → Plots / Tracks / Lock / ARM / RWR），见 [RADAR_API.md](RADAR_API.md)
 
+#### 系统层（驻留 / ECCM / 关联）
+
+- **驻留 / 资源管理**（`m_EnableDwellScheduler`，默认关）：波束时间预算内调度火控（锁定目标）+ 跟踪（确认航迹）驻留；类优先级 + EDF + 硬预算 + deadline-miss；搜索仍走公平游标
+- **ECCM 决策层**（`m_EnableEccmDecision`，默认关）：滞回压制检测 + 旁瓣/主瓣耦合选 SLB/频率捷变 + 欺骗→PRF + 锁定→烧穿；SLB 实接干扰机，其余经 `GetEccmStatusShort` 上报
+- **JPDA 软关联**（`m_EnableJpda`，默认关）：门控 + 并查集聚类 + 联合事件枚举 + 边缘化 + 加权 α-β，替换密集多目标下最近邻互抢
+
 #### 观感上「像雷达」的部分
 
 - 有扫到、漏检、弱检、杂波压目标、干扰抬噪声、测距晃动的感觉
@@ -137,11 +143,11 @@
 
 ### 5. 建议优先级（只选三条时）
 
-重评估（2026-07-29，与 [TODO.md](../TODO.md) 对齐）：
+重评估（2026-08-14，与 [TODO.md](../TODO.md) 对齐）：
 
-1. ~~**Python CFAR/track golden + 最小 CI**~~ **已完成**（`test_rdf_radar_cfar.py` / `test_rdf_radar_track.py` + GitHub Actions）  
-2. **锁定层对接武器**（示例制导已有；产品武器仍需模组接入）  
-3. **场景驱动**：DEM span / 多刃 — 勿与远程算力抢位  
+1. ~~**Python CFAR/track golden + 最小 CI**~~ **已完成**
+2. ~~**系统层纵深（S1 驻留 / S2 JPDA / S3 ECCM）**~~ **已完成**（离线金标 + C 端口 + 游戏内 AutoTest 全 PASS）
+3. **锁定层对接武器**（示例制导已有；产品武器仍需模组接入）  
 
 目标产品形态：**可信的军武传感器玩法**（发现 / 丢失 / 压制 / 欺骗 / 锁定），而不是真实雷达仿真器。
 
@@ -221,6 +227,12 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 - DEM/SURF may preload full map into RAM by default (`m_DemPreloadAll`, HUD shows `SURF RAM`)
 - **Public façade** `RDF_RadarSensor` (SEARCH / STARE / WLR / ESM → Plots / Tracks / Lock / ARM / RWR); see [RADAR_API.md](RADAR_API.md)
 
+#### System layer (dwell / ECCM / association)
+
+- **Dwell / resource management** (`m_EnableDwellScheduler`, default off): schedules fire-control (locked target) + track (confirmed tracks) dwells within a beam-time budget; class priority + EDF + hard budget + deadline-miss; search stays on the fair cursor
+- **ECCM decision layer** (`m_EnableEccmDecision`, default off): hysteresis jam detection + sidelobe/mainlobe coupling selects SLB / frequency agility + deception→PRF + locked→burn-through; SLB wired to the jammers, the rest reported via `GetEccmStatusShort`
+- **JPDA soft association** (`m_EnableJpda`, default off): gate + union-find cluster + joint-event enumeration + marginalization + weighted alpha-beta, replacing nearest-neighbor stealing under dense multi-target
+
 #### Parts that “feel like radar”
 
 - Sense of detection, miss, weak detect, clutter burying targets, jamming raising noise, ranging wobble
@@ -294,11 +306,11 @@ Offline cross-check: toy Yee FDTD in `tools/dem` can be compared against the hig
 
 ### 5. Suggested priority (if picking only three)
 
-Reprioritized 2026-07-29 (aligned with [TODO.md](../TODO.md)):
+Reprioritized 2026-08-14 (aligned with [TODO.md](../TODO.md)):
 
-1. ~~**Python CFAR/track golden + minimal CI**~~ **done** (`test_rdf_radar_cfar.py` / `test_rdf_radar_track.py` + GitHub Actions)  
-2. **Lock layer → weapon integration** (example guidance exists; product weapons still need mod wiring)  
-3. **Scenario-driven**: DEM span / multi-edge — do not let remote compute jump the queue
+1. ~~**Python CFAR/track golden + minimal CI**~~ **done**
+2. ~~**System-layer depth (S1 dwell / S2 JPDA / S3 ECCM)**~~ **done** (offline golden + C port + in-game AutoTest all PASS)
+3. **Lock layer → weapon integration** (example guidance exists; product weapons still need mod wiring)
 
 Target product shape: **credible military-sensor gameplay** (detect / lose / jam / deceive / lock), not a real radar simulator.
 
