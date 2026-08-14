@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-08-14 — JPDA 软关联（层叠，默认关）
+
+- **JpdaAssociator**：`RDF_JpdaAssociator` / `RDF_JpdaPoint`；门控 + 并查集聚类 + 递归联合事件枚举 + 边缘化（β_ij + miss β_i0）；簇 >4×4 回退 GNN 硬指派
+- **层叠集成**：`m_EnableJpda`（默认关）→ tracker 走 `UpdateWithOriginJpda`（软关联 + 加权 α-β）；GNN 仍为默认且未改动
+- **高斯似然**：无 `Math.Exp`，用 `Math.Pow(0.5, x·INV_TWO_LN2)`（同 HwCalib 惯用法）
+- **离线金标**：`tools/dem/rdf_radar_jpda.py` + `test_rdf_radar_jpda.py`（8 例）；游戏内 `RDF_RadarJpdaAutoTest.Start()`
+
 ## 2026-08-14 — ECCM 决策层（层叠，默认关）
 
 - **EccmDecisionLayer**：`RDF_EccmDecisionLayer`；滞回噪声压制检测 + 旁瓣/主瓣耦合选择 SLB/频率捷变 + 欺骗→PRF + 锁定→烧穿

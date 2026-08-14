@@ -365,6 +365,30 @@ Offline mirror + golden: `tools/dem/rdf_radar_eccm.py`. In-game regression:
 
 ---
 
+### JPDA soft association (dense multi-target)
+
+Opt-in (`m_EnableJpda`, default off). When on, the tracker uses soft association
+instead of hard nearest-neighbor (GNN); when off, the classic GNN path is
+unchanged.
+
+```c
+cfg.m_EnableJpda = true;
+cfg.m_JpdaPd = 0.9;   // per-scan detection probability (miss hypothesis weight)
+```
+
+| Knob | Default | When to touch |
+|------|---------|---------------|
+| `m_EnableJpda` | **off** | Dense multi-target where tracks swap / steal plots |
+| `m_JpdaPd` | 0.9 | Miss-hypothesis weight in the joint events |
+
+Association: gate (range + azimuth) → union-find clusters → joint-event
+enumeration → marginal association probabilities β_ij + miss β_i0 → beta-weighted
+alpha-beta update. Clusters larger than 4×4 fall back to hard GNN assignment.
+Offline mirror + golden: `tools/dem/rdf_radar_jpda.py`. In-game regression:
+`RDF_RadarJpdaAutoTest.Start()`.
+
+---
+
 ## Read model (contracts)
 
 | API | Returns |
@@ -901,6 +925,27 @@ cfg.m_EccmSidelobeCouplingOn = 0.3; // 旁瓣/主瓣分界
 SLB 是当前唯一实接的运行时响应；PRF/频率捷变与烧穿已决策并经 `Sensor.GetEccmStatusShort()`
 上报（其运行时效果接线延后——硬件 PRF/载频当前为配置期）。离线镜像 + 金标：
 `tools/dem/rdf_radar_eccm.py`。游戏内回归：`RDF_RadarEccmAutoTest.Start()`。
+
+---
+
+### JPDA 软关联（密集多目标）
+
+按需开启（`m_EnableJpda`，默认关）。开启后 tracker 用软关联取代硬最近邻（GNN）；
+关闭时经典 GNN 路径不变。
+
+```c
+cfg.m_EnableJpda = true;
+cfg.m_JpdaPd = 0.9;   // 每扫检测概率（miss 假设权重）
+```
+
+| 旋钮 | 默认 | 何时动 |
+|------|------|--------|
+| `m_EnableJpda` | **关** | 密集多目标、航迹互抢/互换 |
+| `m_JpdaPd` | 0.9 | 联合事件中 miss 假设权重 |
+
+关联流程：门控（距离+方位）→ 并查集聚类 → 联合事件枚举 → 边缘关联概率 β_ij + miss
+β_i0 → β 加权 α-β 更新。簇大于 4×4 回退 GNN 硬指派。离线镜像 + 金标：
+`tools/dem/rdf_radar_jpda.py`。游戏内回归：`RDF_RadarJpdaAutoTest.Start()`。
 
 ---
 
