@@ -70,6 +70,12 @@ class RDF_RadarSensor
     // so each track's revisit deadline survives across scans.
     protected ref RDF_DwellScheduler m_DwellScheduler;
     protected ref map<int, ref RDF_DwellTask> m_DwellTasks;
+    // ECCM decision layer (TODO §9 S3) + last-decided actions for status.
+    protected ref RDF_EccmDecisionLayer m_EccmDecision;
+    protected bool m_EccmSlb;
+    protected bool m_EccmPrf;
+    protected bool m_EccmFreq;
+    protected bool m_EccmBurn;
 
     void RDF_RadarSensor()
     {
@@ -89,6 +95,7 @@ class RDF_RadarSensor
         m_LastScanDurationMs = 0.0;
         m_DwellScheduler = new RDF_DwellScheduler();
         m_DwellTasks = new map<int, ref RDF_DwellTask>();
+        m_EccmDecision = new RDF_EccmDecisionLayer();
     }
 
     void SetEnabled(bool enabled)
@@ -430,6 +437,10 @@ class RDF_RadarSensor
         ClearTracks();
         if (m_LockManager)
             m_LockManager.Unlock();
+        if (m_EccmDecision)
+            m_EccmDecision.Reset();
+        if (m_DwellTasks)
+            m_DwellTasks.Clear();
     }
 
     // Convenience: current locked target for weapon / fire-control code.
@@ -693,6 +704,8 @@ class RDF_RadarSensor
             else
                 m_Scanner.ClearDwellScattererIds();
             m_Scanner.Scan(subject, m_Plots);
+            if (m_Settings.m_EnableEccmDecision)
+                RunEccmDecision();
             trackOrigin = m_Scanner.GetLastOrigin();
             forward = m_Scanner.GetLastForward();
             rangeM = m_Scanner.GetLastRange();
@@ -836,6 +849,73 @@ class RDF_RadarSensor
         created.m_DeadlineS = 0.0;
         m_DwellTasks.Set(scattererId, created);
         return created;
+    }
+
+    // Read EW observables each scan and decide ECCM responses (TODO §9 S3).
+    // The only runtime-switchable response today is SLB; PRF / frequency agility
+    // and burn-through are reported for status only — their runtime effect wiring
+    // is deferred because hardware PRF / carrier are config-time in the model.
+    protected void RunEccmDecision()
+    {
+        if (!m_Settings || !m_EccmDecision || !m_Scanner)
+            return;
+        m_EccmDecision.Configure(
+            m_Settings.m_EccmJnOnDb,
+            m_Settings.m_EccmJnHysteresisDb,
+            m_Settings.m_EccmSidelobeCouplingOn);
+
+        float jnDb = m_Scanner.GetLastJnDb();
+        int falsePlots = m_Scanner.GetLastFalsePlotCount();
+        bool locked = false;
+        if (m_LockManager)
+            locked = m_LockManager.HasTarget();
+
+        float sidelobeCoupling = 0.0;
+        if (m_Settings.m_EwStack && m_Settings.m_Hardware)
+        {
+            float minMain = m_Settings.m_EwStack.GetMinMainlobeFraction(
+                m_Scanner.GetLastOrigin(),
+                m_Scanner.GetLastForward(),
+                m_Settings.m_Hardware);
+            sidelobeCoupling = 1.0 - minMain;
+        }
+
+        bool slb;
+        bool prf;
+        bool freq;
+        bool burn;
+        m_EccmDecision.Decide(
+            jnDb,
+            sidelobeCoupling,
+            falsePlots,
+            locked,
+            slb,
+            prf,
+            freq,
+            burn);
+        m_EccmSlb = slb;
+        m_EccmPrf = prf;
+        m_EccmFreq = freq;
+        m_EccmBurn = burn;
+
+        if (m_Settings.m_EwStack)
+            m_Settings.m_EwStack.SetSlbEnabled(slb);
+    }
+
+    string GetEccmStatusShort()
+    {
+        if (!m_EccmSlb && !m_EccmPrf && !m_EccmFreq && !m_EccmBurn)
+            return "eccm=0";
+        string s = "eccm";
+        if (m_EccmSlb)
+            s = s + " slb";
+        if (m_EccmPrf)
+            s = s + " prf";
+        if (m_EccmFreq)
+            s = s + " freq";
+        if (m_EccmBurn)
+            s = s + " burn";
+        return s;
     }
 
     // Notify illuminated platforms (RWR). Skipped for ESM receive-only.

@@ -110,6 +110,46 @@ class RDF_RadarNoiseJammerEffect : RDF_RadarEwEffect
         m_EnableSlb = enable;
     }
 
+    // 0..1: 1 = jammer fully in the mainlobe, 0 = fully in a sidelobe. Used by
+    // the ECCM decision layer to pick sidelobe blanking vs frequency agility.
+    // SEARCH_AVG has no instantaneous boresight, so it returns the scan duty
+    // (the fraction of time the beam points at the jammer).
+    float GetMainlobeFraction(
+        vector radarOrigin,
+        vector scanForward,
+        RDF_RadarHardware hardware)
+    {
+        if (m_CouplingMode == ERDF_NoiseJamCoupling.RDF_JAM_COUPLE_SEARCH_AVG)
+        {
+            float duty = m_SearchDutyOverride;
+            if (duty < 0.0)
+            {
+                float beam = hardware.m_AzimuthBeamwidthDeg;
+                if (beam < 0.1)
+                    beam = 0.1;
+                duty = beam / 360.0;
+            }
+            if (duty < 0.0)
+                duty = 0.0;
+            if (duty > 1.0)
+                duty = 1.0;
+            return duty;
+        }
+
+        vector delta = m_Position - radarOrigin;
+        float rangeM = delta.Length();
+        if (rangeM < 1.0)
+            rangeM = 1.0;
+        vector direction = delta * (1.0 / rangeM);
+        float dot = scanForward[0] * direction[0]
+            + scanForward[1] * direction[1]
+            + scanForward[2] * direction[2];
+        float halfBeamRad = hardware.m_AzimuthBeamwidthDeg * 0.5 * 0.01745329;
+        if (dot >= Math.Cos(halfBeamRad))
+            return 1.0;
+        return 0.0;
+    }
+
     protected float ResolveCoupling(
         vector radarOrigin,
         vector scanForward,
@@ -262,6 +302,46 @@ class RDF_RadarEwStack
                 hardware,
                 worldTimeS,
                 outPlots);
+        }
+    }
+
+    // Worst-case mainlobe fraction across noise jammers (for ECCM decision).
+    // Returns 1.0 when no noise jammer is active.
+    float GetMinMainlobeFraction(
+        vector radarOrigin,
+        vector scanForward,
+        RDF_RadarHardware hardware)
+    {
+        float minFraction = 1.0;
+        bool any = false;
+        for (int i = 0; i < m_Effects.Count(); i++)
+        {
+            RDF_RadarNoiseJammerEffect jammer = RDF_RadarNoiseJammerEffect.Cast(
+                m_Effects.Get(i));
+            if (!jammer || !jammer.m_Enabled)
+                continue;
+            any = true;
+            float fraction = jammer.GetMainlobeFraction(
+                radarOrigin,
+                scanForward,
+                hardware);
+            if (fraction < minFraction)
+                minFraction = fraction;
+        }
+        if (!any)
+            return 1.0;
+        return minFraction;
+    }
+
+    // Toggle sidelobe blanking on every noise jammer (ECCM decision output).
+    void SetSlbEnabled(bool enable)
+    {
+        for (int i = 0; i < m_Effects.Count(); i++)
+        {
+            RDF_RadarNoiseJammerEffect jammer = RDF_RadarNoiseJammerEffect.Cast(
+                m_Effects.Get(i));
+            if (jammer)
+                jammer.EnableSlb(enable);
         }
     }
 }

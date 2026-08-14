@@ -106,6 +106,14 @@ class RDF_RadarSettings
     float m_FireControlDwellMs = 4.0;
     float m_TrackDwellPeriodS = 1.0;
     float m_TrackDwellMs = 2.0;
+    // ECCM decision layer (TODO §9 S3). Layered, opt-in: off keeps the jammer
+    // effects exactly as configured. On, the Sensor reads EW observables each
+    // scan and auto-toggles SLB / (reports) PRF / frequency agility / burn-
+    // through. Offline mirror: tools/dem/rdf_radar_eccm.py.
+    bool m_EnableEccmDecision = false;
+    float m_EccmJnOnDb = 6.0;
+    float m_EccmJnHysteresisDb = 2.0;
+    float m_EccmSidelobeCouplingOn = 0.3;
     // Fill empty CFAR cells with thermal-noise samples (real Pfa behaviour).
     bool m_EnableCfarThermalFill = false;
     // Two-way atmospheric / rain loss on received power.
@@ -310,6 +318,9 @@ class RDF_RadarSettings
         m_FireControlDwellMs = Math.Clamp(m_FireControlDwellMs, 0.0, 100.0);
         m_TrackDwellPeriodS = Math.Clamp(m_TrackDwellPeriodS, 0.05, 60.0);
         m_TrackDwellMs = Math.Clamp(m_TrackDwellMs, 0.0, 100.0);
+        m_EccmJnOnDb = Math.Clamp(m_EccmJnOnDb, -60.0, 60.0);
+        m_EccmJnHysteresisDb = Math.Clamp(m_EccmJnHysteresisDb, 0.0, 30.0);
+        m_EccmSidelobeCouplingOn = Math.Clamp(m_EccmSidelobeCouplingOn, 0.0, 1.0);
         m_AtmLossDbPerKmOneWay = Math.Clamp(m_AtmLossDbPerKmOneWay, -1.0, 5.0);
         m_RainLossDbPerKmOneWay = Math.Clamp(m_RainLossDbPerKmOneWay, 0.0, 20.0);
         m_RainLossDbPerKmAtFullIntensity = Math.Clamp(

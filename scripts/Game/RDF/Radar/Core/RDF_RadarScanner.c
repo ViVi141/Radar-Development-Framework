@@ -48,6 +48,8 @@ class RDF_RadarScanner
     protected ref map<int, IEntity> m_DebugTruthByScattererId;
     // Scatterer ids the dwell scheduler forces to a full update this scan.
     protected ref array<int> m_DwellScattererIds;
+    // Deception false-plot count of the last scan (ECCM decision observable).
+    protected int m_LastFalsePlotCount;
 
     void RDF_RadarScanner(RDF_RadarSettings settings = null)
     {
@@ -68,6 +70,7 @@ class RDF_RadarScanner
         m_PassCtx = new RDF_RadarScanPassContext();
         m_DebugTruthByScattererId = new map<int, IEntity>();
         m_DwellScattererIds = new array<int>();
+        m_LastFalsePlotCount = 0;
         m_SettingsValidated = false;
         m_RegistryScanCursor = 0;
         m_ScanRainLossDbPerKm = 0.0;
@@ -300,6 +303,11 @@ class RDF_RadarScanner
         return m_LastBurnThroughRangeM;
     }
 
+    int GetLastFalsePlotCount()
+    {
+        return m_LastFalsePlotCount;
+    }
+
     string GetEwStatsShort()
     {
         if (m_LastEwNoiseRfW <= 0.0)
@@ -390,6 +398,7 @@ class RDF_RadarScanner
         m_LastMtdWinBin = -1;
         m_LastMtdPrfIndex = 0;
         m_ScanRainLossDbPerKm = 0.0;
+        m_LastFalsePlotCount = 0;
         if (!m_SettingsValidated)
         {
             m_Settings.Validate();
@@ -1027,6 +1036,7 @@ class RDF_RadarScanner
         if (!falsePlots || falsePlots.Count() <= 0)
             return;
 
+        m_LastFalsePlotCount = falsePlots.Count();
         float scanAzimuth = Math.Atan2(scanForward[2], scanForward[0]);
         for (int i = 0; i < falsePlots.Count() && outTargets.Count() < maxTargets; i++)
         {
