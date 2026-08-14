@@ -66,6 +66,10 @@ class RDF_RadarSensor
     protected int m_ScanSerial;
     // Wall-clock cost of the last ScanOnce (local or network path).
     protected float m_LastScanDurationMs;
+    // Dwell scheduler + persistent task state (TODO §9 S1). Keyed by scatterer id
+    // so each track's revisit deadline survives across scans.
+    protected ref RDF_DwellScheduler m_DwellScheduler;
+    protected ref map<int, ref RDF_DwellTask> m_DwellTasks;
 
     void RDF_RadarSensor()
     {
@@ -83,6 +87,8 @@ class RDF_RadarSensor
         m_LastScanTimeS = -1000.0;
         m_ScanSerial = 0;
         m_LastScanDurationMs = 0.0;
+        m_DwellScheduler = new RDF_DwellScheduler();
+        m_DwellTasks = new map<int, ref RDF_DwellTask>();
     }
 
     void SetEnabled(bool enabled)
@@ -682,6 +688,10 @@ class RDF_RadarSensor
         }
         else
         {
+            if (m_Settings.m_EnableDwellScheduler)
+                PlanDwells(worldTimeS);
+            else
+                m_Scanner.ClearDwellScattererIds();
             m_Scanner.Scan(subject, m_Plots);
             trackOrigin = m_Scanner.GetLastOrigin();
             forward = m_Scanner.GetLastForward();
@@ -739,6 +749,93 @@ class RDF_RadarSensor
 
         if (m_Handler)
             m_Handler.OnScanComplete(this, m_Plots, m_Tracker, m_Context);
+    }
+
+    // Build + schedule FIRE_CONTROL / TRACK dwells (TODO §9 S1). Persistent task
+    // state keeps each track's deadline across scans; the scanner then forces a
+    // full update for scheduled scatterer ids. SEARCH stays on the fair cursor.
+    // Dead scatterer ids accumulate in m_DwellTasks (ids are monotonic, so no
+    // reuse collision); prune later if the table ever grows unbounded.
+    protected void PlanDwells(float worldTimeS)
+    {
+        if (!m_Settings || !m_DwellScheduler || !m_DwellTasks || !m_Tracker)
+            return;
+        m_DwellScheduler.SetBudgetMs(m_Settings.m_DwellBudgetMs);
+
+        array<ref RDF_DwellTask> tasks = new array<ref RDF_DwellTask>();
+        array<ref RDF_RadarTrack> tracks = m_Tracker.GetAllTracks();
+
+        // Fire-control: the locked target gets the highest-rate dwell.
+        if (m_LockManager && m_LockManager.HasTarget())
+        {
+            int lockTrackId = m_LockManager.GetLockedTrackId();
+            if (lockTrackId >= 0)
+            {
+                RDF_RadarTrack lockTrack = m_Tracker.GetTrackById(lockTrackId);
+                if (lockTrack && lockTrack.m_ScattererId > 0)
+                {
+                    RDF_DwellTask fc = GetOrCreateDwellTask(
+                        lockTrack.m_ScattererId,
+                        ERDF_DwellKind.RDF_DWELL_FIRE_CONTROL);
+                    fc.m_PeriodS = m_Settings.m_FireControlDwellPeriodS;
+                    fc.m_DwellMs = m_Settings.m_FireControlDwellMs;
+                    tasks.Insert(fc);
+                }
+            }
+        }
+
+        // Track dwells: confirmed tracks with a scatterer id (skip the locked one).
+        int lockedId = -1;
+        if (m_LockManager && m_LockManager.HasTarget())
+            lockedId = m_LockManager.GetLockedTrackId();
+        for (int i = 0; i < tracks.Count(); i++)
+        {
+            RDF_RadarTrack tr = tracks.Get(i);
+            if (!tr || !tr.m_Confirmed || tr.m_ScattererId <= 0)
+                continue;
+            if (tr.m_TrackId == lockedId)
+                continue;
+            RDF_DwellTask t = GetOrCreateDwellTask(
+                tr.m_ScattererId,
+                ERDF_DwellKind.RDF_DWELL_TRACK);
+            t.m_PeriodS = m_Settings.m_TrackDwellPeriodS;
+            t.m_DwellMs = m_Settings.m_TrackDwellMs;
+            tasks.Insert(t);
+        }
+
+        array<ref RDF_DwellTask> scheduled = new array<ref RDF_DwellTask>();
+        array<ref RDF_DwellTask> late = new array<ref RDF_DwellTask>();
+        m_DwellScheduler.Plan(tasks, worldTimeS, scheduled, late);
+        // late (deadline miss) is ignored for now; a future slice may coast them.
+
+        array<int> ids = new array<int>();
+        for (int s = 0; s < scheduled.Count(); s++)
+        {
+            RDF_DwellTask st = scheduled.Get(s);
+            if (!st)
+                continue;
+            ids.Insert(st.m_TaskId);
+            RDF_DwellScheduler.Advance(st, worldTimeS);
+        }
+        m_Scanner.SetDwellScattererIds(ids);
+    }
+
+    protected RDF_DwellTask GetOrCreateDwellTask(int scattererId, ERDF_DwellKind kind)
+    {
+        RDF_DwellTask existing = null;
+        if (m_DwellTasks.Contains(scattererId))
+            existing = m_DwellTasks.Get(scattererId);
+        if (existing)
+        {
+            existing.m_Kind = kind;
+            return existing;
+        }
+        RDF_DwellTask created = new RDF_DwellTask();
+        created.m_TaskId = scattererId;
+        created.m_Kind = kind;
+        created.m_DeadlineS = 0.0;
+        m_DwellTasks.Set(scattererId, created);
+        return created;
     }
 
     // Notify illuminated platforms (RWR). Skipped for ESM receive-only.

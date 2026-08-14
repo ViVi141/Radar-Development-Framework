@@ -46,6 +46,8 @@ class RDF_RadarScanner
     protected ref RDF_RadarScanPassContext m_PassCtx;
     // Forward-side truth bypass for AutoTest / ARM (scattererId -> entity).
     protected ref map<int, IEntity> m_DebugTruthByScattererId;
+    // Scatterer ids the dwell scheduler forces to a full update this scan.
+    protected ref array<int> m_DwellScattererIds;
 
     void RDF_RadarScanner(RDF_RadarSettings settings = null)
     {
@@ -65,6 +67,7 @@ class RDF_RadarScanner
         m_LosExclude = new array<IEntity>();
         m_PassCtx = new RDF_RadarScanPassContext();
         m_DebugTruthByScattererId = new map<int, IEntity>();
+        m_DwellScattererIds = new array<int>();
         m_SettingsValidated = false;
         m_RegistryScanCursor = 0;
         m_ScanRainLossDbPerKm = 0.0;
@@ -341,6 +344,33 @@ class RDF_RadarScanner
             ew);
     }
 
+    // Dwell scheduler (Sensor-side) marks which scatterer ids must be fully
+    // updated this scan (FIRE_CONTROL / TRACK dwells). SEARCH still uses the
+    // fair cursor + reuse budget. Cleared each local scan by the Sensor.
+    void SetDwellScattererIds(notnull array<int> ids)
+    {
+        m_DwellScattererIds.Clear();
+        for (int i = 0; i < ids.Count(); i++)
+            m_DwellScattererIds.Insert(ids.Get(i));
+    }
+
+    void ClearDwellScattererIds()
+    {
+        m_DwellScattererIds.Clear();
+    }
+
+    protected bool IsDwellScatterer(int scattererId)
+    {
+        if (!m_DwellScattererIds)
+            return false;
+        for (int i = 0; i < m_DwellScattererIds.Count(); i++)
+        {
+            if (m_DwellScattererIds.Get(i) == scattererId)
+                return true;
+        }
+        return false;
+    }
+
     void Scan(IEntity subject, array<ref RDF_RadarTarget> outTargets)
     {
         if (!subject || !m_Settings || !m_Settings.m_Enabled || !outTargets)
@@ -609,6 +639,13 @@ class RDF_RadarScanner
                 runFullUpdate = m_ScanReuseCache.ShouldRunFullUpdate(entry.m_Entity, priorityBand, wallTime, m_Settings);
             if (IsDirtyRegistryCandidate(priorityType, dist, speedMs, runFullUpdate))
                 highPriority = true;
+            // Dwell scheduler forces a full update for scheduled FIRE_CONTROL /
+            // TRACK dwells regardless of reuse budget or priority band.
+            if (IsDwellScatterer(entry.m_ScattererId))
+            {
+                runFullUpdate = true;
+                highPriority = true;
+            }
             if (!runFullUpdate || (!highPriority && freshBudget <= 0))
             {
                 m_StatBudgetSkips = m_StatBudgetSkips + 1;

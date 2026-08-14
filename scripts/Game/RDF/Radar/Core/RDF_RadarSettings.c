@@ -96,6 +96,16 @@ class RDF_RadarSettings
     // Pluggable channel-error model (runs after CFAR, before Tracker/WLR).
     // Null → built-in RDF_RadarMeasurement.Synthesize fallback.
     ref RDF_RadarMeasurementModel m_MeasurementModel;
+    // Phased-array dwell / resource management (TODO §9 S1). Layered, opt-in:
+    // off keeps the classic scan-everything path. On, the Sensor schedules
+    // FIRE_CONTROL / TRACK dwells within a beam-time budget; SEARCH still uses
+    // the fair scan cursor. Offline mirror: tools/dem/rdf_radar_dwell.py.
+    bool m_EnableDwellScheduler = false;
+    float m_DwellBudgetMs = 20.0;
+    float m_FireControlDwellPeriodS = 0.25;
+    float m_FireControlDwellMs = 4.0;
+    float m_TrackDwellPeriodS = 1.0;
+    float m_TrackDwellMs = 2.0;
     // Fill empty CFAR cells with thermal-noise samples (real Pfa behaviour).
     bool m_EnableCfarThermalFill = false;
     // Two-way atmospheric / rain loss on received power.
@@ -295,6 +305,11 @@ class RDF_RadarSettings
         m_MeasAzimuthBiasDeg = Math.Clamp(m_MeasAzimuthBiasDeg, -5.0, 5.0);
         m_MeasElevationBiasDeg = Math.Clamp(m_MeasElevationBiasDeg, -5.0, 5.0);
         m_MeasDopplerBiasHz = Math.Clamp(m_MeasDopplerBiasHz, -500.0, 500.0);
+        m_DwellBudgetMs = Math.Clamp(m_DwellBudgetMs, 0.0, 1000.0);
+        m_FireControlDwellPeriodS = Math.Clamp(m_FireControlDwellPeriodS, 0.02, 60.0);
+        m_FireControlDwellMs = Math.Clamp(m_FireControlDwellMs, 0.0, 100.0);
+        m_TrackDwellPeriodS = Math.Clamp(m_TrackDwellPeriodS, 0.05, 60.0);
+        m_TrackDwellMs = Math.Clamp(m_TrackDwellMs, 0.0, 100.0);
         m_AtmLossDbPerKmOneWay = Math.Clamp(m_AtmLossDbPerKmOneWay, -1.0, 5.0);
         m_RainLossDbPerKmOneWay = Math.Clamp(m_RainLossDbPerKmOneWay, 0.0, 20.0);
         m_RainLossDbPerKmAtFullIntensity = Math.Clamp(

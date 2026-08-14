@@ -305,6 +305,39 @@ In-game matrix bench: Debugger `RDF_RadarDemLosBenchAutoTest.Start()` → [AUTOT
 
 ---
 
+### Dwell / resource management (phased-array beam-time budget)
+
+Opt-in (`m_EnableDwellScheduler`, default off). When on, the Sensor schedules
+FIRE_CONTROL (the locked target) and TRACK (confirmed tracks) dwells within a
+beam-time budget; the scanner then forces a full update for the scheduled
+scatterer ids. SEARCH keeps using the fair scan cursor. When off, the classic
+scan-everything path is unchanged.
+
+```c
+cfg.m_EnableDwellScheduler = true;
+cfg.m_DwellBudgetMs = 8.0;            // beam-time budget per scan
+cfg.m_FireControlDwellPeriodS = 0.25; // locked-target revisit
+cfg.m_FireControlDwellMs = 4.0;       // cost of one fire-control dwell
+cfg.m_TrackDwellPeriodS = 1.0;        // confirmed-track revisit
+cfg.m_TrackDwellMs = 2.0;             // cost of one track dwell
+cfg.Validate();
+```
+
+| Knob | Default | When to touch |
+|------|---------|---------------|
+| `m_EnableDwellScheduler` | **off** | Enable for phased-array / fire-control radars |
+| `m_DwellBudgetMs` | 20 | Lower to create contention; must still fit fire-control |
+| `m_FireControlDwellPeriodS` / `m_FireControlDwellMs` | 0.25 / 4.0 | Locked-target update rate / cost |
+| `m_TrackDwellPeriodS` / `m_TrackDwellMs` | 1.0 / 2.0 | Track revisit rate / cost |
+
+Scheduling rule: class priority (fire-control > track > search), earliest
+deadline first within a class, hard budget cap. Deadline miss is reported to
+the sensor (currently unused; a future slice may coast missed tracks). Offline
+mirror + golden: `tools/dem/rdf_radar_dwell.py`. In-game regression:
+`RDF_RadarDwellAutoTest.Start()`.
+
+---
+
 ## Read model (contracts)
 
 | API | Returns |
@@ -788,6 +821,35 @@ cfg.Validate();
 
 无 HEIGHT 包 → 预检是**空操作**（与旧版纯 Trace 相同）。  
 游戏内四象限基准：Debugger `RDF_RadarDemLosBenchAutoTest.Start()` → [AUTOTEST_CI_LIMITS.md](AUTOTEST_CI_LIMITS.md)。
+
+---
+
+### 驻留 / 资源管理（相控阵波束时间预算）
+
+按需开启（`m_EnableDwellScheduler`，默认关）。开启后 Sensor 在波束时间预算内调度
+火控（锁定目标）与跟踪（确认航迹）驻留，Scanner 再对命中的散射体强制全量更新；
+搜索仍走公平扫描游标。关闭时走经典全扫描路径，行为不变。
+
+```c
+cfg.m_EnableDwellScheduler = true;
+cfg.m_DwellBudgetMs = 8.0;            // 每扫波束时间预算
+cfg.m_FireControlDwellPeriodS = 0.25; // 锁定目标重访
+cfg.m_FireControlDwellMs = 4.0;       // 单次火控驻留成本
+cfg.m_TrackDwellPeriodS = 1.0;        // 确认航迹重访
+cfg.m_TrackDwellMs = 2.0;             // 单次跟踪驻留成本
+cfg.Validate();
+```
+
+| 旋钮 | 默认 | 何时动 |
+|------|------|--------|
+| `m_EnableDwellScheduler` | **关** | 相控阵 / 火控雷达开启 |
+| `m_DwellBudgetMs` | 20 | 调小制造争抢；仍须装得下火控 |
+| `m_FireControlDwellPeriodS` / `m_FireControlDwellMs` | 0.25 / 4.0 | 锁定目标更新率 / 成本 |
+| `m_TrackDwellPeriodS` / `m_TrackDwellMs` | 1.0 / 2.0 | 航迹重访率 / 成本 |
+
+调度规则：类优先级（火控>跟踪>搜索）、类内最早截止优先、硬预算上限。截止错过上报给
+Sensor（当前未用；后续可驱动航迹 coast）。离线镜像 + 金标：`tools/dem/rdf_radar_dwell.py`。
+游戏内回归：`RDF_RadarDwellAutoTest.Start()`。
 
 ---
 

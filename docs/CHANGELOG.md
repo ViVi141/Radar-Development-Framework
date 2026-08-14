@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-08-14 — 相控阵驻留 / 资源管理（层叠，默认关）
+
+- **DwellScheduler**：`RDF_DwellScheduler` / `RDF_DwellTask` / `ERDF_DwellKind`（SEARCH / TRACK / FIRE_CONTROL）；类优先级（火控>跟踪>搜索）+ 类内 EDF + 硬预算 + deadline-miss 上报 + 服务相对重访
+- **层叠集成**：`m_EnableDwellScheduler`（默认关）→ Sensor 从锁定目标（火控）与确认航迹（跟踪）建驻留，喂给 Scanner 强制全量更新；搜索仍走 `FairScanCursor`
+- **Settings**：`m_DwellBudgetMs` / `m_FireControlDwellPeriodS` / `m_FireControlDwellMs` / `m_TrackDwellPeriodS` / `m_TrackDwellMs`
+- **离线金标**：`tools/dem/rdf_radar_dwell.py` + `test_rdf_radar_dwell.py`（7 例）；游戏内 `RDF_RadarDwellAutoTest.Start()` 集成回归
+
 ## 2026-08-07 — 杂波边界锐化（非对称 EMA + 足迹 σ⁰ + sea_state）
 
 - **ClutterMap**：`ConfigureAsym` / `m_ClutterMapAlphaDown`（快降慢升）；PulseDoppler 默认 α_up=0.15、α_down=0.45

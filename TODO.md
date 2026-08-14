@@ -181,11 +181,11 @@
 
 | 档 | 项 | 收益 | 成本 | 状态 |
 |----|----|------|------|------|
-| **S1** | 相控阵驻留 / 资源管理（波束时间预算 + TWS 边扫边跟 + 搜索/跟踪驻留交织 + 威胁优先级） | 「真雷达」体感最强 | 中高 | 未开始 |
+| **S1** | 相控阵驻留 / 资源管理（波束时间预算 + 火控/跟踪驻留；搜索/TWS 待续） | 「真雷达」体感最强 | 中高 | 已落地核心 |
 | **S2** | 多假设关联 / JPDA（替换最近邻单假设） | 密集多目标不互吃 | 高 | 未开始 |
 | **S3** | ECCM 决策层（检测压制 → 自适应 PRF/频率捷变 / SLB / 烧穿策略） | EW 博弈由被动转主动 | 中 | 未开始 |
 
-- [ ] **S1** 驻留/资源管理：beam 时间当预算，TWS，搜索/跟踪驻留交织，按威胁优先级调度
+- [x] **S1** 波束时间预算 + 火控/跟踪驻留（类优先级 + EDF + 硬预算 + deadline-miss）已接；搜索/TWS 交织与威胁优先级老化待续
 - [ ] **S2** 多假设关联 / JPDA：密集多目标下替换最近邻（保留 coast 波门作回退；Python 先做 golden）
 - [ ] **S3** ECCM 决策：识别噪声/欺骗压制 → 自适应响应（PRF 捷变 / 频率捷变 / SLB / 烧穿）
 - [ ] 完整 DRFM（相干距离门拖引）仍留停车场（§5 / 明确不做）；现有拖距/角闪烁/间歇已覆盖玩法层
@@ -457,11 +457,11 @@ Principle: EM/propagation is at its honest boundary (world-data limited); signal
 
 | Tier | Item | Benefit | Cost | Status |
 |------|------|---------|------|--------|
-| **S1** | Phased-array dwell / resource management (beam-time budget + TWS + search/track interleave + threat priority) | Strongest “real radar” feel | Med–high | Not started |
+| **S1** | Phased-array dwell / resource management (beam-time budget + fire-control/track dwells; search/TWS next) | Strongest “real radar” feel | Med–high | Core shipped |
 | **S2** | Multi-hypothesis association / JPDA (replace nearest-neighbor) | Dense multi-target no longer steals | High | Not started |
 | **S3** | ECCM decision layer (detect jam → adaptive PRF/frequency agility / SLB / burn-through) | EW contest turns active | Med | Not started |
 
-- [ ] **S1** Dwell/resource management: beam time as budget, TWS, search/track dwell interleave, threat-priority scheduling
+- [x] **S1** Beam-time budget + fire-control/track dwells (class priority + EDF + hard cap + deadline-miss) shipped; search/TWS interleave + threat-priority ageing next
 - [ ] **S2** Multi-hypothesis association / JPDA: replace nearest-neighbor under dense targets (keep coast gates as fallback; Python golden first)
 - [ ] **S3** ECCM decision: detect noise/deception jamming → adaptive response (PRF agility / frequency agility / SLB / burn-through)
 - [ ] Full DRFM (coherent range-gate pull-off) stays in parking lot (§5 / out of scope); current range walk-off / scintillation / intermittent already cover the gameplay layer
