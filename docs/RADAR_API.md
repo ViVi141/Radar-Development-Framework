@@ -338,6 +338,33 @@ mirror + golden: `tools/dem/rdf_radar_dwell.py`. In-game regression:
 
 ---
 
+### ECCM decision (auto anti-jam response)
+
+Opt-in (`m_EnableEccmDecision`, default off). When on, the Sensor reads EW
+observables each scan and auto-responds:
+
+```c
+cfg.m_EnableEccmDecision = true;
+cfg.m_EccmJnOnDb = 6.0;             // jam detect threshold (J/N dB)
+cfg.m_EccmJnHysteresisDb = 2.0;     // release hysteresis
+cfg.m_EccmSidelobeCouplingOn = 0.3; // sidelobe vs mainlobe split
+```
+
+| Threat | Auto response |
+|--------|---------------|
+| Sidelobe noise jam | sidelobe blanking (SLB, wired to the jammers) |
+| Mainlobe noise jam | frequency agility (reported only) |
+| Deception false plots | PRF agility (reported only) |
+| Locked target under jam | burn-through (reported only) |
+
+SLB is the only runtime-wired response today; PRF / frequency agility +
+burn-through are decided and reported via `Sensor.GetEccmStatusShort()` (their
+runtime effect wiring is deferred — hardware PRF / carrier are config-time).
+Offline mirror + golden: `tools/dem/rdf_radar_eccm.py`. In-game regression:
+`RDF_RadarEccmAutoTest.Start()`.
+
+---
+
 ## Read model (contracts)
 
 | API | Returns |
@@ -850,6 +877,30 @@ cfg.Validate();
 调度规则：类优先级（火控>跟踪>搜索）、类内最早截止优先、硬预算上限。截止错过上报给
 Sensor（当前未用；后续可驱动航迹 coast）。离线镜像 + 金标：`tools/dem/rdf_radar_dwell.py`。
 游戏内回归：`RDF_RadarDwellAutoTest.Start()`。
+
+---
+
+### ECCM 决策（自动抗干扰响应）
+
+按需开启（`m_EnableEccmDecision`，默认关）。开启后 Sensor 每扫读取 EW 观测量并自动响应：
+
+```c
+cfg.m_EnableEccmDecision = true;
+cfg.m_EccmJnOnDb = 6.0;             // 压制检测阈值（J/N dB）
+cfg.m_EccmJnHysteresisDb = 2.0;     // 释放滞回
+cfg.m_EccmSidelobeCouplingOn = 0.3; // 旁瓣/主瓣分界
+```
+
+| 威胁 | 自动响应 |
+|------|---------|
+| 旁瓣噪声压制 | 旁瓣消隐（SLB，已接干扰机） |
+| 主瓣噪声压制 | 频率捷变（仅上报） |
+| 欺骗假点 | PRF 捷变（仅上报） |
+| 锁定目标被压制 | 烧穿保持（仅上报） |
+
+SLB 是当前唯一实接的运行时响应；PRF/频率捷变与烧穿已决策并经 `Sensor.GetEccmStatusShort()`
+上报（其运行时效果接线延后——硬件 PRF/载频当前为配置期）。离线镜像 + 金标：
+`tools/dem/rdf_radar_eccm.py`。游戏内回归：`RDF_RadarEccmAutoTest.Start()`。
 
 ---
 

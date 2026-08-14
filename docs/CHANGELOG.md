@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 2026-08-14 — ECCM 决策层（层叠，默认关）
+
+- **EccmDecisionLayer**：`RDF_EccmDecisionLayer`；滞回噪声压制检测 + 旁瓣/主瓣耦合选择 SLB/频率捷变 + 欺骗→PRF + 锁定→烧穿
+- **层叠集成**：`m_EnableEccmDecision`（默认关）→ Sensor 每扫读 `GetLastJnDb` / 假点计数 / 锁定态 / 主瓣占比 → 决策 → SLB 实接干扰机（`SetSlbEnabled`）+ `GetEccmStatusShort` 上报
+- **可观测量**：`NoiseJammerEffect.GetMainlobeFraction` / `EwStack.GetMinMainlobeFraction` / `Scanner.GetLastFalsePlotCount`
+- **边界**：SLB 是唯一实接响应；PRF/频率捷变/烧穿仅决策上报（硬件 PRF/载频仍配置期）
+- **离线金标**：`tools/dem/rdf_radar_eccm.py` + `test_rdf_radar_eccm.py`（9 例）；游戏内 `RDF_RadarEccmAutoTest.Start()`
+
 ## 2026-08-14 — 相控阵驻留 / 资源管理（层叠，默认关）
 
 - **DwellScheduler**：`RDF_DwellScheduler` / `RDF_DwellTask` / `ERDF_DwellKind`（SEARCH / TRACK / FIRE_CONTROL）；类优先级（火控>跟踪>搜索）+ 类内 EDF + 硬预算 + deadline-miss 上报 + 服务相对重访
