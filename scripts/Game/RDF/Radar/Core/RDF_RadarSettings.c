@@ -114,6 +114,10 @@ class RDF_RadarSettings
     float m_EccmJnOnDb = 6.0;
     float m_EccmJnHysteresisDb = 2.0;
     float m_EccmSidelobeCouplingOn = 0.3;
+    // JPDA soft association (TODO §9 S2). Layered, opt-in: off keeps the classic
+    // nearest-neighbor (GNN) association. On, the tracker uses soft association.
+    bool m_EnableJpda = false;
+    float m_JpdaPd = 0.9;
     // Fill empty CFAR cells with thermal-noise samples (real Pfa behaviour).
     bool m_EnableCfarThermalFill = false;
     // Two-way atmospheric / rain loss on received power.
@@ -321,6 +325,7 @@ class RDF_RadarSettings
         m_EccmJnOnDb = Math.Clamp(m_EccmJnOnDb, -60.0, 60.0);
         m_EccmJnHysteresisDb = Math.Clamp(m_EccmJnHysteresisDb, 0.0, 30.0);
         m_EccmSidelobeCouplingOn = Math.Clamp(m_EccmSidelobeCouplingOn, 0.0, 1.0);
+        m_JpdaPd = Math.Clamp(m_JpdaPd, 0.1, 1.0);
         m_AtmLossDbPerKmOneWay = Math.Clamp(m_AtmLossDbPerKmOneWay, -1.0, 5.0);
         m_RainLossDbPerKmOneWay = Math.Clamp(m_RainLossDbPerKmOneWay, 0.0, 20.0);
         m_RainLossDbPerKmAtFullIntensity = Math.Clamp(

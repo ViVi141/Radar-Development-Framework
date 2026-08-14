@@ -295,6 +295,100 @@ class RDF_RadarTrack
         Push(m_FilteredPosition, m_FilteredVelocity, target.m_Time);
     }
 
+    // JPDA weighted alpha-beta update (TODO §9 S2). Uses the strongest-beta plot
+    // for bookkeeping and beta-weighted residuals for the kinematics update.
+    void FilterUpdateWeighted(
+        notnull array<ref RDF_RadarTarget> plots,
+        notnull array<float> betas,
+        float alpha,
+        float beta,
+        int confirmHits)
+    {
+        int strongest = -1;
+        float strongestBeta = -1.0;
+        float wRange = 0.0;
+        float wAz = 0.0;
+        float wEl = 0.0;
+        vector wPos = "0 0 0";
+        for (int p = 0; p < plots.Count(); p++)
+        {
+            float b = betas.Get(p);
+            if (b <= 0.0)
+                continue;
+            RDF_RadarTarget plot = plots.Get(p);
+            if (!plot)
+                continue;
+            wRange = wRange + b * plot.m_Distance;
+            wAz = wAz + b * plot.m_AzimuthDeg;
+            wEl = wEl + b * plot.m_ElevationDeg;
+            wPos = wPos + plot.m_Position * b;
+            if (b > strongestBeta)
+            {
+                strongestBeta = b;
+                strongest = p;
+            }
+        }
+        if (strongest < 0)
+            return;
+
+        RDF_RadarTarget refPlot = plots.Get(strongest);
+        float lastTime = GetLastTime();
+        float dt = 0.001;
+        if (lastTime >= 0.0)
+        {
+            dt = refPlot.m_Time - lastTime;
+            if (dt < 0.001)
+                dt = 0.001;
+        }
+
+        if (lastTime < 0.0)
+        {
+            m_FilteredPosition = refPlot.m_Position;
+            m_FilteredVelocity = refPlot.m_Velocity;
+            m_FilteredRangeM = refPlot.m_Distance;
+            m_FilteredAzimuthDeg = refPlot.m_AzimuthDeg;
+            m_FilteredElevationDeg = refPlot.m_ElevationDeg;
+            m_FilteredRangeRateMs = refPlot.m_RadialSpeedMs;
+        }
+        else
+        {
+            float predRange = m_FilteredRangeM + m_FilteredRangeRateMs * dt;
+            float residualRange = wRange - predRange;
+            m_FilteredRangeM = predRange + residualRange * alpha;
+            m_FilteredRangeRateMs = m_FilteredRangeRateMs + residualRange * (beta / dt);
+
+            float azErr = NormalizeAngleDeg(wAz - m_FilteredAzimuthDeg);
+            m_FilteredAzimuthDeg = m_FilteredAzimuthDeg + azErr * alpha;
+            float elErr = wEl - m_FilteredElevationDeg;
+            m_FilteredElevationDeg = m_FilteredElevationDeg + elErr * alpha;
+
+            vector prediction = m_FilteredPosition + m_FilteredVelocity * dt;
+            vector residual = wPos - prediction;
+            m_FilteredPosition = prediction + residual * alpha;
+            m_FilteredVelocity = m_FilteredVelocity + residual * (beta / dt);
+        }
+
+        m_Type = refPlot.m_Type;
+        m_LastSnrDb = refPlot.m_SnrDb;
+        m_HitCount = m_HitCount + 1;
+        m_MissCount = 0;
+        m_Coasting = false;
+        m_CoastElapsedSec = 0.0;
+        m_SoftMissStreak = 0;
+        m_LastDopplerBin = refPlot.m_DopplerBin;
+        m_LastPrfIndex = refPlot.m_PrfIndex;
+        m_LastPrfHz = 0.0;
+        m_LastScanNumber = refPlot.m_ScanNumber;
+        m_LastUpdateTime = refPlot.m_Time;
+        if (m_HitCount >= confirmHits)
+            m_Confirmed = true;
+        else
+            m_Confirmed = false;
+        if (refPlot.m_ScattererId > 0)
+            m_ScattererId = refPlot.m_ScattererId;
+        Push(m_FilteredPosition, m_FilteredVelocity, refPlot.m_Time);
+    }
+
     // Advance filtered state with velocity (and ballistic integrate for shells).
     void CoastTo(float worldTimeSec, vector radarOrigin)
     {
@@ -397,6 +491,10 @@ class RDF_RadarProjectileTracker
     protected float m_BlindGateScale = 1.5;
     protected int m_BlindExtraMisses = 2;
     protected bool m_EnablePrfDeblind = true;
+    // JPDA soft association (TODO §9 S2). Off keeps the classic GNN path.
+    protected bool m_EnableJpda = false;
+    protected float m_JpdaPd = 0.9;
+    protected ref RDF_JpdaAssociator m_JpdaAssociator = new RDF_JpdaAssociator();
 
     void ConfigureFromSettings(RDF_RadarSettings settings)
     {
@@ -420,6 +518,8 @@ class RDF_RadarProjectileTracker
         m_CoastMaxSec = settings.m_TrackCoastMaxSec;
         RDF_RadarBallistics.SetUseDemGround(settings.m_EnableDemGroundForWlr);
         ConfigurePrfFromHardware(settings.m_Hardware);
+        m_EnableJpda = settings.m_EnableJpda;
+        m_JpdaPd = settings.m_JpdaPd;
     }
 
     void ConfigurePrfFromHardware(RDF_RadarHardware hardware)
@@ -573,6 +673,11 @@ class RDF_RadarProjectileTracker
         m_LastRadarOrigin = radarOrigin;
         if (!targets)
             return;
+        if (m_EnableJpda)
+        {
+            UpdateWithOriginJpda(targets, worldTimeSec, radarOrigin);
+            return;
+        }
 
         array<ref RDF_RadarTarget> plots = new array<ref RDF_RadarTarget>();
         for (int i = 0; i < targets.Count(); i++)
@@ -764,6 +869,130 @@ class RDF_RadarProjectileTracker
             m_Tracks.Insert(born);
         }
 
+        for (int j = m_Tracks.Count() - 1; j >= 0; j--)
+        {
+            RDF_RadarTrack tr = m_Tracks.Get(j);
+            if (!tr)
+            {
+                m_Tracks.Remove(j);
+                continue;
+            }
+            bool ageOut = false;
+            if (worldTimeSec - tr.GetLastTime() > m_PruneAgeSec)
+                ageOut = true;
+            if (tr.m_MissCount > EffectiveMaxMisses(tr))
+                ageOut = true;
+            if (m_CoastMaxSec > 0.0 && tr.m_Coasting && tr.m_CoastElapsedSec > m_CoastMaxSec)
+                ageOut = true;
+            if (ageOut)
+                m_Tracks.Remove(j);
+        }
+    }
+
+    // JPDA soft-association path (TODO §9 S2). Opt-in via m_EnableJpda; parallel
+    // to the GNN path. First slice: fixed gate, soft association, weighted
+    // alpha-beta update. Coast / birth / prune mirror the GNN path.
+    protected void UpdateWithOriginJpda(
+        notnull array<ref RDF_RadarTarget> targets,
+        float worldTimeSec,
+        vector radarOrigin)
+    {
+        array<ref RDF_RadarTarget> plots = new array<ref RDF_RadarTarget>();
+        for (int i = 0; i < targets.Count(); i++)
+        {
+            RDF_RadarTarget t = targets.Get(i);
+            if (t && t.m_Detected)
+                plots.Insert(t);
+        }
+
+        int nTracks = m_Tracks.Count();
+        int nPlots = plots.Count();
+
+        array<bool> trackUpdated = new array<bool>();
+        for (int ti = 0; ti < nTracks; ti++)
+            trackUpdated.Insert(false);
+        array<bool> plotClaimed = new array<bool>();
+        for (int pi = 0; pi < nPlots; pi++)
+            plotClaimed.Insert(false);
+
+        if (nTracks > 0 && nPlots > 0)
+        {
+            array<ref RDF_JpdaPoint> trackPred = new array<ref RDF_JpdaPoint>();
+            for (int ti = 0; ti < nTracks; ti++)
+            {
+                RDF_JpdaPoint tp = new RDF_JpdaPoint();
+                float pr;
+                float pa;
+                float pe;
+                float prr;
+                m_Tracks.Get(ti).PredictPolarAt(worldTimeSec, radarOrigin, pr, pa, pe, prr);
+                tp.m_RangeM = pr;
+                tp.m_AzimuthDeg = pa;
+                trackPred.Insert(tp);
+            }
+            array<ref RDF_JpdaPoint> plotMeas = new array<ref RDF_JpdaPoint>();
+            for (int pi = 0; pi < nPlots; pi++)
+            {
+                RDF_JpdaPoint pm = new RDF_JpdaPoint();
+                pm.m_RangeM = plots.Get(pi).m_Distance;
+                pm.m_AzimuthDeg = plots.Get(pi).m_AzimuthDeg;
+                plotMeas.Insert(pm);
+            }
+            array<ref array<float>> betas = new array<ref array<float>>();
+            array<float> miss = new array<float>();
+            m_JpdaAssociator.Associate(
+                trackPred,
+                plotMeas,
+                m_GateRangeM,
+                m_GateAzimuthDeg,
+                m_JpdaPd,
+                betas,
+                miss);
+
+            for (int ti = 0; ti < nTracks; ti++)
+            {
+                if (miss.Get(ti) >= 0.5)
+                    continue;
+                m_Tracks.Get(ti).FilterUpdateWeighted(
+                    plots, betas.Get(ti), m_Alpha, m_Beta, m_ConfirmHits);
+                trackUpdated.Set(ti, true);
+                for (int pi = 0; pi < nPlots; pi++)
+                {
+                    if (betas.Get(ti).Get(pi) > 0.1)
+                        plotClaimed.Set(pi, true);
+                }
+            }
+        }
+
+        // Coast tracks that got no association (miss >= 0.5).
+        for (int ti = 0; ti < nTracks; ti++)
+        {
+            if (trackUpdated.Get(ti))
+                continue;
+            RDF_RadarTrack tr = m_Tracks.Get(ti);
+            tr.m_MissCount = tr.m_MissCount + 1;
+            if (m_CoastOnMiss)
+                tr.CoastTo(worldTimeSec, radarOrigin);
+        }
+
+        // Birth new tracks from unclaimed plots.
+        for (int pi = 0; pi < nPlots; pi++)
+        {
+            if (plotClaimed.Get(pi))
+                continue;
+            RDF_RadarTarget seed = plots.Get(pi);
+            RDF_RadarTrack born = new RDF_RadarTrack();
+            born.m_TrackId = m_NextTrackId;
+            m_NextTrackId = m_NextTrackId + 1;
+            if (seed.m_ScattererId > 0)
+                born.m_ScattererId = seed.m_ScattererId;
+            ApplyBallisticConfig(born);
+            born.FilterUpdate(seed, m_Alpha, m_Beta, m_ConfirmHits);
+            born.m_LastPrfHz = ResolvePrfHz(seed.m_PrfIndex);
+            m_Tracks.Insert(born);
+        }
+
+        // Prune (same policy as GNN).
         for (int j = m_Tracks.Count() - 1; j >= 0; j--)
         {
             RDF_RadarTrack tr = m_Tracks.Get(j);
