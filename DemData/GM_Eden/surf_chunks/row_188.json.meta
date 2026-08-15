@@ -1,0 +1,17 @@
+MetaFileClass {
+ Name "{EF1CA9C1ED5DDA8A}DemData/GM_Eden/surf_chunks/row_188.json"
+ Configurations {
+  JSONResourceClass PC {
+  }
+  JSONResourceClass XBOX_ONE : PC {
+  }
+  JSONResourceClass XBOX_SERIES : PC {
+  }
+  JSONResourceClass PS4 : PC {
+  }
+  JSONResourceClass PS5 : PC {
+  }
+  JSONResourceClass HEADLESS : PC {
+  }
+ }
+}

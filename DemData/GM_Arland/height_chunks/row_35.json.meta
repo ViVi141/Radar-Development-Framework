@@ -1,0 +1,17 @@
+MetaFileClass {
+ Name "{BBC9E9A7FC3F2DE4}DemData/GM_Arland/height_chunks/row_35.json"
+ Configurations {
+  JSONResourceClass PC {
+  }
+  JSONResourceClass XBOX_ONE : PC {
+  }
+  JSONResourceClass XBOX_SERIES : PC {
+  }
+  JSONResourceClass PS4 : PC {
+  }
+  JSONResourceClass PS5 : PC {
+  }
+  JSONResourceClass HEADLESS : PC {
+  }
+ }
+}

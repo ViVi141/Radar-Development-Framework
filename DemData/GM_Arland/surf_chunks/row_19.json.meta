@@ -1,0 +1,17 @@
+MetaFileClass {
+ Name "{EAC9A0F5B9BFE89B}DemData/GM_Arland/surf_chunks/row_19.json"
+ Configurations {
+  JSONResourceClass PC {
+  }
+  JSONResourceClass XBOX_ONE : PC {
+  }
+  JSONResourceClass XBOX_SERIES : PC {
+  }
+  JSONResourceClass PS4 : PC {
+  }
+  JSONResourceClass PS5 : PC {
+  }
+  JSONResourceClass HEADLESS : PC {
+  }
+ }
+}
