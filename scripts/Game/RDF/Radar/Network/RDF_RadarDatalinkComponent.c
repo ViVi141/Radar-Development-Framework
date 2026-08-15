@@ -12,19 +12,19 @@ class RDF_RadarDatalinkComponent : RDF_RadarDatalinkAPI
     protected float m_LastBroadcastMs = -100000.0;
 
     [Attribute(defvalue: "1", desc: "Broadcast datalink/fused summaries to proxies")]
-    bool m_EnableBroadcast = true;
+    bool m_EnableBroadcast;
 
     [Attribute(defvalue: "48", desc: "Max datalink tracks per Broadcast (0 = unlimited)")]
-    int m_MaxSyncedTracks = 48;
+    int m_MaxSyncedTracks;
 
     [Attribute(defvalue: "32", desc: "Max fused tracks per Broadcast (0 = unlimited)")]
-    int m_MaxSyncedFused = 32;
+    int m_MaxSyncedFused;
 
     [Attribute(defvalue: "0.25", desc: "Min seconds between datalink Broadcasts")]
-    float m_MinBroadcastIntervalS = 0.25;
+    float m_MinBroadcastIntervalS;
 
     [Attribute(defvalue: "15000", desc: "Only Broadcast if a player is within this radius of owner (m); 0 = always")]
-    float m_InterestRadiusM = 15000.0;
+    float m_InterestRadiusM;
 
     override void EOnInit(IEntity owner)
     {
@@ -183,3 +183,4 @@ class RDF_RadarDatalinkComponent : RDF_RadarDatalinkAPI
         return true;
     }
 }
+

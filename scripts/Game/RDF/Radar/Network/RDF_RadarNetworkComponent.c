@@ -31,25 +31,25 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
 
     // Bandwidth / scale policy (editor Attributes, not RplProp — authority-only knobs).
     [Attribute(defvalue: "1", desc: "Unreliable Broadcast of capped plots for HUD (official: FX-like)")]
-    bool m_SyncPlotsUnreliable = true;
+    bool m_SyncPlotsUnreliable;
 
     [Attribute(defvalue: "24", desc: "Max plots in Unreliable plot Rpc (0 = unlimited)")]
-    int m_MaxSyncedPlots = 24;
+    int m_MaxSyncedPlots;
 
     [Attribute(defvalue: "32", desc: "Max confirmed tracks in Reliable summary Rpc (0 = unlimited)")]
-    int m_MaxSyncedTracks = 32;
+    int m_MaxSyncedTracks;
 
     [Attribute(defvalue: "0.15", desc: "Min seconds between Reliable summary Broadcasts")]
-    float m_MinReliableBroadcastIntervalS = 0.15;
+    float m_MinReliableBroadcastIntervalS;
 
     [Attribute(defvalue: "0.05", desc: "Min seconds between Unreliable plot Broadcasts")]
-    float m_MinPlotBroadcastIntervalS = 0.05;
+    float m_MinPlotBroadcastIntervalS;
 
     [Attribute(defvalue: "1", desc: "Skip Reliable Broadcast when track/lock fingerprint unchanged")]
-    bool m_SkipUnchangedSummary = true;
+    bool m_SkipUnchangedSummary;
 
     [Attribute(defvalue: "12000", desc: "Only Broadcast if a player is within this radius (m); 0 = always")]
-    float m_InterestRadiusM = 12000.0;
+    float m_InterestRadiusM;
 
     [RplProp(condition: RplCondition.NoOwner, onRplName: "OnDemoEnabledChanged")]
     protected bool m_DemoEnabled = true;
@@ -919,3 +919,4 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         ApplyLocalEmitting(m_IsEmitting);
     }
 }
+
