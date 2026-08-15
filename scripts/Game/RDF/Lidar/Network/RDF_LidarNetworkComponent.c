@@ -330,7 +330,7 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
             now = GetGame().GetWorld().GetWorldTime();
         for (int bi = m_PayloadBuffers.Count() - 1; bi >= 0; bi--)
         {
-            if (now - m_PayloadBuffers.Get(bi).m_CreateTime > 10.0)
+            if (now - m_PayloadBuffers.Get(bi).m_CreateTime > 10000.0)
                 m_PayloadBuffers.Remove(bi);
         } 
 
@@ -399,7 +399,7 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
             now = GetGame().GetWorld().GetWorldTime();
 
         // Treat data older than 60s as stale
-        if (now - m_LastScanTime > 60.0)
+        if (now - m_LastScanTime > 60000.0)
             return false;
 
         return true;

@@ -33,7 +33,7 @@ class RDF_SweepSampleStrategy : RDF_LidarSampleStrategy
         World world = GetGame().GetWorld();
         float time = 0.0;
         if (world)
-            time = world.GetWorldTime();
+            time = world.GetWorldTime() * 0.001;
         return time * m_SweepSpeedDegPerSec;
     }
 
@@ -42,7 +42,7 @@ class RDF_SweepSampleStrategy : RDF_LidarSampleStrategy
         World world = GetGame().GetWorld();
         float time = 0.0;
         if (world)
-            time = world.GetWorldTime();
+            time = world.GetWorldTime() * 0.001;
 
         float sweepWidthRad = m_SweepWidthDeg * Math.DEG2RAD;
         float currentAzimuthRad = (time * m_SweepSpeedDegPerSec) * Math.DEG2RAD;

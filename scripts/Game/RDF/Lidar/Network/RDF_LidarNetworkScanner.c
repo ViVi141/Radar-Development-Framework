@@ -21,7 +21,7 @@ class RDF_LidarNetworkScannerPoller
         m_Handler = handler;
         m_Deadline = 0.0;
         if (GetGame().GetWorld())
-            m_Deadline = GetGame().GetWorld().GetWorldTime() + timeoutSeconds;
+            m_Deadline = GetGame().GetWorld().GetWorldTime() + timeoutSeconds * 1000.0;
         m_Finished = false;
     }
 
@@ -133,7 +133,7 @@ class RDF_LidarNetworkScanner
 
         // If there are still pollers remaining, schedule next tick; otherwise stop.
         if (s_Pollers && s_Pollers.Count() > 0)
-            GetGame().GetCallqueue().CallLater(StaticPollTick, 0.1, false);
+            GetGame().GetCallqueue().CallLater(StaticPollTick, 100, false);
         else
             s_PollersTickActive = false;
     }
@@ -146,7 +146,7 @@ class RDF_LidarNetworkScanner
             if (!s_Pollers)
                 s_Pollers = new array<ref RDF_LidarNetworkScannerPoller>();
             // Schedule a single-shot tick; StaticPollTick will re-schedule while work exists.
-            GetGame().GetCallqueue().CallLater(StaticPollTick, 0.1, false);
+            GetGame().GetCallqueue().CallLater(StaticPollTick, 100, false);
         }
     }
 

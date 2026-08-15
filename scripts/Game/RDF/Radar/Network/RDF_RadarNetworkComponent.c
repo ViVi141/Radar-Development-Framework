@@ -720,7 +720,7 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         float now = 0.0;
         if (GetGame().GetWorld())
             now = GetGame().GetWorld().GetWorldTime();
-        if (now - m_LastScanTime > 60.0)
+        if (now - m_LastScanTime > 60000.0)
             return false;
         return true;
     }

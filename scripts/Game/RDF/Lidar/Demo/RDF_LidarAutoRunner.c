@@ -30,7 +30,7 @@ class RDF_LidarAutoRunner
         if (vs)
             vs.ApplyShowcaseDefaults();
         // recurring tick; scanning is gated by m_Running. Use a non-zero min tick interval to avoid per-frame overhead.
-        GetGame().GetCallqueue().CallLater(StaticTick, s_MinTickInterval, true);
+        GetGame().GetCallqueue().CallLater(StaticTick, (int)(s_MinTickInterval * 1000.0), true);
     }
 
     // Configure minimum tick interval at runtime (seconds).
@@ -561,7 +561,7 @@ class RDF_LidarAutoRunner
         if (!world)
             return;
 
-        float now = world.GetWorldTime();
+        float now = world.GetWorldTime() * 0.001;
         if (m_LastScanTime >= 0.0 && (now - m_LastScanTime) < settings.m_UpdateInterval)
             return;
         m_LastScanTime = now;

@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## 2026-08-14 — 时间单位修复：GetWorldTime 毫秒/秒混用（9 处）
+
+> EN: Time-unit audit — 9 sites across 6 files mixed `BaseWorld.GetWorldTime()` **ms** with **seconds** (or passed seconds into `CallLater`'s int-ms delay). All fixed; Radar side already used the correct `* 0.001` convention.
+
+- **根因**：`BaseWorld.GetWorldTime()` 返回**毫秒**；以下代码把它当秒用，或把秒值直接塞进 `CallLater` 的 int 毫秒参数
+- **Radar 网络**：`RDF_RadarNetworkComponent.HasSyncedTargets` 过期阈值 `60.0`（ms）→ `60000.0`（60 s）；此前同步点迹/航迹 60 ms 即判过期，网络路径几乎总回退本地
+- **Lidar 网络**：`RDF_LidarNetworkComponent`：`HasSyncedSamples` 过期阈值 `60.0` → `60000.0`；分包缓冲清理 `10.0` → `10000.0`（注释本就写 10 s）
+- **扫掠相位**：`RDF_SweepSampleStrategy`：`GetWorldTime()` → `* 0.001`；此前 45°/s 实际 45,000°/s（≈125 圈/秒）
+- **AutoRunner**：`RDF_LidarAutoRunner`：`CallLater(StaticTick, s_MinTickInterval, true)` → `(int)(s_MinTickInterval * 1000.0)`（0.2 → 200 ms，此前 0 ms 每帧 tick）；扫描门控 `now = GetWorldTime() * 0.001`（此前毫秒对比秒，节流失效）
+- **DemoCycler**：`RDF_LidarDemoCycler`：`CallLater(StaticCycleTick, (int)(s_CycleInterval * 1000.0))`（10 s 此前 10 ms）
+- **网络扫描器**：`RDF_LidarNetworkScanner`：deadline `+ timeoutSeconds * 1000.0`（毫秒对齐）；poll `CallLater(StaticPollTick, 100, false)`（0.1 s 此前 0 ms 每帧轮询）
+- **行为影响**：雷达/Lidar 网络同步结果真正可用；扫掠/自动循环/轮询恢复正常节拍；AutoRunner 的 `m_UpdateInterval`（默认 5 s）真正生效，每帧全量扫描消除
+- **约定**：`GetWorldTime()` 一律按毫秒；转秒用 `* 0.001`；`CallLater` 延时传毫秒 `(int)(seconds * 1000.0)`
+- **验证**：9/9 处修改落盘确认；全项目残留扫描无 float 秒残留（14 处未换算的 GetWorldTime 均为有意毫秒时间戳，阈值已同步为 ms）；建议 Workbench 编译确认
+
 ## 2026-08-14 — 机械扫描相位偏移（可恢复暂停天线）
 
 - **Settings**：`RDF_RadarSettings.m_ScanPhaseOffsetRad`（默认 0 = 原世界钟绝对角度，向后兼容）

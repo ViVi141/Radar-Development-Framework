@@ -61,7 +61,7 @@ class RDF_LidarDemoCycler
         if (!s_AutoCycleEnabled) return;
         Cycle();
         // Schedule next tick one-shot to allow interval changes
-        GetGame().GetCallqueue().CallLater(StaticCycleTick, s_CycleInterval, false);
+        GetGame().GetCallqueue().CallLater(StaticCycleTick, (int)(s_CycleInterval * 1000.0), false);
     }
 
     static void StartAutoCycle(float interval = 10.0)
@@ -70,7 +70,7 @@ class RDF_LidarDemoCycler
         if (s_AutoCycleEnabled) return;
         s_AutoCycleEnabled = true;
         // schedule first tick after interval
-        GetGame().GetCallqueue().CallLater(StaticCycleTick, s_CycleInterval, false);
+        GetGame().GetCallqueue().CallLater(StaticCycleTick, (int)(s_CycleInterval * 1000.0), false);
         Print("[RDF] Auto-cycle started (interval=" + s_CycleInterval + "s)");
     }
 
