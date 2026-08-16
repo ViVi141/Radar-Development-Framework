@@ -34,6 +34,11 @@ class RDF_RadarSettings
     // (world-time absolute). Mods should update it while the sensor is
     // disabled so the first scan after re-enable starts at the frozen angle.
     float m_ScanPhaseOffsetRad = 0.0;
+    // When true, GetScanForward uses m_ScanPhaseOffsetRad as an absolute
+    // world azimuth (0 = +X east, pi/2 = +Z north) and ignores worldTime*rpm.
+    // Needed so a parked beam is not one frame late vs a spinning world clock
+    // (narrow beams miss the target if the offset is applied after Scan).
+    bool m_bScanAngleLocked = false;
     float m_DetectionSnrDb = 8.0;
     bool m_KeepUndetected = false;
     bool m_EnableDemClutter = true;

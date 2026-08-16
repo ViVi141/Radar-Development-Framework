@@ -1221,6 +1221,12 @@ class RDF_RadarScanner
             return GetSubjectForward(subject);
 
         float rpm = m_Settings.m_Hardware.m_ScanRpm;
+        if (m_Settings.m_bScanAngleLocked)
+        {
+            float locked = NormalizeAngleRad(m_Settings.m_ScanPhaseOffsetRad);
+            return Vector(Math.Cos(locked), 0.0, Math.Sin(locked));
+        }
+
         if (rpm <= 0.0)
             return GetSubjectForward(subject);
 

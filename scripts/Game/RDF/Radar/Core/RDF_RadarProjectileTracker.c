@@ -522,6 +522,56 @@ class RDF_RadarProjectileTracker
         m_JpdaPd = settings.m_JpdaPd;
     }
 
+    // Leftover plots that already fall in an existing track's gate are
+    // extra extracts of the same contact — drop them instead of birthing
+    // a parallel file (GNN is 1-to-1 per dwell).
+    protected int FindGatingTrack(RDF_RadarTarget plot, vector radarOrigin)
+    {
+        if (!plot)
+            return -1;
+
+        int best = -1;
+        float bestCost = 1.0e30;
+        int ti = 0;
+        while (ti < m_Tracks.Count())
+        {
+            RDF_RadarTrack track = m_Tracks.Get(ti);
+            ti = ti + 1;
+            if (!track)
+                continue;
+
+            float predRange;
+            float predAz;
+            float predEl;
+            float predRr;
+            track.PredictPolarAt(
+                plot.m_Time, radarOrigin, predRange, predAz, predEl, predRr);
+
+            float dRange = plot.m_Distance - predRange;
+            if (dRange < 0.0)
+                dRange = -dRange;
+            if (dRange > m_GateRangeM)
+                continue;
+
+            float dAz = RDF_RadarTrack.NormalizeAngleDeg(
+                plot.m_AzimuthDeg - predAz);
+            if (dAz < 0.0)
+                dAz = -dAz;
+            if (dAz > m_GateAzimuthDeg)
+                continue;
+
+            float cost = dRange / Math.Max(m_GateRangeM, 1.0)
+                + dAz / Math.Max(m_GateAzimuthDeg, 0.1);
+            if (cost < bestCost)
+            {
+                bestCost = cost;
+                best = ti - 1;
+            }
+        }
+
+        return best;
+    }
+
     void ConfigurePrfFromHardware(RDF_RadarHardware hardware)
     {
         if (!m_PrfSetHz)
@@ -858,6 +908,10 @@ class RDF_RadarProjectileTracker
             RDF_RadarTarget seed = plots.Get(pn);
             if (!seed)
                 continue;
+
+            if (FindGatingTrack(seed, radarOrigin) >= 0)
+                continue;
+
             RDF_RadarTrack born = new RDF_RadarTrack();
             born.m_TrackId = m_NextTrackId;
             m_NextTrackId = m_NextTrackId + 1;
@@ -975,12 +1029,19 @@ class RDF_RadarProjectileTracker
                 tr.CoastTo(worldTimeSec, radarOrigin);
         }
 
-        // Birth new tracks from unclaimed plots.
+        // Birth only if the leftover plot is not already inside an existing
+        // track gate (second extract of the same contact).
         for (int pi = 0; pi < nPlots; pi++)
         {
             if (plotClaimed.Get(pi))
                 continue;
             RDF_RadarTarget seed = plots.Get(pi);
+            if (!seed)
+                continue;
+
+            if (FindGatingTrack(seed, radarOrigin) >= 0)
+                continue;
+
             RDF_RadarTrack born = new RDF_RadarTrack();
             born.m_TrackId = m_NextTrackId;
             m_NextTrackId = m_NextTrackId + 1;
