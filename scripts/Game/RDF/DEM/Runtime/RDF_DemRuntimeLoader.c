@@ -295,7 +295,9 @@ class RDF_DemRuntimeLoader
             return false;
         }
 
-        if (tile.m_CellM != manifest.m_CellM)
+        // Epsilon compare (exact float == is brittle across serialization paths;
+        // matches RDF_DemHeightJsonPack's 0.001 tolerance).
+        if (Math.AbsFloat(tile.m_CellM - manifest.m_CellM) > 0.001)
         {
             Warn("Tile cell_m mismatch: " + tilePath);
             return false;

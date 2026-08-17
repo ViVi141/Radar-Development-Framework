@@ -418,7 +418,9 @@ class RDF_RadarClutterModel
             return 0.0;
 
         float normFd = WrapNormalizedDoppler(dopplerHz / prfHz);
-        float binCenter = binIndex / binCount;
+        // binIndex / binCount is int/int (truncating) in Enforce — every bin
+        // centre would collapse to 0. Force float division.
+        float binCenter = binIndex / (float)binCount;
         if (binCenter >= 0.5)
             binCenter = binCenter - 1.0;
         float delta = WrapNormalizedDoppler(normFd - binCenter);

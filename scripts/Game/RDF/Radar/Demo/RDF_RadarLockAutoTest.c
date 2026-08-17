@@ -485,7 +485,9 @@ class RDF_RadarLockAutoTest
         if (!m_Target)
             return false;
         vector pos = m_Target.GetOrigin();
-        if (pos[0] == 0.0 && pos[1] == 0.0 && pos[2] == 0.0)
+        // Epsilon distance from world origin instead of exact float == (a live
+        // entity whose transform is a tiny non-zero value would be misread dead).
+        if (pos.LengthSq() < 0.01)
             return false;
         return true;
     }

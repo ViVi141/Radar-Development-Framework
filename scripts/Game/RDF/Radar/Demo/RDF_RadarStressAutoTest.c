@@ -658,7 +658,9 @@ class RDF_RadarStressAutoTest
                 }
             }
         }
-        int idx = Math.Floor((n - 1) * 0.95);
+        // Epsilon bias: (n-1)*0.95 in float32 can land ~1 ULP below an integer
+        // boundary; Math.Floor would then pick the index one below the true P95.
+        int idx = Math.Floor((n - 1) * 0.95 + 0.0001);
         if (idx < 0)
             idx = 0;
         if (idx >= n)

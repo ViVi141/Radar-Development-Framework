@@ -411,6 +411,9 @@ class RDF_DemRuntimeCache
         s_AsyncEntryIdx = 0;
         s_AsyncLoaded = 0;
         s_AsyncFailed = 0;
+        // Reset the phase timer so the "async HEIGHT warm done ... ms=" log
+        // measures only the HEIGHT decode, not SURF + HEIGHT total.
+        s_AsyncWall0 = System.GetTickCount();
         Print(string.Format(
             "[RDF DEM Runtime] async HEIGHT warm start world=%1 rows=%2",
             s_AsyncWorldKey,

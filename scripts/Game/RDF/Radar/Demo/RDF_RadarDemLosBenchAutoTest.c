@@ -254,6 +254,11 @@ class RDF_RadarDemLosBenchAutoTest
         cfg.m_SectorHalfAngleDeg = 90.0;
         cfg.m_UpdateInterval = 0.2;
         cfg.m_MaxLosTracesPerScan = 64;
+        // Bench measures raw per-scan DEM-LOS cost; disable the cross-frame
+        // queue and the adaptive governor so the recorded ms reflects the full
+        // per-scan budget.
+        cfg.m_EnableLosFrameQueue = false;
+        cfg.m_EnableAdaptiveBudget = false;
         cfg.m_IncludeVehicles = true;
         cfg.m_IncludeProjectiles = false;
         cfg.m_IncludeRadarEmitters = false;

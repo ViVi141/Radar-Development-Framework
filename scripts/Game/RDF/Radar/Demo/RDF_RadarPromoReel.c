@@ -123,7 +123,7 @@ class RDF_RadarPromoReel
     protected static const float PROMO_MIN_RANGE_M = 50.0;
     protected static const float SHELL_IMPACT_HOLD_S = 3.5;
     protected static const float SHELL_TOF_FALLBACK_S = 18.5;
-    protected static const float TICK_MS = 33.0;
+    protected static const int TICK_MS = 33;
 
     protected static ref RDF_RadarPromoReel s_Instance;
     protected static bool s_TickRegistered;

@@ -17,8 +17,8 @@ class RDF_RectangularFOVSampleStrategy : RDF_LidarSampleStrategy
     {
         m_HorizHalfDeg = Math.Clamp(horizFOVDeg * 0.5, 0.1, 180.0);
         m_VertHalfDeg = Math.Clamp(vertFOVDeg * 0.5, 0.1, 90.0);
-        m_Cols = Math.Max(1, cols);
-        m_Rows = Math.Max(1, rows);
+        m_Cols = Math.MaxInt(1, cols);
+        m_Rows = Math.MaxInt(1, rows);
     }
 
     float GetHorizFOVDeg()

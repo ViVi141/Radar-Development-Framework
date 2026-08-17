@@ -128,8 +128,14 @@ class RDF_DwellScheduler
         int rp = ClassPriority(rhs.m_Kind);
         if (lp != rp)
             return lp > rp;
-        if (lhs.m_DeadlineS != rhs.m_DeadlineS)
-            return lhs.m_DeadlineS < rhs.m_DeadlineS;
+        // Epsilon comparison: exact float == on deadlines is fragile when two
+        // equal deadlines are produced via different float paths.
+        float dl = lhs.m_DeadlineS;
+        float dr = rhs.m_DeadlineS;
+        if (dl < dr - 0.000001)
+            return true;
+        if (dr < dl - 0.000001)
+            return false;
         return lhs.m_TaskId < rhs.m_TaskId;
     }
 }

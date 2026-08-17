@@ -197,7 +197,7 @@ class RDF_LidarSensor
         s.m_UpdateInterval = 0.2;
         s.m_TraceTargetMode = ERDF_TraceTargetMode.ALL;
         if (rayCount > 0)
-            s.m_RayCount = Math.Min(rayCount, gridRays);
+            s.m_RayCount = Math.MinInt(rayCount, gridRays);
         else
             s.m_RayCount = gridRays;
         s.Validate();

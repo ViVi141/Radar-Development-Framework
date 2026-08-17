@@ -1,5 +1,87 @@
 # CHANGELOG
 
+## 2026-08-15 — 实测基线：Stress 重载场景 tickAvg 9.4 → 4.4ms（全优化闭环）
+
+> EN: Final measured baseline after all optimizations (cross-frame LOS queue + adaptive governor + allocation reuse). Stress AutoTest (24 UAZ + 3 Mi-8, DEM clutter, HUD, 60 s soak): **tickAvg 4.4 ms · p95 5 ms · max 8 ms · hitch16/33 = 0/0** vs the first baseline 9.4 / 15 / 23 ms / 10-0. ScanMs steady 4–5 ms (was 6–8); the former 46 ms external spike at t≈45 s is gone (4 ms). Detection intact (maxScat 40, sig all baked). Report `$profile:RDF/RadarTests/radar_stress_autotest_5531806.txt`. Full details: `docs/PERFORMANCE_EVALUATION.md` §8 (bilingual).
+
+- **基线固化**：`docs/PERFORMANCE_EVALUATION.md` 新增 §8「实测验证」——优化前/后对照表（tickAvg 9.4→4.4ms、p95 15→5ms、max 23→8ms、hitch 归零、scanMs 6–8→4–5ms）、60 tick 帧预算占比换算（~25–30%）、三层机制归因、TL;DR 重载行与尾注同步更新
+- **验证口径**：200ms 节拍、含 HUD/可视化；客户端（纯网络消费）不受影响；TraceMove 物理查询未变快，改善来自摊平 + 分配消除
+
+## 2026-08-15 — 热路径对象复用（消除高频 new/销毁）
+
+> EN: Object reuse in hot paths — replace per-scan / per-call allocation with clear-and-reuse buffers where lifetime is provably safe (all consumers copy or consume synchronously; escaping objects like `RDF_RadarTarget` / `RDF_LidarSample` stay un-pooled). Cuts the highest-frequency `new` sites in the 5 Hz radar scan + network broadcast paths.
+
+- **Tracker（`RDF_RadarProjectileTracker.UpdateWithOrigin`）**：6 个并行数组（plots/plotUsed/trackAssigned/pairCosts/pairTrackIdx/pairPlotIdx）从每次 `new` 改为成员 `m_Scratch*` Clear+复用——每次扫描省 6 次数组分配（每雷达）
+- **NetCodec（`RDF_RadarNetCodec`）**：`PackScanRpc`/`PackScanPlotsRpc`/`WriteScanBits` 共享静态 `s_Scratch*`（6 数组），`PackDatalinkRpc`/`WriteDatalinkBits` 用独立 `s_ScratchDl*`（4 数组）——每广播省 12/4 次分配。安全依据：Enforce 单线程、广播顺序调用、pack 函数互不嵌套；接收端（Unpack/Read）不碰 scratch（输出逃逸）
+- **Scanner（`RDF_RadarScanner.ScanFromRegistry`）**：每候选 `new RDF_RadarTruthSample` 改为成员 `m_TruthScratch` 复用；因 DTO 字段条件赋值，显式重置 `m_DemSampleValid`/`m_DemSurfaceClass`/`m_DemTerrainY`/`m_RotorSidebandUsed`/`m_BeamName`/emitter 字段防残留；`StoreResult` 深拷贝 + `PublishFromTruth` 深拷贝确认不持有引用
+- **不池化（文档标注）**：`RDF_RadarTarget`（逃逸到 outTargets/HUD/网络）、`RDF_LidarSample`（HUD 磷光跨扫描持有）、`RDF_RadarEwModel.CollectFalsePlots` dst（跨 effect 聚合覆盖风险）、JPDA 路径数组（默认关、改动面大）
+- **验证**：跑 Perf/Stress + 带 EW 欺骗的 Eccm 测试，确认 plots/tracks 数与复用前一致；关注 `m_TruthScratch` 重置分支的 DEM 字段
+
+## 2026-08-15 — ScattererRegistry 网格键整数化（消除每扫描字符串分配）
+
+> EN: `RDF_RadarScattererRegistry` grid buckets switch from `map<string, ...>` to `map<int, ...>` with a packed key `((ix+32768)<<16) | (iz+32768)`. `CollectInSphere` (per-scan grid query, ~289 cells @ 5 Hz per radar) and `Insert/RemoveEntryFromGrid` no longer allocate `ToString()+":"+ToString()` strings per cell — removes the most sustained string-GC source in the radar scan path. Constants `GRID_KEY_OFFSET=32768` / `GRID_KEY_BITS=16` cover a ±64k-cell span (256 m cells ≈ ±16 M m), far beyond any Reforger map.
+
+- `RDF_RadarScattererRegistry`：`s_CellBuckets` 类型 `map<string,...>` → `map<int,...>`；`GridKey` 从 `ToString()+":"+ToString()` 改为打包整数键 `((ix+32768)<<16)|(iz+32768)`（GRID_KEY_OFFSET/BITS 常量）；`EnsureContainers` / `CollectInSphere` / `InsertEntryToGrid` / `RemoveEntryFromGrid` 同步
+- 键数学：ix/iz ∈ [-32768, 32767] 格（256m 格 ≈ ±8.4M m），打包后恒为非负 int，无符号位/碰撞风险；map<int> 键为值语义（项目已有 map<int,...> 惯例）
+- 收益：每扫描每雷达消除 ~289 次 `ToString()` + 字符串拼接 + string 哈希；多雷达场景线性放大
+- 验证：Stress / 任意带目标的扫描观察 `cells=` 统计不变（键只影响内部存储，不影响行为）
+
+## 2026-08-15 — 基本类型审计修复 + 时间处理规范
+
+> EN: Primitive-type audit (7 parallel shard agents, 932 type-API call sites → 31 findings) and the new **`docs/TIME_HANDLING.md`** convention doc. Fixed the high-severity MTD bug (int/int division made every Doppler bin centre 0), the medium fingerprint hash float-promotion collision, 22 hot-path `Math.*Int` sites, 3× P95 floor epsilon traps, 3 float-equality epsilons, a no-op round-trip, and EntityClassifier double class-name fetch + case-sensitivity. Remaining low-risk string hot spots (grid keys, CSV rows, RLE) are documented as known-optimizable in the convention doc.
+
+- **【高危】MTD bin 中心 int/int 除法**（`RDF_RadarClutterModel.MtdBinPowerGain`）：`binIndex / binCount` 整数除法恒为 0，所有多普勒 bin 中心重合 → MTD_BANK 无法区分 bin，杂波抑制失效（每目标热路径调用）。修复：`binIndex / (float)binCount`
+- **【中危】指纹哈希 float 提升**（`RDF_RadarNetCodec.FingerprintTracksAndLock`）：`h * 31 + Math.Round(...)` 整式提升到 float，h 超 2²⁴ 后丢精度 → 航迹指纹碰撞 → `SkipUnchangedSummary` 静默吞掉合法广播。修复：`(int)Math.Round(...)`
+- **【低危】热路径 int API**：22 处 `Math.Max/Min/Clamp` 在 int 上走 float 重载（Lidar 每射线/每样本循环、Visualizer 分段、网络分片等）→ `Math.MaxInt/MinInt/ClampInt`
+- **【低危】P95 取样 ULP 陷阱**：Perf/Stress/Play 三处 `Math.Floor((n-1)*0.95)` 在整数边界可能差 1 → 加 `+0.0001` epsilon
+- **【低危】浮点相等 epsilon**：`DwellScheduler.TaskLess`（deadline `!=`）、`DemRuntimeLoader.CellM`（`!=`）、`LockAutoTest.IsTargetAlive`（位置 `==0.0`）→ epsilon / LengthSq
+- **【低危】无用 round-trip**：`DemTileBake` `Math.Round(int*int)` → 直接 int 乘积
+- **【低危】字符串重复获取**：`RDF_RadarEntityClassifier` 每次 token 匹配重新 `GetClassName` 且大小写敏感 → 单次取类名 + `ToLower()` + token 数组
+- **新文档**：`docs/TIME_HANDLING.md`（双语）——时钟选择矩阵、字段命名后缀、int/float/string 规则、已知可优化项；README / I18N 索引已挂
+- **未改（记为已知可优化）**：`GridKey` 字符串键、`SamplesToCSV` O(n²) 拼接、`RLECompress` 每字符 Substring——低风险低收益或改动面大，规范文档 §4 列明
+
+## 2026-08-15 — 时间处理全面审计修复（7 项）
+
+> EN: Full time-handling audit of all scripts (7 parallel shard agents, 198 time-API call sites). Fixed 7 findings: 2 functional bugs, 1 mislabeled log, 2 CallLater unit hazards, 1 clock-source divergence, 1 field-naming hazard.
+
+- **【功能 bug】RGPO 拖距用绝对世界时间**（`RDF_RadarEwModel.c`，中危）：`RDF_RadarDeceptionJammerEffect.CollectFalsePlots` 用 `range + rate × worldTimeS` 计算拖距——worldTimeS 是任务总秒数而非相对创建时间，任何带 range rate 的假点会在任务中段飞出扫描范围被门滤掉（效果静默失效）。修复：`RDF_RadarFalsePlot` 增加 `m_StartTimeS`，`AddFalsePlot` 可选传参（默认 -1），effect 首次产出时懒锚定 `m_EffectStartTimeS`，walk 从 `worldTimeS - start` 计算；与 `RDF_RadarRangeWalkOffEffect`（已正确的 tRel 写法）语义对齐
+- **【功能 bug】LiDAR 网络扫描超时用世界时钟**（`RDF_LidarNetworkScanner.c`，中危）：`m_Deadline = GetWorldTime() + timeout*1000` 且 `now = GetWorldTime()`——世界时间在暂停/时间缩放/进图前冻结时，deadline 永不达到，poller 永不超时回退本地扫描。修复：改用 `System.GetTickCount()`（墙钟 ms）计算 deadline 与 now
+- **【日志】HEIGHT 阶段耗时错标**（`RDF_DemRuntimeCache.c`，低危）：`BeginAsyncHeightPhase` 未重置 `s_AsyncWall0`，`async HEIGHT warm done ... ms=` 实际打印 SURF+HEIGHT 总耗时。修复：HEIGHT 阶段开始处重置计时基准
+- **【单位】CallLater 浮点常量**（`RDF_RadarPromoReel.c` / `RDF_LidarAutoRunner.c`，低危）：`TICK_MS` / `HUD_AFTERGLOW_TICK_MS` 声明为 float 传入 int 延迟参数——当前数值正确但类型不强制 ms，未来改成秒值会静默变 bug。修复：改为 `const int`
+- **【时钟】Lidar demo 与产品路径门控时钟分歧**（`RDF_LidarAutoRunner.c`，中危）：`RDF_LidarTick` 用世界时钟门控 `m_UpdateInterval`，而 `RDF_LidarSensor.Tick`（产品）用墙钟——世界时间冻结/缩放时两者节拍分叉。修复：demo 侧统一为墙钟（与 Radar 侧 2026-07-27 的修复一致），字段改名 `m_LastScanWallS`
+- **【命名】`RDF_RadarNetworkComponent.m_LastScanTime` 无单位后缀**（低危）：存原始 ms 却无 `*Ms` 后缀，与同类 `m_LastReliableBroadcastMs` 等不一致，且与 Sensor 的 `m_LastScanTimeS`（秒）易混淆。修复：改名 `m_LastScanTimeMs` + 注释
+
+## 2026-08-15 — 自适应预算调节改为「单帧预算」分母（实测 FPS）
+
+> EN: Adaptive budget governor denominator fix — the budget is now ONE SERVER FRAME, not the scan interval. The governor reads `System.GetFPS()` (10-frame average; 16.7 ms @ 60 tick, 8.3 ms @ 120 tick) and computes `util = emaScanMs / (frameMs × m_AdaptiveTargetScanFraction)`. Previous versions used the CallLater scan cadence (~200 ms) as the denominator, which made the overload branch (util > 1.0) unreachable in practice — the budget (40 ms) exceeded the entire 16.7 ms frame. New defaults: `m_AdaptiveTargetScanFraction = 0.3` (scan ≤ ~30% of one frame), idle-raise only when util < 0.25 (scanMs < ~7.5% of a frame), `m_AdaptiveLosMaxPerTick` 24→20, `m_AdaptiveWlrMaxSolves` stays 6. `RDF_RadarSensor.m_LastTickIntervalMs` and the tickIntervalMs parameter were removed (no longer needed).
+
+- **Governor**：`RDF_RadarBudgetGovernor` 分母改为 `1000 / System.GetFPS()`（`ResolveFrameMs`，GetFPS<5 回退 16.7ms）；`Update(settings, scanWallMs)` 去掉 tickIntervalMs 参数；EMA 同时平滑 scanMs 与 frameMs
+- **Settings**：`m_AdaptiveTargetScanFraction` 默认 0.3（单帧占比）；`m_AdaptiveLosMaxPerTick` 24→20；`m_AdaptiveWlrMaxSolves` 保持 6
+- **Sensor**：删除 `m_LastTickIntervalMs` 成员与 Tick 内测量；ScanOnce 喂样本改单参
+- **理由**：60/120 tick 服务器帧预算 16.7/8.3ms；扫描每 200ms 跑一次但落点的那一帧不能被打满——旧分母（扫描间隔）导致预算 40ms 超过整帧，降载分支形同虚设
+- **验证建议**：60 tick 服务器观察 `gov los=` 在 scanMs>5ms 时降档；空场景（scanMs<1.2ms）回升
+
+## 2026-08-15 — 自适应预算调节（服务器帧率驱动，默认开）
+
+> EN: Adaptive budget governor (`RDF_RadarBudgetGovernor`, **default on** via `m_EnableAdaptiveBudget=true`; disable or pin min==max to keep fixed budgets). The Sensor measures real scan wall time + tick cadence each scan and auto-scales the per-tick LOS trace budget and per-scan WLR solve budget to keep the server inside `m_AdaptiveTargetScanFraction` × tick interval (default **0.2**). Overload (scanMs > 20% of tick) sheds load; idle-raise only while scanMs stays below ~5% of the tick (util < 0.25), so a fully-detected scene does not ratchet the LOS budget to the max and waste TraceMoves (fixed after a stress run showed 16→32 ratchet doubling scan cost with no detection gain). EMA damping + hysteresis bands prevent thrash; budgets are written back into `RDF_RadarSettings` and picked up by Scanner/Tracker next scan. Status line appends `gov los= wlr=`. Perf / DEM-LOS bench tests explicitly disable the governor (and the LOS queue) to measure raw per-scan cost.
+
+- **新增**：`scripts/Game/RDF/Radar/Core/RDF_RadarBudgetGovernor.c`（EMA 占用率 + 滞回上下缩放 + 钳制写回）
+- **Settings**：`m_EnableAdaptiveBudget`（**默认 true**）、`m_AdaptiveTargetScanFraction`（默认 **0.2**，曾 0.5——过载分支形同虚设）、`m_AdaptiveEmaAlpha`（0.3）、`m_AdaptiveLosMinPerTick/MaxPerTick`（默认 **4/24**，曾 4/32）、`m_AdaptiveWlrMinSolves/MaxSolves`（默认 **1/6**）、`m_AdaptiveStepDown/StepUp`（0.85/1.1）；`Validate()` 钳制
+- **Governor 滞回**：过载 `util > 1.0` 降载；空闲升档条件收紧为 `util < 0.25`（≈ scanMs < Tick 的 5%），中间带保持——修复"单向棘轮顶到上限"（Stress 实测 gov 开后 tickAvg 9.4→19.5ms、hitch16 10→117 的根因）
+- **Sensor**：`m_BudgetGovernor` 成员 + `Configure` 重置；`Tick` 记录实测 Tick 间隔 `m_LastTickIntervalMs`；`ScanOnce` 末尾喂样本并写回 settings、重同步 Tracker；`GetStatusShort` 追加 `gov los=/wlr=`；新增 `GetBudgetGovernor()`
+- **AutoTest**：Perf / DEM-LOS Bench 显式 `m_EnableAdaptiveBudget = false`（与 `m_EnableLosFrameQueue = false` 同理，度量原始单扫描耗时）
+- **验证建议**：观察 `gov los=` 在重载（高 scanMs）下降档、空闲（低 scanMs）回升；重跑 Stress 确认 tickAvg 回落
+
+## 2026-08-15 — 跨帧性能预算：LOS TraceMove 队列 + WLR 解算预算
+
+> EN: Cross-frame performance budgets. **LOS**: `m_EnableLosFrameQueue` (default on) caps TraceMove calls per Tick at `m_LosTracesPerTick` (default 16); overflow scatterers are queued (`m_LosQueue`, cap `m_LosQueueMax`) and drained first on later scans (`DrainLosQueue`), so one Tick never burns the whole per-scan budget synchronously. Drain + sweep share `m_LosBudget` within a Tick; `PublishTruthToPlots` dedups by scatterer id per scan. **WLR**: `m_WeaponLocateSolvesPerScan` (default 2) caps ballistic solves per scan; overflow tracks queue FIFO (`m_WeaponLocateQueueMax`, default 16) and drain on later scans (0 = legacy solve-all). Perf / DEM-LOS Bench disable the queue to keep measuring raw per-scan cost.
+
+- **Settings**：`RDF_RadarSettings` 新增 `m_EnableLosFrameQueue`（默认 true）、`m_LosTracesPerTick`（默认 16，0 = 回退旧每扫描上限）、`m_LosQueueMax`（默认 128）、`m_WeaponLocateSolvesPerScan`（默认 2，0 = 旧行为）、`m_WeaponLocateQueueMax`（默认 16）；`Validate()` 加钳制
+- **Scanner**：`RDF_RadarScanner` 新增 `m_LosQueue` / `m_QueueCandidates` / `m_PublishedScattererIds`；`ResolveLosBudgetPerTick` 解析每 Tick 预算；`Scan()` 先 `DrainLosQueue` 再正常扫掠；`ScanFromRegistry` 支持队列切片（跳过球收集与公平游标），预算耗尽时 `EnqueueRemainingLosCandidates` 把本扫描未处理尾部入队；`ClearScanOptimizationCaches` 同时清队列（flush 变体语义不变）；统计串追加 `losQ=queued/drained`
+- **Tracker**：`RDF_RadarProjectileTracker.RefreshWeaponLocates` 两阶段——先排空 `m_WlrPending` 队列（FIFO、校验仍存活），再扫合格航迹；预算耗尽入队；`ClearTracks` / `ApplySyncedTracks` 清队列；同扫描已解算航迹不会二次解算/入队（`solvedThisScan`）
+- **AutoTest**：`RDF_RadarPerfAutoTest` / `RDF_RadarDemLosBenchAutoTest` 显式 `m_EnableLosFrameQueue = false`，继续度量单扫描原始耗时（队列平滑由 Stress / Play 验证）
+- **行为影响**：密集场景单 Tick TraceMove 尖峰被摊平；10 发齐射 WLR 不再单 Tick 25–50ms；默认开且向后兼容（显式配置旧参数仍按旧语义）
+
 ## 2026-08-14 — 时间单位修复：GetWorldTime 毫秒/秒混用（9 处）
 
 > EN: Time-unit audit — 9 sites across 6 files mixed `BaseWorld.GetWorldTime()` **ms** with **seconds** (or passed seconds into `CallLater`'s int-ms delay). All fixed; Radar side already used the correct `* 0.001` convention.

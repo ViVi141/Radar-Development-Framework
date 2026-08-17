@@ -27,6 +27,9 @@ class RDF_RadarFalsePlot
     float m_ElevationDeg;
     float m_PowerW;
     float m_RangeRateMs;
+    // World time (seconds) when this false plot was created — range walk-off
+    // must be measured from creation, not from absolute world time zero.
+    float m_StartTimeS = -1.0;
 }
 
 // Burn-through under noise jamming: Reff = R0 · (N / (N+J))^(1/4).
@@ -350,6 +353,10 @@ class RDF_RadarDeceptionJammerEffect : RDF_RadarEwEffect
 {
     bool m_Enabled = true;
     ref array<ref RDF_RadarFalsePlot> m_FalsePlots;
+    // World time (seconds) when the effect started producing plots. Plots added
+    // without an explicit start time walk from here (so a static AddFalsePlot at
+    // config time does not walk with absolute world time and fly out of range).
+    float m_EffectStartTimeS = -1.0;
 
     void RDF_RadarDeceptionJammerEffect()
     {
@@ -361,7 +368,8 @@ class RDF_RadarDeceptionJammerEffect : RDF_RadarEwEffect
         float azimuthDeg,
         float powerW,
         float rangeRateMs = 0.0,
-        float elevationDeg = 0.0)
+        float elevationDeg = 0.0,
+        float startTimeS = -1.0)
     {
         RDF_RadarFalsePlot p = new RDF_RadarFalsePlot();
         p.m_RangeM = rangeM;
@@ -369,6 +377,7 @@ class RDF_RadarDeceptionJammerEffect : RDF_RadarEwEffect
         p.m_ElevationDeg = elevationDeg;
         p.m_PowerW = powerW;
         p.m_RangeRateMs = rangeRateMs;
+        p.m_StartTimeS = startTimeS;
         m_FalsePlots.Insert(p);
     }
 
@@ -382,17 +391,33 @@ class RDF_RadarDeceptionJammerEffect : RDF_RadarEwEffect
         if (!m_Enabled || !m_FalsePlots)
             return;
 
+        // Lazily anchor the effect's walk-off start on first production (the
+        // effect is usually created at config time, before any scan runs).
+        if (m_EffectStartTimeS < 0.0)
+            m_EffectStartTimeS = worldTimeS;
+
         for (int i = 0; i < m_FalsePlots.Count(); i++)
         {
             RDF_RadarFalsePlot src = m_FalsePlots.Get(i);
             if (!src)
                 continue;
+            // Walk-off is measured from the plot's creation time (or the effect
+            // start), not from absolute world time zero — a plot created at
+            // t=300 s with an 18 m/s rate must sit at range+18*(t-300), not
+            // range+18*t, which would be filtered by the scan range gate and
+            // silently kill the effect mid-mission.
+            float tRel = worldTimeS - m_EffectStartTimeS;
+            if (src.m_StartTimeS >= 0.0)
+                tRel = worldTimeS - src.m_StartTimeS;
+            if (tRel < 0.0)
+                tRel = 0.0;
             RDF_RadarFalsePlot dst = new RDF_RadarFalsePlot();
             dst.m_AzimuthDeg = src.m_AzimuthDeg;
             dst.m_ElevationDeg = src.m_ElevationDeg;
             dst.m_PowerW = src.m_PowerW;
             dst.m_RangeRateMs = src.m_RangeRateMs;
-            dst.m_RangeM = src.m_RangeM + src.m_RangeRateMs * worldTimeS;
+            dst.m_StartTimeS = src.m_StartTimeS;
+            dst.m_RangeM = src.m_RangeM + src.m_RangeRateMs * tRel;
             if (dst.m_RangeM < 1.0)
                 continue;
             outPlots.Insert(dst);

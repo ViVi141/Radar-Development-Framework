@@ -5,7 +5,7 @@ class RDF_ScanlineSampleStrategy : RDF_LidarSampleStrategy
 
     void RDF_ScanlineSampleStrategy(int sectors = 32)
     {
-        m_Sectors = Math.Max(1, sectors);
+        m_Sectors = Math.MaxInt(1, sectors);
     }
 
     override vector BuildDirection(int index, int count)

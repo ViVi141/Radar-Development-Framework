@@ -101,6 +101,23 @@ class RDF_RadarNetCodec
         return 0;
     }
 
+    // Reused pack scratch. NetCodec is all-static and runs in the single-threaded
+    // game loop; BroadcastScanState calls PackScanRpc then PackScanPlotsRpc
+    // sequentially, so reusing these buffers across calls is safe (each Pack*
+    // clears before filling). Saves 12 array allocations per scan per radar.
+    protected static ref array<int> s_ScratchPlotInts = new array<int>();
+    protected static ref array<float> s_ScratchPlotFloats = new array<float>();
+    protected static ref array<int> s_ScratchTrackInts = new array<int>();
+    protected static ref array<float> s_ScratchTrackFloats = new array<float>();
+    protected static ref array<int> s_ScratchWlrInts = new array<int>();
+    protected static ref array<float> s_ScratchWlrFloats = new array<float>();
+    // Datalink pack scratch (separate set — datalink broadcast runs on a
+    // different call chain than scan summary/plots).
+    protected static ref array<int> s_ScratchDlTrackInts = new array<int>();
+    protected static ref array<float> s_ScratchDlTrackFloats = new array<float>();
+    protected static ref array<int> s_ScratchDlFusedInts = new array<int>();
+    protected static ref array<float> s_ScratchDlFusedFloats = new array<float>();
+
     static void PushVector(notnull array<float> floats, vector v)
     {
         floats.Insert(v[0]);
@@ -324,12 +341,13 @@ class RDF_RadarNetCodec
         if (includePlots)
             plotSrc = plots;
 
-        array<int> plotInts = new array<int>();
-        array<float> plotFloats = new array<float>();
-        array<int> trackInts = new array<int>();
-        array<float> trackFloats = new array<float>();
-        array<int> wlrInts = new array<int>();
-        array<float> wlrFloats = new array<float>();
+        // Reused scratch buffers (see s_Scratch* declaration note).
+        array<int> plotInts = s_ScratchPlotInts;
+        array<float> plotFloats = s_ScratchPlotFloats;
+        array<int> trackInts = s_ScratchTrackInts;
+        array<float> trackFloats = s_ScratchTrackFloats;
+        array<int> wlrInts = s_ScratchWlrInts;
+        array<float> wlrFloats = s_ScratchWlrFloats;
         PackScan(plotSrc, tracks, plotInts, plotFloats, trackInts, trackFloats, wlrInts, wlrFloats, maxPlots, maxTracks);
 
         int plotCount = plotInts.Count() / PLOT_INT_STRIDE;
@@ -364,12 +382,13 @@ class RDF_RadarNetCodec
         notnull array<int> outInts,
         notnull array<float> outFloats)
     {
-        array<int> plotInts = new array<int>();
-        array<float> plotFloats = new array<float>();
-        array<int> trackInts = new array<int>();
-        array<float> trackFloats = new array<float>();
-        array<int> wlrInts = new array<int>();
-        array<float> wlrFloats = new array<float>();
+        // Reused scratch buffers (see s_Scratch* declaration note).
+        array<int> plotInts = s_ScratchPlotInts;
+        array<float> plotFloats = s_ScratchPlotFloats;
+        array<int> trackInts = s_ScratchTrackInts;
+        array<float> trackFloats = s_ScratchTrackFloats;
+        array<int> wlrInts = s_ScratchWlrInts;
+        array<float> wlrFloats = s_ScratchWlrFloats;
         PackScan(plots, null, plotInts, plotFloats, trackInts, trackFloats, wlrInts, wlrFloats, maxPlots, 0);
 
         outInts.Clear();
@@ -429,9 +448,14 @@ class RDF_RadarNetCodec
                 continue;
             h = h * 31 + tr.m_TrackId;
             h = h * 31 + TargetTypeToInt(tr.m_Type);
-            h = h * 31 + Math.Round(tr.m_FilteredPosition[0]);
-            h = h * 31 + Math.Round(tr.m_FilteredPosition[2]);
-            h = h * 31 + Math.Round(tr.m_LastSnrDb);
+            // Keep the hash arithmetic in int domain: Math.Round returns float,
+            // and `h * 31 + float` promotes the whole expression to float —
+            // once h exceeds 2^24 (4-5 tracks at this multiplier) mantissa
+            // precision is lost and distinct summaries can collide, silently
+            // suppressing legitimate reliable broadcasts (SkipUnchangedSummary).
+            h = h * 31 + (int)Math.Round(tr.m_FilteredPosition[0]);
+            h = h * 31 + (int)Math.Round(tr.m_FilteredPosition[2]);
+            h = h * 31 + (int)Math.Round(tr.m_LastSnrDb);
         }
         return h;
     }
@@ -604,10 +628,11 @@ class RDF_RadarNetCodec
         int maxTracks,
         int maxFused)
     {
-        array<int> trackInts = new array<int>();
-        array<float> trackFloats = new array<float>();
-        array<int> fusedInts = new array<int>();
-        array<float> fusedFloats = new array<float>();
+        // Reused scratch buffers (datalink set; see s_Scratch* declaration note).
+        array<int> trackInts = s_ScratchDlTrackInts;
+        array<float> trackFloats = s_ScratchDlTrackFloats;
+        array<int> fusedInts = s_ScratchDlFusedInts;
+        array<float> fusedFloats = s_ScratchDlFusedFloats;
         PackDatalink(tracks, fused, trackInts, trackFloats, fusedInts, fusedFloats, maxTracks, maxFused);
 
         int trackCount = trackInts.Count() / DL_TRACK_INT_STRIDE;
@@ -729,12 +754,13 @@ class RDF_RadarNetCodec
         writer.WriteInt(lockTrackId);
         writer.WriteVector(lockAim);
 
-        array<int> plotInts = new array<int>();
-        array<float> plotFloats = new array<float>();
-        array<int> trackInts = new array<int>();
-        array<float> trackFloats = new array<float>();
-        array<int> wlrInts = new array<int>();
-        array<float> wlrFloats = new array<float>();
+        // Reused scratch buffers (see s_Scratch* declaration note).
+        array<int> plotInts = s_ScratchPlotInts;
+        array<float> plotFloats = s_ScratchPlotFloats;
+        array<int> trackInts = s_ScratchTrackInts;
+        array<float> trackFloats = s_ScratchTrackFloats;
+        array<int> wlrInts = s_ScratchWlrInts;
+        array<float> wlrFloats = s_ScratchWlrFloats;
         PackScan(plots, tracks, plotInts, plotFloats, trackInts, trackFloats, wlrInts, wlrFloats, 0, 0);
         WriteIntArray(writer, plotInts);
         WriteFloatArray(writer, plotFloats);
@@ -921,10 +947,11 @@ class RDF_RadarNetCodec
         array<ref RDF_RadarDatalinkTrack> tracks,
         array<ref RDF_RadarFusedTrack> fused)
     {
-        array<int> trackInts = new array<int>();
-        array<float> trackFloats = new array<float>();
-        array<int> fusedInts = new array<int>();
-        array<float> fusedFloats = new array<float>();
+        // Reused scratch buffers (datalink set).
+        array<int> trackInts = s_ScratchDlTrackInts;
+        array<float> trackFloats = s_ScratchDlTrackFloats;
+        array<int> fusedInts = s_ScratchDlFusedInts;
+        array<float> fusedFloats = s_ScratchDlFusedFloats;
         PackDatalink(tracks, fused, trackInts, trackFloats, fusedInts, fusedFloats, 0, 0);
         WriteIntArray(writer, trackInts);
         WriteFloatArray(writer, trackFloats);

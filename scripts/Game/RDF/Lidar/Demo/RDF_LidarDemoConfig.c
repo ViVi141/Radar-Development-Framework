@@ -25,10 +25,10 @@ class RDF_LidarDemoConfig
     static bool IsBootstrapAutoCycle() { return s_BootstrapAutoCycle; }
     static void SetBootstrapCycleInterval(float sec) { s_BootstrapCycleInterval = Math.Max(0.1, sec); }
     static float GetBootstrapCycleInterval() { return s_BootstrapCycleInterval; }
-    static void SetDefaultRayCount(int n) { s_DefaultRayCount = Math.Max(1, n); }
+    static void SetDefaultRayCount(int n) { s_DefaultRayCount = Math.MaxInt(1, n); }
     static void SetDefaultRange(float m) { s_DefaultRange = Math.Max(0.1, m); }
     static void SetDefaultUpdateInterval(float sec) { s_DefaultUpdateInterval = Math.Max(0.01, sec); }
-    static void SetDefaultTraceMode(int mode) { s_DefaultTraceMode = Math.Clamp(mode, 0, 2); }
+    static void SetDefaultTraceMode(int mode) { s_DefaultTraceMode = Math.ClampInt(mode, 0, 2); }
     static void SetDefaultDrawRays(bool draw) { s_DefaultDrawRays = draw; }
     static void SetDefaultDrawPoints(bool draw) { s_DefaultDrawPoints = draw; }
     static void SetDefaultDrawOriginAxis(bool draw) { s_DefaultDrawOriginAxis = draw; }
@@ -109,7 +109,7 @@ class RDF_LidarDemoConfig
         RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
         cfg.m_Enable = true;
         cfg.m_SampleStrategy = new RDF_UniformSampleStrategy();
-        cfg.m_RayCount = Math.Max(rayCount, 1);
+        cfg.m_RayCount = Math.MaxInt(rayCount, 1);
         cfg.m_ColorStrategy = new RDF_LidarMaterialColorStrategy();
         cfg.m_UseBatchedMesh = true;
         cfg.m_DrawRays = false;
@@ -147,7 +147,7 @@ class RDF_LidarDemoConfig
         RDF_LidarDemoConfig cfg = new RDF_LidarDemoConfig();
         cfg.m_Enable = true;
         cfg.m_SampleStrategy = new RDF_UniformSampleStrategy();
-        cfg.m_RayCount = Math.Max(rayCount, 1);
+        cfg.m_RayCount = Math.MaxInt(rayCount, 1);
         cfg.m_ShowHUD = true;
         cfg.m_DrawRays = false;
         cfg.m_DrawPoints = false;

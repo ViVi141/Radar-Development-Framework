@@ -73,9 +73,15 @@ class RDF_RadarScattererRegistry
     protected static ref map<IEntity, bool> s_Seen;
     protected static ref array<IEntity> s_SeenPruneScratch;
     protected static ref map<IEntity, bool> s_Ignored;
-    protected static ref map<string, ref array<ref RDF_RadarScatterer>> s_CellBuckets;
+    protected static ref map<int, ref array<ref RDF_RadarScatterer>> s_CellBuckets;
 
     protected static float s_GridCellSizeM = 256.0;
+    // Packed integer grid key: (ix+OFFSET)<<BITS | (iz+OFFSET). The offset keeps
+    // negative cell coords (world origin is not grid-aligned) positive so the
+    // key is a valid int; BITS must cover the largest |iz| range we expect
+    // (a 64k cell span each way is plenty for any Reforger map).
+    protected static const int GRID_KEY_OFFSET = 32768;
+    protected static const int GRID_KEY_BITS = 16;
     protected static int s_StatGridQueries;
     protected static int s_StatGridHits;
 
@@ -215,7 +221,7 @@ class RDF_RadarScattererRegistry
         {
             for (int iz = minIz; iz <= maxIz; iz++)
             {
-                string key = GridKey(ix, iz);
+                int key = GridKey(ix, iz);
                 ref array<ref RDF_RadarScatterer> bucket = s_CellBuckets.Get(key);
                 if (!bucket)
                     continue;
@@ -1047,9 +1053,11 @@ class RDF_RadarScattererRegistry
     }
 
     //------------------------------------------------------------------------------------------------
-    protected static string GridKey(int ix, int iz)
+    // Packed int key — no string allocation per cell (hot path: CollectInSphere
+    // builds one key per grid cell per scan).
+    protected static int GridKey(int ix, int iz)
     {
-        return ix.ToString() + ":" + iz.ToString();
+        return ((ix + GRID_KEY_OFFSET) << GRID_KEY_BITS) | (iz + GRID_KEY_OFFSET);
     }
 
     //------------------------------------------------------------------------------------------------
@@ -1070,7 +1078,7 @@ class RDF_RadarScattererRegistry
 
         int ix, iz;
         GetGridCoords(entry.m_Position, ix, iz);
-        string key = GridKey(ix, iz);
+        int key = GridKey(ix, iz);
 
         ref array<ref RDF_RadarScatterer> bucket = s_CellBuckets.Get(key);
         if (!bucket)
@@ -1091,7 +1099,7 @@ class RDF_RadarScattererRegistry
         if (!entry || !entry.m_HasGridCell)
             return;
 
-        string key = GridKey(entry.m_GridIx, entry.m_GridIz);
+        int key = GridKey(entry.m_GridIx, entry.m_GridIz);
         ref array<ref RDF_RadarScatterer> bucket = s_CellBuckets.Get(key);
         if (bucket)
         {
@@ -1143,7 +1151,7 @@ class RDF_RadarScattererRegistry
         if (!s_SeenPruneScratch)
             s_SeenPruneScratch = new array<IEntity>();
         if (!s_CellBuckets)
-            s_CellBuckets = new map<string, ref array<ref RDF_RadarScatterer>>();
+            s_CellBuckets = new map<int, ref array<ref RDF_RadarScatterer>>();
         if (!s_FocusOrigins)
             s_FocusOrigins = new array<vector>();
         if (!s_FocusRadiiM)

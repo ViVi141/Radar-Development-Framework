@@ -32,7 +32,7 @@ class RDF_LidarSettings
     // Validate and clamp settings to safe defaults/ranges.
     void Validate()
     {
-        m_RayCount = Math.Max(m_RayCount, 1);
+        m_RayCount = Math.MaxInt(m_RayCount, 1);
         if (m_MaxRayCount > 0 && m_RayCount > m_MaxRayCount)
             m_RayCount = m_MaxRayCount;
         m_Range = Math.Clamp(m_Range, 0.1, 100000.0);

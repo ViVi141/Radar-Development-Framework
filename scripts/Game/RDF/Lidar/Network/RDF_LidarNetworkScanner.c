@@ -20,8 +20,11 @@ class RDF_LidarNetworkScannerPoller
         m_Api = api;
         m_Handler = handler;
         m_Deadline = 0.0;
-        if (GetGame().GetWorld())
-            m_Deadline = GetGame().GetWorld().GetWorldTime() + timeoutSeconds * 1000.0;
+        // A network round-trip timeout must elapse in REAL time. The world
+        // clock (GetWorldTime) freezes on pause / time-scale 0 / pre-mission,
+        // which would make the deadline unreachable and the poller poll
+        // forever. GetTickCount is wall-clock milliseconds, always advancing.
+        m_Deadline = System.GetTickCount() + (int)(timeoutSeconds * 1000.0);
         m_Finished = false;
     }
 
@@ -52,9 +55,8 @@ class RDF_LidarNetworkScannerPoller
             return;
         }
 
-        float now = 0.0;
-        if (GetGame().GetWorld())
-            now = GetGame().GetWorld().GetWorldTime();
+        // Wall-clock ms (matches m_Deadline; world time can freeze under pause).
+        float now = System.GetTickCount();
         if (now >= m_Deadline)
         {
             // timeout: fallback to local scan

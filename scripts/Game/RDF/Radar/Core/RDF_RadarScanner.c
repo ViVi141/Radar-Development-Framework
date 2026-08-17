@@ -44,6 +44,25 @@ class RDF_RadarScanner
     protected float m_ScanRainLossDbPerKm;
     // Reused pass context (avoid per-scan allocation).
     protected ref RDF_RadarScanPassContext m_PassCtx;
+    // Cross-frame LOS queue: scatterers whose fresh LOS pass was deferred when
+    // the per-tick TraceMove budget (m_LosTracesPerTick) was exhausted. Drained
+    // at the start of the next Scan() so starved candidates get priority before
+    // the normal sweep consumes the budget.
+    protected ref array<ref RDF_RadarScatterer> m_LosQueue;
+    protected int m_StatLosQueued;
+    protected int m_StatLosQueueDrained;
+    // Queue-drain scratch: candidates popped from m_LosQueue for this tick's
+    // deferred LOS slice (passed to ScanFromRegistry as the candidate source).
+    protected ref array<ref RDF_RadarScatterer> m_QueueCandidates;
+    // Scatterer ids already published this Scan() — dedups the same entity when
+    // the queue drain and the sweep both touch it in one tick.
+    protected ref array<int> m_PublishedScattererIds;
+    // Reused truth buffer: ScanFromRegistry processes candidates serially, and
+    // every consumer of RDF_RadarTruthSample (StoreResult deep-copies fields,
+    // PublishFromTruth deep-copies into a new RDF_RadarTarget, PhysicalDetect /
+    // ApplyPhysicalReuse / DepositCoarseRd / NoteMtdPlot are synchronous) drops
+    // the reference before the next candidate, so one scratch instance is safe.
+    protected ref RDF_RadarTruthSample m_TruthScratch;
     // Forward-side truth bypass for AutoTest / ARM (scattererId -> entity).
     protected ref map<int, IEntity> m_DebugTruthByScattererId;
     // Scatterer ids the dwell scheduler forces to a full update this scan.
@@ -68,6 +87,12 @@ class RDF_RadarScanner
         m_TraceParam = new TraceParam();
         m_LosExclude = new array<IEntity>();
         m_PassCtx = new RDF_RadarScanPassContext();
+        m_LosQueue = new array<ref RDF_RadarScatterer>();
+        m_StatLosQueued = 0;
+        m_StatLosQueueDrained = 0;
+        m_QueueCandidates = new array<ref RDF_RadarScatterer>();
+        m_PublishedScattererIds = new array<int>();
+        m_TruthScratch = new RDF_RadarTruthSample();
         m_DebugTruthByScattererId = new map<int, IEntity>();
         m_DwellScattererIds = new array<int>();
         m_LastFalsePlotCount = 0;
@@ -134,6 +159,12 @@ class RDF_RadarScanner
             m_LosCache.Clear();
         if (m_ScanReuseCache)
             m_ScanReuseCache.Clear();
+        // Flush variants must also drop deferred LOS work so the next scan
+        // re-runs every candidate from scratch.
+        if (m_LosQueue)
+            m_LosQueue.Clear();
+        if (m_QueueCandidates)
+            m_QueueCandidates.Clear();
     }
 
     int GetLastDemLosBlocks()
@@ -181,7 +212,9 @@ class RDF_RadarScanner
             + " skip=" + m_StatBudgetSkips.ToString()
             + " losHit=" + m_StatLosCacheHits.ToString()
             + " demBlk=" + m_StatDemLosBlocks.ToString()
-            + " trace=" + m_StatTraceMoves.ToString();
+            + " trace=" + m_StatTraceMoves.ToString()
+            + " losQ=" + m_StatLosQueued.ToString()
+            + "/" + m_StatLosQueueDrained.ToString();
     }
 
     string GetMtdStatsShort()
@@ -270,6 +303,20 @@ class RDF_RadarScanner
         RememberDebugTruth(truth);
         if (!truth.m_Detected && !(m_Settings && m_Settings.m_KeepUndetected))
             return;
+        // Dedup: the queue drain and the sweep may both touch the same scatterer
+        // in one Scan(); publish each scatterer id once per scan.
+        if (truth.m_ScattererId > 0)
+        {
+            if (m_PublishedScattererIds)
+            {
+                for (int i = 0; i < m_PublishedScattererIds.Count(); i++)
+                {
+                    if (m_PublishedScattererIds.Get(i) == truth.m_ScattererId)
+                        return;
+                }
+            }
+            m_PublishedScattererIds.Insert(truth.m_ScattererId);
+        }
         RDF_RadarTarget plot = RDF_RadarMeasurement.PublishFromTruth(truth);
         if (!plot)
             return;
@@ -387,12 +434,16 @@ class RDF_RadarScanner
         outTargets.Clear();
         if (m_DebugTruthByScattererId)
             m_DebugTruthByScattererId.Clear();
+        if (m_PublishedScattererIds)
+            m_PublishedScattererIds.Clear();
         m_StatReuseHits = 0;
         m_StatFreshUpdates = 0;
         m_StatBudgetSkips = 0;
         m_StatLosCacheHits = 0;
         m_StatTraceMoves = 0;
         m_StatDemLosBlocks = 0;
+        m_StatLosQueued = 0;
+        m_StatLosQueueDrained = 0;
         m_StatMtdRotorAided = 0;
         m_StatMtdDetected = 0;
         m_LastMtdWinBin = -1;
@@ -499,7 +550,7 @@ class RDF_RadarScanner
         EnsureLosTrace();
         m_LosExclude.Clear();
         RDF_RadarScanGeometry.ConfigureLosParam(m_TraceParam, m_LosExclude);
-        int losBudget = m_Settings.m_MaxLosTracesPerScan;
+        int losBudget = ResolveLosBudgetPerTick();
         int freshBudget = ComputeFreshUpdateBudget();
         float rangeSq = range * range;
 
@@ -529,6 +580,12 @@ class RDF_RadarScanner
         if (m_ScanReuseCache)
             m_ScanReuseCache.MaybePrune(wallTime);
 
+        // Cross-frame LOS smoothing: drain the deferred LOS queue first so
+        // budget-starved candidates get their fresh pass before the sweep
+        // consumes this tick's trace budget. Queue runs inside the same
+        // per-tick budget (m_LosBudget), so combined trace cost stays bounded.
+        DrainLosQueue(outTargets, passCtx);
+
         ScanFromRegistry(outTargets, passCtx);
 
         AddDeceptionFalsePlots(outTargets, origin, forward, worldTime, maxTargets);
@@ -538,10 +595,15 @@ class RDF_RadarScanner
     }
 
     // Table-driven pass: entities are pre-classified scatterers / emitters.
+    // candidates: optional queue slice for the deferred-LOS drain pass; when
+    // non-null, the fair cursor and sphere collection are skipped (queue drain
+    // runs inside the same per-tick LOS budget).
     protected void ScanFromRegistry(
         notnull array<ref RDF_RadarTarget> outTargets,
-        notnull RDF_RadarScanPassContext ctx)
+        notnull RDF_RadarScanPassContext ctx,
+        array<ref RDF_RadarScatterer> candidates = null)
     {
+        bool queueDrain = candidates != null;
         IEntity subject = ctx.m_Subject;
         BaseWorld world = ctx.m_World;
         vector origin = ctx.m_Origin;
@@ -560,7 +622,10 @@ class RDF_RadarScanner
 
         if (!m_ScattererCandidates)
             m_ScattererCandidates = new array<ref RDF_RadarScatterer>();
-        RDF_RadarScattererRegistry.CollectInSphere(origin, Math.Sqrt(rangeSq), m_ScattererCandidates);
+        if (queueDrain)
+            m_ScattererCandidates = candidates;
+        else
+            RDF_RadarScattererRegistry.CollectInSphere(origin, Math.Sqrt(rangeSq), m_ScattererCandidates);
 
         int candidateCount = m_ScattererCandidates.Count();
         if (candidateCount <= 0)
@@ -571,7 +636,7 @@ class RDF_RadarScanner
         }
 
         int startIndex = 0;
-        if (m_Settings.m_FairScanCursor)
+        if (!queueDrain && m_Settings.m_FairScanCursor)
         {
             startIndex = m_RegistryScanCursor;
             while (startIndex >= candidateCount)
@@ -741,6 +806,13 @@ class RDF_RadarScanner
                             priorityType,
                             worldTime,
                             wallTime);
+                        if (!queueDrain && m_Settings && m_Settings.m_EnableLosFrameQueue && m_LosQueue)
+                        {
+                            // Cross-frame smoothing: defer the rest of this scan's
+                            // fresh-LOS candidates to the queue instead of dropping
+                            // them; the next Scan() drains them first.
+                            EnqueueRemainingLosCandidates(i, step, candidateCount);
+                        }
                         break;
                     }
                     RDF_RadarScanGeometry.FillLosExclude(m_LosExclude, subject, entry.m_Entity);
@@ -790,7 +862,10 @@ class RDF_RadarScanner
                 losElevationDeg,
                 scanNumber);
 
-            RDF_RadarTruthSample t = new RDF_RadarTruthSample();
+            // Reused scratch truth (consumers copy synchronously; see field note).
+            // Reset fields that are conditionally assigned below so no values
+            // leak from the previous candidate through the reuse.
+            RDF_RadarTruthSample t = m_TruthScratch;
             t.m_Entity = entry.m_Entity;
             t.m_ScattererId = entry.m_ScattererId;
             t.m_Position = losEnd;
@@ -808,12 +883,24 @@ class RDF_RadarScanner
             t.m_RotorRcsFraction = entry.m_RotorRcsFraction;
             t.m_HubWidthMs = entry.m_HubWidthMs;
             t.m_AglM = entry.m_AglM;
+            t.m_DemSampleValid = false;
+            t.m_DemSurfaceClass = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
+            t.m_DemTerrainY = 0.0;
+            t.m_RotorSidebandUsed = false;
+            t.m_BeamName = "";
             if (isEmitter)
             {
                 t.m_EmitFrequencyHz = entry.m_EmitFrequencyHz;
                 t.m_EmitPeakPowerW = entry.m_EmitPeakPowerW;
                 t.m_EmitAntennaGainDbi = entry.m_EmitAntennaGainDbi;
                 t.m_EmitStrength = entry.m_EmitStrength;
+            }
+            else
+            {
+                t.m_EmitFrequencyHz = 0.0;
+                t.m_EmitPeakPowerW = 0.0;
+                t.m_EmitAntennaGainDbi = 0.0;
+                t.m_EmitStrength = 1.0;
             }
             if (entry.m_DemSampleValid)
             {
@@ -872,22 +959,125 @@ class RDF_RadarScanner
             PublishTruthToPlots(outTargets, t);
         }
 
-        if (m_Settings.m_FairScanCursor)
+        if (!queueDrain)
         {
-            int nextIndex = startIndex + processedCount;
-            while (nextIndex >= candidateCount)
-                nextIndex = nextIndex - candidateCount;
-            while (nextIndex < 0)
-                nextIndex = nextIndex + candidateCount;
-            m_RegistryScanCursor = nextIndex;
-        }
-        else
-        {
-            m_RegistryScanCursor = 0;
+            if (m_Settings.m_FairScanCursor)
+            {
+                int nextIndex = startIndex + processedCount;
+                while (nextIndex >= candidateCount)
+                    nextIndex = nextIndex - candidateCount;
+                while (nextIndex < 0)
+                    nextIndex = nextIndex + candidateCount;
+                m_RegistryScanCursor = nextIndex;
+            }
+            else
+            {
+                m_RegistryScanCursor = 0;
+            }
         }
 
         ctx.m_LosUsed = losUsed;
         ctx.m_FreshBudget = freshBudget;
+    }
+
+    // Effective per-tick LOS TraceMove budget. With the frame queue on and
+    // m_LosTracesPerTick > 0, one Scan() (one Tick) spends at most this many
+    // traces; overflow is deferred to m_LosQueue and drained by later scans.
+    // Otherwise fall back to the legacy per-scan cap.
+    protected int ResolveLosBudgetPerTick()
+    {
+        if (!m_Settings)
+            return 48;
+        if (m_Settings.m_EnableLosFrameQueue && m_Settings.m_LosTracesPerTick > 0)
+            return m_Settings.m_LosTracesPerTick;
+        return m_Settings.m_MaxLosTracesPerScan;
+    }
+
+    // Cross-frame LOS drain: pop a bounded slice of deferred scatterers and run
+    // the standard candidate pass over it (same gates / LOS / physics path).
+    // Shares ctx.m_LosBudget with the sweep that follows, so the combined trace
+    // cost of drain + sweep stays within the per-tick budget.
+    protected void DrainLosQueue(
+        notnull array<ref RDF_RadarTarget> outTargets,
+        RDF_RadarScanPassContext ctx)
+    {
+        if (!m_Settings || !m_Settings.m_EnableLosFrameQueue)
+            return;
+        if (!m_LosQueue || m_LosQueue.Count() <= 0)
+            return;
+
+        int budget = ctx.m_LosBudget;
+        int used = ctx.m_LosUsed;
+        if (used >= budget)
+            return;
+
+        // Each deferred candidate may consume up to 2 TraceMove calls, so pop at
+        // most (budget - used)/2 + 1 candidates; ScanFromRegistry still enforces
+        // the trace budget itself via losUsed/losBudget. If the drain stops
+        // early, unprocessed slice candidates are harmless — the next sweep's
+        // CollectInSphere re-collects them (the registry is the source of truth;
+        // the queue only reorders priority).
+        int remaining = budget - used;
+        int maxPop = Math.Max(1, remaining / 2 + 1);
+        m_QueueCandidates.Clear();
+        while (m_LosQueue.Count() > 0 && m_QueueCandidates.Count() < maxPop)
+        {
+            RDF_RadarScatterer e = m_LosQueue.Get(0);
+            m_LosQueue.Remove(0);
+            if (!e || !e.m_Alive || !e.m_Entity)
+                continue;
+            m_QueueCandidates.Insert(e);
+            m_StatLosQueueDrained = m_StatLosQueueDrained + 1;
+        }
+        if (m_QueueCandidates.Count() <= 0)
+            return;
+
+        ScanFromRegistry(outTargets, ctx, m_QueueCandidates);
+        m_QueueCandidates.Clear();
+    }
+
+    // Defer the unprocessed tail of the current sweep to the LOS queue so the
+    // next Tick drains it first (priority over fresh candidates). Bounded by
+    // m_LosQueueMax; duplicates by scatterer id are skipped.
+    protected void EnqueueRemainingLosCandidates(
+        int currentIndex,
+        int currentStep,
+        int candidateCount)
+    {
+        if (!m_LosQueue || !m_Settings)
+            return;
+        if (m_LosQueue.Count() >= m_Settings.m_LosQueueMax)
+            return;
+
+        int remaining = candidateCount - (currentStep + 1);
+        for (int k = 0; k < remaining; k++)
+        {
+            if (m_LosQueue.Count() >= m_Settings.m_LosQueueMax)
+                break;
+            int idx = currentIndex + 1 + k;
+            while (idx >= candidateCount)
+                idx = idx - candidateCount;
+            RDF_RadarScatterer e = m_ScattererCandidates.Get(idx);
+            if (!e || !e.m_Alive || !e.m_Entity)
+                continue;
+            if (LosQueueContains(e.m_ScattererId))
+                continue;
+            m_LosQueue.Insert(e);
+            m_StatLosQueued = m_StatLosQueued + 1;
+        }
+    }
+
+    protected bool LosQueueContains(int scattererId)
+    {
+        if (!m_LosQueue || scattererId <= 0)
+            return false;
+        for (int i = 0; i < m_LosQueue.Count(); i++)
+        {
+            RDF_RadarScatterer e = m_LosQueue.Get(i);
+            if (e && e.m_ScattererId == scattererId)
+                return true;
+        }
+        return false;
     }
 
 

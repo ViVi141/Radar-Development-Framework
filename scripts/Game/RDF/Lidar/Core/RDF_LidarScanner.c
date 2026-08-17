@@ -57,7 +57,7 @@ class RDF_LidarScanner
         EnsureTraceParam();
 
         vector origin = GetSubjectOrigin(subject);
-        int rays = Math.Max(m_Settings.m_RayCount, 1);
+        int rays = Math.MaxInt(m_Settings.m_RayCount, 1);
         float range = m_Settings.m_Range;
 
         vector worldMat[4];

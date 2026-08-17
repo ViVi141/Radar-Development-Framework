@@ -217,8 +217,10 @@ class RDF_DemTileBake
         float originZ = s_BoundsMin[2] + s_NextTileZ * tileSpanM;
 
         // Absolute cell origin for stitching (matches ANNA origin_ix/origin_iz convention).
-        int originIx = Math.Round(s_NextTileX * s_TileCells);
-        int originIz = Math.Round(s_NextTileZ * s_TileCells);
+        // int*int is already integral; Math.Round would round-trip through float
+        // for no reason.
+        int originIx = s_NextTileX * s_TileCells;
+        int originIz = s_NextTileZ * s_TileCells;
 
         array<string> lines = {};
         lines.Insert("RDF_DEM_TILE_V3");

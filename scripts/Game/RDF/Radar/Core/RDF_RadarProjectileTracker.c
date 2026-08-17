@@ -479,6 +479,11 @@ class RDF_RadarProjectileTracker
     protected float m_WeaponLocateMaxFitRmsM = 80.0;
     protected int m_WeaponLocateFitWindow = 20;
     protected float m_WeaponLocateSmoothAlpha = 0.35;
+    // Cross-frame WLR solve budget: max ballistic solves per scan; overflow
+    // tracks are queued and drained on later scans. 0 = unlimited (legacy).
+    protected int m_WeaponLocateSolvesPerScan = 2;
+    protected int m_WeaponLocateQueueMax = 16;
+    protected ref array<ref RDF_RadarTrack> m_WlrPending;
     protected bool m_CoastOnMiss = true;
     protected bool m_CoastOnDopplerNull = true;
     protected float m_CoastGateGrowPerMiss = 0.25;
@@ -496,6 +501,16 @@ class RDF_RadarProjectileTracker
     protected float m_JpdaPd = 0.9;
     protected ref RDF_JpdaAssociator m_JpdaAssociator = new RDF_JpdaAssociator();
 
+    // Reused scratch arrays for UpdateWithOrigin (GNN path). All live only
+    // inside that call, so clear-and-reuse avoids per-scan allocation in the
+    // tracker hot path (the 5 Hz scan cadence × every radar).
+    protected ref array<ref RDF_RadarTarget> m_ScratchPlots = new array<ref RDF_RadarTarget>();
+    protected ref array<bool> m_ScratchPlotUsed = new array<bool>();
+    protected ref array<bool> m_ScratchTrackAssigned = new array<bool>();
+    protected ref array<float> m_ScratchPairCosts = new array<float>();
+    protected ref array<int> m_ScratchPairTrackIdx = new array<int>();
+    protected ref array<int> m_ScratchPairPlotIdx = new array<int>();
+
     void ConfigureFromSettings(RDF_RadarSettings settings)
     {
         if (!settings)
@@ -512,6 +527,10 @@ class RDF_RadarProjectileTracker
         m_WeaponLocateMaxFitRmsM = settings.m_WeaponLocateMaxFitRmsM;
         m_WeaponLocateFitWindow = settings.m_WeaponLocateFitWindow;
         m_WeaponLocateSmoothAlpha = settings.m_WeaponLocateSmoothAlpha;
+        m_WeaponLocateSolvesPerScan = settings.m_WeaponLocateSolvesPerScan;
+        m_WeaponLocateQueueMax = settings.m_WeaponLocateQueueMax;
+        if (!m_WlrPending)
+            m_WlrPending = new array<ref RDF_RadarTrack>();
         m_CoastOnMiss = settings.m_TrackCoastOnMiss;
         m_CoastOnDopplerNull = settings.m_TrackCoastOnDopplerNull;
         m_CoastGateGrowPerMiss = settings.m_TrackCoastGateGrowPerMiss;
@@ -690,24 +709,121 @@ class RDF_RadarProjectileTracker
 
     // Recompute launch/impact for confirmed projectile tracks.
     // groundYM is only the fallback plane; SampleGroundYM prefers DEM/surface.
+    // Cross-frame budget: when m_WeaponLocateSolvesPerScan > 0, at most that many
+    // ballistic solves run per scan; overflow tracks are queued (oldest first)
+    // and drained on later scans so a mass barrage cannot hitch a single tick.
     void RefreshWeaponLocates(float groundYM)
     {
         if (!m_EnableWeaponLocate)
+        {
+            if (m_WlrPending)
+                m_WlrPending.Clear();
             return;
+        }
+        if (!m_WlrPending)
+            m_WlrPending = new array<ref RDF_RadarTrack>();
+
+        int budget = m_WeaponLocateSolvesPerScan;
+        if (budget < 0)
+            budget = 0;
+        int solved = 0;
+        // Tracks solved this scan (Phase 1 queue drain) must not be solved or
+        // re-queued again in Phase 2 — they are still in m_Tracks.
+        array<ref RDF_RadarTrack> solvedThisScan = new array<ref RDF_RadarTrack>();
+
+        // Phase 1: drain pending queue first (oldest-first priority) so deferred
+        // solves do not starve behind the fresh eligible tracks each scan.
+        array<ref RDF_RadarTrack> stillPending = new array<ref RDF_RadarTrack>();
+        for (int q = 0; q < m_WlrPending.Count(); q++)
+        {
+            RDF_RadarTrack track = m_WlrPending.Get(q);
+            if (!track || !IsTrackActive(track) || !WlrTrackEligible(track))
+                continue;   // dropped / pruned / no longer eligible
+            if (budget > 0 && solved >= budget)
+            {
+                stillPending.Insert(track);
+                continue;
+            }
+            ApplyBallisticConfig(track);
+            track.SolveWeaponLocate(groundYM);
+            solved = solved + 1;
+            solvedThisScan.Insert(track);
+        }
+        m_WlrPending = stillPending;
+
+        // Phase 2: fresh eligible tracks — solve now or queue overflow.
         for (int i = 0; i < m_Tracks.Count(); i++)
         {
             RDF_RadarTrack track = m_Tracks.Get(i);
-            if (!track)
+            if (!track || !WlrTrackEligible(track))
                 continue;
-            if (!track.m_Confirmed)
+            if (TrackListContains(solvedThisScan, track))
+                continue;   // already solved from the queue this scan
+            if (budget > 0 && solved >= budget)
+            {
+                EnqueueWlrTrack(track);
                 continue;
-            if (!track.IsProjectileTrack())
-                continue;
-            if (track.m_HitCount < m_WeaponLocateMinHits)
-                continue;
+            }
             ApplyBallisticConfig(track);
             track.SolveWeaponLocate(groundYM);
+            solved = solved + 1;
+            solvedThisScan.Insert(track);
         }
+    }
+
+    protected bool TrackListContains(array<ref RDF_RadarTrack> list, RDF_RadarTrack track)
+    {
+        if (!list || !track)
+            return false;
+        for (int i = 0; i < list.Count(); i++)
+        {
+            if (list.Get(i) == track)
+                return true;
+        }
+        return false;
+    }
+
+    // A track qualifies for WLR solving when it is a confirmed projectile with
+    // enough accumulated hits (the min-hit / span gates also run inside the
+    // solver itself).
+    protected bool WlrTrackEligible(RDF_RadarTrack track)
+    {
+        if (!track)
+            return false;
+        if (!track.m_Confirmed)
+            return false;
+        if (!track.IsProjectileTrack())
+            return false;
+        if (track.m_HitCount < m_WeaponLocateMinHits)
+            return false;
+        return true;
+    }
+
+    protected void EnqueueWlrTrack(RDF_RadarTrack track)
+    {
+        if (!m_WlrPending)
+            m_WlrPending = new array<ref RDF_RadarTrack>();
+        if (m_WlrPending.Count() >= m_WeaponLocateQueueMax)
+            return; // queue full: track retries on a later scan (still eligible)
+        for (int i = 0; i < m_WlrPending.Count(); i++)
+        {
+            if (m_WlrPending.Get(i) == track)
+                return; // already queued
+        }
+        m_WlrPending.Insert(track);
+    }
+
+    // True when the track is still held by the tracker (not pruned / cleared).
+    protected bool IsTrackActive(RDF_RadarTrack track)
+    {
+        if (!track)
+            return false;
+        for (int i = 0; i < m_Tracks.Count(); i++)
+        {
+            if (m_Tracks.Get(i) == track)
+                return true;
+        }
+        return false;
     }
 
     void Update(array<ref RDF_RadarTarget> targets, float worldTimeSec)
@@ -729,7 +845,10 @@ class RDF_RadarProjectileTracker
             return;
         }
 
-        array<ref RDF_RadarTarget> plots = new array<ref RDF_RadarTarget>();
+        // Reused scratch arrays (avoid per-scan allocation; all contents live
+        // only within this call).
+        array<ref RDF_RadarTarget> plots = m_ScratchPlots;
+        plots.Clear();
         for (int i = 0; i < targets.Count(); i++)
         {
             RDF_RadarTarget t = targets.Get(i);
@@ -738,18 +857,23 @@ class RDF_RadarProjectileTracker
             plots.Insert(t);
         }
 
-        array<bool> plotUsed = new array<bool>();
+        array<bool> plotUsed = m_ScratchPlotUsed;
+        plotUsed.Clear();
         for (int pInit = 0; pInit < plots.Count(); pInit++)
             plotUsed.Insert(false);
 
-        array<bool> trackAssigned = new array<bool>();
+        array<bool> trackAssigned = m_ScratchTrackAssigned;
+        trackAssigned.Clear();
         for (int tInit = 0; tInit < m_Tracks.Count(); tInit++)
             trackAssigned.Insert(false);
 
         // Cost triples stored as parallel arrays to avoid nested ref types.
-        array<float> pairCosts = new array<float>();
-        array<int> pairTrackIdx = new array<int>();
-        array<int> pairPlotIdx = new array<int>();
+        array<float> pairCosts = m_ScratchPairCosts;
+        pairCosts.Clear();
+        array<int> pairTrackIdx = m_ScratchPairTrackIdx;
+        pairTrackIdx.Clear();
+        array<int> pairPlotIdx = m_ScratchPairPlotIdx;
+        pairPlotIdx.Clear();
 
         for (int ti = 0; ti < m_Tracks.Count(); ti++)
         {
@@ -1100,6 +1224,8 @@ class RDF_RadarProjectileTracker
     void ClearTracks()
     {
         m_Tracks.Clear();
+        if (m_WlrPending)
+            m_WlrPending.Clear();
     }
 
     // Replace local tracks with authoritative network summaries (no re-association).
@@ -1108,6 +1234,8 @@ class RDF_RadarProjectileTracker
         if (!m_Tracks)
             m_Tracks = new array<ref RDF_RadarTrack>();
         m_Tracks.Clear();
+        if (m_WlrPending)
+            m_WlrPending.Clear();
         if (!synced)
             return;
         for (int i = 0; i < synced.Count(); i++)

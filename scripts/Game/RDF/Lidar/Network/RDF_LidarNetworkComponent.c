@@ -129,7 +129,7 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
         }
 
         // Server applies primitives to RplProps
-        m_RayCount = Math.Max(config.m_RayCount, 1);
+        m_RayCount = Math.MaxInt(config.m_RayCount, 1);
         if (config.m_UpdateInterval > 0)
             m_UpdateInterval = Math.Max(0.01, config.m_UpdateInterval);
         if (config.m_Range > 0)
@@ -144,7 +144,7 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
     [RplRpc(RplChannel.Reliable, RplRcver.Server)]
     protected void RpcAsk_SetDemoConfig(int rayCount, float updateInterval, float rangeM, bool renderWorld, bool drawOriginAxis, bool verbose)
     {
-        rayCount = Math.Max(rayCount, 1);
+        rayCount = Math.MaxInt(rayCount, 1);
         if (updateInterval > 0 && updateInterval < 0.01)
             updateInterval = 0.01;
 
@@ -198,7 +198,7 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
         } 
 
         // Apply replicated primitive config
-        scanner.GetSettings().m_RayCount = Math.Max(m_RayCount, 1);
+        scanner.GetSettings().m_RayCount = Math.MaxInt(m_RayCount, 1);
         scanner.GetSettings().m_UpdateInterval = Math.Max(0.01, m_UpdateInterval);
         scanner.GetSettings().m_Range = Math.Clamp(m_Range, 0.1, 100000.0);
 
@@ -229,7 +229,7 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
             for (int i = 0; i < partCount; i++)
             {
                 int start = i * RDF_MAX_CSV_CHUNK;
-                int len = Math.Min(RDF_MAX_CSV_CHUNK, csv.Length() - start);
+                int len = Math.MinInt(RDF_MAX_CSV_CHUNK, csv.Length() - start);
                 string chunk = csv.Substring(start, len);
                 Rpc(RpcDo_ScanCompleteChunk, m_ScanSerial, i, i == (partCount - 1), chunk);
             }

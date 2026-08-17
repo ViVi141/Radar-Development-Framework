@@ -1,7 +1,39 @@
 // Classify entities for radar: projectile vs vehicle vs other.
 // Cheap type checks first; prefab string fallback only when needed.
+// The prefab class name is fetched ONCE per entity and lowercased, so the
+// vehicle/projectile token scans never re-run GetPrefabData()/GetPrefab()/
+// GetClassName() (costly per candidate) and case differences cannot cause
+// classification false negatives.
 class RDF_RadarEntityClassifier
 {
+    // Lazy-initialised token tables. Enforce requires `ref` on reference-type
+    // statics and has no static ctor, so fill on first use (this is a hot
+    // path — the sphere-query callback calls IsRadarCandidate per entity).
+    protected static ref array<string> s_ProjectileTokens;
+    protected static ref array<string> s_VehicleTokens;
+    protected static bool s_TokensInit;
+
+    protected static void EnsureTokens()
+    {
+        if (s_TokensInit)
+            return;
+        s_TokensInit = true;
+
+        s_ProjectileTokens = new array<string>();
+        s_ProjectileTokens.Insert("projectile");
+        s_ProjectileTokens.Insert("missile");
+
+        s_VehicleTokens = new array<string>();
+        s_VehicleTokens.Insert("car");
+        s_VehicleTokens.Insert("vehicle");
+        s_VehicleTokens.Insert("tank");
+        s_VehicleTokens.Insert("helicopter");
+        s_VehicleTokens.Insert("aircraft");
+        s_VehicleTokens.Insert("plane");
+        s_VehicleTokens.Insert("rotor");
+        s_VehicleTokens.Insert("character");
+    }
+
     static bool IsProjectile(IEntity entity)
     {
         if (!entity)
@@ -16,7 +48,9 @@ class RDF_RadarEntityClassifier
                 return true;
         }
 
-        return PrefabNameContainsProjectileToken(entity);
+        EnsureTokens();
+        string lower = GetLowerPrefabClassName(entity);
+        return ContainsAnyToken(lower, s_ProjectileTokens);
     }
 
     static bool IsVehicleOrCharacter(IEntity entity)
@@ -30,7 +64,9 @@ class RDF_RadarEntityClassifier
         if (Vehicle.Cast(entity))
             return true;
 
-        return PrefabNameContainsVehicleToken(entity);
+        EnsureTokens();
+        string lower = GetLowerPrefabClassName(entity);
+        return ContainsAnyToken(lower, s_VehicleTokens);
     }
 
     // Fast reject used by sphere-query callback before inserting candidates.
@@ -52,44 +88,35 @@ class RDF_RadarEntityClassifier
                 return true;
         }
 
-        return PrefabNameContainsVehicleToken(entity)
-            || PrefabNameContainsProjectileToken(entity);
+        // One GetClassName + one lowercase pass for both token sets.
+        EnsureTokens();
+        string lower = GetLowerPrefabClassName(entity);
+        return ContainsAnyToken(lower, s_VehicleTokens)
+            || ContainsAnyToken(lower, s_ProjectileTokens);
     }
 
-    protected static bool PrefabNameContainsProjectileToken(IEntity entity)
+    //------------------------------------------------------------------------------------------------
+    protected static bool ContainsAnyToken(string haystack, array<string> tokens)
     {
-        string className = GetPrefabClassName(entity);
-        if (className == "")
+        if (haystack == "")
             return false;
-        if (className.IndexOf("Projectile") >= 0)
-            return true;
-        if (className.IndexOf("Missile") >= 0)
-            return true;
+        for (int i = 0; i < tokens.Count(); i++)
+        {
+            if (haystack.IndexOf(tokens.Get(i)) >= 0)
+                return true;
+        }
         return false;
     }
 
-    protected static bool PrefabNameContainsVehicleToken(IEntity entity)
+    protected static string GetLowerPrefabClassName(IEntity entity)
     {
-        string className = GetPrefabClassName(entity);
-        if (className == "")
-            return false;
-        if (className.IndexOf("Car") >= 0)
-            return true;
-        if (className.IndexOf("Vehicle") >= 0)
-            return true;
-        if (className.IndexOf("Tank") >= 0)
-            return true;
-        if (className.IndexOf("Helicopter") >= 0)
-            return true;
-        if (className.IndexOf("Aircraft") >= 0)
-            return true;
-        if (className.IndexOf("Plane") >= 0)
-            return true;
-        if (className.IndexOf("Rotor") >= 0)
-            return true;
-        if (className.IndexOf("Character") >= 0)
-            return true;
-        return false;
+        string name = GetPrefabClassName(entity);
+        if (name == "")
+            return "";
+        // Enforce string.ToLower() mutates in place and returns the length
+        // (int), not a new string.
+        name.ToLower();
+        return name;
     }
 
     protected static string GetPrefabClassName(IEntity entity)

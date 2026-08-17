@@ -12,7 +12,8 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
     protected ref RDF_RadarSensor m_Sensor;
     protected ref array<ref RDF_RadarTarget> m_LastTargets;
     protected ref array<ref RDF_RadarTrack> m_LastTracks;
-    protected float m_LastScanTime = 0.0;
+    // Raw GetWorldTime() milliseconds of the last scan (world clock; ms).
+    protected float m_LastScanTimeMs = 0.0;
     protected vector m_LastScanOrigin = "0 0 0";
     protected vector m_LastScanForward = "1 0 0";
     protected float m_LastScanRange = 0.0;
@@ -445,7 +446,7 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
             }
         }
         if (GetGame().GetWorld())
-            m_LastScanTime = GetGame().GetWorld().GetWorldTime();
+            m_LastScanTimeMs = GetGame().GetWorld().GetWorldTime();
         m_HasSyncedScan = true;
     }
 
@@ -600,7 +601,7 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         m_LastLockAimPos = lockAim;
 
         if (GetGame().GetWorld())
-            m_LastScanTime = GetGame().GetWorld().GetWorldTime();
+            m_LastScanTimeMs = GetGame().GetWorld().GetWorldTime();
         m_HasSyncedScan = true;
     }
 
@@ -611,7 +612,7 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         if (!RDF_RadarNetCodec.UnpackScanPlotsRpc(ints, floats, m_LastTargets))
             return;
         if (GetGame().GetWorld())
-            m_LastScanTime = GetGame().GetWorld().GetWorldTime();
+            m_LastScanTimeMs = GetGame().GetWorld().GetWorldTime();
         m_HasSyncedScan = true;
     }
 
@@ -673,7 +674,7 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         m_LastLockTrackId = lockTrackId;
         m_LastLockAimPos = lockAim;
         if (GetGame().GetWorld())
-            m_LastScanTime = GetGame().GetWorld().GetWorldTime();
+            m_LastScanTimeMs = GetGame().GetWorld().GetWorldTime();
         return true;
     }
 
@@ -720,7 +721,7 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         float now = 0.0;
         if (GetGame().GetWorld())
             now = GetGame().GetWorld().GetWorldTime();
-        if (now - m_LastScanTime > 60000.0)
+        if (now - m_LastScanTimeMs > 60000.0)
             return false;
         return true;
     }

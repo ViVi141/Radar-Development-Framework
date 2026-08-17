@@ -24,6 +24,39 @@ class RDF_RadarSettings
     int m_MaxTargets = 64;
     // Cap TraceMove calls per scan to bound hitch size in dense scenes.
     int m_MaxLosTracesPerScan = 48;
+    // Cross-frame LOS smoothing (default on): limit TraceMove calls per Tick and
+    // defer the overflow to a queue drained on later scans. Keeps one scan from
+    // burning the whole per-scan budget in a single synchronous burst.
+    bool m_EnableLosFrameQueue = true;
+    // Max TraceMove calls per Tick when m_EnableLosFrameQueue is on.
+    // 0 = fall back to m_MaxLosTracesPerScan (legacy one-shot behaviour).
+    int m_LosTracesPerTick = 16;
+    // Cap on deferred LOS queue length (scatterers awaiting a fresh LOS pass).
+    int m_LosQueueMax = 128;
+    // Adaptive budget governor (default on): the Sensor measures real scan wall
+    // time and tick cadence each scan and auto-scales the per-tick LOS trace
+    // budget (and WLR solve budget) to keep the server headroom. To pin a fixed
+    // budget, set m_AdaptiveLosMinPerTick == m_AdaptiveLosMaxPerTick (same for
+    // WLR) or disable the governor. Requires m_EnableLosFrameQueue for the LOS
+    // channel to take effect.
+    bool m_EnableAdaptiveBudget = true;
+    // Target: scanMs should stay below this fraction of ONE SERVER FRAME
+    // (frameMs = 1000 / GetFPS; 16.7 ms @ 60 tick, 8.3 ms @ 120 tick). 0.3
+    // means a scan may consume at most ~30% of a single frame; the scan runs
+    // every m_UpdateInterval but must not hitch the frame it lands on. The
+    // overload branch (util > 1.0) must stay reachable, so keep this modest.
+    float m_AdaptiveTargetScanFraction = 0.3;
+    // EMA smoothing of measured scan ms / frame ms.
+    float m_AdaptiveEmaAlpha = 0.3;
+    // Clamp range for the adaptive per-tick LOS trace budget.
+    int m_AdaptiveLosMinPerTick = 4;
+    int m_AdaptiveLosMaxPerTick = 20;
+    // Clamp range for the adaptive per-scan WLR solve budget.
+    int m_AdaptiveWlrMinSolves = 1;
+    int m_AdaptiveWlrMaxSolves = 6;
+    // Step factors when overloaded (down) / idle (up).
+    float m_AdaptiveStepDown = 0.85;
+    float m_AdaptiveStepUp = 1.1;
     float m_MinDistance = 0.5;
     ref RDF_RadarHardware m_Hardware;
     bool m_EnablePhysicalDetection = true;
@@ -218,6 +251,13 @@ class RDF_RadarSettings
     int m_WeaponLocateFitWindow = 20;
     // Blend new launch/impact into the previous fix (1 = jump, 0 = freeze).
     float m_WeaponLocateSmoothAlpha = 0.35;
+    // Cross-frame WLR solve budget (default on): cap ballistic solves per scan
+    // and queue overflow tracks to later scans, so a mass barrage does not burn
+    // 25-50 ms in one tick. 0 = unlimited (legacy: solve every eligible track
+    // every scan).
+    int m_WeaponLocateSolvesPerScan = 2;
+    // Cap on the deferred WLR solve queue length.
+    int m_WeaponLocateQueueMax = 16;
 
     // ---- Scan optimization thresholds (was hardcoded on Scanner / ReuseCache) ----
     float m_LosCacheMaxAgeS = 0.25;
@@ -260,6 +300,22 @@ class RDF_RadarSettings
         m_SectorHalfAngleDeg = Math.Clamp(m_SectorHalfAngleDeg, 0.0, 180.0);
         m_MaxTargets = Math.Max(1, m_MaxTargets);
         m_MaxLosTracesPerScan = Math.Clamp(m_MaxLosTracesPerScan, 4, 512);
+        m_LosTracesPerTick = Math.Clamp(m_LosTracesPerTick, 0, 512);
+        m_LosQueueMax = Math.Clamp(m_LosQueueMax, 4, 4096);
+        if (m_LosTracesPerTick > 0 && m_LosTracesPerTick > m_MaxLosTracesPerScan)
+            m_LosTracesPerTick = m_MaxLosTracesPerScan;
+        m_AdaptiveTargetScanFraction = Math.Clamp(m_AdaptiveTargetScanFraction, 0.1, 1.0);
+        m_AdaptiveEmaAlpha = Math.Clamp(m_AdaptiveEmaAlpha, 0.05, 0.9);
+        m_AdaptiveLosMinPerTick = Math.Clamp(m_AdaptiveLosMinPerTick, 1, 512);
+        m_AdaptiveLosMaxPerTick = Math.Clamp(m_AdaptiveLosMaxPerTick, 1, 512);
+        if (m_AdaptiveLosMaxPerTick < m_AdaptiveLosMinPerTick)
+            m_AdaptiveLosMaxPerTick = m_AdaptiveLosMinPerTick;
+        m_AdaptiveWlrMinSolves = Math.Clamp(m_AdaptiveWlrMinSolves, 0, 64);
+        m_AdaptiveWlrMaxSolves = Math.Clamp(m_AdaptiveWlrMaxSolves, 0, 64);
+        if (m_AdaptiveWlrMaxSolves < m_AdaptiveWlrMinSolves)
+            m_AdaptiveWlrMaxSolves = m_AdaptiveWlrMinSolves;
+        m_AdaptiveStepDown = Math.Clamp(m_AdaptiveStepDown, 0.5, 0.99);
+        m_AdaptiveStepUp = Math.Clamp(m_AdaptiveStepUp, 1.01, 2.0);
         m_ScattererDiscoveryRangeScale = Math.Clamp(m_ScattererDiscoveryRangeScale, 1.0, 4.0);
         m_ScattererDiscoveryIntervalS = Math.Clamp(m_ScattererDiscoveryIntervalS, 0.25, 60.0);
         m_ScattererClassifyPerTick = Math.Clamp(m_ScattererClassifyPerTick, 1, 256);
@@ -302,6 +358,8 @@ class RDF_RadarSettings
         m_WeaponLocateMaxFitRmsM = Math.Clamp(m_WeaponLocateMaxFitRmsM, 5.0, 500.0);
         m_WeaponLocateFitWindow = Math.Clamp(m_WeaponLocateFitWindow, 3, 64);
         m_WeaponLocateSmoothAlpha = Math.Clamp(m_WeaponLocateSmoothAlpha, 0.0, 1.0);
+        m_WeaponLocateSolvesPerScan = Math.Clamp(m_WeaponLocateSolvesPerScan, 0, 64);
+        m_WeaponLocateQueueMax = Math.Clamp(m_WeaponLocateQueueMax, 1, 256);
         m_LosCacheMaxAgeS = Math.Clamp(m_LosCacheMaxAgeS, 0.05, 5.0);
         m_LosCacheMaxOriginShiftM = Math.Clamp(m_LosCacheMaxOriginShiftM, 0.1, 50.0);
         m_LosCacheMaxTargetShiftM = Math.Clamp(m_LosCacheMaxTargetShiftM, 0.1, 100.0);

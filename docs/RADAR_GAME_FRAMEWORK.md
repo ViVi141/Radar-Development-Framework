@@ -71,6 +71,26 @@ Opt-in system layer (see [RADAR_API.md](RADAR_API.md) § Dwell / ECCM / JPDA):
 - `m_ScattererDiscoveryRangeScale`, `m_ScattererDiscoveryIntervalS`,
   `m_ScattererClassifyPerTick`, `m_ScattererRefreshPerTick`, `m_ScattererMaxEntries`
 - `m_MaxLosTracesPerScan` (default 48; bounds TraceMove hitch)
+- Cross-frame LOS smoothing: `m_EnableLosFrameQueue` (default true),
+  `m_LosTracesPerTick` (default 16; per-tick TraceMove cap, 0 = legacy per-scan),
+  `m_LosQueueMax` (default 128; deferred queue cap). Overflow is queued and
+  drained on later scans, so one Tick never burns the whole per-scan budget.
+- **Adaptive budget governor** (default on): `m_EnableAdaptiveBudget`.
+  The Sensor measures the real scan wall time each scan and the governor reads
+  the server's **actual frame time** via `System.GetFPS()` (10-frame average;
+  16.7 ms @ 60 tick, 8.3 ms @ 120 tick) and auto-scales the per-tick LOS trace
+  budget (`m_AdaptiveLosMinPerTick` / `m_AdaptiveLosMaxPerTick`, default 4–20)
+  and per-scan WLR solve budget (`m_AdaptiveWlrMinSolves` /
+  `m_AdaptiveWlrMaxSolves`, default 1–6). Utilisation is
+  `scanMs / (frameMs × m_AdaptiveTargetScanFraction)` (fraction default 0.3 =
+  scan may use at most ~30% of one frame). Overload (util > 1.0) sheds load;
+  idle-raise only while scanMs stays below ~7.5% of a frame (util < 0.25), so a
+  fully-detected scene does not ratchet the LOS budget to the max and waste
+  TraceMoves. EMA damping (`m_AdaptiveEmaAlpha`) + hysteresis bands prevent
+  thrash. To pin a fixed budget, set the min == max (LOS and/or WLR) or set
+  `m_EnableAdaptiveBudget = false`. Requires `m_EnableLosFrameQueue` for the
+  LOS channel to take effect. Perf / DEM-LOS bench tests disable it to measure
+  raw per-scan cost.
 - `m_EnableDemLosPrecheck` (default true; HEIGHT RAM terrain skip before Trace)
 - `m_DemLosPrecheckSamples` (default 8)
 - `m_EnableNlosMultipath` (default true)
@@ -86,6 +106,10 @@ Opt-in system layer (see [RADAR_API.md](RADAR_API.md) § Dwell / ECCM / JPDA):
 - `m_EnableMeasurementSynthesis` (default true), `m_KeepEntityTruth` (debug),
   `m_MeasurementModel`, measurement noise scale
 - `m_TrackGateRangeM`, `m_TrackGateAzimuthDeg`, `m_TrackConfirmHits`, `m_TrackMaxMisses`
+- Cross-frame WLR solve budget: `m_WeaponLocateSolvesPerScan` (default 2; max
+  ballistic solves per scan, 0 = unlimited legacy) and `m_WeaponLocateQueueMax`
+  (default 16). Overflow tracks are queued oldest-first and drained on later
+  scans, so a mass barrage does not add 25-50 ms in one tick.
 - `m_EnableEsmReceive` (Friis \(R^2\) for emitters; SEARCH presets enable this)
 - `m_EnableRwrReporting` (publish SEARCH/TRACK/LOCK threats after each dwell)
 - `m_FairScanCursor` (fair round-robin dwell cursor; default true)
@@ -479,6 +503,23 @@ Enforce 实现现已遵循与离线原型相同的契约。游戏实体是物理
 - `m_ScattererDiscoveryRangeScale`、`m_ScattererDiscoveryIntervalS`、
   `m_ScattererClassifyPerTick`、`m_ScattererRefreshPerTick`、`m_ScattererMaxEntries`
 - `m_MaxLosTracesPerScan`（默认 48；限制 TraceMove 卡顿）
+- 跨帧 LOS 平滑：`m_EnableLosFrameQueue`（默认 true）、`m_LosTracesPerTick`
+  （默认 16；每 Tick TraceMove 上限，0 = 沿用每扫描上限）、`m_LosQueueMax`
+  （默认 128；延迟队列上限）。超出部分入队并在后续扫描优先排空，单 Tick
+  不再一次性烧完整个扫描预算。
+- **自适应预算调节**（默认开）：`m_EnableAdaptiveBudget`。Sensor 每次
+  扫描实测扫描墙钟耗时，governor 通过 `System.GetFPS()`（10 帧平均；60 tick
+  ≈ 16.7ms/帧，120 tick ≈ 8.3ms/帧）读取**服务器真实帧时间**，自动伸缩
+  每 Tick LOS Trace 预算（`m_AdaptiveLosMinPerTick` / `m_AdaptiveLosMaxPerTick`，
+  默认 4–20）与每扫描 WLR 解算预算（`m_AdaptiveWlrMinSolves` /
+  `m_AdaptiveWlrMaxSolves`，默认 1–6）。占用率 =
+  `scanMs / (frameMs × m_AdaptiveTargetScanFraction)`（fraction 默认 0.3 =
+  扫描最多占单帧 ~30%）。过载（util > 1.0）主动降载；仅当 scanMs 低于单帧
+  ~7.5%（util < 0.25）才升档——已全检出的场景不会把 LOS 预算顶到上限浪费
+  TraceMove。EMA 阻尼（`m_AdaptiveEmaAlpha`）+ 滞回带防止抖振。想固定预算：
+  把 min == max（LOS 和/或 WLR），或设 `m_EnableAdaptiveBudget = false`。
+  LOS 通道生效需 `m_EnableLosFrameQueue`。Perf / DEM-LOS 基准测试显式关闭
+  以度量原始单扫描耗时。
 - `m_EnableDemLosPrecheck`（默认 true；HEIGHT RAM 地形先挡再 Trace）
 - `m_DemLosPrecheckSamples`（默认 8）
 - `m_EnableNlosMultipath`（默认 true）
@@ -494,6 +535,9 @@ Enforce 实现现已遵循与离线原型相同的契约。游戏实体是物理
 - `m_EnableMeasurementSynthesis`（默认 true）、`m_KeepEntityTruth`（调试）、
   `m_MeasurementModel`、测量噪声缩放
 - `m_TrackGateRangeM`、`m_TrackGateAzimuthDeg`、`m_TrackConfirmHits`、`m_TrackMaxMisses`
+- 跨帧 WLR 解算预算：`m_WeaponLocateSolvesPerScan`（默认 2；每扫描最多解算数，
+  0 = 不限（旧行为））与 `m_WeaponLocateQueueMax`（默认 16）。超出的航迹按
+  先进先出排队，在后续扫描排空，避免齐射单 Tick 增加 25–50ms。
 - `m_EnableEsmReceive`（辐射源走 Friis \(R^2\)；SEARCH 预设开启）
 - `m_EnableRwrReporting`（每次驻留后发布 SEARCH/TRACK/LOCK 威胁）
 - `m_FairScanCursor`（公平轮询驻留游标；默认 true）

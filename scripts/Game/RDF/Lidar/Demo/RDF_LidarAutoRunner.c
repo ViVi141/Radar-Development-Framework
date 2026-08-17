@@ -13,12 +13,15 @@ class RDF_LidarAutoRunner
     protected ref RDF_LidarDemoConfig m_DemoConfig;
     protected ref RDF_LidarScanCompleteHandler m_ScanCompleteHandler;
     protected ref RDF_LidarDemoStatsHandler m_DemoStatsHandler;
-    protected float m_LastScanTime = -1.0;
+    // Wall-clock seconds of the last demo scan start (cadence gate). Wall clock
+    // matches RDF_LidarSensor.Tick / radar side: world time freezes in GM
+    // editor / pause, which would otherwise stall the demo scan serial.
+    protected float m_LastScanWallS = -1.0;
     protected bool m_Running = false;
     protected bool m_WriteLiveCSV = false;
     protected int m_ScanSerial = 0;
     protected bool m_HudAfterglowTickScheduled = false;
-    protected static const float HUD_AFTERGLOW_TICK_MS = 100.0;
+    protected static const int HUD_AFTERGLOW_TICK_MS = 100;
 
     void RDF_LidarAutoRunner()
     {
@@ -157,7 +160,7 @@ class RDF_LidarAutoRunner
         if (!inst || !inst.m_Scanner) return;
         RDF_LidarSettings s = inst.m_Scanner.GetSettings();
         if (!s) return;
-        s.m_RayCount = Math.Max(rays, 1);
+        s.m_RayCount = Math.MaxInt(rays, 1);
     }
 
     // Set the demo visual color strategy (applies to visualizer if present)
@@ -459,7 +462,7 @@ class RDF_LidarAutoRunner
         if (!inst || !inst.m_Scanner) return;
         RDF_LidarSettings s = inst.m_Scanner.GetSettings();
         if (!s) return;
-        int m = Math.Clamp(mode, 0, 2);
+        int m = Math.ClampInt(mode, 0, 2);
         if (m == 0)
             s.m_TraceTargetMode = ERDF_TraceTargetMode.TERRAIN_ONLY;
         else if (m == 1)
@@ -561,10 +564,13 @@ class RDF_LidarAutoRunner
         if (!world)
             return;
 
-        float now = world.GetWorldTime() * 0.001;
-        if (m_LastScanTime >= 0.0 && (now - m_LastScanTime) < settings.m_UpdateInterval)
+        // Wall-clock cadence gate (same clock as RDF_LidarSensor.Tick), so the
+        // demo and the product path stay in sync when world time is frozen or
+        // time-scaled in the GM editor.
+        float now = System.GetTickCount() * 0.001;
+        if (m_LastScanWallS >= 0.0 && (now - m_LastScanWallS) < settings.m_UpdateInterval)
             return;
-        m_LastScanTime = now;
+        m_LastScanWallS = now;
 
         IEntity subject = RDF_LidarSubjectResolver.ResolveLocalSubject(true);
 

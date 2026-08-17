@@ -76,6 +76,9 @@ class RDF_RadarSensor
     protected bool m_EccmPrf;
     protected bool m_EccmFreq;
     protected bool m_EccmBurn;
+    // Adaptive budget governor: server main-thread headroom drives per-tick
+    // LOS trace / WLR solve budgets (opt-in via m_EnableAdaptiveBudget).
+    protected ref RDF_RadarBudgetGovernor m_BudgetGovernor;
 
     void RDF_RadarSensor()
     {
@@ -96,6 +99,8 @@ class RDF_RadarSensor
         m_DwellScheduler = new RDF_DwellScheduler();
         m_DwellTasks = new map<int, ref RDF_DwellTask>();
         m_EccmDecision = new RDF_EccmDecisionLayer();
+        m_BudgetGovernor = new RDF_RadarBudgetGovernor();
+        m_BudgetGovernor.Configure(m_Settings);
     }
 
     void SetEnabled(bool enabled)
@@ -154,6 +159,10 @@ class RDF_RadarSensor
         if (!m_Tracker)
             m_Tracker = new RDF_RadarProjectileTracker();
         m_Tracker.ConfigureFromSettings(m_Settings);
+        if (!m_BudgetGovernor)
+            m_BudgetGovernor = new RDF_RadarBudgetGovernor();
+        m_BudgetGovernor.Reset();
+        m_BudgetGovernor.Configure(m_Settings);
         // Force the next Tick to run immediately after a reconfigure.
         m_LastScanWallS = -1000.0;
         // Drop stale plots from the previous settings object so consumers
@@ -396,6 +405,12 @@ class RDF_RadarSensor
         if (!m_LockManager)
             m_LockManager = new RDF_RadarLockManager();
         return m_LockManager;
+    }
+
+    // Adaptive budget governor (null-safe when disabled).
+    RDF_RadarBudgetGovernor GetBudgetGovernor()
+    {
+        return m_BudgetGovernor;
     }
 
     // Drop every track. Call when reconfiguring between scenarios / suite steps
@@ -760,6 +775,18 @@ class RDF_RadarSensor
         if (m_LastScanDurationMs < 0.0)
             m_LastScanDurationMs = 0.0;
 
+        // Adaptive budget governor: feed the measured scan cost; it reads the
+        // server's real frame time (System.GetFPS) and adjusts per-tick LOS /
+        // WLR budgets in m_Settings when enabled.
+        if (m_BudgetGovernor && m_BudgetGovernor.IsEnabled())
+        {
+            m_BudgetGovernor.Update(m_Settings, m_LastScanDurationMs);
+            // The scanner and tracker read budgets from settings per scan, so
+            // the new values take effect on the next Tick automatically.
+            if (m_Tracker)
+                m_Tracker.ConfigureFromSettings(m_Settings);
+        }
+
         if (m_Handler)
             m_Handler.OnScanComplete(this, m_Plots, m_Tracker, m_Context);
     }
@@ -1035,6 +1062,13 @@ class RDF_RadarSensor
         if (m_Scanner)
             ew = " | " + m_Scanner.GetEwStatsShort();
 
+        string gov = "";
+        if (m_BudgetGovernor && m_BudgetGovernor.IsEnabled())
+        {
+            gov = " | gov los=" + m_BudgetGovernor.GetLosBudget().ToString()
+                + " wlr=" + m_BudgetGovernor.GetWlrBudget().ToString();
+        }
+
         string lock = "";
         if (m_LockManager)
             lock = " | " + m_LockManager.GetStatusShort();
@@ -1047,6 +1081,7 @@ class RDF_RadarSensor
             + reuse
             + mtd
             + ew
+            + gov
             + lock;
     }
 }

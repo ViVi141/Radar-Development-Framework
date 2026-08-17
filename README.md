@@ -201,6 +201,7 @@ python tools\dem\rdf_dem_pack.py --world GM_Eden
 | [docs/RADAR_REQUIRED_APIS.md](docs/RADAR_REQUIRED_APIS.md) | Engine API mapping |
 | [docs/VEHICLE_RADAR_LOCK_GUIDE.md](docs/VEHICLE_RADAR_LOCK_GUIDE.md) | Vehicle lock / engage patterns |
 | [docs/OPTIMIZATION_AND_MEMORY.md](docs/OPTIMIZATION_AND_MEMORY.md) | Performance and memory |
+| [docs/TIME_HANDLING.md](docs/TIME_HANDLING.md) | Time & primitive-type conventions |
 | [docs/LESSONS_FROM_ENGINE.md](docs/LESSONS_FROM_ENGINE.md) | Engine pitfalls and anti-patterns |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | Change history |
 | [docs/I18N.md](docs/I18N.md) | Language policy / bilingual docs |

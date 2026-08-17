@@ -14,7 +14,13 @@ Radar 联机**不要**沿用 LiDAR CSV 分片缓冲思路。权威路径用类�
 
 Radar **LOS TraceMove** 热路径（`RDF_RadarScanner` / `RDF_RadarScanGeometry`）：
 复用成员 `TraceParam` + `ExcludeArray`；`ANY_CONTACT`；起点出壳；单次扫描预算
-`m_MaxLosTracesPerScan`。HEIGHT RAM 就绪时默认 **DEM 先挡**（`m_EnableDemLosPrecheck`）再 Trace；
+`m_MaxLosTracesPerScan`。**跨帧 LOS 队列**（`m_EnableLosFrameQueue` +
+`m_LosTracesPerTick` + `m_LosQueueMax`）：每 Tick 最多 `m_LosTracesPerTick` 条
+TraceMove，超出入队并在后续扫描先排空，单 Tick 不再同步烧完整个预算；
+同 Tick 内队列排空 + 正常扫掠共享 `m_LosBudget`，总 TraceMove 开销有界。
+**WLR 解算预算**（`m_WeaponLocateSolvesPerScan` + `m_WeaponLocateQueueMax`）：
+每扫描最多 N 次弹道解算，超出航迹排队后续扫描处理，齐射不再单 Tick 叠加。
+HEIGHT RAM 就绪时默认 **DEM 先挡**（`m_EnableDemLosPrecheck`）再 Trace；
 复扫时 **LOS/reuse 缓存**墙钟收益更大。细则：[LESSONS_FROM_ENGINE.md](LESSONS_FROM_ENGINE.md) §6.5、
 [RADAR_API.md](RADAR_API.md) § Scan LOS path。
 
@@ -119,7 +125,15 @@ throttle / fingerprint skip / `m_InterestRadiusM`. Contract: [RADAR_API.md](RADA
 
 Radar **LOS TraceMove** hot path (`RDF_RadarScanner` / `RDF_RadarScanGeometry`):
 reuse member `TraceParam` + `ExcludeArray`; `ANY_CONTACT`; start clearance; per-scan
-budget `m_MaxLosTracesPerScan`. With HEIGHT RAM, default **DEM terrain precheck**
+budget `m_MaxLosTracesPerScan`. **Cross-frame LOS queue** (`m_EnableLosFrameQueue` +
+`m_LosTracesPerTick` + `m_LosQueueMax`): at most `m_LosTracesPerTick` TraceMove calls
+per Tick; overflow is queued and drained first on later scans, so one Tick never
+burns the whole per-scan budget synchronously; queue drain + normal sweep share
+`m_LosBudget` within the same Tick, so total trace cost stays bounded.
+**WLR solve budget** (`m_WeaponLocateSolvesPerScan` + `m_WeaponLocateQueueMax`):
+at most N ballistic solves per scan; overflow tracks are queued and drained on
+later scans, so mass fire no longer stacks 25–50 ms into one Tick.
+With HEIGHT RAM, default **DEM terrain precheck**
 (`m_EnableDemLosPrecheck`) before Trace; **LOS/reuse caches** dominate wall time on
 repeat dwells. Details: [LESSONS_FROM_ENGINE.md](LESSONS_FROM_ENGINE.md) §6.5,
 [RADAR_API.md](RADAR_API.md) § Scan LOS path.

@@ -170,7 +170,7 @@ class RDF_LidarVisualizer
         if (scanSettings)
         {
             m_LastRange = Math.Max(0.1, scanSettings.m_Range);
-            rays = Math.Max(scanSettings.m_RayCount, 1);
+            rays = Math.MaxInt(scanSettings.m_RayCount, 1);
         }
 
         if (m_Samples)
@@ -301,7 +301,7 @@ class RDF_LidarVisualizer
         if (m_Settings.m_DrawAfterglow)
             DrawAfterglow(nowS, shapeFlags);
 
-        int drawLimit = Math.Min(samples.Count(), MAX_DRAW_RAYS);
+        int drawLimit = Math.MinInt(samples.Count(), MAX_DRAW_RAYS);
         bool anyDynamic = m_Settings.m_DrawRays || m_Settings.m_DrawPoints;
         if (anyDynamic && drawLimit > 0)
         {
@@ -649,7 +649,7 @@ class RDF_LidarVisualizer
             return;
         int drawLimit;
         if (maxSamplesToDraw >= 0)
-            drawLimit = Math.Min(samples.Count(), maxSamplesToDraw);
+            drawLimit = Math.MinInt(samples.Count(), maxSamplesToDraw);
         else
             drawLimit = samples.Count();
         if (drawLimit <= 0)
@@ -667,7 +667,7 @@ class RDF_LidarVisualizer
         vector camRight = camMat[0];
         vector camUp = camMat[1];
 
-        int segs = Math.Max(1, m_Settings.m_RaySegments);
+        int segs = Math.MaxInt(1, m_Settings.m_RaySegments);
         array<ref array<vector>> trisHits = new array<ref array<vector>>();
         array<ref array<vector>> trisMisses = new array<ref array<vector>>();
         for (int i = 0; i < segs; i++)
@@ -718,7 +718,7 @@ class RDF_LidarVisualizer
                     vector v2 = p1 + perp * rayHalfWidth;
                     vector v3 = p1 - perp * rayHalfWidth;
 
-                    int bucket = Math.Clamp((int)Math.Floor(t1 * segs), 0, segs - 1);
+                    int bucket = Math.ClampInt((int)Math.Floor(t1 * segs), 0, segs - 1);
                     ref array<vector> bucketArr;
                     if (sample.m_Hit)
                         bucketArr = trisHits.Get(bucket);
@@ -768,7 +768,7 @@ class RDF_LidarVisualizer
         int offset = 0;
         while (offset < totalVerts)
         {
-            int copyCount = Math.Min(totalVerts - offset, CHUNK);
+            int copyCount = Math.MinInt(totalVerts - offset, CHUNK);
             vector trisBuf[CHUNK];
             for (int vi = 0; vi < copyCount; vi++)
                 trisBuf[vi] = src.Get(offset + vi);

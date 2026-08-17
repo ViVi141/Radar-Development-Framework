@@ -348,6 +348,12 @@ class RDF_RadarPerfAutoTest
         cfg.m_SectorHalfAngleDeg = 45.0;
         cfg.m_UpdateInterval = 0.2;
         cfg.m_MaxLosTracesPerScan = 24;
+        // Perf measures raw single-scan wall time; disable the cross-frame LOS
+        // queue AND the adaptive governor so the recorded ms reflects the
+        // configured per-scan budget (smoothing/adaptation validated by Stress /
+        // Play instead).
+        cfg.m_EnableLosFrameQueue = false;
+        cfg.m_EnableAdaptiveBudget = false;
         cfg.m_IncludeVehicles = true;
         cfg.m_IncludeProjectiles = false;
         cfg.m_IncludeRadarEmitters = false;
@@ -371,6 +377,9 @@ class RDF_RadarPerfAutoTest
         cfg.m_SectorHalfAngleDeg = 90.0;
         cfg.m_UpdateInterval = 0.2;
         cfg.m_MaxLosTracesPerScan = 64;
+        // Same as light: measure raw per-scan cost, not queue/adaptive-smoothed.
+        cfg.m_EnableLosFrameQueue = false;
+        cfg.m_EnableAdaptiveBudget = false;
         cfg.m_IncludeVehicles = true;
         cfg.m_IncludeProjectiles = true;
         cfg.m_IncludeRadarEmitters = true;
@@ -558,7 +567,9 @@ class RDF_RadarPerfAutoTest
                 }
             }
         }
-        int idx = Math.Floor((n - 1) * 0.95);
+        // Epsilon bias: (n-1)*0.95 in float32 can land ~1 ULP below an integer
+        // boundary; Math.Floor would then pick the index one below the true P95.
+        int idx = Math.Floor((n - 1) * 0.95 + 0.0001);
         if (idx < 0)
             idx = 0;
         if (idx >= n)
