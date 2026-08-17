@@ -4,11 +4,40 @@
 
 > 评估范围：`scripts/Game/RDF/**`（Radar / LiDAR / DEM / 网络 / UI）在 Arma Reforger 游戏循环中的 CPU、内存、网络与 GC 表现。
 > 方法：代码热路径分析 + 项目自带 AutoTest 的 PASS 阈值（Perf / Stress / DEM-LOS Bench）+ Enforce Script 引擎成本常识。
-> 结论性质：**预测**（predictive）。Workbench 未运行，未做本次会话内的实机 profile；下列数字为有依据的估算区间，不是实测。
+> 重载 Stress 场景有 **Workbench 实测**（§8）。其余场景是有依据的估算区间。玩家 / 轻量开发者请先读下方「先看这个」。
 
 ---
 
 ## 中文
+
+### 先看这个（玩家 / 轻量开发者）
+
+**一句话**：框架默认关掉。打开后，雷达不是每帧都算，大约每秒扫 4～5 次；默认一台雷达，玩家通常感觉不到掉帧。
+
+把它想成手电筒，而不是永远开着的探照灯：眨几下看周围，看完歇着。游戏跑 60 帧时，一帧大约 17 毫秒。雷达算的那一帧，默认最多用掉大约三分之一（约 5 毫秒）。忙了就自动少看几个目标、晚一点更新，宁可发现慢一点，也不把这一帧卡死。
+
+| 你会遇到的情况 | 体感 |
+|---|---|
+| 玩别人的模组、自己不当雷达主机 | 几乎无感。客户端只画 PPI，服务器在算。 |
+| 一台搜索雷达、周围十几辆车 | 无感。每次扫描大约几毫秒。 |
+| 很挤的战场（二十多辆车 + 几架直升机） | 仍无感。实测平均 **4.4 毫秒**，最差 8 毫秒，没有卡顿。 |
+| 反炮兵（算炮弹从哪飞来）赶上齐射 | 略贵，但每次扫描只解算有限几发，其余排队，不会一次算爆。 |
+| 同场很多台雷达 | 台数会叠加。一台没事，十几台就要当心。 |
+| LiDAR 256～512 根射线 | 无感。 |
+| LiDAR 拉到 4096 根 | **会卡。** 玩法建议不超过 1024。 |
+
+**内存**：Eden 若把整张地形杂波装进内存，大约 **300 多 MB**。8 GB 机器再叠其他模组会紧。可以不预载高度图，检测还在，只是地面杂波差一点。
+
+**联机**：每台雷达大约 **0.5 Mbps** 量级（几台完全没问题）。客户端带宽和解包都有上限。
+
+**轻量开发者记住四条**：
+
+1. 用默认配置。`RDF_RadarSensor.ConfigureMode` → `Tick` 即可，不要自己每帧狂扫。
+2. 贵的不是雷达公式，是引擎「这条线上有没有挡住」（`TraceMove`）。默认已经限条数、跨帧摊平。
+3. 不要把 LiDAR 射线数开很大；JPDA / 粗 RD 图默认关，保持关就好。
+4. 多雷达 = 多份视线检查。先一台跑稳，再加第二台。
+
+数字和旋钮的完整说明见下文 §0 起。
 
 ### 0. 结论速览 (TL;DR)
 
@@ -130,6 +159,35 @@
 ---
 
 ## English
+
+### Read this first (players / lightweight mod authors)
+
+**One line**: RDF is off until you enable it. A radar does **not** run every frame — about 4–5 scans per second. One radar at defaults is usually invisible in the frame time.
+
+Think of it as a blinking flashlight, not a floodlight that never turns off. At 60 FPS one frame is ~17 ms. The frame that actually scans may spend about a third of that (~5 ms). If the server is busy, RDF automatically looks at fewer contacts and updates a bit later — slower discovery beats a hitch.
+
+| What you are doing | How it feels |
+|---|---|
+| Playing someone else's mod, not hosting the radar | Negligible. Clients only draw the PPI; the server does the work. |
+| One search radar, a dozen vehicles | Negligible. A few milliseconds per scan. |
+| Crowded field (20+ vehicles + a few helicopters) | Still fine. Measured **4.4 ms** average, 8 ms worst, no hitch. |
+| Counter-battery (WLR) during a barrage | A bit more work, but only a few ballistic solves per scan; the rest queue. |
+| Many radars in one mission | Cost adds up. One is fine; a dozen needs care. |
+| LiDAR 256–512 rays | Negligible. |
+| LiDAR at 4096 rays | **Will hitch.** Keep gameplay ≤ 1024 rays. |
+
+**RAM**: preloading full Eden terrain clutter is about **300+ MB**. Tight on 8 GB boxes with other mods. You can skip HEIGHT preload: detection still works, ground clutter is weaker.
+
+**Network**: on the order of **0.5 Mbps per radar** (a handful is fine). Client unpack and HUD redraw are capped.
+
+**Four rules for lightweight authors**:
+
+1. Keep defaults. `ConfigureMode` → `Tick` — do not scan every frame yourself.
+2. The expensive part is engine line-of-sight (`TraceMove`), not the radar equation. Defaults already cap and spread those traces.
+3. Do not crank LiDAR ray count. JPDA / coarse RD stay off unless you know you need them.
+4. N radars ≈ N times the LOS work. Stabilize one, then add the second.
+
+Full numbers and knobs start at §0 below.
 
 ### 0. TL;DR
 

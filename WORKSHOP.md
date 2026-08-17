@@ -60,6 +60,15 @@ array<ref RDF_RadarTarget> plots = sensor.GetPlots();
 array<ref RDF_RadarTrack> tracks = sensor.GetTracks();
 ```
 
+## Performance (plain language)
+
+Off until you enable it. A radar blinks about 4–5 times per second; it does
+**not** run every frame. One default radar is usually invisible in frame time
+(heavy soak measured **4.4 ms** average, 8 ms worst, no hitch). Clients only
+draw the PPI — the server does the work. Cost adds up if you spawn many radars
+or crank LiDAR to thousands of rays (keep gameplay ≤ 1024). Full Eden terrain
+clutter preload is ~300 MB RAM. Details: `docs/PERFORMANCE_EVALUATION.md`.
+
 ## Important
 
 This is a **framework**, not a ready-to-play weapon mod. It ships sensors and

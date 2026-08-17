@@ -200,7 +200,8 @@ python tools\dem\rdf_dem_pack.py --world GM_Eden
 | [docs/DEM.md](docs/DEM.md) | DEM bake and runtime |
 | [docs/RADAR_REQUIRED_APIS.md](docs/RADAR_REQUIRED_APIS.md) | Engine API mapping |
 | [docs/VEHICLE_RADAR_LOCK_GUIDE.md](docs/VEHICLE_RADAR_LOCK_GUIDE.md) | Vehicle lock / engage patterns |
-| [docs/OPTIMIZATION_AND_MEMORY.md](docs/OPTIMIZATION_AND_MEMORY.md) | Performance and memory |
+| [docs/OPTIMIZATION_AND_MEMORY.md](docs/OPTIMIZATION_AND_MEMORY.md) | LiDAR memory guards |
+| [docs/PERFORMANCE_EVALUATION.md](docs/PERFORMANCE_EVALUATION.md) | Performance: player-facing summary + measured Stress baseline |
 | [docs/TIME_HANDLING.md](docs/TIME_HANDLING.md) | Time & primitive-type conventions |
 | [docs/LESSONS_FROM_ENGINE.md](docs/LESSONS_FROM_ENGINE.md) | Engine pitfalls and anti-patterns |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | Change history |
@@ -420,7 +421,9 @@ python tools\dem\rdf_dem_pack.py --world GM_Eden
 | [docs/DEM.md](docs/DEM.md) | DEM 烘焙与运行时 |
 | [docs/RADAR_REQUIRED_APIS.md](docs/RADAR_REQUIRED_APIS.md) | 引擎 API 对照 |
 | [docs/VEHICLE_RADAR_LOCK_GUIDE.md](docs/VEHICLE_RADAR_LOCK_GUIDE.md) | 载具锁定/打击思路 |
-| [docs/OPTIMIZATION_AND_MEMORY.md](docs/OPTIMIZATION_AND_MEMORY.md) | 性能与内存 |
+| [docs/OPTIMIZATION_AND_MEMORY.md](docs/OPTIMIZATION_AND_MEMORY.md) | LiDAR 内存防护 |
+| [docs/PERFORMANCE_EVALUATION.md](docs/PERFORMANCE_EVALUATION.md) | 性能：玩家向说明 + Stress 实测 |
+| [docs/TIME_HANDLING.md](docs/TIME_HANDLING.md) | 时间与基本类型约定 |
 | [docs/LESSONS_FROM_ENGINE.md](docs/LESSONS_FROM_ENGINE.md) | 引擎踩坑与反模式 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 变更历史 |
 | [docs/I18N.md](docs/I18N.md) | 语言约定 / 双语文档 |
