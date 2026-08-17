@@ -1,5 +1,31 @@
 # CHANGELOG
 
+## 1.0.2 — 2026-08-18
+
+相对 1.0.1。范围：`99efd5d`（含）… `a1292be`（HEAD）。
+
+> EN: Patch over 1.0.1. Range: `99efd5d` (inclusive) … `a1292be` (HEAD). Duplicate-track gating + parked-beam lock; server-frame budget governor + cross-frame LOS/WLR queues + hot-path reuse; MTD/fingerprint/RGPO/clock correctness; Stress soak **9.4 → 4.4 ms** tickAvg (hitch 16/33 = 0). Details in the 2026-08-15 dated entries below.
+
+跟踪与扫描：
+
+- **门控去重**（`FindGatingTrack`）：波门内未认领点迹视为同一接触的二次提取，不再另开平行航迹（GNN 每驻留仍 1-to-1）
+- **停驻波束**（`m_bScanAngleLocked`）：`GetScanForward` 用 `m_ScanPhaseOffsetRad` 作绝对方位，忽略 `worldTime×rpm`，避免窄波束相对世界钟晚一帧打空
+
+性能（Stress：24×UAZ + 3×Mi-8、DEM 杂波、HUD、60 s soak）：
+
+- 跨帧 **LOS 队列**（每 Tick TraceMove 封顶）+ **WLR 解算预算**（齐射不再单 Tick 叠满）
+- **自适应 BudgetGovernor**（默认开）：分母改为单帧 `1/GetFPS()`，扫描 ≤ 约 30% 帧；过载降 LOS/WLR，空闲才回升
+- 热路径复用：Tracker 6 数组、NetCodec 静态 scratch、Scanner `m_TruthScratch`；Registry 网格键 `map<int>` 打包，去掉每扫描 ~289 次字符串
+- **实测**：tickAvg 9.4→4.4 ms · p95 15→5 · max 23→8 · hitch16/33 = 0/0；scanMs 6–8→4–5 ms。TraceMove 本身未变快，改善来自摊平 + 分配消除。报告见 `docs/PERFORMANCE_EVALUATION.md` §8
+
+正确性（类型 / 时间审计）：
+
+- **高危** MTD bin 中心 `int/int` 除法恒为 0 → 杂波抑制失效；改为 float 除
+- **中危** 航迹指纹 `h*31+Round` 提升到 float，超 2²⁴ 丢精度 → 静默吞合法广播
+- **功能** RGPO 拖距用任务绝对世界时间（假点中段飞出门）；LiDAR 网络超时 / demo 扫描门控在世界钟冻结时永不触发 → 改墙钟
+- 热路径 `Math.*Int`、P95 floor epsilon、浮点相等、分类器类名只取一次；CallLater 延迟改为 `const int` ms
+- 约定文档：`docs/TIME_HANDLING.md`
+
 ## 2026-08-15 — 实测基线：Stress 重载场景 tickAvg 9.4 → 4.4ms（全优化闭环）
 
 > EN: Final measured baseline after all optimizations (cross-frame LOS queue + adaptive governor + allocation reuse). Stress AutoTest (24 UAZ + 3 Mi-8, DEM clutter, HUD, 60 s soak): **tickAvg 4.4 ms · p95 5 ms · max 8 ms · hitch16/33 = 0/0** vs the first baseline 9.4 / 15 / 23 ms / 10-0. ScanMs steady 4–5 ms (was 6–8); the former 46 ms external spike at t≈45 s is gone (4 ms). Detection intact (maxScat 40, sig all baked). Report `$profile:RDF/RadarTests/radar_stress_autotest_5531806.txt`. Full details: `docs/PERFORMANCE_EVALUATION.md` §8 (bilingual).
@@ -81,6 +107,18 @@
 - **Tracker**：`RDF_RadarProjectileTracker.RefreshWeaponLocates` 两阶段——先排空 `m_WlrPending` 队列（FIFO、校验仍存活），再扫合格航迹；预算耗尽入队；`ClearTracks` / `ApplySyncedTracks` 清队列；同扫描已解算航迹不会二次解算/入队（`solvedThisScan`）
 - **AutoTest**：`RDF_RadarPerfAutoTest` / `RDF_RadarDemLosBenchAutoTest` 显式 `m_EnableLosFrameQueue = false`，继续度量单扫描原始耗时（队列平滑由 Stress / Play 验证）
 - **行为影响**：密集场景单 Tick TraceMove 尖峰被摊平；10 发齐射 WLR 不再单 Tick 25–50ms；默认开且向后兼容（显式配置旧参数仍按旧语义）
+
+## 1.0.1 — 2026-08-16
+
+1.0.0 之后、`99efd5d` 之前的维护。
+
+> EN: Maintenance after 1.0.0 (before `99efd5d`): GetWorldTime ms/s unification, DemData ResourceManager registration, `[Attribute]` script-default cleanup, mechanical-scan phase offset, Workshop copy. Details in the 2026-08-14 dated entries below.
+
+- GetWorldTime 毫秒/秒混用（9 处）
+- DemData `.meta` 资源注册（新克隆不再报 resource not registered）
+- 去掉 `[Attribute]` 字段的脚本默认值（避免覆盖源数据）
+- 机械扫描相位偏移（暂停天线可续转）
+- `WORKSHOP.md` 工坊文案
 
 ## 2026-08-14 — 时间单位修复：GetWorldTime 毫秒/秒混用（9 处）
 

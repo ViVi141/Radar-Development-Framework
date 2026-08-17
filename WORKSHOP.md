@@ -10,7 +10,7 @@ Realistic radar, LiDAR and DEM sensor framework for Arma Reforger. Physical dete
 
 ## Description (≤ 5000 chars)
 
-# Radar Development Framework (RDF) — v1.0.0
+# Radar Development Framework (RDF) — v1.0.2
 
 A modular, workshop-ready sensor framework for Arma Reforger: **Radar**,
 **LiDAR**, and **DEM** bake/runtime. It models the detection chain as a
@@ -75,6 +75,30 @@ is included). Enable features explicitly — the framework is silent by default.
 ---
 
 ## Changelog (unlimited)
+
+## 1.0.2 — 2026-08-18
+
+Patch over 1.0.1 (`99efd5d` … `a1292be`).
+
+- Track birth: leftover plots already inside an existing gate are dropped
+  (no parallel file for the same contact). Parked beam:
+  `m_bScanAngleLocked` uses phase offset as absolute azimuth.
+- Cross-frame LOS TraceMove queue + WLR solve budget; adaptive
+  BudgetGovernor (denominator = one server frame via GetFPS; scan ≤ ~30%
+  of the frame). Hot-path reuse (tracker / NetCodec / TruthSample) and
+  integer scatterer-grid keys.
+- Stress soak (24 UAZ + 3 Mi-8, DEM clutter, HUD, 60 s): tickAvg
+  **9.4 → 4.4 ms**, p95 15→5, max 23→8, hitch 16/33 = 0.
+- Correctness: MTD bin-centre int/int (clutter cancel was dead);
+  track-fingerprint float promotion (silent skip of legal broadcasts);
+  RGPO used absolute world time; LiDAR network timeout / demo gate used
+  frozen world clock. Convention: `docs/TIME_HANDLING.md`.
+
+## 1.0.1 — 2026-08-16
+
+Maintenance after 1.0.0 (before `99efd5d`): GetWorldTime ms/s unification,
+DemData resource registration, `[Attribute]` script-default cleanup,
+mechanical-scan phase offset, Workshop copy.
 
 ## 1.0.0 — 2026-08-14
 
