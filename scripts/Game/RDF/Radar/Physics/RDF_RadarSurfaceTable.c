@@ -67,6 +67,12 @@ class RDF_RadarSurfaceTable
     static const ResourceName PACKAGED_CONF =
         "{B4E81F2A7C903D65}RadarData/SurfaceTable.conf";
     static const int CLASS_COUNT = 12;
+    static const int BAND_VHF = 0;
+    static const int BAND_L = 1;
+    static const int BAND_S = 2;
+    static const int BAND_C = 3;
+    static const int BAND_X = 4;
+    static const int BAND_COUNT = 5;
 
     protected static bool s_Loaded;
     protected static string s_Source;
@@ -74,6 +80,9 @@ class RDF_RadarSurfaceTable
     protected static int s_SeaState;
     protected static float s_ThetaRefRad;
     protected static ref array<ref RDF_RadarSurfaceParams> s_ById;
+    // Per-band σ⁰_ref (linear), CLASS_COUNT slots each. Overlay JSON/conf
+    // replaces only the tagged band; other bands keep builtins.
+    protected static ref array<float> s_BandSigma0RefLin;
     // Water σ⁰ dB offset vs sea_state=3 (matches tools/dem _SEA_STATE_WATER_DB).
     protected static const float SEA_STATE_WATER_DB_0 = -8.0;
     protected static const float SEA_STATE_WATER_DB_1 = -4.0;
@@ -91,6 +100,7 @@ class RDF_RadarSurfaceTable
         s_Loaded = true;
         s_ById = new array<ref RDF_RadarSurfaceParams>();
         s_ById.Resize(CLASS_COUNT);
+        EnsureBandTables();
         InstallBuiltins();
 
         // 1) Profile JSON — local calibration without re-Register
@@ -118,7 +128,7 @@ class RDF_RadarSurfaceTable
         }
 
         s_Source = "builtin";
-        Print("[RDF SurfaceTable] using builtins (X-band)", LogLevel.NORMAL);
+        Print("[RDF SurfaceTable] using builtins (X overlay, VHF/L/S/C/X σ⁰)", LogLevel.NORMAL);
     }
 
     //--------------------------------------------------------------------------------------------
@@ -133,6 +143,72 @@ class RDF_RadarSurfaceTable
     {
         EnsureLoaded();
         return s_Source;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    static string GetLoadedBand()
+    {
+        EnsureLoaded();
+        return s_Band;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    // Matches tools/dem/rdf_radar_channel.band_for_frequency.
+    static string BandNameFromFrequencyHz(float frequencyHz)
+    {
+        float fGhz = frequencyHz / 1000000000.0;
+        if (fGhz < 0.3)
+            return "VHF";
+        if (fGhz < 2.0)
+            return "L";
+        if (fGhz < 4.0)
+            return "S";
+        if (fGhz < 8.0)
+            return "C";
+        return "X";
+    }
+
+    //--------------------------------------------------------------------------------------------
+    static int BandIndexFromName(string band)
+    {
+        if (band.IsEmpty())
+            return -1;
+        string key = band;
+        // Enforce ToUpper mutates in place and returns length (int).
+        key.ToUpper();
+        if (key == "VHF")
+            return BAND_VHF;
+        if (key == "L")
+            return BAND_L;
+        if (key == "S")
+            return BAND_S;
+        if (key == "C")
+            return BAND_C;
+        if (key == "X")
+            return BAND_X;
+        return -1;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    static int BandIndexFromFrequencyHz(float frequencyHz)
+    {
+        return BandIndexFromName(BandNameFromFrequencyHz(frequencyHz));
+    }
+
+    //--------------------------------------------------------------------------------------------
+    // Foliage / volume attenuation vs X-band authorship (0.5 dB/km veg).
+    static float GetAttenuationScaleForBand(string band)
+    {
+        int idx = BandIndexFromName(band);
+        if (idx == BAND_VHF)
+            return 0.20;
+        if (idx == BAND_L)
+            return 0.40;
+        if (idx == BAND_S)
+            return 0.55;
+        if (idx == BAND_C)
+            return 0.75;
+        return 1.0;
     }
 
     //--------------------------------------------------------------------------------------------
@@ -174,12 +250,33 @@ class RDF_RadarSurfaceTable
     //--------------------------------------------------------------------------------------------
     static float GetSigma0RefLin(int surfaceClass)
     {
-        RDF_RadarSurfaceParams p = GetParams(surfaceClass);
-        if (!p)
-            return DbToLin(-18.0);
-        float refLin = p.m_Sigma0RefLin;
+        EnsureLoaded();
+        return GetSigma0RefLin(surfaceClass, s_Band);
+    }
+
+    //--------------------------------------------------------------------------------------------
+    static float GetSigma0RefLin(int surfaceClass, string band)
+    {
+        EnsureLoaded();
+        int classId = surfaceClass;
+        if (classId < 0 || classId >= CLASS_COUNT)
+            classId = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
+
+        int bandIdx = BandIndexFromName(band);
+        if (bandIdx < 0)
+            bandIdx = BandIndexFromName(s_Band);
+        if (bandIdx < 0)
+            bandIdx = BAND_X;
+
+        float refLin = 0.0;
+        int slot = bandIdx * CLASS_COUNT + classId;
+        if (s_BandSigma0RefLin && slot < s_BandSigma0RefLin.Count())
+            refLin = s_BandSigma0RefLin.Get(slot);
+        if (refLin <= 0.0)
+            refLin = DbToLin(-18.0);
+
         // Table water entries are authored at sea_state=3 reference; scale live.
-        if (surfaceClass == ERDF_DemSurfaceClass.RDF_DEM_SURF_WATER)
+        if (classId == ERDF_DemSurfaceClass.RDF_DEM_SURF_WATER)
             refLin = refLin * GetSeaStateWaterScale();
         return refLin;
     }
@@ -230,6 +327,15 @@ class RDF_RadarSurfaceTable
     }
 
     //--------------------------------------------------------------------------------------------
+    static float GetAttenuationDbPerKm(int surfaceClass, string band)
+    {
+        float baseAtt = GetAttenuationDbPerKm(surfaceClass);
+        if (band.IsEmpty())
+            return baseAtt;
+        return baseAtt * GetAttenuationScaleForBand(band);
+    }
+
+    //--------------------------------------------------------------------------------------------
     protected static bool TryLoadConf(ResourceName path)
     {
         if (path.IsEmpty())
@@ -245,6 +351,7 @@ class RDF_RadarSurfaceTable
         s_Band = conf.m_sBand;
         if (s_Band.IsEmpty())
             s_Band = "X";
+        s_Band.ToUpper();
         s_SeaState = ClampSeaState(conf.m_iSeaState);
         s_ThetaRefRad = conf.m_fThetaRefDeg * 0.017453292519943295;
         if (s_ThetaRefRad <= 0.0)
@@ -286,6 +393,7 @@ class RDF_RadarSurfaceTable
         s_Band = doc.band;
         if (s_Band.IsEmpty())
             s_Band = "X";
+        s_Band.ToUpper();
         s_SeaState = ClampSeaState(doc.sea_state);
         s_ThetaRefRad = doc.theta_ref_deg * 0.017453292519943295;
         if (s_ThetaRefRad <= 0.0)
@@ -344,6 +452,11 @@ class RDF_RadarSurfaceTable
         if (p.m_AttenuationDbPerKm < 0.0)
             p.m_AttenuationDbPerKm = 0.0;
         s_ById.Set(id, p);
+
+        int overlayBand = BandIndexFromName(s_Band);
+        if (overlayBand < 0)
+            overlayBand = BAND_X;
+        SetBandSigma0Db(overlayBand, id, sigma0RefDb);
     }
 
     //--------------------------------------------------------------------------------------------
@@ -376,11 +489,79 @@ class RDF_RadarSurfaceTable
     }
 
     //--------------------------------------------------------------------------------------------
+    protected static void EnsureBandTables()
+    {
+        if (!s_BandSigma0RefLin)
+            s_BandSigma0RefLin = new array<float>();
+        int n = BAND_COUNT * CLASS_COUNT;
+        if (s_BandSigma0RefLin.Count() != n)
+            s_BandSigma0RefLin.Resize(n);
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected static void SetBandSigma0Db(int bandIdx, int classId, float db)
+    {
+        if (bandIdx < 0 || bandIdx >= BAND_COUNT)
+            return;
+        if (classId < 0 || classId >= CLASS_COUNT)
+            return;
+        EnsureBandTables();
+        s_BandSigma0RefLin.Set(bandIdx * CLASS_COUNT + classId, DbToLin(db));
+    }
+
+    //--------------------------------------------------------------------------------------------
+    // σ⁰_ref dB at 30° grazing. Matches tools/dem/rdf_radar_materials._BAND_SIGMA0_DB.
+    protected static void InstallBandSigma0Row(
+        int bandIdx,
+        float unknownDb,
+        float waterDb,
+        float vegetationDb,
+        float soilDb,
+        float sandDb,
+        float gravelDb,
+        float asphaltDb,
+        float hardDb,
+        float woodDb,
+        float metalDb,
+        float snowIceDb,
+        float fabricDb)
+    {
+        SetBandSigma0Db(bandIdx, 0, unknownDb);
+        SetBandSigma0Db(bandIdx, 1, waterDb);
+        SetBandSigma0Db(bandIdx, 2, vegetationDb);
+        SetBandSigma0Db(bandIdx, 3, soilDb);
+        SetBandSigma0Db(bandIdx, 4, sandDb);
+        SetBandSigma0Db(bandIdx, 5, gravelDb);
+        SetBandSigma0Db(bandIdx, 6, asphaltDb);
+        SetBandSigma0Db(bandIdx, 7, hardDb);
+        SetBandSigma0Db(bandIdx, 8, woodDb);
+        SetBandSigma0Db(bandIdx, 9, metalDb);
+        SetBandSigma0Db(bandIdx, 10, snowIceDb);
+        SetBandSigma0Db(bandIdx, 11, fabricDb);
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected static void InstallAllBandSigma0()
+    {
+        InstallBandSigma0Row(
+            BAND_VHF, -24.0, -30.0, -10.0, -24.0, -26.0, -22.0, -18.0, -16.0, -14.0, -8.0, -20.0, -28.0);
+        InstallBandSigma0Row(
+            BAND_L, -22.0, -28.0, -12.0, -22.0, -24.0, -20.0, -16.0, -14.0, -22.0, -7.0, -18.0, -28.0);
+        InstallBandSigma0Row(
+            BAND_S, -20.0, -26.0, -16.0, -20.0, -22.0, -18.0, -14.0, -12.0, -20.0, -6.0, -22.0, -26.0);
+        InstallBandSigma0Row(
+            BAND_C, -19.0, -24.0, -15.0, -19.0, -21.0, -17.0, -13.0, -11.0, -19.0, -5.5, -21.0, -25.0);
+        InstallBandSigma0Row(
+            BAND_X, -18.0, -22.0, -14.0, -18.0, -20.0, -16.0, -12.0, -10.0, -18.0, -5.0, -20.0, -24.0);
+    }
+
+    //--------------------------------------------------------------------------------------------
     protected static void InstallBuiltins()
     {
         s_Band = "X";
         s_SeaState = 3;
         s_ThetaRefRad = 0.523598775598;
+        InstallAllBandSigma0();
         SetBuiltin(0, "unknown", -18.0, 1.0, 1.0, 10.0, 0.08, 0.0);
         SetBuiltin(1, "water", -22.0, 1.4, 1.0, 80.0, 0.02, 0.0);
         SetBuiltin(2, "vegetation", -14.0, 0.8, 1.0, 15.0, 0.3, 0.5);

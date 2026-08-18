@@ -127,6 +127,13 @@ class RDF_RadarHardware
         return RDF_RadarClutterModel.C_LIGHT / m_FrequencyHz;
     }
 
+    //------------------------------------------------------------------------------------------------
+    // Engineering band tag from carrier. Matches rdf_radar_channel.band_for_frequency.
+    string GetBand()
+    {
+        return RDF_RadarSurfaceTable.BandNameFromFrequencyHz(m_FrequencyHz);
+    }
+
     float GetScanPeriodS()
     {
         if (m_ScanRpm <= 0.0)
@@ -289,6 +296,7 @@ class RDF_RadarHardware
         return new RDF_RadarHardware();
     }
 
+    // VHF early-warning example. GetBand() resolves to "VHF" from 160 MHz.
     static RDF_RadarHardware CreateP18Like()
     {
         RDF_RadarHardware hardware = new RDF_RadarHardware();

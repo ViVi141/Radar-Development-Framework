@@ -16,6 +16,12 @@ class RDF_RadarClutterModel
     }
 
     //------------------------------------------------------------------------------------------------
+    static float GetSigma0Ref(int surfaceClass, string band)
+    {
+        return RDF_RadarSurfaceTable.GetSigma0RefLin(surfaceClass, band);
+    }
+
+    //------------------------------------------------------------------------------------------------
     static float GetSigma0Exponent(int surfaceClass)
     {
         return RDF_RadarSurfaceTable.GetGammaK(surfaceClass);
@@ -25,13 +31,19 @@ class RDF_RadarClutterModel
     // Constant-gamma: σ⁰(θ) = σ⁰_ref * (sinθ / sinθ_ref)^k * clutter_scale
     static float GetSigma0(int surfaceClass, float grazingRad)
     {
+        return GetSigma0(surfaceClass, grazingRad, "");
+    }
+
+    //------------------------------------------------------------------------------------------------
+    static float GetSigma0(int surfaceClass, float grazingRad, string band)
+    {
         float theta = grazingRad;
         if (theta < MIN_GRAZING_RAD)
             theta = MIN_GRAZING_RAD;
         if (theta > (Math.PI * 0.5))
             theta = Math.PI * 0.5;
 
-        float refValue = GetSigma0Ref(surfaceClass);
+        float refValue = GetSigma0Ref(surfaceClass, band);
         float exponent = GetSigma0Exponent(surfaceClass);
         float thetaRef = RDF_RadarSurfaceTable.GetThetaRefRad();
         float ratio = Math.Sin(theta) / Math.Sin(thetaRef);
@@ -52,10 +64,22 @@ class RDF_RadarClutterModel
     }
 
     //------------------------------------------------------------------------------------------------
+    static float GetCanopySigma0(float grazingRad, string band)
+    {
+        return GetSigma0(ERDF_DemSurfaceClass.RDF_DEM_SURF_VEGETATION, grazingRad, band);
+    }
+
+    //------------------------------------------------------------------------------------------------
     // One-way foliage/volume attenuation from SurfaceTable (dB/km).
     static float GetSurfaceAttenuationDbPerKm(int surfaceClass)
     {
         return RDF_RadarSurfaceTable.GetAttenuationDbPerKm(surfaceClass);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    static float GetSurfaceAttenuationDbPerKm(int surfaceClass, string band)
+    {
+        return RDF_RadarSurfaceTable.GetAttenuationDbPerKm(surfaceClass, band);
     }
 
     //------------------------------------------------------------------------------------------------
@@ -287,6 +311,20 @@ class RDF_RadarClutterModel
         if (factor < 1.0)
             return 1.0;
         return factor;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Simplified ITU-ish one-way rain loss (dB/km). Matches rdf_radar_systems.
+    static float RainOneWayDbPerKm(float rainMmH, float frequencyHz)
+    {
+        float r = rainMmH;
+        if (r <= 0.0)
+            return 0.0;
+        float fGhz = frequencyHz / 1000000000.0;
+        if (fGhz < 1.0)
+            fGhz = 1.0;
+        float a = 0.0001 * Math.Pow(fGhz, 1.2);
+        return a * r;
     }
 
     //------------------------------------------------------------------------------------------------

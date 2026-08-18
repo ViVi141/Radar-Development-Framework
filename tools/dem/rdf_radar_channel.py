@@ -469,35 +469,63 @@ def aspect_factor_3d(
     )
 
 
-def aspect_rcs_from_extents(
+def los_unit_from_az_el(azimuth_deg: float, elevation_deg: float) -> tuple[float, float, float]:
+    """LOS unit: azimuth atan2(Z,X), elevation from horizon. Matches Enforce."""
+    az = math.radians(float(azimuth_deg))
+    el = math.radians(float(elevation_deg))
+    ce = math.cos(el)
+    return (ce * math.cos(az), math.sin(el), ce * math.sin(az))
+
+
+def axes_from_yaw_pitch(
+    yaw_deg: float,
+    pitch_deg: float,
+) -> tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]:
+    """Zero-roll body axes (right, up, forward). Matches RDF_RadarRcsModel."""
+    yaw = math.radians(float(yaw_deg))
+    pitch = math.radians(float(pitch_deg))
+    cy = math.cos(yaw)
+    sy = math.sin(yaw)
+    cp = math.cos(pitch)
+    sp = math.sin(pitch)
+    forward = (cp * cy, sp, cp * sy)
+    right = (-sy, 0.0, cy)
+    up = (
+        right[1] * forward[2] - right[2] * forward[1],
+        right[2] * forward[0] - right[0] * forward[2],
+        right[0] * forward[1] - right[1] * forward[0],
+    )
+    def _norm(v: tuple[float, float, float], fb: tuple[float, float, float]):
+        length = math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
+        if length < 1e-3:
+            return fb
+        inv = 1.0 / length
+        return (v[0] * inv, v[1] * inv, v[2] * inv)
+
+    return (
+        _norm(right, (0.0, 0.0, 1.0)),
+        _norm(up, (0.0, 1.0, 0.0)),
+        _norm(forward, (1.0, 0.0, 0.0)),
+    )
+
+
+def aspect_rcs_from_obb(
     mean_rcs_m2: float,
     size_x: float,
     size_y: float,
     size_z: float,
-    yaw_deg: float,
+    axis_right: tuple[float, float, float],
+    axis_up: tuple[float, float, float],
+    axis_forward: tuple[float, float, float],
     los_azimuth_deg: float,
-    pitch_deg: float = 0.0,
-    los_elevation_deg: float = 0.0,
+    los_elevation_deg: float,
 ) -> float:
-    """Mirror of RDF_RadarRcsModel.AspectRcsFromExtents3D."""
+    """Mirror of RDF_RadarRcsModel.AspectRcsFromObb."""
     fallback = float(mean_rcs_m2)
     if fallback <= 0.0:
         fallback = 1.0
-
     if size_x <= 0.01 and size_y <= 0.01 and size_z <= 0.01:
-        return fallback * aspect_factor_3d(
-            yaw_deg, pitch_deg, los_azimuth_deg, los_elevation_deg
-        )
-
-    rel_az = math.radians(_wrap_delta_deg(los_azimuth_deg - yaw_deg))
-    rel_el = math.radians(_wrap_delta_deg(los_elevation_deg - pitch_deg))
-    ce = math.cos(rel_el)
-    se = math.sin(rel_el)
-    ca = math.cos(rel_az)
-    sa = math.sin(rel_az)
-    u_f = abs(ce * ca)
-    u_s = abs(ce * sa)
-    u_t = abs(se)
+        return fallback
 
     height = size_y
     if height < 0.1:
@@ -509,6 +537,14 @@ def aspect_rcs_from_extents(
     if beam < 0.1:
         beam = 0.1
 
+    los = los_unit_from_az_el(los_azimuth_deg, los_elevation_deg)
+
+    def _abs_dot(a, b) -> float:
+        return abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2])
+
+    u_f = _abs_dot(los, axis_forward)
+    u_s = _abs_dot(los, axis_right)
+    u_t = _abs_dot(los, axis_up)
     projected = u_f * beam * height + u_s * length * height + u_t * beam * length
     estimate = projected * 0.25
     lo = fallback * 0.2
@@ -518,3 +554,37 @@ def aspect_rcs_from_extents(
     if estimate > hi:
         estimate = hi
     return estimate
+
+
+def aspect_rcs_from_extents(
+    mean_rcs_m2: float,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    yaw_deg: float,
+    los_azimuth_deg: float,
+    pitch_deg: float = 0.0,
+    los_elevation_deg: float = 0.0,
+) -> float:
+    """Mirror of RDF_RadarRcsModel.AspectRcsFromExtents3D (zero-roll OBB)."""
+    fallback = float(mean_rcs_m2)
+    if fallback <= 0.0:
+        fallback = 1.0
+
+    if size_x <= 0.01 and size_y <= 0.01 and size_z <= 0.01:
+        return fallback * aspect_factor_3d(
+            yaw_deg, pitch_deg, los_azimuth_deg, los_elevation_deg
+        )
+
+    axis_right, axis_up, axis_forward = axes_from_yaw_pitch(yaw_deg, pitch_deg)
+    return aspect_rcs_from_obb(
+        mean_rcs_m2,
+        size_x,
+        size_y,
+        size_z,
+        axis_right,
+        axis_up,
+        axis_forward,
+        los_azimuth_deg,
+        los_elevation_deg,
+    )

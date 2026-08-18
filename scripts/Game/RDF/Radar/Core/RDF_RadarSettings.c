@@ -566,7 +566,14 @@ class RDF_RadarSettings
     //------------------------------------------------------------------------------------------------
     // Resolve effective one-way rain(+fog) loss for this scan.
     // Manual floor always applies; weather terms optional.
+    // frequencyHz > 0 scales the weather rain term vs X-band 9 GHz (SHORAD unchanged).
     float ResolveRainLossDbPerKm(RDF_RadarWeatherSnapshot weather)
+    {
+        return ResolveRainLossDbPerKm(weather, 0.0);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    float ResolveRainLossDbPerKm(RDF_RadarWeatherSnapshot weather, float frequencyHz)
     {
         float rainDb = m_RainLossDbPerKmOneWay;
         if (!m_EnableWeatherDrivenRainLoss)
@@ -574,8 +581,17 @@ class RDF_RadarSettings
         if (!weather || !weather.m_Valid)
             return rainDb;
 
+        float weatherRain = weather.m_RainIntensity * m_RainLossDbPerKmAtFullIntensity;
+        if (frequencyHz > 0.0)
+        {
+            float xRef = RDF_RadarClutterModel.RainOneWayDbPerKm(25.0, 9000000000.0);
+            float fRain = RDF_RadarClutterModel.RainOneWayDbPerKm(25.0, frequencyHz);
+            if (xRef > 0.000001)
+                weatherRain = weatherRain * (fRain / xRef);
+        }
+
         rainDb = rainDb
-            + weather.m_RainIntensity * m_RainLossDbPerKmAtFullIntensity
+            + weatherRain
             + weather.m_FogAmount * m_FogLossDbPerKmAtFullFog;
         if (rainDb < 0.0)
             rainDb = 0.0;

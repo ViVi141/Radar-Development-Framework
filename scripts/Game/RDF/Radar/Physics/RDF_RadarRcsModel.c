@@ -41,7 +41,7 @@ class RDF_RadarRcsModel
     }
 
     //------------------------------------------------------------------------------------------------
-    // Optical-region estimate from AABB extents (no entity query).
+    // Optical-region estimate from local-box extents (entity-space AABB = OBB size).
     static float EstimateRcsFromExtents(
         float sizeX,
         float sizeY,
@@ -119,7 +119,8 @@ class RDF_RadarRcsModel
     }
 
     //------------------------------------------------------------------------------------------------
-    // Body-relative unit weights for silhouette proxy (no roll).
+    // Body-relative unit weights for silhouette proxy (zero-roll).
+    // Prefer AspectRcsFromObb when world axes are available.
     // Forward uses entity yaw/pitch; sizeX≈beam, sizeY≈height, sizeZ≈length
     // (matches existing 2D nose=X×Y / side=Z×Y convention).
     static void BodyLosWeights(
@@ -165,13 +166,64 @@ class RDF_RadarRcsModel
     }
 
     //------------------------------------------------------------------------------------------------
-    static float AspectRcsFromExtents3D(
+    // LOS unit vector: azimuth atan2(Z,X) like ReadPose yaw, elevation from horizon.
+    static vector LosUnitFromAzEl(float azimuthDeg, float elevationDeg)
+    {
+        float az = azimuthDeg * 0.0174532925199;
+        float el = elevationDeg * 0.0174532925199;
+        float ce = Math.Cos(el);
+        return Vector(ce * Math.Cos(az), Math.Sin(el), ce * Math.Sin(az));
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Zero-roll body axes from yaw/pitch (runtime uses live world matrix + roll).
+    static void AxesFromYawPitch(
+        float yawDeg,
+        float pitchDeg,
+        out vector outRight,
+        out vector outUp,
+        out vector outForward)
+    {
+        float yaw = yawDeg * 0.0174532925199;
+        float pitch = pitchDeg * 0.0174532925199;
+        float cy = Math.Cos(yaw);
+        float sy = Math.Sin(yaw);
+        float cp = Math.Cos(pitch);
+        float sp = Math.Sin(pitch);
+        outForward = Vector(cp * cy, sp, cp * sy);
+        outRight = Vector(-sy, 0.0, cy);
+        outUp = Vector(
+            outRight[1] * outForward[2] - outRight[2] * outForward[1],
+            outRight[2] * outForward[0] - outRight[0] * outForward[2],
+            outRight[0] * outForward[1] - outRight[1] * outForward[0]);
+        float ulen = outUp.Length();
+        if (ulen < 0.001)
+            outUp = "0 1 0";
+        else
+            outUp = outUp * (1.0 / ulen);
+        float flen = outForward.Length();
+        if (flen < 0.001)
+            outForward = "1 0 0";
+        else
+            outForward = outForward * (1.0 / flen);
+        float rlen = outRight.Length();
+        if (rlen < 0.001)
+            outRight = "0 0 1";
+        else
+            outRight = outRight * (1.0 / rlen);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Optical-region silhouette of a rectangular OBB: Σ |û·axis| * face area.
+    // sizeX=beam (right), sizeY=height (up), sizeZ=length (forward).
+    static float AspectRcsFromObb(
         float meanRcsM2,
         float sizeX,
         float sizeY,
         float sizeZ,
-        float yawDeg,
-        float pitchDeg,
+        vector axisRight,
+        vector axisUp,
+        vector axisForward,
         float losAzimuthDeg,
         float losElevationDeg)
     {
@@ -180,22 +232,7 @@ class RDF_RadarRcsModel
             fallback = 1.0;
 
         if (sizeX <= 0.01 && sizeY <= 0.01 && sizeZ <= 0.01)
-        {
-            return fallback * AspectFactor3D(
-                yawDeg, pitchDeg, losAzimuthDeg, losElevationDeg);
-        }
-
-        float uF;
-        float uS;
-        float uT;
-        BodyLosWeights(
-            yawDeg,
-            pitchDeg,
-            losAzimuthDeg,
-            losElevationDeg,
-            uF,
-            uS,
-            uT);
+            return fallback;
 
         float height = sizeY;
         if (height < 0.1)
@@ -207,7 +244,11 @@ class RDF_RadarRcsModel
         if (beam < 0.1)
             beam = 0.1;
 
-        // Nose face beam×height, side length×height, planform beam×length.
+        vector los = LosUnitFromAzEl(losAzimuthDeg, losElevationDeg);
+        float uF = Math.AbsFloat(vector.Dot(los, axisForward));
+        float uS = Math.AbsFloat(vector.Dot(los, axisRight));
+        float uT = Math.AbsFloat(vector.Dot(los, axisUp));
+
         float projected = uF * beam * height + uS * length * height + uT * beam * length;
         float estimate = projected * 0.25;
         float lo = fallback * 0.2;
@@ -217,6 +258,42 @@ class RDF_RadarRcsModel
         if (estimate > hi)
             estimate = hi;
         return estimate;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    static float AspectRcsFromExtents3D(
+        float meanRcsM2,
+        float sizeX,
+        float sizeY,
+        float sizeZ,
+        float yawDeg,
+        float pitchDeg,
+        float losAzimuthDeg,
+        float losElevationDeg)
+    {
+        if (sizeX <= 0.01 && sizeY <= 0.01 && sizeZ <= 0.01)
+        {
+            float fallback = meanRcsM2;
+            if (fallback <= 0.0)
+                fallback = 1.0;
+            return fallback * AspectFactor3D(
+                yawDeg, pitchDeg, losAzimuthDeg, losElevationDeg);
+        }
+
+        vector axisRight;
+        vector axisUp;
+        vector axisForward;
+        AxesFromYawPitch(yawDeg, pitchDeg, axisRight, axisUp, axisForward);
+        return AspectRcsFromObb(
+            meanRcsM2,
+            sizeX,
+            sizeY,
+            sizeZ,
+            axisRight,
+            axisUp,
+            axisForward,
+            losAzimuthDeg,
+            losElevationDeg);
     }
 
     //------------------------------------------------------------------------------------------------

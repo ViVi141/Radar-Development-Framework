@@ -10,10 +10,14 @@ class RDF_RadarScatterer
     vector m_Velocity;
     vector m_PrevPosition;
     float m_PrevSampleTime = -1.0;
-    // Horizontal yaw / pitch (deg) and body forward — aspect RCS input.
+    // Horizontal yaw / pitch (deg) and body axes — OBB aspect RCS.
     float m_YawDeg;
     float m_PitchDeg;
     vector m_Forward = "1 0 0";
+    // Local-box axes in world (Enfusion mat[0]/mat[1]/mat[2]). Defaults match yaw=0.
+    vector m_AxisRight = "0 0 1";
+    vector m_AxisUp = "0 1 0";
+    vector m_AxisForward = "1 0 0";
     // Height above terrain (metres); negative means unknown.
     float m_AglM = -1.0;
     // Cached DEM sample at this scatterer (shared across radars).
@@ -25,7 +29,8 @@ class RDF_RadarScatterer
     float m_DemSampleZ;
     // Prefab key used to look up the shared signature (extents / RCS class).
     string m_SignatureKey;
-    // Local AABB extents from the signature table (metres).
+    // Local-box extents from the signature table (metres). Oriented at runtime
+    // by m_Axis* (OBB silhouette), not a world-axis AABB.
     float m_SizeX;
     float m_SizeY;
     float m_SizeZ;
@@ -822,6 +827,19 @@ class RDF_RadarScattererRegistry
         if (fy < -1.0)
             fy = -1.0;
         entry.m_PitchDeg = Math.Asin(fy) * 57.2957795;
+
+        entry.m_AxisRight = NormalizeAxis(mat[0], "0 0 1");
+        entry.m_AxisUp = NormalizeAxis(mat[1], "0 1 0");
+        entry.m_AxisForward = forward;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    protected static vector NormalizeAxis(vector axis, vector fallback)
+    {
+        float len = axis.Length();
+        if (len < 0.001)
+            return fallback;
+        return axis * (1.0 / len);
     }
 
     //------------------------------------------------------------------------------------------------
@@ -972,13 +990,14 @@ class RDF_RadarScattererRegistry
         if (!entry)
             return 0.0;
 
-        float aspectRcs = RDF_RadarRcsModel.AspectRcsFromExtents3D(
+        float aspectRcs = RDF_RadarRcsModel.AspectRcsFromObb(
             entry.m_MeanRcsM2,
             entry.m_SizeX,
             entry.m_SizeY,
             entry.m_SizeZ,
-            entry.m_YawDeg,
-            entry.m_PitchDeg,
+            entry.m_AxisRight,
+            entry.m_AxisUp,
+            entry.m_AxisForward,
             losAzimuthDeg,
             losElevationDeg);
         float fluct = RDF_RadarRcsModel.SampleSwerling(

@@ -253,6 +253,7 @@ Enable only what you need. Defaults leave optional fidelity **off**.
 | `m_EnableDualKnifeEdge` / `m_KnifeEdgeMinUSeparation` | Dual-dominant knife-edge (Deygout-lite) |
 | `m_EnableKnifeEdgeLut` | ν→factor LUT (`RDF_RadarKnifeEdgeLut`) |
 | `Hardware.m_PolarizationMode` | `RDF_POL_H` / `V` / `CIRCULAR` match table |
+| `Hardware.GetBand()` | VHF/L/S/C/X from `m_FrequencyHz` (σ⁰ + foliage attenuation) |
 | `Hardware.m_PolarizationFactor` | Extra linear trim on received power |
 | `Hardware.m_SidelobeLevelDb` | One-way sidelobe floor (two-way = lin²) |
 | `NoiseJammerEffect.EnableSlb(true)` | Blank sidelobe-only jam coupling |
@@ -848,6 +849,7 @@ sensor.SetMeasurementModel(new MyGameplayNoise());
 | `m_EnableDualKnifeEdge` / `m_KnifeEdgeMinUSeparation` | 双主导刃（Deygout-lite） |
 | `m_EnableKnifeEdgeLut` | ν→factor LUT（`RDF_RadarKnifeEdgeLut`） |
 | `Hardware.m_PolarizationMode` | `RDF_POL_H` / `V` / `CIRCULAR` 匹配表 |
+| `Hardware.GetBand()` | 由 `m_FrequencyHz` 派生 VHF/L/S/C/X（σ⁰ 与植被衰减） |
 | `Hardware.m_PolarizationFactor` | 接收功率额外极化微调 |
 | `Hardware.m_SidelobeLevelDb` | 单程旁瓣地板（双程 = lin²） |
 | `NoiseJammerEffect.EnableSlb(true)` | 旁瓣耦合消隐 |

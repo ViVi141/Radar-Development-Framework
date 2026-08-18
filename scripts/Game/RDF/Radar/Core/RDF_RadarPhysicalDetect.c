@@ -521,11 +521,13 @@ class RDF_RadarPhysicalDetect
         float azWidthM,
         float rangeResolutionM,
         RDF_RadarSettings settings,
-        RDF_DemRuntimeCache demCache)
+        RDF_DemRuntimeCache demCache,
+        string band)
     {
         float centerSigma0 = RDF_RadarClutterModel.GetSigma0(
             centerSurfaceClass,
-            grazingRad);
+            grazingRad,
+            band);
         if (!settings || !settings.m_EnableClutterFootprintMix)
             return centerSigma0;
         if (!target || !demCache)
@@ -580,7 +582,8 @@ class RDF_RadarPhysicalDetect
                 continue;
             float s0 = RDF_RadarClutterModel.GetSigma0(
                 demSample.m_SurfaceClass,
-                grazingRad);
+                grazingRad,
+                band);
             sum = sum + s0;
             count = count + 1;
         }
@@ -647,6 +650,7 @@ class RDF_RadarPhysicalDetect
         if (areaM2 < minArea)
             areaM2 = minArea;
 
+        string band = hardware.GetBand();
         float sigma0 = ResolveFootprintSigma0(
             target,
             origin,
@@ -656,7 +660,8 @@ class RDF_RadarPhysicalDetect
             azWidthM,
             rangeResolutionM,
             settings,
-            demCache);
+            demCache,
+            band);
         sigma0 = sigma0 * settings.m_DemClutterScale;
         if (sigma0 <= 0.0)
             return 0.0;
@@ -679,7 +684,7 @@ class RDF_RadarPhysicalDetect
                 receivedClutter = receivedClutter * polClutter;
         }
         float surfaceAttenDbPerKm =
-            RDF_RadarClutterModel.GetSurfaceAttenuationDbPerKm(surfaceClass);
+            RDF_RadarClutterModel.GetSurfaceAttenuationDbPerKm(surfaceClass, band);
         if (surfaceAttenDbPerKm > 0.0)
         {
             float surfaceLossLin = RDF_RadarClutterModel.AtmosphericLossLinear(

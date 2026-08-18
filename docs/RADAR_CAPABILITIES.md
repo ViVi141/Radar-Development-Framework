@@ -33,7 +33,7 @@
 - 通视：可选 **DEM HEIGHT 预检**（`m_EnableDemLosPrecheck`，默认开）地形刺穿则跳过 `TraceMove`；否则 `TraceMove`（`RDF_RadarScanGeometry`：`ANY_CONTACT` + `ExcludeArray` + 复用 TraceParam + 起点出壳）；遮挡时可选 **NLOS 地面反射弱检** + **双主导刃绕射**（Deygout-lite；DEM/`GetSurfaceY` 沿程，`/diff`；ν LUT）；可选 **DEM 柱 span 顶**（`m_EnableDemSpanOcclusion`，默认关，非 SURF）
 - 可选粗 RD 图（`m_EnableCoarseRd`，默认关）与多雷达共用 discovery focus 调度
 - 硬件参数 → 雷达方程、多普勒、MTI（Two/ThreePulse + 可选参差消盲 / MTD bank）、处理增益、SNR 门限（辐射源在 `m_EnableEsmReceive` 下用 ESM 方程）
-- DEM σ⁰ **地面杂波**进入噪声分母（ESM 路径跳过）；可选 clutter-map **非对称 EMA**（快降慢升）+ PulseDoppler 足迹 σ⁰ 混合；`sea_state` 调制水面 σ⁰
+- DEM σ⁰ **地面杂波**进入噪声分母（ESM 路径跳过）；**按载频选 VHF/L/S/C/X 表**（工坊 conf 只覆盖其 tagged 波段）；可选 clutter-map **非对称 EMA**（快降慢升）+ PulseDoppler 足迹 σ⁰ 混合；`sea_state` 调制水面 σ⁰
 - **航迹 coast**：弹道速度更新 + 门限随 miss 增长 + Doppler-null/盲速软 miss
 - **测量合成**：距离门中心 + 波束角抖动 + 多普勒反解径向速度（SNR 越低越抖）
 - **测量噪声/偏差可调**：`SetMeasurementNoise` / `MeasNoiseScale`；下游可 override `RDF_RadarMeasurementModel`
@@ -43,7 +43,7 @@
 - **旁瓣 / 方向图**：分段方位 LUT（主瓣+旁瓣峰+地板，`m_EnablePatternLut` 默认开）或高斯+`m_SidelobeLevelDb` 地板；EW 可选 SLB（默认关）
 - **固定站路径表**：极坐标 DEM 路径因子（`m_EnableSitePathLut`，默认关；需 bake `SitePathLut.json`）
 - **无理想/逼真双档**：需要什么开什么；AutoTest 用 `StabilizeForRegression()`
-- **散射体表拟真输入**：姿态方位+俯仰 RCS（AABB 投影）、Swerling 起伏、AGL、DEM 缓存、辐射源射频摘要；烘焙表优先读 `Signatures/*.conf`（工坊），profile CSV 回退
+- **散射体表拟真输入**：姿态方位+俯仰+滚转 **OBB 投影 RCS**（局部盒 × 机体轴）、Swerling 起伏、AGL、DEM 缓存、辐射源射频摘要；烘焙表优先读 `Signatures/*.conf`（工坊），profile CSV 回退
 - DEM / 地表：`GetSurfaceY` + SURF JSON；电磁参数优先 `RadarData/SurfaceTable.conf`
 - **EW 效果栈**：噪声压制 + 欺骗假目标
 - **简化 CFAR**：粗栅格 CA / GO / SO（`m_CfarMode`）；空单元可填热噪声
@@ -197,7 +197,7 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 - Optional coarse RD map (`m_EnableCoarseRd`, default off) and shared multi-radar discovery focus scheduling
 - Hardware params → radar equation, Doppler, MTI / optional **MTD filter bank**, processing gain, SNR threshold (emitters use the ESM equation when `m_EnableEsmReceive` is on)
 - Default MTI remains two-pulse (`RDF_MTI_TWOPULSE`); `RDF_MTI_THREE_PULSE` uses sin⁴; classic paths score rotor spectrum + optional PRF-set max de-blind; `RDF_MTI_MTD_BANK` puts clutter in the near-zero bin and picks the best Doppler channel
-- DEM σ⁰ **ground clutter** enters the noise denominator (skipped on the ESM path); optional asymmetric clutter-map EMA (fast-down) + PulseDoppler footprint σ⁰ mix; `sea_state` scales water σ⁰
+- DEM σ⁰ **ground clutter** enters the noise denominator (skipped on the ESM path); **VHF/L/S/C/X tables selected from carrier frequency** (workshop conf overlays only its tagged band); optional asymmetric clutter-map EMA (fast-down) + PulseDoppler footprint σ⁰ mix; `sea_state` scales water σ⁰
 - **Measurement synthesis**: range-gate center + beam-angle jitter + Doppler-derived radial velocity (more jitter at lower SNR)
 - **Tunable measurement noise / bias**: `SetMeasurementNoise` / `MeasNoiseScale`; downstream can override `RDF_RadarMeasurementModel`
 - **Atmosphere / rain / weather-driven loss**: simplified; opt-in via `EnableAtmosphericPathLoss`
@@ -206,7 +206,7 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 - **Pattern / sidelobes**: segmented az LUT (mainlobe+peaks+floor, `m_EnablePatternLut` default on) or Gaussian+`m_SidelobeLevelDb` floor; optional EW SLB (default off)
 - **Fixed-site path LUT**: polar DEM path factors (`m_EnableSitePathLut`, default off; needs baked `SitePathLut.json`)
 - **No ideal/realistic tiers**: enable what you need; AutoTest uses `StabilizeForRegression()`
-- **Scatterer-table fidelity inputs**: aspect azimuth + elevation RCS (AABB projection), Swerling fluctuation, AGL, DEM cache, emitter RF summary; baked tables prefer `Signatures/*.conf` (workshop), profile CSV fallback
+- **Scatterer-table fidelity inputs**: azimuth + elevation + roll **OBB projected RCS** (local box × body axes), Swerling fluctuation, AGL, DEM cache, emitter RF summary; baked tables prefer `Signatures/*.conf` (workshop), profile CSV fallback
 - DEM / surface: `GetSurfaceY` + SURF JSON; EM params prefer `RadarData/SurfaceTable.conf`
 - **EW effect stack**: noise jamming + deceptive false targets
 - **Simplified CFAR**: coarse-grid CA / GO / SO (`m_CfarMode`); empty cells can be filled with thermal noise

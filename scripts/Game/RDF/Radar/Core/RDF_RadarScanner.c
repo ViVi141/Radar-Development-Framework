@@ -461,7 +461,10 @@ class RDF_RadarScanner
             RDF_RadarWeatherSnapshot weather = null;
             if (m_Settings.m_EnableWeatherDrivenRainLoss)
                 weather = RDF_RadarBallistics.SampleWorldWeather();
-            m_ScanRainLossDbPerKm = m_Settings.ResolveRainLossDbPerKm(weather);
+            float rainFreqHz = 0.0;
+            if (m_Settings.m_Hardware)
+                rainFreqHz = m_Settings.m_Hardware.m_FrequencyHz;
+            m_ScanRainLossDbPerKm = m_Settings.ResolveRainLossDbPerKm(weather, rainFreqHz);
         }
 
         BaseWorld world = subject.GetWorld();

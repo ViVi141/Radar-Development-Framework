@@ -138,6 +138,24 @@ _DEFAULT_EXPONENT = {
     "fabric": 1.0,
 }
 
+# Foliage/volume attenuation vs X-band authorship. Keep in sync with
+# RDF_RadarSurfaceTable.GetAttenuationScaleForBand.
+BAND_ATTENUATION_SCALE = {
+    "VHF": 0.20,
+    "L": 0.40,
+    "S": 0.55,
+    "C": 0.75,
+    "X": 1.0,
+}
+
+
+def attenuation_scale_for_band(band: str) -> float:
+    """Linear scale on SurfaceTable foliage attenuation for a radar band."""
+    key = str(band).upper()
+    if key not in BAND_ATTENUATION_SCALE:
+        return 1.0
+    return float(BAND_ATTENUATION_SCALE[key])
+
 # Sea-state offset applied to water σ⁰_ref [dB] (Douglas / Beaufort-ish).
 _SEA_STATE_WATER_DB = {
     0: -8.0,  # calm

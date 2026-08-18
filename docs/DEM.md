@@ -54,6 +54,8 @@ python tools\dem\rdf_dem_pack_height_json.py --world GM_Eden --from-ttile-npz
 
 加载顺序：`$profile:.../SurfaceTable.json` → 模组 `.conf` → 模组 `.json` → 内置。
 
+运行时 σ⁰ 按**该雷达载频**选 VHF / L / S / C / X（`RDF_RadarHardware.GetBand()`）。工坊表的 `band` 字段只覆盖对应那一张；换 P-18 不会继续用 X 波段 σ⁰。介电 / 粗糙度 / 指数仍共用一份。植被体衰减在 VHF 更弱。
+
 每类字段：`sigma0_ref_db`、`gamma_k`、`clutter_scale`、`dielectric`、`roughness`、`attenuation_db_per_km`  
 （conf 中为 `m_fSigma0RefDb` 等 Attribute 名）
 
@@ -207,6 +209,8 @@ Workshop: Register `surf_*` and optional `height_manifest.json` + `height_chunks
 | `RadarData/SurfaceTable.json` | Python / profile override / JSON fallback |
 
 Load order: `$profile:.../SurfaceTable.json` → mod `.conf` → mod `.json` → built-in.
+
+Runtime σ⁰ is selected from **that radar's carrier** (VHF / L / S / C / X via `RDF_RadarHardware.GetBand()`). The workshop table's `band` tag overlays only that band; a P-18-like radar no longer keeps the X-band σ⁰ table. Dielectric / roughness / gamma exponents stay shared. Foliage volume attenuation is weaker at VHF.
 
 Per-class fields: `sigma0_ref_db`, `gamma_k`, `clutter_scale`, `dielectric`, `roughness`, `attenuation_db_per_km`  
 (in conf these are Attribute names such as `m_fSigma0RefDb`)

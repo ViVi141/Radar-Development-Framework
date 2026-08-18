@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## 2026-08-19 — OBB 方位 RCS（含滚转）
+
+> EN: Instantaneous RCS now projects the signature local box onto the entity's world axes (true rectangular OBB), including roll. Zero-roll yaw/pitch path is unchanged. Not a mesh/PO/MLFMM solver.
+
+- `RDF_RadarScatterer` 缓存 `m_AxisRight/Up/Forward`（`GetWorldTransform`）
+- `AspectRcsFromObb`：\(\sigma \propto \sum |\hat{u}\cdot\mathrm{axis}| \times\) 对应面面积
+- 旧 `AspectRcsFromExtents3D` 改为零滚转轴重建后走同一公式
+- 离线：`tools/dem/test_rdf_radar_rcs.py`
+
+## 2026-08-19 — 波段感知杂波 / 雨衰
+
+> EN: Per-radar band σ⁰. Carrier frequency selects VHF/L/S/C/X clutter tables so a VHF search radar and an X-band SHORAD can share a world. Weather rain scales vs 9 GHz (SHORAD unchanged). Foliage attenuation is weaker at VHF.
+
+- **σ⁰**：`RDF_RadarHardware.GetBand()` 由载频派生；`SurfaceTable` 内置五张 σ⁰ 表（与 Python `_BAND_SIGMA0_DB` 对齐）。工坊 `.conf` 只覆盖其 `m_sBand` 那一张，其它波段保持内置。多雷达互不影响。
+- **植被体衰减**：VHF 0.20× … X 1.0×（相对表内 `attenuation_db_per_km`）
+- **天气雨衰**：相对 9 GHz 缩放 ITU-ish 项；P-18 雨衰明显弱于 SHORAD
+- 离线：`tools/dem/test_rdf_radar_band.py`
+
 ## 1.0.2 — 2026-08-18
 
 相对 1.0.1。范围：`99efd5d`（含）… `a1292be`（HEAD）。

@@ -292,6 +292,22 @@ class RDF_RadarBallisticsAutoTest
         ExpectTrue("elev_factor_horizon_gt_nadir", elHoriz > elDown);
         ExpectNear("elev_factor_horizon", elHoriz, 1.0, 0.01);
         ExpectNear("elev_factor_nadir", elDown, 0.5, 0.01);
+
+        float level = RDF_RadarRcsModel.AspectRcsFromObb(
+            20.0, 2.0, 4.0, 8.0,
+            Vector(0.0, 0.0, 1.0),
+            Vector(0.0, 1.0, 0.0),
+            Vector(1.0, 0.0, 0.0),
+            90.0,
+            0.0);
+        float rolled = RDF_RadarRcsModel.AspectRcsFromObb(
+            20.0, 2.0, 4.0, 8.0,
+            Vector(0.0, -1.0, 0.0),
+            Vector(0.0, 0.0, 1.0),
+            Vector(1.0, 0.0, 0.0),
+            90.0,
+            0.0);
+        ExpectTrue("aspect_obb_roll_changes_broadside", Math.AbsFloat(level - rolled) > 0.5);
     }
 
     protected static void WriteReport()
