@@ -49,4 +49,13 @@ class RDF_RadarSignatureEntryConf
 
     [Attribute("0", UIWidgets.EditBox, "Hub / flash radial width [m/s]")]
     float m_fHubWidthMs;
+
+    [Attribute("0", UIWidgets.EditBox, "Jet-fan tip speed [m/s] (0 = none)")]
+    float m_fFanTipSpeedMs;
+
+    [Attribute("0", UIWidgets.EditBox, "Fan blade count")]
+    int m_iFanBladeCount;
+
+    [Attribute("0", UIWidgets.EditBox, "Fan RCS fraction of mean [0..1]")]
+    float m_fFanRcsFraction;
 }

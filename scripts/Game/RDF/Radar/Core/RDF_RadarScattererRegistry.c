@@ -46,6 +46,9 @@ class RDF_RadarScatterer
     int m_BladeCount;
     float m_RotorRcsFraction;
     float m_HubWidthMs;
+    float m_FanTipSpeedMs;
+    int m_FanBladeCount;
+    float m_FanRcsFraction;
     bool m_Emitting;
     float m_EmitStrength = 1.0;
     // Emitter RF summary for ESM / passive detection hooks.
@@ -777,6 +780,9 @@ class RDF_RadarScattererRegistry
         entry.m_BladeCount = sig.m_BladeCount;
         entry.m_RotorRcsFraction = sig.m_RotorRcsFraction;
         entry.m_HubWidthMs = sig.m_HubWidthMs;
+        entry.m_FanTipSpeedMs = sig.m_FanTipSpeedMs;
+        entry.m_FanBladeCount = sig.m_FanBladeCount;
+        entry.m_FanRcsFraction = sig.m_FanRcsFraction;
     }
 
     //------------------------------------------------------------------------------------------------

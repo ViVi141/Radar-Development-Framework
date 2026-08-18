@@ -61,6 +61,7 @@ jobs:
               "test_rdf_radar_band",
               "test_rdf_radar_rcs",
               "test_rdf_radar_multiband",
+              "test_rdf_radar_nctr",
           }
           missing = sorted(required - set(names))
           print("modules=", names)

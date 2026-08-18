@@ -79,6 +79,7 @@ class RDF_RadarSensor
     // Adaptive budget governor: server main-thread headroom drives per-tick
     // LOS trace / WLR solve budgets (opt-in via m_EnableAdaptiveBudget).
     protected ref RDF_RadarBudgetGovernor m_BudgetGovernor;
+    protected int m_DesignatedScattererId;
 
     void RDF_RadarSensor()
     {
@@ -101,6 +102,7 @@ class RDF_RadarSensor
         m_EccmDecision = new RDF_EccmDecisionLayer();
         m_BudgetGovernor = new RDF_RadarBudgetGovernor();
         m_BudgetGovernor.Configure(m_Settings);
+        m_DesignatedScattererId = 0;
     }
 
     void SetEnabled(bool enabled)
@@ -456,6 +458,25 @@ class RDF_RadarSensor
             m_EccmDecision.Reset();
         if (m_DwellTasks)
             m_DwellTasks.Clear();
+        ClearDesignation();
+    }
+
+    // Force FIRE_CONTROL dwells onto a scatterer even without a lock.
+    void DesignateScattererId(int scattererId)
+    {
+        if (scattererId < 0)
+            scattererId = 0;
+        m_DesignatedScattererId = scattererId;
+    }
+
+    void ClearDesignation()
+    {
+        m_DesignatedScattererId = 0;
+    }
+
+    int GetDesignatedScattererId()
+    {
+        return m_DesignatedScattererId;
     }
 
     // Convenience: current locked target for weapon / fire-control code.
@@ -836,6 +857,33 @@ class RDF_RadarSensor
             }
         }
 
+        // Designated scatterer: FIRE_CONTROL even if not locked.
+        if (m_DesignatedScattererId > 0)
+        {
+            bool alreadyFc = false;
+            for (int d = 0; d < tasks.Count(); d++)
+            {
+                RDF_DwellTask existingFc = tasks.Get(d);
+                if (!existingFc)
+                    continue;
+                if (existingFc.m_TaskId != m_DesignatedScattererId)
+                    continue;
+                existingFc.m_Kind = ERDF_DwellKind.RDF_DWELL_FIRE_CONTROL;
+                existingFc.m_PeriodS = m_Settings.m_FireControlDwellPeriodS;
+                existingFc.m_DwellMs = m_Settings.m_FireControlDwellMs;
+                alreadyFc = true;
+            }
+            if (!alreadyFc)
+            {
+                RDF_DwellTask des = GetOrCreateDwellTask(
+                    m_DesignatedScattererId,
+                    ERDF_DwellKind.RDF_DWELL_FIRE_CONTROL);
+                des.m_PeriodS = m_Settings.m_FireControlDwellPeriodS;
+                des.m_DwellMs = m_Settings.m_FireControlDwellMs;
+                tasks.Insert(des);
+            }
+        }
+
         // Track dwells: confirmed tracks with a scatterer id (skip the locked one).
         int lockedId = -1;
         if (m_LockManager && m_LockManager.HasTarget())
@@ -846,6 +894,8 @@ class RDF_RadarSensor
             if (!tr || !tr.m_Confirmed || tr.m_ScattererId <= 0)
                 continue;
             if (tr.m_TrackId == lockedId)
+                continue;
+            if (tr.m_ScattererId == m_DesignatedScattererId)
                 continue;
             RDF_DwellTask t = GetOrCreateDwellTask(
                 tr.m_ScattererId,
@@ -985,6 +1035,8 @@ class RDF_RadarSensor
                 IEntity victim = ResolveRwrVictim(plot);
                 if (!victim)
                     continue;
+                if (!VictimCanHearIlluminator(plot.m_Distance))
+                    continue;
                 RDF_RadarRwr.Report(
                     subject,
                     victim,
@@ -1004,6 +1056,8 @@ class RDF_RadarSensor
                 if (!tr || !tr.m_Entity)
                     continue;
                 if (tr.m_HitCount < 1)
+                    continue;
+                if (!VictimCanHearIlluminator(tr.m_FilteredRangeM))
                     continue;
 
                 ERDF_RadarRwrLevel lvl = ERDF_RadarRwrLevel.RDF_RWR_SEARCH;
@@ -1025,6 +1079,11 @@ class RDF_RadarSensor
             IEntity lockedEnt = m_LockManager.GetLockedEntity();
             if (lockedEnt)
             {
+                if (!VictimCanHearIlluminator(m_LockManager.GetLockedRangeM()))
+                    lockedEnt = null;
+            }
+            if (lockedEnt)
+            {
                 ERDF_RadarLockState st = m_LockManager.GetState();
                 if (st == ERDF_RadarLockState.RDF_RADAR_LOCK_ACQUIRING
                     || st == ERDF_RadarLockState.RDF_RADAR_LOCK_TRACKING
@@ -1040,6 +1099,42 @@ class RDF_RadarSensor
                 }
             }
         }
+    }
+
+    // Geometric RWR (default): already detected ⇒ hear. Friis opt-in uses LPI peak.
+    protected bool VictimCanHearIlluminator(float rangeM)
+    {
+        if (!m_Settings)
+            return true;
+        if (!m_Settings.m_EnableRwrFriis)
+            return true;
+        RDF_RadarHardware hardware = m_Settings.m_Hardware;
+        if (!hardware)
+            return true;
+
+        float freqHz = hardware.GetScanFrequencyHz(m_ScanSerial);
+        float gt = hardware.GetAntennaGainDbiAtFrequency(freqHz);
+        float pr = RDF_RadarClutterModel.ReceivedPowerEsmW(
+            hardware.GetEffectivePeakPowerW(),
+            gt,
+            freqHz,
+            m_Settings.m_RwrAntennaGainDbi,
+            hardware.m_SystemLossDb,
+            rangeM,
+            1.0,
+            1.0);
+        float noise = hardware.GetNoisePowerW() * 4.0;
+        if (noise < 1.0e-30)
+            noise = 1.0e-30;
+        if (pr <= 0.0)
+            return false;
+        float ratio = pr / noise;
+        if (ratio <= 0.0)
+            return false;
+        float snrDb = 10.0 * Math.Log10(ratio);
+        if (snrDb >= m_Settings.m_RwrDetectSnrDb)
+            return true;
+        return false;
     }
 
     protected IEntity ResolveRwrVictim(RDF_RadarTarget plot)

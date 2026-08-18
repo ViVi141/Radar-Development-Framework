@@ -427,9 +427,16 @@ class RDF_RadarRcsModel
             return;
 
         // Rotor / micro-Doppler sidebands from signature (0 tip speed → none).
+        // Jets may carry weaker fan (JEM) lines when rotor tip is unset.
         float tipMs = target.m_RotorTipSpeedMs;
         float rotorFrac = target.m_RotorRcsFraction;
         int blades = target.m_BladeCount;
+        if (tipMs <= 0.0)
+        {
+            tipMs = target.m_FanTipSpeedMs;
+            rotorFrac = target.m_FanRcsFraction;
+            blades = target.m_FanBladeCount;
+        }
         if (tipMs <= 0.0)
             return;
         if (rotorFrac <= 0.0)

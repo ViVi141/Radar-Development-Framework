@@ -472,18 +472,24 @@ class RDF_RadarScanner
         m_LastOrigin = origin;
         m_LastForward = forward;
         m_LastRange = range;
-        if (m_Settings.m_EnableAtmosphericLoss)
+        m_Settings.m_LastRainIntensity = 0.0;
+        if (m_Settings.m_EnableAtmosphericLoss || m_Settings.m_EnableRainSeaClutterDamp)
         {
             RDF_RadarWeatherSnapshot weather = null;
-            if (m_Settings.m_EnableWeatherDrivenRainLoss)
+            if (m_Settings.m_EnableWeatherDrivenRainLoss || m_Settings.m_EnableRainSeaClutterDamp)
                 weather = RDF_RadarBallistics.SampleWorldWeather();
-            float rainFreqHz = 0.0;
-            if (m_Settings.m_Hardware)
+            if (weather && weather.m_Valid)
+                m_Settings.m_LastRainIntensity = weather.m_RainIntensity;
+            if (m_Settings.m_EnableAtmosphericLoss)
             {
-                int scanNumberRain = m_Settings.m_Hardware.GetScanNumber(worldTime);
-                rainFreqHz = m_Settings.m_Hardware.GetScanFrequencyHz(scanNumberRain);
+                float rainFreqHz = 0.0;
+                if (m_Settings.m_Hardware)
+                {
+                    int scanNumberRain = m_Settings.m_Hardware.GetScanNumber(worldTime);
+                    rainFreqHz = m_Settings.m_Hardware.GetScanFrequencyHz(scanNumberRain);
+                }
+                m_ScanRainLossDbPerKm = m_Settings.ResolveRainLossDbPerKm(weather, rainFreqHz);
             }
-            m_ScanRainLossDbPerKm = m_Settings.ResolveRainLossDbPerKm(weather, rainFreqHz);
         }
         RefreshEwScanStats(origin, forward, range);
         if (m_ClutterMap && m_Settings.m_EnableClutterMap)
@@ -889,11 +895,16 @@ class RDF_RadarScanner
             t.m_BladeCount = entry.m_BladeCount;
             t.m_RotorRcsFraction = entry.m_RotorRcsFraction;
             t.m_HubWidthMs = entry.m_HubWidthMs;
+            t.m_FanTipSpeedMs = entry.m_FanTipSpeedMs;
+            t.m_FanBladeCount = entry.m_FanBladeCount;
+            t.m_FanRcsFraction = entry.m_FanRcsFraction;
             t.m_AglM = entry.m_AglM;
             t.m_DemSampleValid = false;
             t.m_DemSurfaceClass = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
             t.m_DemTerrainY = 0.0;
             t.m_RotorSidebandUsed = false;
+            t.m_NctrClass = ERDF_RadarNctrClass.RDF_NCTR_UNKNOWN;
+            t.m_NctrConfidence = 0.0;
             t.m_BeamName = "";
             if (isEmitter)
             {
@@ -945,6 +956,7 @@ class RDF_RadarScanner
                     t, origin, forward, worldTime, world,
                     m_Settings, m_DemCache, m_ScanRainLossDbPerKm, m_ClutterMap, m_CoarseRdMap);
             }
+            RDF_RadarNctr.ApplyToSample(t, m_Settings);
             DepositCoarseRd(t);
             NoteMtdPlot(t);
 
@@ -1345,6 +1357,11 @@ class RDF_RadarScanner
         target.m_RotorRcsFraction = source.m_RotorRcsFraction;
         target.m_HubWidthMs = source.m_HubWidthMs;
         target.m_RotorSidebandUsed = source.m_RotorSidebandUsed;
+        target.m_FanTipSpeedMs = source.m_FanTipSpeedMs;
+        target.m_FanBladeCount = source.m_FanBladeCount;
+        target.m_FanRcsFraction = source.m_FanRcsFraction;
+        target.m_NctrClass = source.m_NctrClass;
+        target.m_NctrConfidence = source.m_NctrConfidence;
         target.m_DemSurfaceClass = source.m_DemSurfaceClass;
         target.m_DemSampleValid = source.m_DemSampleValid;
         target.m_ClutterPowerW = source.m_ClutterPowerW;
@@ -1417,7 +1434,7 @@ class RDF_RadarScanner
         if (!m_Settings.m_EnableMechanicalScan || !m_Settings.m_Hardware)
             return GetSubjectForward(subject);
 
-        float rpm = m_Settings.m_Hardware.m_ScanRpm;
+        float rpm = m_Settings.m_Hardware.GetEffectiveScanRpm();
         if (m_Settings.m_bScanAngleLocked)
         {
             float locked = NormalizeAngleRad(m_Settings.m_ScanPhaseOffsetRad);

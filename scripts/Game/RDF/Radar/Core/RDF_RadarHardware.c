@@ -49,6 +49,9 @@ class RDF_RadarHardware
     int m_PulsesIntegrated = 32;
     bool m_CoherentIntegration = false;
     float m_ScanRpm = 15.0;
+    ERDF_RadarSearchMode m_SearchMode = ERDF_RadarSearchMode.RDF_SEARCH_SURVEIL;
+    float m_LpiPeakPowerScale = 0.15;
+    float m_LpiScanRpmScale = 0.5;
     float m_MtiClutterFloor = 0.0001;
     // Non-zero MTD bins: DEM clutter × this leakage (not the global TwoPulse floor).
     float m_MtdClutterLeakage = 0.000001;
@@ -261,9 +264,34 @@ class RDF_RadarHardware
 
     float GetScanPeriodS()
     {
-        if (m_ScanRpm <= 0.0)
+        float rpm = GetEffectiveScanRpm();
+        if (rpm <= 0.0)
             return 1000000000.0;
-        return 60.0 / m_ScanRpm;
+        return 60.0 / rpm;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    float GetEffectiveScanRpm()
+    {
+        float rpm = m_ScanRpm;
+        if (rpm <= 0.0)
+            return 0.0;
+        if (m_SearchMode == ERDF_RadarSearchMode.RDF_SEARCH_LPI)
+            rpm = rpm * m_LpiScanRpmScale;
+        if (rpm < 0.0)
+            rpm = 0.0;
+        return rpm;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    float GetEffectivePeakPowerW()
+    {
+        float p = m_PeakPowerW;
+        if (m_SearchMode == ERDF_RadarSearchMode.RDF_SEARCH_LPI)
+            p = p * m_LpiPeakPowerScale;
+        if (p < 0.0)
+            p = 0.0;
+        return p;
     }
 
     float GetProcessingGain()
@@ -393,6 +421,10 @@ class RDF_RadarHardware
         }
         m_PulsesIntegrated = Math.Max(1, m_PulsesIntegrated);
         m_ScanRpm = Math.Max(0.0, m_ScanRpm);
+        m_LpiPeakPowerScale = Math.Clamp(m_LpiPeakPowerScale, 0.01, 1.0);
+        m_LpiScanRpmScale = Math.Clamp(m_LpiScanRpmScale, 0.05, 1.0);
+        if (m_SearchMode != ERDF_RadarSearchMode.RDF_SEARCH_LPI)
+            m_SearchMode = ERDF_RadarSearchMode.RDF_SEARCH_SURVEIL;
         m_MtiClutterFloor = Math.Clamp(m_MtiClutterFloor, 0.000001, 1.0);
         m_ClutterSigmaVrMs = Math.Clamp(m_ClutterSigmaVrMs, 0.05, 8.0);
         m_DopplerBinCount = Math.Clamp(m_DopplerBinCount, 4, 64);

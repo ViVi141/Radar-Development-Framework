@@ -153,6 +153,8 @@ class RDF_RadarPhysicalDetect
                 radarAgl,
                 targetAgl,
                 settings.m_EarthRadiusFactor);
+            if (settings.m_EnableAtmosphericDuct)
+                horizonM = horizonM * settings.m_DuctHorizonScale;
             float horizonFactor = RDF_RadarClutterModel.HorizonSoftFactor(
                 distance,
                 horizonM);
@@ -283,7 +285,7 @@ class RDF_RadarPhysicalDetect
         }
 
         target.m_ReceivedPowerW = RDF_RadarClutterModel.ReceivedPowerW(
-            hardware.m_PeakPowerW,
+            hardware.GetEffectivePeakPowerW(),
             scanGainDbi,
             scanFreqHz,
             hardware.m_SystemLossDb,
@@ -673,12 +675,17 @@ class RDF_RadarPhysicalDetect
             demCache,
             band);
         sigma0 = sigma0 * settings.m_DemClutterScale;
+        if (settings.m_EnableRainSeaClutterDamp)
+        {
+            if (surfaceClass == ERDF_DemSurfaceClass.RDF_DEM_SURF_WATER)
+                sigma0 = sigma0 * RDF_RadarNctr.RainWaterClutterScale(settings.m_LastRainIntensity);
+        }
         if (sigma0 <= 0.0)
             return 0.0;
 
         float clutterSigmaM2 = sigma0 * areaM2;
         float receivedClutter = RDF_RadarClutterModel.ReceivedPowerW(
-            hardware.m_PeakPowerW,
+            hardware.GetEffectivePeakPowerW(),
             scanGainDbi,
             scanFrequencyHz,
             hardware.m_SystemLossDb,

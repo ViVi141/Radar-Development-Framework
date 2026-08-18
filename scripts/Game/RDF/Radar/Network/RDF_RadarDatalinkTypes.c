@@ -27,6 +27,9 @@ class RDF_RadarDatalinkTrack
     vector m_WlrLaunchPos;
     bool m_WlrImpactValid;
     vector m_WlrImpactPos;
+    ERDF_RadarNctrClass m_NctrClass;
+    float m_NctrConfidence;
+    float m_Confidence;
 }
 
 class RDF_RadarFusedTrack
@@ -48,6 +51,9 @@ class RDF_RadarFusedTrack
     vector m_WlrLaunchPos;
     bool m_WlrImpactValid;
     vector m_WlrImpactPos;
+    ERDF_RadarNctrClass m_NctrClass;
+    float m_NctrConfidence;
+    float m_Confidence;
 }
 
 // Mods override Resolve() to map entity/faction → IFF.

@@ -524,6 +524,9 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
             dt.m_RangeRateMs = src.m_FilteredRangeRateMs;
             dt.m_SnrDb = src.m_LastSnrDb;
             dt.m_Type = src.m_Type;
+            dt.m_NctrClass = src.m_NctrClass;
+            dt.m_NctrConfidence = src.m_NctrConfidence;
+            dt.m_Confidence = src.m_Confidence;
             dt.m_TimeS = worldTimeS;
             dt.m_RadarOrigin = m_LastScanOrigin;
             if (iff)

@@ -36,6 +36,11 @@ class RDF_RadarTrack
     // Consecutive soft-miss coasts (Doppler-null / blind); hard-miss when exceeded.
     int m_SoftMissStreak;
     ERDF_RadarTargetType m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_ANONYMOUS;
+    ERDF_RadarNctrClass m_NctrClass;
+    float m_NctrConfidence;
+    float m_Confidence;
+    int m_ConfirmHitsNeed = 1;
+    float m_LastGateM = 400.0;
     // Ballistic prior (ShellMoveComponent.AirDrag). <=0 disables drag path.
     float m_AirDrag = RDF_RadarBallistics.AIR_DRAG_SHELL_82MM_HE;
     bool m_UseBallisticPrediction = true;
@@ -78,6 +83,28 @@ class RDF_RadarTrack
         if (m_Type == ERDF_RadarTargetType.RDF_RADAR_TARGET_PROJECTILE)
             return true;
         return false;
+    }
+
+    // Copy plot NCTR and recompute kinematic track quality.
+    void ApplyObservables(RDF_RadarTarget plot, int confirmHits, float residualM, float gateM)
+    {
+        if (confirmHits < 1)
+            confirmHits = 1;
+        m_ConfirmHitsNeed = confirmHits;
+        if (gateM > 1.0)
+            m_LastGateM = gateM;
+        if (plot)
+        {
+            m_NctrClass = plot.m_NctrClass;
+            m_NctrConfidence = plot.m_NctrConfidence;
+        }
+        m_Confidence = RDF_RadarNctr.TrackQuality(
+            m_HitCount,
+            m_ConfirmHitsNeed,
+            m_LastSnrDb,
+            residualM,
+            m_LastGateM,
+            m_Coasting);
     }
 
     // Extrapolate Cartesian position at an absolute world time (seconds).
@@ -240,11 +267,22 @@ class RDF_RadarTrack
         float beta,
         int confirmHits)
     {
+        FilterUpdate(target, alpha, beta, confirmHits, 400.0);
+    }
+
+    void FilterUpdate(
+        RDF_RadarTarget target,
+        float alpha,
+        float beta,
+        int confirmHits,
+        float gateM)
+    {
         if (!target)
             return;
 
         m_Type = target.m_Type;
         float lastTime = GetLastTime();
+        float residualM = 0.0;
         if (lastTime < 0.0)
         {
             m_FilteredPosition = target.m_Position;
@@ -269,6 +307,7 @@ class RDF_RadarTrack
 
             vector prediction = m_FilteredPosition + m_FilteredVelocity * dt;
             vector residual = target.m_Position - prediction;
+            residualM = residual.Length();
             m_FilteredPosition = prediction + residual * alpha;
             m_FilteredVelocity = m_FilteredVelocity + residual * (beta / dt);
         }
@@ -292,6 +331,7 @@ class RDF_RadarTrack
         // for Sensor debug-truth rebind when KeepEntityTruth is enabled.
         if (target.m_ScattererId > 0)
             m_ScattererId = target.m_ScattererId;
+        ApplyObservables(target, confirmHits, residualM, gateM);
         Push(m_FilteredPosition, m_FilteredVelocity, target.m_Time);
     }
 
@@ -303,6 +343,17 @@ class RDF_RadarTrack
         float alpha,
         float beta,
         int confirmHits)
+    {
+        FilterUpdateWeighted(plots, betas, alpha, beta, confirmHits, 400.0);
+    }
+
+    void FilterUpdateWeighted(
+        notnull array<ref RDF_RadarTarget> plots,
+        notnull array<float> betas,
+        float alpha,
+        float beta,
+        int confirmHits,
+        float gateM)
     {
         int strongest = -1;
         float strongestBeta = -1.0;
@@ -333,6 +384,7 @@ class RDF_RadarTrack
 
         RDF_RadarTarget refPlot = plots.Get(strongest);
         float lastTime = GetLastTime();
+        float residualM = 0.0;
         float dt = 0.001;
         if (lastTime >= 0.0)
         {
@@ -364,6 +416,7 @@ class RDF_RadarTrack
 
             vector prediction = m_FilteredPosition + m_FilteredVelocity * dt;
             vector residual = wPos - prediction;
+            residualM = residual.Length();
             m_FilteredPosition = prediction + residual * alpha;
             m_FilteredVelocity = m_FilteredVelocity + residual * (beta / dt);
         }
@@ -386,6 +439,7 @@ class RDF_RadarTrack
             m_Confirmed = false;
         if (refPlot.m_ScattererId > 0)
             m_ScattererId = refPlot.m_ScattererId;
+        ApplyObservables(refPlot, confirmHits, residualM, gateM);
         Push(m_FilteredPosition, m_FilteredVelocity, refPlot.m_Time);
     }
 
@@ -445,6 +499,13 @@ class RDF_RadarTrack
         m_LastUpdateTime = worldTimeSec;
         m_Coasting = true;
         m_CoastElapsedSec = m_CoastElapsedSec + dt;
+        m_Confidence = RDF_RadarNctr.TrackQuality(
+            m_HitCount,
+            m_ConfirmHitsNeed,
+            m_LastSnrDb,
+            0.0,
+            m_LastGateM,
+            true);
     }
 
     static float NormalizeAngleDeg(float deg)
@@ -985,7 +1046,7 @@ class RDF_RadarProjectileTracker
             if (assigned && hit)
             {
                 ApplyBallisticConfig(assigned);
-                assigned.FilterUpdate(hit, m_Alpha, m_Beta, m_ConfirmHits);
+                assigned.FilterUpdate(hit, m_Alpha, m_Beta, m_ConfirmHits, m_GateRangeM);
                 assigned.m_LastPrfHz = ResolvePrfHz(hit.m_PrfIndex);
             }
         }
@@ -1042,7 +1103,7 @@ class RDF_RadarProjectileTracker
             if (seed.m_ScattererId > 0)
                 born.m_ScattererId = seed.m_ScattererId;
             ApplyBallisticConfig(born);
-            born.FilterUpdate(seed, m_Alpha, m_Beta, m_ConfirmHits);
+            born.FilterUpdate(seed, m_Alpha, m_Beta, m_ConfirmHits, m_GateRangeM);
             born.m_LastPrfHz = ResolvePrfHz(seed.m_PrfIndex);
             m_Tracks.Insert(born);
         }
@@ -1132,7 +1193,7 @@ class RDF_RadarProjectileTracker
                 if (miss.Get(ti) >= 0.5)
                     continue;
                 m_Tracks.Get(ti).FilterUpdateWeighted(
-                    plots, betas.Get(ti), m_Alpha, m_Beta, m_ConfirmHits);
+                    plots, betas.Get(ti), m_Alpha, m_Beta, m_ConfirmHits, m_GateRangeM);
                 trackUpdated.Set(ti, true);
                 for (int pi = 0; pi < nPlots; pi++)
                 {
@@ -1172,7 +1233,7 @@ class RDF_RadarProjectileTracker
             if (seed.m_ScattererId > 0)
                 born.m_ScattererId = seed.m_ScattererId;
             ApplyBallisticConfig(born);
-            born.FilterUpdate(seed, m_Alpha, m_Beta, m_ConfirmHits);
+            born.FilterUpdate(seed, m_Alpha, m_Beta, m_ConfirmHits, m_GateRangeM);
             born.m_LastPrfHz = ResolvePrfHz(seed.m_PrfIndex);
             m_Tracks.Insert(born);
         }

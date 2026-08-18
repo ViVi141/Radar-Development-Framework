@@ -44,6 +44,13 @@ enum ERDF_RadarPolarization
     RDF_POL_CIRCULAR
 }
 
+// SURVEIL = authored Pt / rpm. LPI scales peak and scan rate for intercept vs SNR.
+enum ERDF_RadarSearchMode
+{
+    RDF_SEARCH_SURVEIL,
+    RDF_SEARCH_LPI
+}
+
 // Forward-only truth sample for PhysicalDetect. Never publish to Tracker/Lock.
 // Entity and DEM/LOS inputs live here; inverse path must not read this type.
 class RDF_RadarTruthSample
@@ -74,6 +81,11 @@ class RDF_RadarTruthSample
     float m_RotorRcsFraction;
     float m_HubWidthMs;
     bool m_RotorSidebandUsed;
+    float m_FanTipSpeedMs;
+    int m_FanBladeCount;
+    float m_FanRcsFraction;
+    ERDF_RadarNctrClass m_NctrClass;
+    float m_NctrConfidence;
     int m_DemSurfaceClass = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
     bool m_DemSampleValid;
     float m_ClutterPowerW;
@@ -131,6 +143,11 @@ class RDF_RadarTarget
     float m_HubWidthMs;
     // True when MTD win bin is non-zero and rotor tip lines contributed (observability).
     bool m_RotorSidebandUsed;
+    float m_FanTipSpeedMs;
+    int m_FanBladeCount;
+    float m_FanRcsFraction;
+    ERDF_RadarNctrClass m_NctrClass;
+    float m_NctrConfidence;
     int m_DemSurfaceClass = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
     bool m_DemSampleValid;
     float m_ClutterPowerW;

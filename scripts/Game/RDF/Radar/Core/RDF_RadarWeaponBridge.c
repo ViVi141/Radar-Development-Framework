@@ -123,6 +123,7 @@ class RDF_RadarWeaponBridge
     }
 
     // Launch gate: TRACKING by default; COAST/ACQUIRING optional.
+    // Weapon-grade confidence is extra: 0 on settings = legacy (no extra gate).
     bool CanAuthorizeFire()
     {
         RDF_RadarLockManager lockMgr = GetLockManager();
@@ -130,18 +131,30 @@ class RDF_RadarWeaponBridge
             return false;
 
         ERDF_RadarLockState state = lockMgr.GetState();
+        bool stateOk = false;
         if (m_RequireTrackingForFire)
         {
             if (state == ERDF_RadarLockState.RDF_RADAR_LOCK_TRACKING)
-                return true;
-            return false;
+                stateOk = true;
         }
+        else
+        {
+            if (state == ERDF_RadarLockState.RDF_RADAR_LOCK_TRACKING)
+                stateOk = true;
+            else if (state == ERDF_RadarLockState.RDF_RADAR_LOCK_COAST)
+                stateOk = true;
+        }
+        if (!stateOk)
+            return false;
 
-        if (state == ERDF_RadarLockState.RDF_RADAR_LOCK_TRACKING)
+        RDF_RadarSensor sensor = GetSensor();
+        if (!sensor)
             return true;
-        if (state == ERDF_RadarLockState.RDF_RADAR_LOCK_COAST)
-            return true;
-        return false;
+        RDF_RadarSettings settings = sensor.GetSettings();
+        float minConf = 0.0;
+        if (settings)
+            minConf = settings.m_WeaponGradeMinConfidence;
+        return lockMgr.PassesWeaponGradeConfidence(minConf);
     }
 
     // Fill a fire solution for HUD / launch / midcourse. Returns false if no usable lock.

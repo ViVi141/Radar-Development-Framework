@@ -173,6 +173,22 @@ class RDF_RadarSettings
     // nearest-neighbor (GNN) association. On, the tracker uses soft association.
     bool m_EnableJpda = false;
     float m_JpdaPd = 0.9;
+    // NCTR from micro-Doppler (rotor / fan / fixed). Default off.
+    bool m_EnableNctr = false;
+    // RWR Friis intercept gate. Off = geometric (report if we detected them).
+    bool m_EnableRwrFriis = false;
+    float m_RwrAntennaGainDbi = 0.0;
+    float m_RwrDetectSnrDb = 6.0;
+    // Weapon-grade lock: 0 = no extra gate. Typical 0.55 when enabled.
+    float m_WeaponGradeMinConfidence = 0.0;
+    // Rain damps water σ⁰ (does not replace atmospheric rain loss).
+    bool m_EnableRainSeaClutterDamp = false;
+    float m_LastRainIntensity;
+    // Trapping layer: stretch radio horizon. Default off.
+    bool m_EnableAtmosphericDuct = false;
+    float m_DuctHorizonScale = 2.0;
+    // Low-AGL elevation bias toward the surface.
+    bool m_EnableMultipathGlint = false;
     // Fill empty CFAR cells with thermal-noise samples (real Pfa behaviour).
     bool m_EnableCfarThermalFill = false;
     // Two-way atmospheric / rain loss on received power.
@@ -407,6 +423,11 @@ class RDF_RadarSettings
         m_EccmJnHysteresisDb = Math.Clamp(m_EccmJnHysteresisDb, 0.0, 30.0);
         m_EccmSidelobeCouplingOn = Math.Clamp(m_EccmSidelobeCouplingOn, 0.0, 1.0);
         m_JpdaPd = Math.Clamp(m_JpdaPd, 0.1, 1.0);
+        m_RwrAntennaGainDbi = Math.Clamp(m_RwrAntennaGainDbi, -20.0, 20.0);
+        m_RwrDetectSnrDb = Math.Clamp(m_RwrDetectSnrDb, -10.0, 30.0);
+        m_WeaponGradeMinConfidence = Math.Clamp(m_WeaponGradeMinConfidence, 0.0, 1.0);
+        m_LastRainIntensity = Math.Clamp(m_LastRainIntensity, 0.0, 1.0);
+        m_DuctHorizonScale = Math.Clamp(m_DuctHorizonScale, 1.0, 8.0);
         m_AtmLossDbPerKmOneWay = Math.Clamp(m_AtmLossDbPerKmOneWay, -1.0, 5.0);
         m_RainLossDbPerKmOneWay = Math.Clamp(m_RainLossDbPerKmOneWay, 0.0, 20.0);
         m_RainLossDbPerKmAtFullIntensity = Math.Clamp(
@@ -621,6 +642,12 @@ class RDF_RadarSettings
         m_EnableCoarseRd = false;
         m_EnableDemSpanOcclusion = false;
         m_EnableClutterFootprintMix = false;
+        m_EnableNctr = false;
+        m_EnableRwrFriis = false;
+        m_EnableRainSeaClutterDamp = false;
+        m_EnableAtmosphericDuct = false;
+        m_EnableMultipathGlint = false;
+        m_WeaponGradeMinConfidence = 0.0;
     }
 
     //------------------------------------------------------------------------------------------------

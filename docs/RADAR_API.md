@@ -148,6 +148,8 @@ if (radarComp.HasRwrLockWarning()) { ... }
 
 Levels: `RDF_RWR_SEARCH` (detected plot) → `RDF_RWR_TRACK` (confirmed track) → `RDF_RWR_LOCK` (lock manager).  
 ESM mode does not report (receive-only). Disable with `m_EnableRwrReporting = false`.  
+Default intercept is geometric (report if this radar already detected the victim).  
+Opt-in `m_EnableRwrFriis` uses one-way Friis on `GetEffectivePeakPowerW()` vs RWR noise (`GetNoisePowerW()×4`) and `m_RwrDetectSnrDb`. LPI search therefore shrinks intercept range.  
 Regression: `RDF_RadarRwrAutoTest.Start()`.
 
 Sensor convenience (same semantics, any victim entity):
@@ -450,6 +452,69 @@ enumeration → marginal association probabilities β_ij + miss β_i0 → beta-w
 alpha-beta update. Clusters larger than 4×4 fall back to hard GNN assignment.
 Offline mirror + golden: `tools/dem/rdf_radar_jpda.py`. In-game regression:
 `RDF_RadarJpdaAutoTest.Start()`.
+
+---
+
+### NCTR (rotor / fan / fixed)
+
+Opt-in (`m_EnableNctr`, default off). Classifies from **micro-Doppler observables**
+(rotor/fan tip, RCS fraction, sideband used, SNR) — never entity type / prefab.
+Plots and tracks carry `m_NctrClass` / `m_NctrConfidence`. Fusion keeps the class
+when both sides agree; mismatch → `UNKNOWN`. Network scan-track codec stride is
+unchanged (local + in-process datalink only).
+
+```c
+cfg.m_EnableNctr = true;
+// Optional signature fan fields; jets without authored fans get defaults
+// (tip 320 m/s, 17 blades, frac 0.07) if the key looks like Aircraft/Jet.
+```
+
+| Class | Cue |
+|-------|-----|
+| `RDF_NCTR_ROTOR` | rotor tip > 40 m/s and frac ≥ 0.15 (+ sideband or SNR ≥ 6) |
+| `RDF_NCTR_FAN` | fan tip > 40 m/s and 0 < frac < 0.149 (+ sideband or SNR ≥ 8) |
+| `RDF_NCTR_FIXED` | otherwise SNR ≥ 4 |
+| `RDF_NCTR_UNKNOWN` | low SNR / no detect |
+
+Offline: `tools/dem/rdf_radar_nctr.py`.
+
+---
+
+### LPI search mode
+
+`Hardware.m_SearchMode = RDF_SEARCH_LPI` scales **peak power** (`m_LpiPeakPowerScale`,
+default 0.15) and **scan rpm** (`m_LpiScanRpmScale`, default 0.5) via
+`GetEffectivePeakPowerW()` / `GetEffectiveScanRpm()`. Radar equation and clutter
+use the effective peak; ESM *emit* fallback still uses authored `m_PeakPowerW`.
+
+---
+
+### Track confidence, weapon-grade lock, designation
+
+Tracks recompute `m_Confidence` from hit age, SNR, and residual/gate (×0.6 while
+coasting). HUD `GetLockedTarget` is unchanged.
+
+```c
+cfg.m_WeaponGradeMinConfidence = 0.55;  // 0 = legacy, no extra fire gate
+sensor.DesignateScattererId(scattererId);  // FIRE_CONTROL dwells even without lock
+sensor.ClearDesignation();
+```
+
+`RDF_RadarWeaponBridge.CanAuthorizeFire()` still requires TRACKING (or COAST if
+that flag is off) **and** `lock.PassesWeaponGradeConfidence(min)` when min > 0.
+Dwell scheduler must be on for designation to take effect.
+
+---
+
+### Environment extras (glint / rain-sea / duct)
+
+All default off. `StabilizeForRegression()` clears them.
+
+| Knob | Effect |
+|------|--------|
+| `m_EnableMultipathGlint` | Low-AGL elevation bias toward the surface (water strongest) |
+| `m_EnableRainSeaClutterDamp` | Rain intensity scales water σ⁰ down (does not replace rain path loss) |
+| `m_EnableAtmosphericDuct` | Multiplies radio horizon when `m_EnableAtmosphericRefraction` is on |
 
 ---
 
@@ -783,6 +848,8 @@ if (radarComp.HasRwrLockWarning()) { ... }
 
 等级：`RDF_RWR_SEARCH`（检出 plot）→ `RDF_RWR_TRACK`（确认航迹）→ `RDF_RWR_LOCK`（锁控管理器）。  
 ESM 模式不报告（仅接收）。用 `m_EnableRwrReporting = false` 关闭。  
+默认截获是几何的（本雷达已检出受害方才告警）。  
+按需 `m_EnableRwrFriis` 用单向 Friis 对 `GetEffectivePeakPowerW()` 与 RWR 噪声（`GetNoisePowerW()×4`）以及 `m_RwrDetectSnrDb` 做门限。LPI 搜索会缩短截获距离。  
 回归：`RDF_RadarRwrAutoTest.Start()`。
 
 Sensor 便捷方法（语义相同，任意受害实体）：
@@ -1070,6 +1137,67 @@ cfg.m_JpdaPd = 0.9;   // 每扫检测概率（miss 假设权重）
 关联流程：门控（距离+方位）→ 并查集聚类 → 联合事件枚举 → 边缘关联概率 β_ij + miss
 β_i0 → β 加权 α-β 更新。簇大于 4×4 回退 GNN 硬指派。离线镜像 + 金标：
 `tools/dem/rdf_radar_jpda.py`。游戏内回归：`RDF_RadarJpdaAutoTest.Start()`。
+
+---
+
+### NCTR（旋翼 / 风扇 / 固定）
+
+按需开启（`m_EnableNctr`，默认关）。只根据**微多普勒可观测量**（桨尖/风扇尖、RCS
+份额、边带是否用上、SNR）分类，**不用**实体类型 / prefab。点迹与航迹带
+`m_NctrClass` / `m_NctrConfidence`。融合同类保留，冲突回 `UNKNOWN`。网络航迹
+编解码步长不变（仅本机 + 进程内数据链）。
+
+```c
+cfg.m_EnableNctr = true;
+// 签名可选风扇字段；Aircraft/Jet 类键无作者风扇时给默认（尖速 320、17 叶、份额 0.07）
+```
+
+| 类 | 线索 |
+|----|------|
+| `RDF_NCTR_ROTOR` | 旋翼尖 > 40 m/s 且份额 ≥ 0.15（边带或 SNR ≥ 6） |
+| `RDF_NCTR_FAN` | 风扇尖 > 40 m/s 且 0 < 份额 < 0.149（边带或 SNR ≥ 8） |
+| `RDF_NCTR_FIXED` | 其余 SNR ≥ 4 |
+| `RDF_NCTR_UNKNOWN` | 低 SNR / 未检出 |
+
+离线：`tools/dem/rdf_radar_nctr.py`。
+
+---
+
+### LPI 搜索档
+
+`Hardware.m_SearchMode = RDF_SEARCH_LPI` 通过 `GetEffectivePeakPowerW()` /
+`GetEffectiveScanRpm()` 缩放峰值（`m_LpiPeakPowerScale`，默认 0.15）与扫描转速
+（`m_LpiScanRpmScale`，默认 0.5）。雷达方程与杂波用有效峰值；ESM **发射**回退仍用
+作者 `m_PeakPowerW`。
+
+---
+
+### 航迹置信度、武器级锁、指定驻留
+
+航迹按命中龄期、SNR、残差/波门重算 `m_Confidence`（coast 时 ×0.6）。HUD
+`GetLockedTarget` 不变。
+
+```c
+cfg.m_WeaponGradeMinConfidence = 0.55;  // 0 = 旧行为，无额外开火门
+sensor.DesignateScattererId(scattererId);  // 无锁也走 FIRE_CONTROL 驻留
+sensor.ClearDesignation();
+```
+
+`RDF_RadarWeaponBridge.CanAuthorizeFire()` 仍要求 TRACKING（或关闭该开关时允许
+COAST），**并且**当 min > 0 时 `lock.PassesWeaponGradeConfidence(min)`。指定驻留
+需要打开驻留调度器。
+
+---
+
+### 环境附加（闪烁 / 雨阻海杂波 / 波导）
+
+全部默认关。`StabilizeForRegression()` 会清掉。
+
+| 旋钮 | 效果 |
+|------|------|
+| `m_EnableMultipathGlint` | 低 AGL 俯仰朝地表偏（水面最强） |
+| `m_EnableRainSeaClutterDamp` | 雨强压低水面 σ⁰（不替代雨衰路径损耗） |
+| `m_EnableAtmosphericDuct` | 在 `m_EnableAtmosphericRefraction` 开启时拉伸无线电地平 |
 
 ---
 

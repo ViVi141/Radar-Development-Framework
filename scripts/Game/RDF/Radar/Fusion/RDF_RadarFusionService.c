@@ -98,6 +98,9 @@ class RDF_RadarFusionService
             m_NextFusedId = m_NextFusedId + 1;
             fused.m_TimeS = worldTimeS;
             fused.m_Type = a.m_Type;
+            fused.m_NctrClass = a.m_NctrClass;
+            fused.m_NctrConfidence = a.m_NctrConfidence;
+            fused.m_Confidence = a.m_Confidence;
             fused.m_ContributorRadarId0 = a.m_SourceRadarId;
             fused.m_ContributorTrackId0 = a.m_LocalTrackId;
 
@@ -108,6 +111,12 @@ class RDF_RadarFusionService
                 fused.m_ContributorRadarId1 = b.m_SourceRadarId;
                 fused.m_ContributorTrackId1 = b.m_LocalTrackId;
                 fused.m_Iff = MergeIff(a.m_Iff, b.m_Iff);
+                fused.m_NctrClass = MergeNctr(a.m_NctrClass, b.m_NctrClass);
+                if (fused.m_NctrClass == ERDF_RadarNctrClass.RDF_NCTR_UNKNOWN)
+                    fused.m_NctrConfidence = 0.0;
+                else
+                    fused.m_NctrConfidence = 0.5 * (a.m_NctrConfidence + b.m_NctrConfidence);
+                fused.m_Confidence = 0.5 * (a.m_Confidence + b.m_Confidence);
                 if (a.m_Type != b.m_Type)
                     fused.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_ANONYMOUS;
 
@@ -133,6 +142,9 @@ class RDF_RadarFusionService
                 fused.m_ContributorRadarId1 = -1;
                 fused.m_ContributorTrackId1 = -1;
                 fused.m_Iff = a.m_Iff;
+                fused.m_NctrClass = a.m_NctrClass;
+                fused.m_NctrConfidence = a.m_NctrConfidence;
+                fused.m_Confidence = a.m_Confidence;
                 fused.m_WorldPos = a.m_WorldPos;
                 fused.m_Velocity = a.m_Velocity;
                 fused.m_SnrDb = a.m_SnrDb;
@@ -173,6 +185,13 @@ class RDF_RadarFusionService
         if (b == ERDF_RadarIff.RDF_IFF_UNKNOWN)
             return a;
         return ERDF_RadarIff.RDF_IFF_UNKNOWN;
+    }
+
+    protected ERDF_RadarNctrClass MergeNctr(ERDF_RadarNctrClass a, ERDF_RadarNctrClass b)
+    {
+        if (a == b)
+            return a;
+        return ERDF_RadarNctrClass.RDF_NCTR_UNKNOWN;
     }
 
     protected void MergeWlr(

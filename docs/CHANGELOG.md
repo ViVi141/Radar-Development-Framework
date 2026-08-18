@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-08-19 — NCTR / LPI·RWR Friis / 航迹置信度 / 环境闪烁
+
+> EN: Opt-in fidelity: NCTR from rotor/fan micro-Doppler (not entity type); LPI search scales peak+rpm and optional Friis RWR intercept; track confidence gates weapon-grade fire; designation forces FIRE_CONTROL dwells; multipath elevation glint, rain-damped water σ⁰, duct-stretched radio horizon. All default off; `StabilizeForRegression()` clears them. Network track codec stride unchanged.
+
+- **NCTR**：`m_EnableNctr`；签名可选风扇字段 + 喷气默认；点迹/航迹 `m_NctrClass` / `m_NctrConfidence`；融合同类保留、冲突回 UNKNOWN。离线：`tools/dem/test_rdf_radar_nctr.py`
+- **LPI / RWR**：`Hardware.m_SearchMode`（SURVEIL/LPI）缩放 `GetEffectivePeakPowerW` / 扫描转速；`m_EnableRwrFriis` 用单向 Friis 对有效峰值做截获门（默认仍几何：检出即告警）
+- **置信度 / 指定**：航迹 `m_Confidence`（命中龄期+SNR+残差；coast×0.6）；`m_WeaponGradeMinConfidence` 额外拦 `CanAuthorizeFire`；`Sensor.DesignateScattererId` 插入 FIRE_CONTROL 驻留
+- **环境**：`m_EnableMultipathGlint` 低 AGL 俯仰下偏；`m_EnableRainSeaClutterDamp` 雨压水面 σ⁰；`m_EnableAtmosphericDuct` 在折射开启时拉伸无线电地平
+
 ## 2026-08-19 — 真多波段通道 / RCS 随波长
 
 > EN: True multi-band: one platform can hold several `RDF_RadarHardware` channels and switch the active carrier per scan from the highest-priority scheduled dwell (FIRE_CONTROL > TRACK > SEARCH). Instantaneous RCS rolls off as Rayleigh when \(ka<10\). Optional same-aperture retune and intra-band hop. Default off; SHORAD unchanged.

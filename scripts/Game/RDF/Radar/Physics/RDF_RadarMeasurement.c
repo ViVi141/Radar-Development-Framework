@@ -43,6 +43,11 @@ class RDF_RadarMeasurement
         plot.m_RotorRcsFraction = truth.m_RotorRcsFraction;
         plot.m_HubWidthMs = truth.m_HubWidthMs;
         plot.m_RotorSidebandUsed = truth.m_RotorSidebandUsed;
+        plot.m_FanTipSpeedMs = truth.m_FanTipSpeedMs;
+        plot.m_FanBladeCount = truth.m_FanBladeCount;
+        plot.m_FanRcsFraction = truth.m_FanRcsFraction;
+        plot.m_NctrClass = truth.m_NctrClass;
+        plot.m_NctrConfidence = truth.m_NctrConfidence;
         plot.m_DemSurfaceClass = truth.m_DemSurfaceClass;
         plot.m_DemSampleValid = truth.m_DemSampleValid;
         plot.m_ClutterPowerW = truth.m_ClutterPowerW;
@@ -141,6 +146,14 @@ class RDF_RadarMeasurement
         }
         if (elSigmaDeg > 0.0)
             measuredElDeg = measuredElDeg + Math.RandomGaussFloat(elSigmaDeg, 0.0);
+        if (settings.m_EnableMultipathGlint)
+        {
+            measuredElDeg = measuredElDeg + RDF_RadarNctr.GlintElevationBiasDeg(
+                target.m_AglM,
+                target.m_DemSurfaceClass,
+                target.m_Time,
+                trueRange);
+        }
 
         float wavelength = hardware.GetWavelengthM();
         float trueDoppler = target.m_DopplerHz;

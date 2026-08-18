@@ -29,7 +29,7 @@
 - 扇区 / 可选机械扫描内，发现**载具、炮弹、主动辐射源**（仅作散射体输入）
 - **ESM 模式**（`RDF_RADAR_MODE_ESM`）：仅辐射源；单向 Friis 侦收功率；平台静默不登记发射
 - **反辐射瞄点 API**：`GetArmAim` / `LockArmTrackId`（关辐射丢锁）；不含导弹 prefab
-- **RWR**：被搜索 / 跟踪 / 锁定告警（`RDF_RadarRwr`）；无专用 UI，模组读 API
+- **RWR**：被搜索 / 跟踪 / 锁定告警（`RDF_RadarRwr`）；默认几何截获，可选 Friis（`m_EnableRwrFriis`）；无专用 UI，模组读 API
 - 通视：可选 **DEM HEIGHT 预检**（`m_EnableDemLosPrecheck`，默认开）地形刺穿则跳过 `TraceMove`；否则 `TraceMove`（`RDF_RadarScanGeometry`：`ANY_CONTACT` + `ExcludeArray` + 复用 TraceParam + 起点出壳）；遮挡时可选 **NLOS 地面反射弱检** + **双主导刃绕射**（Deygout-lite；DEM/`GetSurfaceY` 沿程，`/diff`；ν LUT）；可选 **DEM 柱 span 顶**（`m_EnableDemSpanOcclusion`，默认关，非 SURF）
 - 可选粗 RD 图（`m_EnableCoarseRd`，默认关）与多雷达共用 discovery focus 调度
 - 硬件参数 → 雷达方程、多普勒、MTI（Two/ThreePulse + 可选参差消盲 / MTD bank）、处理增益、SNR 门限（辐射源在 `m_EnableEsmReceive` 下用 ESM 方程）
@@ -70,6 +70,10 @@
 - **多波段通道**（`m_EnableMultiBand`，默认关）：同一平台多份 `RDF_RadarHardware`，按驻留 kind 每扫切一个载频（非同时复合波形）；工厂 `CreateDualBandVhfSearchXTrack()`；RCS / 杂波 / 雨衰随 λ
 - **ECCM 决策层**（`m_EnableEccmDecision`，默认关）：滞回压制检测 + 旁瓣/主瓣耦合选 SLB/频率捷变 + 欺骗→PRF + 锁定→烧穿；SLB 实接干扰机，频率捷变下一扫 hop 载频，PRF/烧穿经 `GetEccmStatusShort` 上报
 - **JPDA 软关联**（`m_EnableJpda`，默认关）：门控 + 并查集聚类 + 联合事件枚举 + 边缘化 + 加权 α-β，替换密集多目标下最近邻互抢
+- **NCTR**（`m_EnableNctr`，默认关）：由旋翼/风扇微多普勒可观测量分类（不用实体类型）；点迹/航迹/进程内融合带类与置信度
+- **LPI 搜索**（`Hardware.m_SearchMode`）：缩放有效峰值与转速；RWR Friis 走有效峰值
+- **航迹置信度 / 武器级锁 / 指定驻留**：`m_Confidence` 拦 `CanAuthorizeFire`；`DesignateScattererId` 强制 FIRE_CONTROL
+- **环境附加**（均默认关）：多径俯仰闪烁、雨阻水面 σ⁰、折射开启时的波导地平拉伸
 
 #### 观感上「像雷达」的部分
 
@@ -194,7 +198,7 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 - Within a sector / optional mechanical scan, discover **vehicles, shells, and active emitters** (scatterer inputs only)
 - **ESM mode** (`RDF_RADAR_MODE_ESM`): emitters only; one-way Friis receive power; platform stays silent (no transmit registration)
 - **Anti-radiation aim API**: `GetArmAim` / `LockArmTrackId` (lock drops when emission stops); no missile prefab included
-- **RWR**: search / track / lock warnings (`RDF_RadarRwr`); no dedicated UI — mods read the API
+- **RWR**: search / track / lock warnings (`RDF_RadarRwr`); geometric intercept by default, optional Friis (`m_EnableRwrFriis`); no dedicated UI — mods read the API
 - LOS: optional **DEM HEIGHT precheck** (`m_EnableDemLosPrecheck`, default on) skips `TraceMove` when terrain pierces geometric LOS; else `TraceMove` (`RDF_RadarScanGeometry`: `ANY_CONTACT` + `ExcludeArray` + reused TraceParam + start clearance); optional **NLOS ground-bounce** + **dual-dominant knife-edge** when occluded (Deygout-lite; DEM/`GetSurfaceY`, `/diff`; ν LUT); optional **DEM column-span tops** (`m_EnableDemSpanOcclusion`, default off, non-SURF)
 - Optional coarse RD map (`m_EnableCoarseRd`, default off) and shared multi-radar discovery focus scheduling
 - Hardware params → radar equation, Doppler, MTI / optional **MTD filter bank**, processing gain, SNR threshold (emitters use the ESM equation when `m_EnableEsmReceive` is on)
@@ -235,6 +239,10 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 - **Multi-band channels** (`m_EnableMultiBand`, default off): several `RDF_RadarHardware` objects on one platform; one carrier per scan from the highest-priority scheduled dwell (not a simultaneous compound waveform); factory `CreateDualBandVhfSearchXTrack()`; RCS / clutter / rain follow λ
 - **ECCM decision layer** (`m_EnableEccmDecision`, default off): hysteresis jam detection + sidelobe/mainlobe coupling selects SLB / frequency agility + deception→PRF + locked→burn-through; SLB wired to the jammers, frequency agility hops the next-scan carrier, PRF/burn-through reported via `GetEccmStatusShort`
 - **JPDA soft association** (`m_EnableJpda`, default off): gate + union-find cluster + joint-event enumeration + marginalization + weighted alpha-beta, replacing nearest-neighbor stealing under dense multi-target
+- **NCTR** (`m_EnableNctr`, default off): class from rotor/fan micro-Doppler observables (not entity type); plots/tracks/in-process fusion carry class + confidence
+- **LPI search** (`Hardware.m_SearchMode`): scales effective peak and scan rpm; RWR Friis uses the effective peak
+- **Track confidence / weapon-grade lock / designation**: `m_Confidence` gates `CanAuthorizeFire`; `DesignateScattererId` forces FIRE_CONTROL dwells
+- **Environment extras** (all default off): multipath elevation glint, rain-damped water σ⁰, duct-stretched radio horizon when refraction is on
 
 #### Parts that “feel like radar”
 

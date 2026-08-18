@@ -38,6 +38,7 @@ class RDF_RadarLockManager
     protected vector m_LockedVelocity;
     protected float m_LockedRangeM;
     protected float m_LockedAzimuthDeg;
+    protected float m_LockedConfidence;
     protected float m_LastUpdateTimeS;
     protected float m_CoastElapsedSec;
     protected vector m_LastOrigin;
@@ -69,6 +70,7 @@ class RDF_RadarLockManager
         m_LockedVelocity = "0 0 0";
         m_LockedRangeM = 0.0;
         m_LockedAzimuthDeg = 0.0;
+        m_LockedConfidence = 0.0;
         m_LastUpdateTimeS = -1.0;
         m_CoastElapsedSec = 0.0;
         m_ArmLockActive = false;
@@ -213,6 +215,29 @@ class RDF_RadarLockManager
     float GetLockedAzimuthDeg()
     {
         return m_LockedAzimuthDeg;
+    }
+
+    float GetLockedConfidence()
+    {
+        return m_LockedConfidence;
+    }
+
+    // Extra fire gate. minConfidence <= 0 disables the check (legacy).
+    bool PassesWeaponGradeConfidence(float minConfidence)
+    {
+        if (minConfidence <= 0.0)
+            return true;
+        if (m_LockedConfidence >= minConfidence)
+            return true;
+        return false;
+    }
+
+    // TRACKING plus optional confidence floor. HUD GetLockedTarget stays unlocked.
+    bool IsWeaponGradeLock(float minConfidence)
+    {
+        if (m_State != ERDF_RadarLockState.RDF_RADAR_LOCK_TRACKING)
+            return false;
+        return PassesWeaponGradeConfidence(minConfidence);
     }
 
     // Convenience for weapon / fire-control code. Returns false when no usable lock.
@@ -361,6 +386,7 @@ class RDF_RadarLockManager
         m_LockedRangeM = rangeM;
         m_LockedAzimuthDeg = azDeg;
         m_LockedType = track.m_Type;
+        m_LockedConfidence = track.m_Confidence;
         m_LastUpdateTimeS = worldTimeS;
         m_CoastElapsedSec = 0.0;
 
@@ -399,7 +425,12 @@ class RDF_RadarLockManager
             return;
         }
 
+        bool wasCoast = false;
+        if (m_State == ERDF_RadarLockState.RDF_RADAR_LOCK_COAST)
+            wasCoast = true;
         m_State = ERDF_RadarLockState.RDF_RADAR_LOCK_COAST;
+        if (!wasCoast)
+            m_LockedConfidence = m_LockedConfidence * 0.6;
         // Dead-reckon the last known state so weapons keep a usable aim point.
         m_LockedPosition = m_LockedPosition + m_LockedVelocity * dt;
     }

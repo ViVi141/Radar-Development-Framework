@@ -15,6 +15,9 @@ class RDF_RadarSignature
     int m_BladeCount;
     float m_RotorRcsFraction;
     float m_HubWidthMs;
+    float m_FanTipSpeedMs;
+    int m_FanBladeCount;
+    float m_FanRcsFraction;
     // True when loaded from the baked table (not measured this session).
     bool m_Baked;
 }
@@ -271,6 +274,7 @@ class RDF_RadarSignatureLibrary
         sig.m_SwerlingModel = RDF_RadarRcsModel.GetDefaultSwerlingModel(targetType);
         sig.m_TypeHint = TargetTypeToInt(targetType);
         MaybeApplyHelicopterRotorDefaults(sig);
+        MaybeApplyJetFanDefaults(sig);
 
         s_StatMeasured = s_StatMeasured + 1;
         return sig;
@@ -340,10 +344,14 @@ class RDF_RadarSignatureLibrary
             sig.m_BladeCount = e.m_iBladeCount;
             sig.m_RotorRcsFraction = e.m_fRotorRcsFraction;
             sig.m_HubWidthMs = e.m_fHubWidthMs;
+            sig.m_FanTipSpeedMs = e.m_fFanTipSpeedMs;
+            sig.m_FanBladeCount = e.m_iFanBladeCount;
+            sig.m_FanRcsFraction = e.m_fFanRcsFraction;
             sig.m_Baked = true;
             if (sig.m_CharacteristicLengthM < 0.1)
                 sig.m_CharacteristicLengthM = 0.1;
             MaybeApplyHelicopterRotorDefaults(sig);
+            MaybeApplyJetFanDefaults(sig);
 
             s_ByKey.Set(sig.m_Key, sig);
             loaded = loaded + 1;
@@ -402,12 +410,19 @@ class RDF_RadarSignatureLibrary
             sig.m_BladeCount = f.Get(9).ToInt();
             sig.m_RotorRcsFraction = f.Get(10).ToFloat();
             sig.m_HubWidthMs = f.Get(11).ToFloat();
+            if (f.Count() >= 15)
+            {
+                sig.m_FanTipSpeedMs = f.Get(12).ToFloat();
+                sig.m_FanBladeCount = f.Get(13).ToInt();
+                sig.m_FanRcsFraction = f.Get(14).ToFloat();
+            }
             sig.m_Baked = true;
             if (sig.m_Key == "")
                 continue;
             if (sig.m_CharacteristicLengthM < 0.1)
                 sig.m_CharacteristicLengthM = 0.1;
             MaybeApplyHelicopterRotorDefaults(sig);
+            MaybeApplyJetFanDefaults(sig);
 
             s_ByKey.Set(sig.m_Key, sig);
             loaded = loaded + 1;
@@ -637,5 +652,40 @@ class RDF_RadarSignatureLibrary
         sig.m_BladeCount = DEFAULT_HELI_BLADES;
         sig.m_RotorRcsFraction = DEFAULT_HELI_ROTOR_FRAC;
         sig.m_HubWidthMs = DEFAULT_HELI_HUB_MS;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Weak JEM sidebands for fixed-wing / jet prefabs (not helicopters).
+    protected static void MaybeApplyJetFanDefaults(RDF_RadarSignature sig)
+    {
+        if (!sig)
+            return;
+        if (sig.m_FanTipSpeedMs > 0.0)
+            return;
+        if (sig.m_RotorTipSpeedMs > 0.0)
+            return;
+        if (sig.m_Key == "")
+            return;
+
+        string key = sig.m_Key;
+        bool isJet = false;
+        if (key.IndexOf("Aircraft/") >= 0)
+            isJet = true;
+        if (!isJet && key.IndexOf("Airplanes/") >= 0)
+            isJet = true;
+        if (!isJet && key.IndexOf("Fighter") >= 0)
+            isJet = true;
+        if (!isJet && key.IndexOf("/Jet") >= 0)
+            isJet = true;
+        if (!isJet)
+            return;
+        if (key.IndexOf("Helicopters/") >= 0)
+            return;
+        if (key.IndexOf("VehParts/") >= 0)
+            return;
+
+        sig.m_FanTipSpeedMs = 320.0;
+        sig.m_FanBladeCount = 17;
+        sig.m_FanRcsFraction = 0.07;
     }
 }
