@@ -83,6 +83,14 @@ class RDF_RadarPhysicalDetect
             return;
         }
 
+        int scanNumberPre = hardware.GetScanNumber(worldTime);
+        float scanFreqHz = hardware.GetScanFrequencyHz(scanNumberPre);
+        if (scanFreqHz < 1000000.0)
+            scanFreqHz = hardware.m_FrequencyHz;
+        float scanGainDbi = hardware.GetAntennaGainDbiAtFrequency(scanFreqHz);
+        float scanWavelengthM = hardware.GetWavelengthAtFrequencyM(scanFreqHz);
+        string scanBand = RDF_RadarSurfaceTable.BandNameFromFrequencyHz(scanFreqHz);
+
         float minDetectM = settings.GetEffectiveMinDistance();
         if (distance <= minDetectM)
         {
@@ -102,7 +110,7 @@ class RDF_RadarPhysicalDetect
                 target.m_AglM,
                 target.m_DemSampleValid,
                 target.m_DemTerrainY,
-                hardware.GetWavelengthM(),
+                scanWavelengthM,
                 settings,
                 demCache,
                 usedKnifeEdge);
@@ -124,7 +132,7 @@ class RDF_RadarPhysicalDetect
                 origin,
                 target,
                 distance,
-                hardware.GetWavelengthM(),
+                scanWavelengthM,
                 settings,
                 world,
                 demCache);
@@ -197,7 +205,7 @@ class RDF_RadarPhysicalDetect
         {
             float emitFreq = target.m_EmitFrequencyHz;
             if (emitFreq <= 0.0)
-                emitFreq = hardware.m_FrequencyHz;
+                emitFreq = scanFreqHz;
             float emitPeak = target.m_EmitPeakPowerW;
             if (emitPeak <= 0.0)
                 emitPeak = hardware.m_PeakPowerW;
@@ -211,7 +219,7 @@ class RDF_RadarPhysicalDetect
                 emitPeak,
                 emitGain,
                 emitFreq,
-                hardware.m_AntennaGainDbi,
+                scanGainDbi,
                 hardware.m_SystemLossDb,
                 distance,
                 emitStrength,
@@ -276,8 +284,8 @@ class RDF_RadarPhysicalDetect
 
         target.m_ReceivedPowerW = RDF_RadarClutterModel.ReceivedPowerW(
             hardware.m_PeakPowerW,
-            hardware.m_AntennaGainDbi,
-            hardware.m_FrequencyHz,
+            scanGainDbi,
+            scanFreqHz,
             hardware.m_SystemLossDb,
             target.m_RcsM2,
             distance,
@@ -296,7 +304,7 @@ class RDF_RadarPhysicalDetect
         {
             float atmDb = settings.m_AtmLossDbPerKmOneWay;
             if (atmDb < 0.0)
-                atmDb = RDF_RadarClutterModel.AtmosphericOneWayDbPerKm(hardware.m_FrequencyHz);
+                atmDb = RDF_RadarClutterModel.AtmosphericOneWayDbPerKm(scanFreqHz);
             float latm = RDF_RadarClutterModel.AtmosphericLossLinear(
                 distance,
                 atmDb,
@@ -305,7 +313,7 @@ class RDF_RadarPhysicalDetect
                 target.m_ReceivedPowerW = target.m_ReceivedPowerW / latm;
         }
 
-        float wavelength = hardware.GetWavelengthM();
+        float wavelength = scanWavelengthM;
         float bodyDopplerHz = RDF_RadarClutterModel.DopplerHz(
             target.m_RadialSpeedMs,
             wavelength);
@@ -314,10 +322,6 @@ class RDF_RadarPhysicalDetect
         target.m_DopplerBin = -1;
         target.m_RotorSidebandUsed = false;
 
-        float scanPeriodPre = hardware.GetScanPeriodS();
-        int scanNumberPre = 0;
-        if (scanPeriodPre < 1000000.0)
-            scanNumberPre = Math.Floor(worldTime / scanPeriodPre);
         float activePrfHz = hardware.GetActivePrfHz(scanNumberPre);
         target.m_PrfIndex = hardware.GetActivePrfIndex(scanNumberPre);
 
@@ -419,7 +423,10 @@ class RDF_RadarPhysicalDetect
                 processingGain,
                 settings,
                 demCache,
-                scanRainLossDbPerKm);
+                scanRainLossDbPerKm,
+                scanFreqHz,
+                scanGainDbi,
+                scanBand);
             if (settings.m_EnableClutterMap && clutterMap)
             {
                 clutterPower = clutterMap.UpdateAndGet(
@@ -602,7 +609,10 @@ class RDF_RadarPhysicalDetect
         float processingGain,
         RDF_RadarSettings settings,
         RDF_DemRuntimeCache demCache,
-        float scanRainLossDbPerKm)
+        float scanRainLossDbPerKm,
+        float scanFrequencyHz,
+        float scanGainDbi,
+        string scanBand)
     {
         if (!target || !hardware || !demCache || !settings)
             return 0.0;
@@ -650,7 +660,7 @@ class RDF_RadarPhysicalDetect
         if (areaM2 < minArea)
             areaM2 = minArea;
 
-        string band = hardware.GetBand();
+        string band = scanBand;
         float sigma0 = ResolveFootprintSigma0(
             target,
             origin,
@@ -669,8 +679,8 @@ class RDF_RadarPhysicalDetect
         float clutterSigmaM2 = sigma0 * areaM2;
         float receivedClutter = RDF_RadarClutterModel.ReceivedPowerW(
             hardware.m_PeakPowerW,
-            hardware.m_AntennaGainDbi,
-            hardware.m_FrequencyHz,
+            scanGainDbi,
+            scanFrequencyHz,
             hardware.m_SystemLossDb,
             clutterSigmaM2,
             distance,

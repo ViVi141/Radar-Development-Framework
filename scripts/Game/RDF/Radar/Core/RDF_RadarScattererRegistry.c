@@ -980,12 +980,13 @@ class RDF_RadarScattererRegistry
         }
     }
 
-    // Instantaneous RCS for a look direction / scan (3D aspect × Swerling).
+    // Instantaneous RCS for a look direction / scan (3D aspect × λ scale × Swerling).
     static float EvaluateInstantRcsM2(
         RDF_RadarScatterer entry,
         float losAzimuthDeg,
         float losElevationDeg,
-        int scanNumber)
+        int scanNumber,
+        float wavelengthM)
     {
         if (!entry)
             return 0.0;
@@ -1000,8 +1001,12 @@ class RDF_RadarScattererRegistry
             entry.m_AxisForward,
             losAzimuthDeg,
             losElevationDeg);
-        float fluct = RDF_RadarRcsModel.SampleSwerling(
+        float scaledRcs = RDF_RadarRcsModel.ScaleRcsForWavelength(
             aspectRcs,
+            entry.m_CharacteristicLengthM,
+            wavelengthM);
+        float fluct = RDF_RadarRcsModel.SampleSwerling(
+            scaledRcs,
             entry.m_SwerlingModel,
             entry.m_RcsFluctSeed,
             scanNumber,

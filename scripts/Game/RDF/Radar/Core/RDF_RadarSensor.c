@@ -714,10 +714,19 @@ class RDF_RadarSensor
         }
         else
         {
+            ERDF_DwellKind dwellKind = ERDF_DwellKind.RDF_DWELL_SEARCH;
             if (m_Settings.m_EnableDwellScheduler)
-                PlanDwells(worldTimeS);
+                dwellKind = PlanDwells(worldTimeS);
             else
                 m_Scanner.ClearDwellScattererIds();
+            m_Settings.SelectBandForDwell(dwellKind);
+            if (m_Settings.m_Hardware)
+            {
+                bool hop = m_Settings.m_Hardware.m_FrequencyHopEnabled;
+                if (m_EccmFreq)
+                    hop = true;
+                m_Settings.m_Hardware.SetHopActive(hop);
+            }
             m_Scanner.Scan(subject, m_Plots);
             if (m_Settings.m_EnableEccmDecision)
                 RunEccmDecision();
@@ -796,10 +805,13 @@ class RDF_RadarSensor
     // full update for scheduled scatterer ids. SEARCH stays on the fair cursor.
     // Dead scatterer ids accumulate in m_DwellTasks (ids are monotonic, so no
     // reuse collision); prune later if the table ever grows unbounded.
-    protected void PlanDwells(float worldTimeS)
+    // Returns the highest-priority scheduled kind (FC > TRACK > SEARCH) so
+    // multi-band can pick one carrier for the whole scan.
+    protected ERDF_DwellKind PlanDwells(float worldTimeS)
     {
+        ERDF_DwellKind bestKind = ERDF_DwellKind.RDF_DWELL_SEARCH;
         if (!m_Settings || !m_DwellScheduler || !m_DwellTasks || !m_Tracker)
-            return;
+            return bestKind;
         m_DwellScheduler.SetBudgetMs(m_Settings.m_DwellBudgetMs);
 
         array<ref RDF_DwellTask> tasks = new array<ref RDF_DwellTask>();
@@ -849,6 +861,7 @@ class RDF_RadarSensor
         // late (deadline miss) is ignored for now; a future slice may coast them.
 
         array<int> ids = new array<int>();
+        int bestPri = RDF_DwellScheduler.ClassPriority(bestKind);
         for (int s = 0; s < scheduled.Count(); s++)
         {
             RDF_DwellTask st = scheduled.Get(s);
@@ -856,8 +869,15 @@ class RDF_RadarSensor
                 continue;
             ids.Insert(st.m_TaskId);
             RDF_DwellScheduler.Advance(st, worldTimeS);
+            int pri = RDF_DwellScheduler.ClassPriority(st.m_Kind);
+            if (pri > bestPri)
+            {
+                bestPri = pri;
+                bestKind = st.m_Kind;
+            }
         }
         m_Scanner.SetDwellScattererIds(ids);
+        return bestKind;
     }
 
     protected RDF_DwellTask GetOrCreateDwellTask(int scattererId, ERDF_DwellKind kind)
@@ -879,9 +899,9 @@ class RDF_RadarSensor
     }
 
     // Read EW observables each scan and decide ECCM responses (TODO §9 S3).
-    // The only runtime-switchable response today is SLB; PRF / frequency agility
-    // and burn-through are reported for status only — their runtime effect wiring
-    // is deferred because hardware PRF / carrier are config-time in the model.
+    // SLB is applied immediately. Frequency agility arms hop for the *next*
+    // scan (GetScanFrequencyHz). PRF stagger is already config-time; burn-
+    // through is still status-only.
     protected void RunEccmDecision()
     {
         if (!m_Settings || !m_EccmDecision || !m_Scanner)
@@ -1073,7 +1093,7 @@ class RDF_RadarSensor
         if (m_LockManager)
             lock = " | " + m_LockManager.GetStatusShort();
 
-        return modeName + " | " + dem
+        string status = modeName + " | " + dem
             + " | plots=" + CountDetectedPlots().ToString()
             + " tracks=" + CountConfirmedTracks().ToString()
             + " wlr=" + CountWlrFixes().ToString()
@@ -1083,5 +1103,14 @@ class RDF_RadarSensor
             + ew
             + gov
             + lock;
+
+        if (m_Settings && m_Settings.m_EnableMultiBand && m_Settings.m_Hardware)
+        {
+            string band = m_Settings.m_Hardware.GetBand();
+            if (m_Settings.m_Hardware.IsHopActive())
+                band = band + "*";
+            status = status + " | band=" + band;
+        }
+        return status;
     }
 }

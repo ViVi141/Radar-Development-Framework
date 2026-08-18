@@ -34,6 +34,25 @@ class RDF_RadarDemoConfig
         return s;
     }
 
+    // VHF search + X-band track/fire-control on the same platform. Two antennas
+    // (do not ScaleApertureToFrequency between them). One carrier per scan:
+    // SEARCH uses VHF unless a TRACK/FIRE_CONTROL dwell is scheduled.
+    static RDF_RadarSettings CreateDualBandVhfSearchXTrack(int maxTargets = 96)
+    {
+        RDF_RadarSettings s = CreateP18Like(maxTargets);
+        s.m_EnableMultiBand = true;
+        s.m_BandChannels = new array<ref RDF_RadarHardware>();
+        s.m_BandChannels.Insert(s.m_Hardware);
+        RDF_RadarHardware xBand = RDF_RadarHardware.CreateShorad();
+        s.m_BandChannels.Insert(xBand);
+        s.m_SearchBandIndex = 0;
+        s.m_TrackBandIndex = 1;
+        s.m_FireControlBandIndex = 1;
+        s.m_EnableDwellScheduler = true;
+        s.Validate();
+        return s;
+    }
+
     static RDF_RadarSettings CreateLongRange(float range = 5000.0, int maxTargets = 32)
     {
         RDF_RadarSettings s = CreateDefault(maxTargets);

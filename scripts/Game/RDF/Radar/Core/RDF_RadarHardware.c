@@ -35,6 +35,17 @@ class RDF_RadarHardware
     ref array<float> m_PrfSetHz;
     // If >1 and set empty, build a 2-PRF stagger: m_PrfHz and m_PrfHz*ratio.
     float m_PrfStaggerRatio = 1.0;
+    // Optional intra-band hop set (Hz). Empty + hop active → m_FrequencyHz and
+    // m_FrequencyHz * m_HopStaggerRatio. Hop does not re-scale G / beamwidth.
+    ref array<float> m_HopSetHz;
+    float m_HopStaggerRatio = 1.05;
+    // Authoring: hop every scan (ECCM frequency agility also sets hop active).
+    bool m_FrequencyHopEnabled = false;
+    // When true, GetAntennaGainDbiAtFrequency scales G as f² (same physical
+    // aperture). Dual-band factories must leave this off (separate antennas).
+    bool m_ScaleApertureWithFrequency = false;
+    // Runtime: Sensor ORs authored hop with the last ECCM frequency decision.
+    protected bool m_HopActive;
     int m_PulsesIntegrated = 32;
     bool m_CoherentIntegration = false;
     float m_ScanRpm = 15.0;
@@ -61,6 +72,7 @@ class RDF_RadarHardware
     {
         m_ElevationBeams = new array<ref RDF_RadarElevationBeam>();
         m_PrfSetHz = new array<float>();
+        m_HopSetHz = new array<float>();
         AddElevationBeam("main", 4.0, 8.0, 0.0);
     }
 
@@ -125,6 +137,119 @@ class RDF_RadarHardware
         if (m_FrequencyHz <= 0.0)
             return 1.0;
         return RDF_RadarClutterModel.C_LIGHT / m_FrequencyHz;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    int GetScanNumber(float worldTimeS)
+    {
+        float scanPeriod = GetScanPeriodS();
+        if (scanPeriod >= 1000000.0)
+            return 0;
+        int n = Math.Floor(worldTimeS / scanPeriod);
+        if (n < 0)
+            n = 0;
+        return n;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    void SetHopActive(bool active)
+    {
+        m_HopActive = active;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    bool IsHopActive()
+    {
+        return m_HopActive;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Carrier for this scan. Hop cycles m_HopSetHz (or a 5% pair) without
+    // mutating authored G / beamwidth. Matches rdf_radar_channel.scan_frequency_hz.
+    float GetScanFrequencyHz(int scanNumber)
+    {
+        if (!m_HopActive)
+            return m_FrequencyHz;
+
+        int count = 0;
+        if (m_HopSetHz)
+            count = m_HopSetHz.Count();
+        if (count <= 0)
+        {
+            if (m_HopStaggerRatio <= 1.001)
+                return m_FrequencyHz;
+            int bit = 0;
+            if (scanNumber > 0)
+                bit = scanNumber - (scanNumber / 2) * 2;
+            if (bit == 0)
+                return m_FrequencyHz;
+            float hopped = m_FrequencyHz * m_HopStaggerRatio;
+            if (hopped < 1000000.0)
+                hopped = 1000000.0;
+            return hopped;
+        }
+
+        int index = 0;
+        if (count > 1)
+        {
+            if (scanNumber < 0)
+                scanNumber = 0;
+            index = scanNumber - (scanNumber / count) * count;
+            if (index < 0)
+                index = 0;
+        }
+        float freq = m_HopSetHz.Get(index);
+        if (freq < 1000000.0)
+            freq = m_FrequencyHz;
+        return freq;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    float GetWavelengthAtFrequencyM(float frequencyHz)
+    {
+        if (frequencyHz <= 0.0)
+            return 1.0;
+        return RDF_RadarClutterModel.C_LIGHT / frequencyHz;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Same-aperture G(f) ∝ f². Default off so hop / dual-band antennas stay put.
+    float GetAntennaGainDbiAtFrequency(float frequencyHz)
+    {
+        if (!m_ScaleApertureWithFrequency)
+            return m_AntennaGainDbi;
+        float f0 = m_FrequencyHz;
+        if (f0 < 1.0)
+            return m_AntennaGainDbi;
+        if (frequencyHz < 1.0)
+            return m_AntennaGainDbi;
+        float ratio = frequencyHz / f0;
+        if (ratio <= 0.0)
+            return m_AntennaGainDbi;
+        float gain = m_AntennaGainDbi + 20.0 * Math.Log10(ratio);
+        return Math.Clamp(gain, -20.0, 80.0);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Authoring helper: retune this aperture once (G += 20 log10(f/f0), HPBW ∝ 1/f).
+    // Dual-band factories must not call this — they are separate antennas.
+    void ScaleApertureToFrequency(float newFrequencyHz)
+    {
+        if (newFrequencyHz < 1000000.0)
+            return;
+        float oldHz = m_FrequencyHz;
+        if (oldHz < 1.0)
+        {
+            m_FrequencyHz = newFrequencyHz;
+            return;
+        }
+        float ratio = newFrequencyHz / oldHz;
+        if (ratio <= 0.0)
+            return;
+        m_AntennaGainDbi = m_AntennaGainDbi + 20.0 * Math.Log10(ratio);
+        m_AzimuthBeamwidthDeg = m_AzimuthBeamwidthDeg / ratio;
+        m_FrequencyHz = newFrequencyHz;
+        Validate();
     }
 
     //------------------------------------------------------------------------------------------------
@@ -244,6 +369,7 @@ class RDF_RadarHardware
         m_BandwidthHz = Math.Max(1.0, m_BandwidthHz);
         m_PrfHz = Math.Max(1.0, m_PrfHz);
         m_PrfStaggerRatio = Math.Clamp(m_PrfStaggerRatio, 1.0, 2.0);
+        m_HopStaggerRatio = Math.Clamp(m_HopStaggerRatio, 1.0, 1.5);
         if (!m_PrfSetHz)
             m_PrfSetHz = new array<float>();
         if (m_PrfSetHz.Count() == 0 && m_PrfStaggerRatio > 1.001)
@@ -256,6 +382,14 @@ class RDF_RadarHardware
             float p = m_PrfSetHz.Get(pi);
             if (p < 1.0)
                 m_PrfSetHz.Set(pi, m_PrfHz);
+        }
+        if (!m_HopSetHz)
+            m_HopSetHz = new array<float>();
+        for (int hi = 0; hi < m_HopSetHz.Count(); hi++)
+        {
+            float hf = m_HopSetHz.Get(hi);
+            if (hf < 1000000.0)
+                m_HopSetHz.Set(hi, m_FrequencyHz);
         }
         m_PulsesIntegrated = Math.Max(1, m_PulsesIntegrated);
         m_ScanRpm = Math.Max(0.0, m_ScanRpm);

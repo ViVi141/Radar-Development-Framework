@@ -254,6 +254,8 @@ Enable only what you need. Defaults leave optional fidelity **off**.
 | `m_EnableKnifeEdgeLut` | ν→factor LUT (`RDF_RadarKnifeEdgeLut`) |
 | `Hardware.m_PolarizationMode` | `RDF_POL_H` / `V` / `CIRCULAR` match table |
 | `Hardware.GetBand()` | VHF/L/S/C/X from `m_FrequencyHz` (σ⁰ + foliage attenuation) |
+| `Hardware.GetScanFrequencyHz(scan)` | Hop carrier when hop is active (ECCM or `m_FrequencyHopEnabled`) |
+| `Hardware.ScaleApertureToFrequency(f)` | One-shot same-aperture retune (G ∝ f², HPBW ∝ 1/f) |
 | `Hardware.m_PolarizationFactor` | Extra linear trim on received power |
 | `Hardware.m_SidelobeLevelDb` | One-way sidelobe floor (two-way = lin²) |
 | `NoiseJammerEffect.EnableSlb(true)` | Blank sidelobe-only jam coupling |
@@ -364,6 +366,41 @@ mirror + golden: `tools/dem/rdf_radar_dwell.py`. In-game regression:
 
 ---
 
+### Multi-band channels (one carrier per scan)
+
+Opt-in (`m_EnableMultiBand`, default off). When on, `m_BandChannels` holds
+separate antennas / hardware objects. Each scan, the Sensor picks the
+highest-priority **scheduled** dwell kind and points `m_Hardware` at that
+channel (`SelectBandForDwell`). SEARCH uses `m_SearchBandIndex` unless a
+TRACK / FIRE_CONTROL dwell is scheduled. Dual-band factories must **not**
+call `ScaleApertureToFrequency` between channels — those are two apertures.
+
+```c
+RDF_RadarSettings cfg = RDF_RadarDemoConfig.CreateDualBandVhfSearchXTrack();
+// Or hand-wire:
+cfg.m_EnableMultiBand = true;
+cfg.m_BandChannels.Insert(RDF_RadarHardware.CreateP18Like());
+cfg.m_BandChannels.Insert(RDF_RadarHardware.CreateShorad());
+cfg.m_SearchBandIndex = 0;
+cfg.m_TrackBandIndex = 1;
+cfg.m_FireControlBandIndex = 1;
+cfg.m_EnableDwellScheduler = true;
+cfg.Validate();
+```
+
+| Knob | Default | When to touch |
+|------|---------|---------------|
+| `m_EnableMultiBand` | **off** | VHF search + X track/fire-control on one platform |
+| `m_BandChannels` | empty | One `RDF_RadarHardware` per antenna |
+| `m_SearchBandIndex` / `m_TrackBandIndex` / `m_FireControlBandIndex` | 0 | Which channel each dwell kind uses |
+| `Hardware.m_FrequencyHopEnabled` / `m_HopSetHz` | off / empty | Intra-band hop every scan (or ECCM `freq`) |
+
+Instantaneous RCS treats signature `m_MeanRcsM2` as optical-region and scales
+with wavelength (`ka<10` Rayleigh). Small shells drop out on VHF; vehicles
+and aircraft remain. Offline: `tools/dem/test_rdf_radar_multiband.py`.
+
+---
+
 ### ECCM decision (auto anti-jam response)
 
 Opt-in (`m_EnableEccmDecision`, default off). When on, the Sensor reads EW
@@ -379,13 +416,14 @@ cfg.m_EccmSidelobeCouplingOn = 0.3; // sidelobe vs mainlobe split
 | Threat | Auto response |
 |--------|---------------|
 | Sidelobe noise jam | sidelobe blanking (SLB, wired to the jammers) |
-| Mainlobe noise jam | frequency agility (reported only) |
-| Deception false plots | PRF agility (reported only) |
+| Mainlobe noise jam | frequency agility (hops carrier next scan) |
+| Deception false plots | PRF agility (reported; use `m_PrfSetHz` for runtime stagger) |
 | Locked target under jam | burn-through (reported only) |
 
-SLB is the only runtime-wired response today; PRF / frequency agility +
-burn-through are decided and reported via `Sensor.GetEccmStatusShort()` (their
-runtime effect wiring is deferred — hardware PRF / carrier are config-time).
+SLB is wired to the jammer stack. Frequency agility arms `Hardware.SetHopActive`
+for the **next** scan (`GetScanFrequencyHz` cycles `m_HopSetHz` or a 5% pair;
+G / beamwidth stay put). PRF stagger is already config-time. Burn-through is
+still status-only via `Sensor.GetEccmStatusShort()`.
 Offline mirror + golden: `tools/dem/rdf_radar_eccm.py`. In-game regression:
 `RDF_RadarEccmAutoTest.Start()`.
 
@@ -850,6 +888,8 @@ sensor.SetMeasurementModel(new MyGameplayNoise());
 | `m_EnableKnifeEdgeLut` | ν→factor LUT（`RDF_RadarKnifeEdgeLut`） |
 | `Hardware.m_PolarizationMode` | `RDF_POL_H` / `V` / `CIRCULAR` 匹配表 |
 | `Hardware.GetBand()` | 由 `m_FrequencyHz` 派生 VHF/L/S/C/X（σ⁰ 与植被衰减） |
+| `Hardware.GetScanFrequencyHz(scan)` | 捷变激活时的扫描载频（ECCM 或 `m_FrequencyHopEnabled`） |
+| `Hardware.ScaleApertureToFrequency(f)` | 同一孔径一次改频（G ∝ f²，HPBW ∝ 1/f） |
 | `Hardware.m_PolarizationFactor` | 接收功率额外极化微调 |
 | `Hardware.m_SidelobeLevelDb` | 单程旁瓣地板（双程 = lin²） |
 | `NoiseJammerEffect.EnableSlb(true)` | 旁瓣耦合消隐 |
@@ -954,6 +994,38 @@ Sensor（当前未用；后续可驱动航迹 coast）。离线镜像 + 金标�
 
 ---
 
+### 多波段通道（一扫一个载频）
+
+按需开启（`m_EnableMultiBand`，默认关）。开启后 `m_BandChannels` 各持一份天线 /
+硬件。每扫 Sensor 取已调度驻留中优先级最高的 kind，把 `m_Hardware` 指到对应通道
+（`SelectBandForDwell`）。无 TRACK / FIRE_CONTROL 驻留时走 `m_SearchBandIndex`。
+双波段工厂**不要**在通道之间调用 `ScaleApertureToFrequency`——那是两副天线。
+
+```c
+RDF_RadarSettings cfg = RDF_RadarDemoConfig.CreateDualBandVhfSearchXTrack();
+// 或手写：
+cfg.m_EnableMultiBand = true;
+cfg.m_BandChannels.Insert(RDF_RadarHardware.CreateP18Like());
+cfg.m_BandChannels.Insert(RDF_RadarHardware.CreateShorad());
+cfg.m_SearchBandIndex = 0;
+cfg.m_TrackBandIndex = 1;
+cfg.m_FireControlBandIndex = 1;
+cfg.m_EnableDwellScheduler = true;
+cfg.Validate();
+```
+
+| 旋钮 | 默认 | 何时动 |
+|------|------|--------|
+| `m_EnableMultiBand` | **关** | 同一平台 VHF 搜索 + X 跟踪/火控 |
+| `m_BandChannels` | 空 | 每副天线一份 `RDF_RadarHardware` |
+| `m_SearchBandIndex` / `m_TrackBandIndex` / `m_FireControlBandIndex` | 0 | 各驻留 kind 用哪条通道 |
+| `Hardware.m_FrequencyHopEnabled` / `m_HopSetHz` | 关 / 空 | 带内捷变（或 ECCM `freq`） |
+
+瞬时 RCS 把签名 `m_MeanRcsM2` 当光学区，再按波长缩放（`ka<10` 进入瑞利）。
+VHF 上小炮弹几乎看不见，载具/飞机仍可见。离线：`tools/dem/test_rdf_radar_multiband.py`。
+
+---
+
 ### ECCM 决策（自动抗干扰响应）
 
 按需开启（`m_EnableEccmDecision`，默认关）。开启后 Sensor 每扫读取 EW 观测量并自动响应：
@@ -968,13 +1040,15 @@ cfg.m_EccmSidelobeCouplingOn = 0.3; // 旁瓣/主瓣分界
 | 威胁 | 自动响应 |
 |------|---------|
 | 旁瓣噪声压制 | 旁瓣消隐（SLB，已接干扰机） |
-| 主瓣噪声压制 | 频率捷变（仅上报） |
-| 欺骗假点 | PRF 捷变（仅上报） |
+| 主瓣噪声压制 | 频率捷变（下一扫跳载频） |
+| 欺骗假点 | PRF 捷变（上报；运行时参差用 `m_PrfSetHz`） |
 | 锁定目标被压制 | 烧穿保持（仅上报） |
 
-SLB 是当前唯一实接的运行时响应；PRF/频率捷变与烧穿已决策并经 `Sensor.GetEccmStatusShort()`
-上报（其运行时效果接线延后——硬件 PRF/载频当前为配置期）。离线镜像 + 金标：
-`tools/dem/rdf_radar_eccm.py`。游戏内回归：`RDF_RadarEccmAutoTest.Start()`。
+SLB 已接干扰栈。频率捷变在**下一扫**激活 `Hardware.SetHopActive`
+（`GetScanFrequencyHz` 循环 `m_HopSetHz` 或 5% 对；不改 G / 波束宽度）。
+PRF 参差本来就是配置期。烧穿仍只经 `Sensor.GetEccmStatusShort()` 上报。
+离线镜像 + 金标：`tools/dem/rdf_radar_eccm.py`。游戏内回归：
+`RDF_RadarEccmAutoTest.Start()`。
 
 ---
 

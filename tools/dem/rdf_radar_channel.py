@@ -37,7 +37,11 @@ def hardware_at_frequency(
     hardware: RadarHardware,
     frequency_hz: float,
 ) -> RadarHardware:
-    """Clone hardware with retuned carrier (wavelength, atm, band label)."""
+    """Clone hardware with retuned carrier (wavelength, atm, band label).
+
+    Same physical aperture: G and beamwidth stay put. For a one-shot
+    same-aperture retune use scale_aperture_to_frequency.
+    """
     tuned = copy.deepcopy(hardware)
     if frequency_hz <= 0.0:
         return tuned
@@ -45,6 +49,140 @@ def hardware_at_frequency(
     tuned.band = band_for_frequency(frequency_hz)
     tuned.atm_loss_db_per_km_one_way = atmospheric_one_way_db_per_km(frequency_hz)
     return tuned
+
+
+KA_OPTICAL = 10.0
+
+
+def scale_rcs_for_wavelength(
+    optical_rcs_m2: float,
+    characteristic_length_m: float,
+    wavelength_m: float,
+    ka_optical: float = KA_OPTICAL,
+) -> float:
+    """Rayleigh roll-off of optical-region RCS when ka < 10 (a = L/2).
+
+    Mirrors RDF_RadarRcsModel.ScaleRcsForWavelength:
+    σ = σ_opt · (ka / 10)^4 for ka < 10, else optical.
+    """
+    optical = float(optical_rcs_m2)
+    if optical <= 0.0:
+        return 0.0
+    lam = float(wavelength_m)
+    if lam <= 0.0:
+        return optical
+    a = float(characteristic_length_m) * 0.5
+    if a < 0.01:
+        a = 0.01
+    ka = 2.0 * math.pi * a / lam
+    if ka >= float(ka_optical):
+        return optical
+    ratio = ka / float(ka_optical)
+    scale = ratio * ratio * ratio * ratio
+    rcs = optical * scale
+    if rcs < 1.0e-8:
+        rcs = 1.0e-8
+    return rcs
+
+
+def scale_aperture_to_frequency(
+    hardware: RadarHardware,
+    new_frequency_hz: float,
+) -> RadarHardware:
+    """Clone and retune the same physical aperture (G ∝ f², HPBW ∝ 1/f).
+
+    Dual-band factories must not use this — they are separate antennas.
+    Mirrors RDF_RadarHardware.ScaleApertureToFrequency.
+    """
+    new_hz = float(new_frequency_hz)
+    if new_hz < 1.0e6:
+        return copy.deepcopy(hardware)
+    tuned = hardware_at_frequency(hardware, new_hz)
+    old_hz = float(hardware.frequency_hz)
+    if old_hz < 1.0:
+        return tuned
+    ratio = new_hz / old_hz
+    if ratio <= 0.0:
+        return tuned
+    tuned.antenna_gain_dbi = hardware.antenna_gain_dbi + 20.0 * math.log10(ratio)
+    beam = hardware.az_beamwidth_deg / ratio
+    if beam < 0.1:
+        beam = 0.1
+    if beam > 360.0:
+        beam = 360.0
+    tuned.az_beamwidth_deg = beam
+    return tuned
+
+
+def scan_frequency_hz(
+    center_hz: float,
+    hop_set_hz: list[float] | None,
+    scan_number: int,
+    hop_enabled: bool,
+    hop_stagger_ratio: float = 1.05,
+) -> float:
+    """Intra-band hop carrier. Empty hop set + ratio synthesizes a 2-tone pair.
+
+    Hop does not re-scale G / beamwidth. Mirrors RDF_RadarHardware.GetScanFrequencyHz.
+    """
+    center = float(center_hz)
+    if not hop_enabled:
+        return center
+    hops: list[float] = []
+    if hop_set_hz:
+        hops = [float(x) for x in hop_set_hz]
+    if len(hops) <= 0:
+        if hop_stagger_ratio <= 1.001:
+            return center
+        n = int(scan_number)
+        if n < 0:
+            n = 0
+        bit = n - (n // 2) * 2
+        if bit == 0:
+            return center
+        hopped = center * float(hop_stagger_ratio)
+        if hopped < 1.0e6:
+            hopped = 1.0e6
+        return hopped
+    n = int(scan_number)
+    if n < 0:
+        n = 0
+    count = len(hops)
+    index = 0
+    if count > 1:
+        index = n - (n // count) * count
+        if index < 0:
+            index = 0
+    freq = hops[index]
+    if freq < 1.0e6:
+        freq = center
+    return freq
+
+
+def select_band_index(
+    kind: int,
+    search_index: int,
+    track_index: int,
+    fire_control_index: int,
+    n_channels: int,
+) -> int:
+    """Channel index for a dwell kind. kind: 0 SEARCH, 1 TRACK, 2 FIRE_CONTROL.
+
+    Mirrors RDF_RadarSettings.SelectBandForDwell.
+    """
+    idx = int(search_index)
+    if kind == 1:
+        idx = int(track_index)
+    elif kind == 2:
+        idx = int(fire_control_index)
+    n = int(n_channels)
+    if n <= 0:
+        return 0
+    if idx < 0:
+        return 0
+    if idx >= n:
+        return 0
+    return idx
 
 
 def radar_constant_scale(

@@ -261,6 +261,35 @@ class RDF_RadarRcsModel
     }
 
     //------------------------------------------------------------------------------------------------
+    // Optical-region RCS scaled into Rayleigh when ka < 10 (a = L/2).
+    // σ = σ_opt · (ka/10)^4. Signatures store optical-region mean RCS.
+    // Mirrors rdf_radar_channel.scale_rcs_for_wavelength.
+    static float ScaleRcsForWavelength(
+        float opticalRcsM2,
+        float characteristicLengthM,
+        float wavelengthM)
+    {
+        if (opticalRcsM2 <= 0.0)
+            return 0.0;
+        if (wavelengthM <= 0.0)
+            return opticalRcsM2;
+
+        float a = characteristicLengthM * 0.5;
+        if (a < 0.01)
+            a = 0.01;
+        float ka = 6.28318530718 * a / wavelengthM;
+        if (ka >= 10.0)
+            return opticalRcsM2;
+
+        float ratio = ka / 10.0;
+        float scale = ratio * ratio * ratio * ratio;
+        float rcs = opticalRcsM2 * scale;
+        if (rcs < 0.00000001)
+            rcs = 0.00000001;
+        return rcs;
+    }
+
+    //------------------------------------------------------------------------------------------------
     static float AspectRcsFromExtents3D(
         float meanRcsM2,
         float sizeX,

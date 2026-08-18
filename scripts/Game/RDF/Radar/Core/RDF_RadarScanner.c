@@ -456,17 +456,6 @@ class RDF_RadarScanner
             m_SettingsValidated = true;
         }
 
-        if (m_Settings.m_EnableAtmosphericLoss)
-        {
-            RDF_RadarWeatherSnapshot weather = null;
-            if (m_Settings.m_EnableWeatherDrivenRainLoss)
-                weather = RDF_RadarBallistics.SampleWorldWeather();
-            float rainFreqHz = 0.0;
-            if (m_Settings.m_Hardware)
-                rainFreqHz = m_Settings.m_Hardware.m_FrequencyHz;
-            m_ScanRainLossDbPerKm = m_Settings.ResolveRainLossDbPerKm(weather, rainFreqHz);
-        }
-
         BaseWorld world = subject.GetWorld();
         if (!world)
         {
@@ -483,6 +472,19 @@ class RDF_RadarScanner
         m_LastOrigin = origin;
         m_LastForward = forward;
         m_LastRange = range;
+        if (m_Settings.m_EnableAtmosphericLoss)
+        {
+            RDF_RadarWeatherSnapshot weather = null;
+            if (m_Settings.m_EnableWeatherDrivenRainLoss)
+                weather = RDF_RadarBallistics.SampleWorldWeather();
+            float rainFreqHz = 0.0;
+            if (m_Settings.m_Hardware)
+            {
+                int scanNumberRain = m_Settings.m_Hardware.GetScanNumber(worldTime);
+                rainFreqHz = m_Settings.m_Hardware.GetScanFrequencyHz(scanNumberRain);
+            }
+            m_ScanRainLossDbPerKm = m_Settings.ResolveRainLossDbPerKm(weather, rainFreqHz);
+        }
         RefreshEwScanStats(origin, forward, range);
         if (m_ClutterMap && m_Settings.m_EnableClutterMap)
         {
@@ -853,17 +855,19 @@ class RDF_RadarScanner
                 toTargetNorm[0] * toTargetNorm[0] + toTargetNorm[2] * toTargetNorm[2]);
             float losElevationDeg = Math.Atan2(toTargetNorm[1], Math.Max(0.001, horiz)) * RAD_TO_DEG;
             int scanNumber = 0;
+            float wavelengthM = 0.0;
             if (m_Settings.m_Hardware)
             {
-                float scanPeriod = m_Settings.m_Hardware.GetScanPeriodS();
-                if (scanPeriod < 1000000.0)
-                    scanNumber = Math.Floor(worldTime / scanPeriod);
+                scanNumber = m_Settings.m_Hardware.GetScanNumber(worldTime);
+                float scanFreqHz = m_Settings.m_Hardware.GetScanFrequencyHz(scanNumber);
+                wavelengthM = m_Settings.m_Hardware.GetWavelengthAtFrequencyM(scanFreqHz);
             }
             float instantRcs = RDF_RadarScattererRegistry.EvaluateInstantRcsM2(
                 entry,
                 losAzimuthDeg,
                 losElevationDeg,
-                scanNumber);
+                scanNumber,
+                wavelengthM);
 
             // Reused scratch truth (consumers copy synchronously; see field note).
             // Reset fields that are conditionally assigned below so no values

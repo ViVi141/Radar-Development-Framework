@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 2026-08-19 — 真多波段通道 / RCS 随波长
+
+> EN: True multi-band: one platform can hold several `RDF_RadarHardware` channels and switch the active carrier per scan from the highest-priority scheduled dwell (FIRE_CONTROL > TRACK > SEARCH). Instantaneous RCS rolls off as Rayleigh when \(ka<10\). Optional same-aperture retune and intra-band hop. Default off; SHORAD unchanged.
+
+- **通道**：`m_EnableMultiBand` + `m_BandChannels`；`m_Hardware` 是扫描管道别名，`SelectBandForDwell` 指向通道、不改写 authored 对象。一扫一个载频（不是同时复合波形）。工厂：`RDF_RadarDemoConfig.CreateDualBandVhfSearchXTrack()`（VHF 搜索 + X 跟踪/火控，两副天线，**不** `ScaleApertureToFrequency`）。
+- **RCS**：签名 `m_MeanRcsM2` 视为光学区；`ScaleRcsForWavelength`：\(\sigma=\sigma_\mathrm{opt}(ka/10)^4\)（\(a=L/2\)）。VHF 对小炮弹接近不可见，载具/飞机仍可见。
+- **孔径改频（作者一次）**：`Hardware.ScaleApertureToFrequency` — \(G_\mathrm{dB}+=20\log_{10}(f/f_0)\)，HPBW \(\propto 1/f\)。捷变默认不改 G。
+- **ECCM 载频捷变**：决策层 `freq` 在下一扫激活 hop（`m_HopSetHz` 或 5% 对）；只动 \(\lambda^2\) / 杂波波段 / RCS / 雨衰。
+- 离线：`tools/dem/test_rdf_radar_multiband.py`
+
 ## 2026-08-19 — OBB 方位 RCS（含滚转）
 
 > EN: Instantaneous RCS now projects the signature local box onto the entity's world axes (true rectangular OBB), including roll. Zero-roll yaw/pitch path is unchanged. Not a mesh/PO/MLFMM solver.

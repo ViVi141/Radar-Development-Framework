@@ -43,7 +43,7 @@
 - **旁瓣 / 方向图**：分段方位 LUT（主瓣+旁瓣峰+地板，`m_EnablePatternLut` 默认开）或高斯+`m_SidelobeLevelDb` 地板；EW 可选 SLB（默认关）
 - **固定站路径表**：极坐标 DEM 路径因子（`m_EnableSitePathLut`，默认关；需 bake `SitePathLut.json`）
 - **无理想/逼真双档**：需要什么开什么；AutoTest 用 `StabilizeForRegression()`
-- **散射体表拟真输入**：姿态方位+俯仰+滚转 **OBB 投影 RCS**（局部盒 × 机体轴）、Swerling 起伏、AGL、DEM 缓存、辐射源射频摘要；烘焙表优先读 `Signatures/*.conf`（工坊），profile CSV 回退
+- **散射体表拟真输入**：姿态方位+俯仰+滚转 **OBB 投影 RCS**（局部盒 × 机体轴）、**按波长的瑞利/光学缩放**（`ka<10`）、Swerling 起伏、AGL、DEM 缓存、辐射源射频摘要；烘焙表优先读 `Signatures/*.conf`（工坊），profile CSV 回退
 - DEM / 地表：`GetSurfaceY` + SURF JSON；电磁参数优先 `RadarData/SurfaceTable.conf`
 - **EW 效果栈**：噪声压制 + 欺骗假目标
 - **简化 CFAR**：粗栅格 CA / GO / SO（`m_CfarMode`）；空单元可填热噪声
@@ -67,7 +67,8 @@
 #### 系统层（驻留 / ECCM / 关联）
 
 - **驻留 / 资源管理**（`m_EnableDwellScheduler`，默认关）：波束时间预算内调度火控（锁定目标）+ 跟踪（确认航迹）驻留；类优先级 + EDF + 硬预算 + deadline-miss；搜索仍走公平游标
-- **ECCM 决策层**（`m_EnableEccmDecision`，默认关）：滞回压制检测 + 旁瓣/主瓣耦合选 SLB/频率捷变 + 欺骗→PRF + 锁定→烧穿；SLB 实接干扰机，其余经 `GetEccmStatusShort` 上报
+- **多波段通道**（`m_EnableMultiBand`，默认关）：同一平台多份 `RDF_RadarHardware`，按驻留 kind 每扫切一个载频（非同时复合波形）；工厂 `CreateDualBandVhfSearchXTrack()`；RCS / 杂波 / 雨衰随 λ
+- **ECCM 决策层**（`m_EnableEccmDecision`，默认关）：滞回压制检测 + 旁瓣/主瓣耦合选 SLB/频率捷变 + 欺骗→PRF + 锁定→烧穿；SLB 实接干扰机，频率捷变下一扫 hop 载频，PRF/烧穿经 `GetEccmStatusShort` 上报
 - **JPDA 软关联**（`m_EnableJpda`，默认关）：门控 + 并查集聚类 + 联合事件枚举 + 边缘化 + 加权 α-β，替换密集多目标下最近邻互抢
 
 #### 观感上「像雷达」的部分
@@ -99,6 +100,7 @@
 - 多假设关联 / JPDA（现为单假设最近邻；跨站融合为门限关联非 JPDA）
 - ~~多雷达组网、IFF、数据链融合~~ **轻量站间 Hub + 融合已接**；密码学 IFF / 完整数据链协议仍缺
 - 搜索 → 截获 → 跟踪的**资源管理**；武器制导有示例（`RDF_RadarRocketGuidance`），通用武器对接仍靠模组
+- 同时双载频 / 每目标独立波段（当前一扫一个载频；双天线靠驻留切换）
 
 #### 电子战
 
@@ -206,7 +208,7 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 - **Pattern / sidelobes**: segmented az LUT (mainlobe+peaks+floor, `m_EnablePatternLut` default on) or Gaussian+`m_SidelobeLevelDb` floor; optional EW SLB (default off)
 - **Fixed-site path LUT**: polar DEM path factors (`m_EnableSitePathLut`, default off; needs baked `SitePathLut.json`)
 - **No ideal/realistic tiers**: enable what you need; AutoTest uses `StabilizeForRegression()`
-- **Scatterer-table fidelity inputs**: azimuth + elevation + roll **OBB projected RCS** (local box × body axes), Swerling fluctuation, AGL, DEM cache, emitter RF summary; baked tables prefer `Signatures/*.conf` (workshop), profile CSV fallback
+- **Scatterer-table fidelity inputs**: azimuth + elevation + roll **OBB projected RCS** (local box × body axes), **Rayleigh/optical RCS vs wavelength** (`ka<10`), Swerling fluctuation, AGL, DEM cache, emitter RF summary; baked tables prefer `Signatures/*.conf` (workshop), profile CSV fallback
 - DEM / surface: `GetSurfaceY` + SURF JSON; EM params prefer `RadarData/SurfaceTable.conf`
 - **EW effect stack**: noise jamming + deceptive false targets
 - **Simplified CFAR**: coarse-grid CA / GO / SO (`m_CfarMode`); empty cells can be filled with thermal noise
@@ -230,7 +232,8 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 #### System layer (dwell / ECCM / association)
 
 - **Dwell / resource management** (`m_EnableDwellScheduler`, default off): schedules fire-control (locked target) + track (confirmed tracks) dwells within a beam-time budget; class priority + EDF + hard budget + deadline-miss; search stays on the fair cursor
-- **ECCM decision layer** (`m_EnableEccmDecision`, default off): hysteresis jam detection + sidelobe/mainlobe coupling selects SLB / frequency agility + deception→PRF + locked→burn-through; SLB wired to the jammers, the rest reported via `GetEccmStatusShort`
+- **Multi-band channels** (`m_EnableMultiBand`, default off): several `RDF_RadarHardware` objects on one platform; one carrier per scan from the highest-priority scheduled dwell (not a simultaneous compound waveform); factory `CreateDualBandVhfSearchXTrack()`; RCS / clutter / rain follow λ
+- **ECCM decision layer** (`m_EnableEccmDecision`, default off): hysteresis jam detection + sidelobe/mainlobe coupling selects SLB / frequency agility + deception→PRF + locked→burn-through; SLB wired to the jammers, frequency agility hops the next-scan carrier, PRF/burn-through reported via `GetEccmStatusShort`
 - **JPDA soft association** (`m_EnableJpda`, default off): gate + union-find cluster + joint-event enumeration + marginalization + weighted alpha-beta, replacing nearest-neighbor stealing under dense multi-target
 
 #### Parts that “feel like radar”
@@ -262,6 +265,7 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 - Multi-hypothesis association / JPDA (currently single-hypothesis nearest neighbor; cross-site fusion is gated association, not JPDA)
 - ~~Multi-radar networking, IFF, datalink fusion~~ **light station Hub + fusion shipped**; crypto IFF / full datalink protocol still missing
 - **Resource management** for search → acquire → track; weapon guidance has an example (`RDF_RadarRocketGuidance`); general weapon integration still depends on the mod
+- Simultaneous dual-carrier / per-target band (current model: one carrier per scan; dual antennas switch on dwell kind)
 
 #### Electronic warfare
 

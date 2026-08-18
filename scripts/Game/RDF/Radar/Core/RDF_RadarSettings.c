@@ -61,6 +61,15 @@ class RDF_RadarSettings
     // When true, discovery also eclipses ranges inside Hardware Rmin = c·(τ+recovery)/2.
     bool m_EnablePulseBlindZone = true;
     ref RDF_RadarHardware m_Hardware;
+    // Multi-channel RF (default off). m_Hardware is the active alias for the
+    // scan pipeline; SelectBandForDwell points it at a channel without mutating
+    // authored objects. One carrier per scan (highest-priority scheduled dwell).
+    bool m_EnableMultiBand = false;
+    ref array<ref RDF_RadarHardware> m_BandChannels;
+    int m_SearchBandIndex = 0;
+    int m_TrackBandIndex = 0;
+    int m_FireControlBandIndex = 0;
+    int m_ActiveBandIndex = 0;
     bool m_EnablePhysicalDetection = true;
     bool m_EnableMechanicalScan = false;
     // Mechanical-scan phase offset (radians) added to GetScanForward's
@@ -154,8 +163,8 @@ class RDF_RadarSettings
     float m_TrackDwellMs = 2.0;
     // ECCM decision layer (TODO §9 S3). Layered, opt-in: off keeps the jammer
     // effects exactly as configured. On, the Sensor reads EW observables each
-    // scan and auto-toggles SLB / (reports) PRF / frequency agility / burn-
-    // through. Offline mirror: tools/dem/rdf_radar_eccm.py.
+    // scan and auto-toggles SLB / frequency hop (next scan) / (reports) PRF /
+    // burn-through. Offline mirror: tools/dem/rdf_radar_eccm.py.
     bool m_EnableEccmDecision = false;
     float m_EccmJnOnDb = 6.0;
     float m_EccmJnHysteresisDb = 2.0;
@@ -291,6 +300,7 @@ class RDF_RadarSettings
     void RDF_RadarSettings()
     {
         m_Hardware = RDF_RadarHardware.CreateShorad();
+        m_BandChannels = new array<ref RDF_RadarHardware>();
         m_EwStack = new RDF_RadarEwStack();
         m_MeasurementModel = new RDF_RadarDefaultMeasurementModel();
     }
@@ -409,11 +419,61 @@ class RDF_RadarSettings
         m_EarthRadiusFactor = Math.Clamp(m_EarthRadiusFactor, 0.5, 4.0);
         if (!m_Hardware)
             m_Hardware = RDF_RadarHardware.CreateShorad();
+        if (!m_BandChannels)
+            m_BandChannels = new array<ref RDF_RadarHardware>();
+        if (m_EnableMultiBand)
+        {
+            if (m_BandChannels.Count() == 0)
+                m_BandChannels.Insert(m_Hardware);
+            int nCh = m_BandChannels.Count();
+            if (nCh < 1)
+                nCh = 1;
+            m_SearchBandIndex = Math.ClampInt(m_SearchBandIndex, 0, nCh - 1);
+            m_TrackBandIndex = Math.ClampInt(m_TrackBandIndex, 0, nCh - 1);
+            m_FireControlBandIndex = Math.ClampInt(m_FireControlBandIndex, 0, nCh - 1);
+            m_ActiveBandIndex = Math.ClampInt(m_ActiveBandIndex, 0, nCh - 1);
+            for (int ci = 0; ci < m_BandChannels.Count(); ci++)
+            {
+                RDF_RadarHardware ch = m_BandChannels.Get(ci);
+                if (ch)
+                    ch.Validate();
+            }
+        }
         if (!m_EwStack)
             m_EwStack = new RDF_RadarEwStack();
         if (!m_MeasurementModel)
             m_MeasurementModel = new RDF_RadarDefaultMeasurementModel();
         m_Hardware.Validate();
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Point m_Hardware at the channel for this dwell kind. No-op when multi-band
+    // is off. Does not mutate authored channel objects.
+    void SelectBandForDwell(ERDF_DwellKind kind)
+    {
+        if (!m_EnableMultiBand)
+            return;
+        if (!m_BandChannels)
+            return;
+        int n = m_BandChannels.Count();
+        if (n <= 0)
+            return;
+
+        int idx = m_SearchBandIndex;
+        if (kind == ERDF_DwellKind.RDF_DWELL_TRACK)
+            idx = m_TrackBandIndex;
+        else if (kind == ERDF_DwellKind.RDF_DWELL_FIRE_CONTROL)
+            idx = m_FireControlBandIndex;
+        if (idx < 0)
+            idx = 0;
+        if (idx >= n)
+            idx = 0;
+
+        RDF_RadarHardware channel = m_BandChannels.Get(idx);
+        if (!channel)
+            return;
+        m_Hardware = channel;
+        m_ActiveBandIndex = idx;
     }
 
     //------------------------------------------------------------------------------------------------
