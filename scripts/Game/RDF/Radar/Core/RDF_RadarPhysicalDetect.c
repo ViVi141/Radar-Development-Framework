@@ -83,6 +83,13 @@ class RDF_RadarPhysicalDetect
             return;
         }
 
+        float minDetectM = settings.GetEffectiveMinDistance();
+        if (distance <= minDetectM)
+        {
+            target.m_Detected = false;
+            return;
+        }
+
         bool usedKnifeEdge = false;
         if (target.m_LosBlocked)
         {

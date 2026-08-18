@@ -79,6 +79,8 @@ class RadarHardware:
     noise_figure_db: float = 4.0
     # Waveform
     pulse_width_s: float = 1.0e-6
+    # Extra T/R switch / duplexer recovery after the transmit pulse (s).
+    receiver_recovery_s: float = 0.0
     # Chirp / coded bandwidth. If 0 → uncoded, B ≈ 1/τ.
     chirp_bandwidth_hz: float = 0.0
     prf_hz: float = 2000.0
@@ -202,6 +204,24 @@ class RadarHardware:
 
     def range_resolution_m(self) -> float:
         return C_LIGHT_M_S / (2.0 * self.effective_bandwidth_hz)
+
+    def tx_blanking_time_s(self) -> float:
+        blank = self.pulse_width_s
+        if blank < 0.0:
+            blank = 0.0
+        if self.receiver_recovery_s > 0.0:
+            blank = blank + self.receiver_recovery_s
+        return blank
+
+    def min_detectable_range_m(self) -> float:
+        """Near-range eclipsing Rmin = c·(τ + recovery)/2.
+
+        Uses uncompressed TX time. Chirp bandwidth does not shrink this.
+        """
+        blank = self.tx_blanking_time_s()
+        if blank <= 0.0:
+            return 0.0
+        return C_LIGHT_M_S * blank * 0.5
 
     def range_bin_m(self) -> float:
         if self.preferred_range_bin_m > 0.0:

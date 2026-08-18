@@ -25,6 +25,10 @@ class RDF_RadarHardware
     // is floored to this level for off-axis pattern / EW coupling.
     float m_SidelobeLevelDb = -25.0;
     float m_PulseWidthS = 0.0000005;
+    // Extra T/R switch / duplexer recovery after the transmit pulse (s).
+    // Min range uses uncompressed TX time: Rmin = c·(τ + recovery)/2.
+    // Pulse compression shrinks range bins, not this blanking interval.
+    float m_ReceiverRecoveryS = 0.0;
     float m_BandwidthHz = 4000000.0;
     float m_PrfHz = 4000.0;
     // Optional multi-PRF set (Hz). Empty → use m_PrfHz only. Stagger cycles by scan.
@@ -170,6 +174,27 @@ class RDF_RadarHardware
     }
 
     //------------------------------------------------------------------------------------------------
+    // Transmit blanking interval. Receiver is closed for the pulse plus
+    // optional duplexer recovery. Compressed bandwidth does not apply here.
+    float GetTxBlankingTimeS()
+    {
+        float blankS = m_PulseWidthS;
+        if (blankS < 0.0)
+            blankS = 0.0;
+        if (m_ReceiverRecoveryS > 0.0)
+            blankS = blankS + m_ReceiverRecoveryS;
+        return blankS;
+    }
+
+    // Near-range eclipsing / 近程盲区. Rmin = c·τ_blank/2.
+    float GetMinDetectableRangeM()
+    {
+        float blankS = GetTxBlankingTimeS();
+        if (blankS <= 0.0)
+            return 0.0;
+        return RDF_RadarClutterModel.C_LIGHT * blankS * 0.5;
+    }
+
     // Unambiguous range R = c / (2·PRF). Uses primary PRF (not stagger cycle).
     float GetUnambiguousRangeM()
     {
@@ -208,6 +233,7 @@ class RDF_RadarHardware
         m_PolarizationFactor = Math.Clamp(m_PolarizationFactor, 0.05, 1.0);
         m_SidelobeLevelDb = Math.Clamp(m_SidelobeLevelDb, -80.0, 0.0);
         m_PulseWidthS = Math.Max(0.000000001, m_PulseWidthS);
+        m_ReceiverRecoveryS = Math.Max(0.0, m_ReceiverRecoveryS);
         m_BandwidthHz = Math.Max(1.0, m_BandwidthHz);
         m_PrfHz = Math.Max(1.0, m_PrfHz);
         m_PrfStaggerRatio = Math.Clamp(m_PrfStaggerRatio, 1.0, 2.0);

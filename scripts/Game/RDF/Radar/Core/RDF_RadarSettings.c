@@ -58,6 +58,8 @@ class RDF_RadarSettings
     float m_AdaptiveStepDown = 0.85;
     float m_AdaptiveStepUp = 1.1;
     float m_MinDistance = 0.5;
+    // When true, discovery also eclipses ranges inside Hardware Rmin = c·(τ+recovery)/2.
+    bool m_EnablePulseBlindZone = true;
     ref RDF_RadarHardware m_Hardware;
     bool m_EnablePhysicalDetection = true;
     bool m_EnableMechanicalScan = false;
@@ -428,6 +430,22 @@ class RDF_RadarSettings
         m_MeasRangeBiasM = rangeBiasM;
         m_MeasAzimuthBiasDeg = azBiasDeg;
         m_MeasElevationBiasDeg = elBiasDeg;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Caller floor (m_MinDistance) plus optional pulse-eclipsing Rmin.
+    float GetEffectiveMinDistance()
+    {
+        float minDist = m_MinDistance;
+        if (!m_EnablePulseBlindZone)
+            return minDist;
+        if (!m_Hardware)
+            return minDist;
+
+        float pulseMin = m_Hardware.GetMinDetectableRangeM();
+        if (pulseMin > minDist)
+            return pulseMin;
+        return minDist;
     }
 
     //------------------------------------------------------------------------------------------------

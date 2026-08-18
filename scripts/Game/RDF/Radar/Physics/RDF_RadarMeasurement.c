@@ -120,8 +120,8 @@ class RDF_RadarMeasurement
         // Math.RandomGaussFloat(stdDev, mean): sigma first, then the mean (0.0).
         if (rangeSigma > 0.0)
             measuredRange = measuredRange + Math.RandomGaussFloat(rangeSigma, 0.0);
-        if (measuredRange < settings.m_MinDistance)
-            measuredRange = settings.m_MinDistance;
+        if (measuredRange < settings.GetEffectiveMinDistance())
+            measuredRange = settings.GetEffectiveMinDistance();
         if (measuredRange > settings.m_Range)
             measuredRange = settings.m_Range;
 

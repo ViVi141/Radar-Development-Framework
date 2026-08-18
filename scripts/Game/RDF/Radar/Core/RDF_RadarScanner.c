@@ -529,7 +529,7 @@ class RDF_RadarScanner
             origin,
             range * m_Settings.m_ScattererDiscoveryRangeScale);
 
-        float minDist = m_Settings.m_MinDistance;
+        float minDist = m_Settings.GetEffectiveMinDistance();
         float minDistSq = minDist * minDist;
         float halfAngleRad = m_Settings.m_SectorHalfAngleDeg * 0.01745329;
         if (m_Settings.m_EnableMechanicalScan && m_Settings.m_Hardware)
@@ -1236,7 +1236,7 @@ class RDF_RadarScanner
             if (p.m_PowerW <= 0.0)
                 continue;
             float rangeM = p.m_RangeM;
-            if (rangeM <= m_Settings.m_MinDistance)
+            if (rangeM <= m_Settings.GetEffectiveMinDistance())
                 continue;
             if (rangeM > m_Settings.m_Range)
                 continue;

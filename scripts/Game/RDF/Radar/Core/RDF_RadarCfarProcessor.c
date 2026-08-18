@@ -98,6 +98,11 @@ class RDF_RadarCfarProcessor
                 target.m_Detected = false;
                 continue;
             }
+            if (target.m_Distance <= settings.GetEffectiveMinDistance())
+            {
+                target.m_Detected = false;
+                continue;
+            }
             target.m_Detected = m_RowHits.Get(azK * rangeBinCount + rangeK);
         }
 
@@ -320,8 +325,9 @@ class RDF_RadarCfarProcessor
             relAz = (azCenterNorm * 2.0 - 1.0) * halfAngleRad;
         float azimuth = scanAzimuth + relAz;
         float distance = rangeCenterNorm * maxRange;
-        if (distance < settings.m_MinDistance)
-            distance = settings.m_MinDistance;
+        float minDist = settings.GetEffectiveMinDistance();
+        if (distance < minDist)
+            return null;
         if (distance > maxRange)
             distance = maxRange;
 
