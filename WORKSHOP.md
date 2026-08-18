@@ -10,7 +10,7 @@ Realistic radar, LiDAR and DEM sensor framework for Arma Reforger. Physical dete
 
 ## Description (≤ 5000 chars)
 
-# Radar Development Framework (RDF) — v1.0.2
+# Radar Development Framework (RDF) — v1.1.0
 
 A modular, workshop-ready sensor framework for Arma Reforger: **Radar**,
 **LiDAR**, and **DEM** bake/runtime. It models the detection chain as a
@@ -84,6 +84,19 @@ is included). Enable features explicitly — the framework is silent by default.
 ---
 
 ## Changelog (unlimited)
+
+## 1.1.0 — 2026-08-19
+
+Minor over 1.0.2 (`194d65d` … `e5dab5d`). All new knobs default off; SHORAD
+search behaviour unchanged until you Enable*.
+
+- Pulse-width minimum-range eclipse (`m_EnablePulseBlindZone`).
+- Per-band VHF/L/S/C/X clutter σ⁰ + OBB aspect RCS (including roll).
+- Multi-band channel switch per dwell; Rayleigh RCS vs wavelength; optional
+  aperture retune and intra-band hop.
+- Opt-in NCTR (rotor/fan/fixed from micro-Doppler), LPI search + Friis RWR,
+  track confidence / weapon-grade fire / designate dwells, multipath glint,
+  rain-sea σ⁰ damp, atmospheric duct.
 
 ## 1.0.2 — 2026-08-18
 

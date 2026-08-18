@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 1.1.0 — 2026-08-19
+
+相对 1.0.2。范围：`194d65d` 之后 … `e5dab5d`（含）。全部新旋钮默认关；不 Enable* 则 SHORAD 搜索行为不变。
+
+> EN: Minor over 1.0.2. Range: after `194d65d` … `e5dab5d` (inclusive). Pulse blind zone; band-aware clutter + OBB RCS; multi-band channels + Rayleigh RCS vs λ; opt-in NCTR / LPI+Friis RWR / track confidence / glint / rain-sea / duct. Defaults off. Details in the 2026-08-19 dated entries below.
+
+- **脉宽盲区**：`m_EnablePulseBlindZone` — 发射脉宽内距离不检出
+- **波段杂波 / OBB RCS**：载频选 VHF/L/S/C/X σ⁰；方位 RCS 含滚转的矩形 OBB 投影
+- **多波段**：按驻留 kind 切通道；光学区 RCS 在 \(ka<10\) 按瑞利滚降
+- **NCTR / LPI / 置信度 / 环境**：微多普勒分类、LPI 峰值+转速、可选 Friis RWR、武器级锁与指定驻留、多径俯仰闪烁、雨阻海杂波、波导地平
+
 ## 2026-08-19 — NCTR / LPI·RWR Friis / 航迹置信度 / 环境闪烁
 
 > EN: Opt-in fidelity: NCTR from rotor/fan micro-Doppler (not entity type); LPI search scales peak+rpm and optional Friis RWR intercept; track confidence gates weapon-grade fire; designation forces FIRE_CONTROL dwells; multipath elevation glint, rain-damped water σ⁰, duct-stretched radio horizon. All default off; `StabilizeForRegression()` clears them. Network track codec stride unchanged.
