@@ -602,7 +602,254 @@ class RDF_RadarBallistics
         return state;
     }
 
+    //------------------------------------------------------------------------------------------------
+    // Real counter-battery style: fit a full drag ballistic to the measured
+    // history.  A pure vacuum fit ignores drag, so its downrange extrapolation
+    // to first ground hit is far off for a shell (the vacuum-vs-drag mismatch
+    // dominates at long propagation: ~340 m vs ~10 m).  We root the model at
+    // the FIRST measured sample and jointly fit initial velocity + drag via
+    // bounded Nelder-Mead so the RK2 drag-integrated path best reproduces the
+    // measured samples.  This is the 'which ballistics fit the observed arc'
+    // estimation real weapon-locating radars perform, not a read of engine truth.
+    //------------------------------------------------------------------------------------------------
+    // RK2 drag propagation rooted at `anchor` with initial `vel`; advance by
+    // `durationS`.  Mirrors IntegrateForDurationEx but anchored at an arbitrary
+    // sample (used to compare model vs measured for the drag fit).
+    protected static void IntegrateDragFrom(
+        vector anchor,
+        vector vel,
+        float durationS,
+        float airDrag,
+        RDF_RadarGlobalWind wind,
+        float gravityMs2,
+        float dtS,
+        out vector outPos,
+        out vector outVel)
+    {
+        outPos = anchor;
+        outVel = vel;
+        if (durationS <= 0.0)
+            return;
+        if (dtS < 0.0001)
+            dtS = 0.0001;
+        float t = 0.0;
+        vector p = anchor;
+        vector v = vel;
+        while (t + 0.000000000001 < durationS)
+        {
+            float step = dtS;
+            if (t + step > durationS)
+                step = durationS - t;
+            vector nextP;
+            vector nextV;
+            IntegrateStep(p, v, step, airDrag, wind, gravityMs2, nextP, nextV);
+            p = nextP;
+            v = nextV;
+            t = t + step;
+        }
+        outPos = p;
+        outVel = v;
+    }
+
+    // Residual of a candidate {vx,vy,vz,drag} rooted at samples[0]: integrate
+    // forward to each measured time and sum squared position error.
+    protected static float DragFitResidual(
+        array<vector> positions,
+        array<float> times,
+        vector anchor,
+        vector vel,
+        float airDrag,
+        RDF_RadarGlobalWind wind,
+        float gravityMs2,
+        float dtS)
+    {
+        int count = positions.Count();
+        if (count < 2)
+            return 1.0e10;
+        float t0 = times.Get(0);
+        float sumSq = 0.0;
+        int used = 0;
+        for (int i = 1; i < count; i++)
+        {
+            float dur = times.Get(i) - t0;
+            vector outP;
+            vector outV;
+            IntegrateDragFrom(
+                anchor, vel, dur, airDrag, wind, gravityMs2, dtS, outP, outV);
+            vector measured = positions.Get(i);
+            vector d = outP - measured;
+            sumSq = sumSq + d.LengthSq();
+            used = used + 1;
+        }
+        if (used <= 0)
+            return 1.0e10;
+        return sumSq;
+    }
+
+    // Nelder-Mead over {vx, vy, vz, drag} (bounded drag).  Returns best params.
+    // dragInit is the prefab-prior drag to seed the simplex (the true drag for a
+    // correctly-modeled shell), so the search starts at the physical value rather
+    // than far off at the lo/hi midpoint.
+    protected static bool NelderMeadDrag(
+        array<vector> positions,
+        array<float> times,
+        vector anchor,
+        vector velInit,
+        float dragInit,
+        float dragLo,
+        float dragHi,
+        RDF_RadarGlobalWind wind,
+        float gravityMs2,
+        float dtS,
+        out vector outVel,
+        out float outDrag)
+    {
+        outVel = velInit;
+        outDrag = dragLo;
+        if (dragInit < dragLo)
+            dragInit = dragLo;
+        if (dragInit > dragHi)
+            dragInit = dragHi;
+        int n = 4;   // vx, vy, vz, drag
+        // Seed the simplex at the physical prior drag.
+        array<vector> simplexVel = new array<vector>();
+        array<float> simplexDrag = new array<float>();
+        array<float> simplexCost = new array<float>();
+
+        vector init = velInit;
+        simplexVel.Insert(init);
+        simplexDrag.Insert(dragInit);
+        simplexCost.Insert(DragFitResidual(positions, times, anchor, init,
+            dragInit, wind, gravityMs2, dtS));
+
+        float pert = 5.0;   // m/s for vel axes
+        for (int axis = 0; axis < 3; axis++)
+        {
+            vector p = init;
+            if (axis == 0) p[0] = init[0] + pert;
+            if (axis == 1) p[1] = init[1] + pert;
+            if (axis == 2) p[2] = init[2] + pert;
+            float d = dragInit;
+            simplexVel.Insert(p);
+            simplexDrag.Insert(d);
+            simplexCost.Insert(DragFitResidual(positions, times, anchor, p, d, wind, gravityMs2, dtS));
+        }
+        float dart = dragInit;
+        vector vDragAxis = init;
+        simplexVel.Insert(vDragAxis);
+        simplexDrag.Insert(dart);
+        simplexCost.Insert(DragFitResidual(positions, times, anchor, vDragAxis, dart, wind, gravityMs2, dtS));
+
+        for (int iter = 0; iter < 90; iter++)
+        {
+            // index of worst
+            int worst = 0;
+            for (int i = 1; i < simplexCost.Count(); i++)
+                if (simplexCost.Get(i) > simplexCost.Get(worst))
+                    worst = i;
+            // centroid of all but worst
+            vector centVel = "0 0 0";
+            float centDrag = 0.0;
+            for (int i = 0; i < simplexCost.Count(); i++)
+            {
+                if (i == worst)
+                    continue;
+                centVel = centVel + simplexVel.Get(i);
+                centDrag = centDrag + simplexDrag.Get(i);
+            }
+            float inv = 1.0 / (simplexCost.Count() - 1);
+            centVel = centVel * inv;
+            centDrag = centDrag * inv;
+
+            vector worstVel = simplexVel.Get(worst);
+            float worstDrag = simplexDrag.Get(worst);
+            // reflect
+            vector reflVel = centVel + (centVel - worstVel);
+            float reflDrag = centDrag + (centDrag - worstDrag);
+            if (reflDrag < dragLo)
+                reflDrag = dragLo;
+            if (reflDrag > dragHi)
+                reflDrag = dragHi;
+            float costRefl = DragFitResidual(positions, times, anchor, reflVel, reflDrag, wind, gravityMs2, dtS);
+
+            float bestCost = simplexCost.Get(0);
+            for (int i = 1; i < simplexCost.Count(); i++)
+                if (simplexCost.Get(i) < bestCost)
+                    bestCost = simplexCost.Get(i);
+
+            if (costRefl < bestCost)
+            {
+                // expand
+                vector expVel = centVel + (centVel - worstVel) * 1.6;
+                float expDrag = centDrag + (centDrag - worstDrag) * 1.6;
+                if (expDrag < dragLo)
+                    expDrag = dragLo;
+                if (expDrag > dragHi)
+                    expDrag = dragHi;
+                float costExp = DragFitResidual(positions, times, anchor, expVel, expDrag, wind, gravityMs2, dtS);
+                if (costExp < costRefl)
+                {
+                    simplexVel.Set(worst, expVel);
+                    simplexDrag.Set(worst, expDrag);
+                    simplexCost.Set(worst, costExp);
+                }
+                else
+                {
+                    simplexVel.Set(worst, reflVel);
+                    simplexDrag.Set(worst, reflDrag);
+                    simplexCost.Set(worst, costRefl);
+                }
+            }
+            else
+            {
+                float worstCost = simplexCost.Get(worst);
+                // earlier reflection cost improved relative to worst? try inside
+                if (costRefl < worstCost)
+                {
+                    simplexVel.Set(worst, reflVel);
+                    simplexDrag.Set(worst, reflDrag);
+                    simplexCost.Set(worst, costRefl);
+                }
+                else
+                {
+                    // shrink toward best
+                    int best = 0;
+                    for (int i = 1; i < simplexCost.Count(); i++)
+                        if (simplexCost.Get(i) < simplexCost.Get(best))
+                            best = i;
+                    vector bestVel = simplexVel.Get(best);
+                    float bestDrag = simplexDrag.Get(best);
+                    for (int i = 0; i < simplexCost.Count(); i++)
+                    {
+                        if (i == best)
+                            continue;
+                        vector nv = bestVel + (simplexVel.Get(i) - bestVel) * 0.5;
+                        float nd = bestDrag + (simplexDrag.Get(i) - bestDrag) * 0.5;
+                        simplexVel.Set(i, nv);
+                        simplexDrag.Set(i, nd);
+                        simplexCost.Set(i, DragFitResidual(positions, times, anchor, nv, nd, wind, gravityMs2, dtS));
+                    }
+                }
+            }
+        }
+
+        int bi = 0;
+        for (int i = 1; i < simplexCost.Count(); i++)
+            if (simplexCost.Get(i) < simplexCost.Get(bi))
+                bi = i;
+        outVel = simplexVel.Get(bi);
+        outDrag = simplexDrag.Get(bi);
+        if (outDrag < dragLo)
+            outDrag = dragLo;
+        if (outDrag > dragHi)
+            outDrag = dragHi;
+        return true;
+    }
+
     // Fit history → AirDrag integrate to launch/impact (DEM/surface aware).
+    // When enough points are present, refines to a full drag ballistic (rooted
+    // at the first window sample, joint {init vel, drag}); falls back to the
+    // vacuum fit + prefab drag if refinement fails the quality gates.
     static RDF_RadarWlrFix SolveLaunchAndImpactFromHistory(
         array<vector> positions,
         array<float> times,
@@ -627,12 +874,71 @@ class RDF_RadarBallistics
         if (!fit || !fit.m_Valid)
             return empty;
 
+        float drag = airDrag;
+        vector vel = fit.m_Velocity;
+        vector anchor = fit.m_Position;
+        float anchorTimeS = fit.m_AnchorTimeS;   // vacuum anchor (last window time)
+
+        // Build a windowed slice (same indices FitVacuumFromHistory used).
+        int end = positions.Count() - 1;
+        int start = end - windowPoints + 1;
+        if (start < 0)
+            start = 0;
+        int n = end - start + 1;
+        array<vector> winPos = new array<vector>();
+        array<float> winTimes = new array<float>();
+        if (n >= minPoints)
+        {
+            for (int i = start; i <= end; i++)
+            {
+                winPos.Insert(positions.Get(i));
+                winTimes.Insert(times.Get(i));
+            }
+        }
+
+        if (n >= minPoints && airDrag > 0.0 && winPos.Count() >= 3)
+        {
+            float dragLo = airDrag * 0.35;
+            float dragHi = airDrag * 3.0;
+            vector fitVel;
+            float fitDrag;
+            if (NelderMeadDrag(
+                winPos,
+                winTimes,
+                winPos.Get(0),
+                vel,
+                airDrag,
+                dragLo,
+                dragHi,
+                wind,
+                gravityMs2,
+                DEFAULT_DT_S,
+                fitVel,
+                fitDrag))
+            {
+                // Accept only if the refined drag path fits tighter at the
+                // anchor window than the vacuum path; else keep prior.
+                float residBest = DragFitResidual(
+                    winPos, winTimes, winPos.Get(0), fitVel, fitDrag, wind, gravityMs2, DEFAULT_DT_S);
+                float residPrior = DragFitResidual(
+                    winPos, winTimes, winPos.Get(0), vel, airDrag, wind, gravityMs2, DEFAULT_DT_S);
+                if (residBest < residPrior * 1.05)
+                {
+                    vel = fitVel;
+                    drag = fitDrag;
+                    anchor = winPos.Get(0);
+                    // Drag path is rooted at the window's first sample.
+                    anchorTimeS = winTimes.Get(0);
+                }
+            }
+        }
+
         RDF_RadarWlrFix fix = SolveLaunchAndImpact(
-            fit.m_Position,
-            fit.m_Velocity,
+            anchor,
+            vel,
             groundYM,
-            fit.m_AnchorTimeS,
-            airDrag,
+            anchorTimeS,
+            drag,
             wind,
             gravityMs2);
         fix.m_FitValid = true;
