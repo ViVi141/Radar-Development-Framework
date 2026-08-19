@@ -1434,6 +1434,24 @@ class RDF_RadarScanner
         if (!m_Settings.m_EnableMechanicalScan || !m_Settings.m_Hardware)
             return GetSubjectForward(subject);
 
+        // Cold-war narrow-threat-sector sweep: back and forth within a sector
+        // centered on m_SectorSweepCenterRad. More realistic than a full 360°
+        // rotation for counter-battery WLR / threat-corridor search.
+        if (m_Settings.m_SectorSweepEnabled)
+        {
+            float halfWidth = m_Settings.m_SectorSweepHalfWidthRad;
+            if (halfWidth < 0.0)
+                halfWidth = 0.0;
+            float rate = m_Settings.m_SectorSweepRateRadS;
+            if (rate <= 0.0)
+                rate = 0.6;
+            // Math.Sin lacks sign amplitude scaling; drive a [-1,1] oscillation.
+            float osc = Math.Sin(worldTime * rate);
+            float angle = m_Settings.m_SectorSweepCenterRad + halfWidth * osc;
+            angle = NormalizeAngleRad(angle);
+            return Vector(Math.Cos(angle), 0.0, Math.Sin(angle));
+        }
+
         float rpm = m_Settings.m_Hardware.GetEffectiveScanRpm();
         if (m_Settings.m_bScanAngleLocked)
         {

@@ -83,6 +83,14 @@ class RDF_RadarSettings
     // Needed so a parked beam is not one frame late vs a spinning world clock
     // (narrow beams miss the target if the offset is applied after Scan).
     bool m_bScanAngleLocked = false;
+    // Cold-war counter-battery / narrow-threat-sector scan: instead of full 360°
+    // rotation or a fixed stare, the beam sweeps back and forth within a sector
+    // centered on m_SectorSweepCenterRad. Used for WLR-style narrow-threat-
+    // corridor search. Units are radians; rate in rad/s.
+    bool m_SectorSweepEnabled = false;
+    float m_SectorSweepCenterRad = 0.0;
+    float m_SectorSweepHalfWidthRad = 0.785398; // default ±45°
+    float m_SectorSweepRateRadS = 0.6;
     float m_DetectionSnrDb = 8.0;
     bool m_KeepUndetected = false;
     bool m_EnableDemClutter = true;
