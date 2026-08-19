@@ -178,12 +178,24 @@ class RDF_RadarFusionService
 
     protected ERDF_RadarIff MergeIff(ERDF_RadarIff a, ERDF_RadarIff b)
     {
+        // Same classification (incl. friend+friend / foe+foe / neutral+neutral).
         if (a == b)
             return a;
+
+        // UNKNOWN means "not measured" - the other, definite value wins.
         if (a == ERDF_RadarIff.RDF_IFF_UNKNOWN)
             return b;
         if (b == ERDF_RadarIff.RDF_IFF_UNKNOWN)
             return a;
+
+        // NEUTRAL is a weak-but-real state (civilian / unaffiliated): a definite
+        // FRIEND or FOE overrides it, and two definite-but-conflicting readings
+        // that are not neutral collapse to UNKNOWN.
+        if (a == ERDF_RadarIff.RDF_IFF_NEUTRAL)
+            return b;
+        if (b == ERDF_RadarIff.RDF_IFF_NEUTRAL)
+            return a;
+
         return ERDF_RadarIff.RDF_IFF_UNKNOWN;
     }
 
