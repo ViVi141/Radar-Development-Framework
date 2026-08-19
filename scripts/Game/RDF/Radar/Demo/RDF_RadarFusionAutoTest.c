@@ -203,8 +203,8 @@ class RDF_RadarFusionAutoTest
             if (ok)
                 pass = pass + 1;
             Print(string.Format(
-                "[RDF FusionTest]   merge{0}/3 {1}+{2} -> {3} ok={4}",
-                c + 1,
+                "[RDF FusionTest]   merge%1/3 %2+%3 -> %4 ok=%5",
+                (c + 1).ToString(),
                 IffName(iffA.Get(c)),
                 IffName(iffB.Get(c)),
                 IffName(want.Get(c)),
