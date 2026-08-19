@@ -125,6 +125,108 @@ class RDF_RadarFusionAutoTest
 
         RDF_RadarDatalinkHub.ResetForTests();
         RDF_RadarFusionService.ResetForTests();
+
+        RunNeutralMerge();
+    }
+
+    // Regression for the three-state IFF merge (NEUTRAL distinct from UNKNOWN):
+    // two stations reporting the same target with NEUTRAL + FRIEND / NEUTRAL +
+    // FOE must not collapse to UNKNOWN. Guards RDF_RadarFusionService.MergeIff.
+    protected void RunNeutralMerge()
+    {
+        Print("[RDF FusionTest] neutral-merge regression");
+        RDF_RadarDatalinkHub.ResetForTests();
+        RDF_RadarFusionService.ResetForTests();
+
+        RDF_RadarDatalinkHub hub = RDF_RadarDatalinkHub.Get();
+        hub.SetEnabled(true);
+        hub.SetAutoFusion(true);
+        hub.SetTrackTtlS(5.0);
+        RDF_RadarFusionService.Get().SetAssocGateM(400.0);
+
+        array<ERDF_RadarIff> iffA = {
+            ERDF_RadarIff.RDF_IFF_NEUTRAL,
+            ERDF_RadarIff.RDF_IFF_NEUTRAL,
+            ERDF_RadarIff.RDF_IFF_FRIEND
+        };
+        array<ERDF_RadarIff> iffB = {
+            ERDF_RadarIff.RDF_IFF_FRIEND,
+            ERDF_RadarIff.RDF_IFF_FOE,
+            ERDF_RadarIff.RDF_IFF_FOE
+        };
+        array<ERDF_RadarIff> want = {
+            ERDF_RadarIff.RDF_IFF_FRIEND,
+            ERDF_RadarIff.RDF_IFF_FOE,
+            ERDF_RadarIff.RDF_IFF_UNKNOWN
+        };
+
+        int pass = 0;
+        for (int c = 0; c < iffA.Count(); c++)
+        {
+            hub.Clear();
+            array<ref RDF_RadarDatalinkTrack> batchA = new array<ref RDF_RadarDatalinkTrack>();
+            RDF_RadarDatalinkTrack a = new RDF_RadarDatalinkTrack();
+            a.m_LocalTrackId = 1;
+            a.m_WorldPos = Vector(1000.0, 150.0, 1000.0);
+            a.m_Velocity = Vector(20.0, 0.0, 0.0);
+            a.m_AzimuthDeg = 45.0;
+            a.m_RangeM = 1414.0;
+            a.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_VEHICLE;
+            a.m_Iff = iffA.Get(c);
+            a.m_RadarOrigin = Vector(0.0, 20.0, 0.0);
+            a.m_TimeS = 10.0;
+            batchA.Insert(a);
+            hub.PublishFromRadar(101, a.m_RadarOrigin, 10.0, batchA);
+
+            array<ref RDF_RadarDatalinkTrack> batchB = new array<ref RDF_RadarDatalinkTrack>();
+            RDF_RadarDatalinkTrack b = new RDF_RadarDatalinkTrack();
+            b.m_LocalTrackId = 7;
+            b.m_WorldPos = Vector(1008.0, 150.0, 1002.0);
+            b.m_Velocity = Vector(20.0, 0.0, 0.0);
+            b.m_AzimuthDeg = -45.0;
+            b.m_RangeM = 1414.0;
+            b.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_VEHICLE;
+            b.m_Iff = iffB.Get(c);
+            b.m_RadarOrigin = Vector(0.0, 20.0, 2000.0);
+            b.m_TimeS = 10.0;
+            batchB.Insert(b);
+            hub.PublishFromRadar(202, b.m_RadarOrigin, 10.0, batchB);
+
+            bool ok = false;
+            array<ref RDF_RadarFusedTrack> fused = hub.GetFusedTracks();
+            if (fused && fused.Count() >= 1)
+            {
+                if (fused.Get(0).m_Iff == want.Get(c))
+                    ok = true;
+            }
+
+            if (ok)
+                pass = pass + 1;
+            Print(string.Format(
+                "[RDF FusionTest]   merge{0}/3 {1}+{2} -> {3} ok={4}",
+                c + 1,
+                IffName(iffA.Get(c)),
+                IffName(iffB.Get(c)),
+                IffName(want.Get(c)),
+                ok.ToString()));
+        }
+
+        bool passAll = pass == iffA.Count();
+        if (passAll)
+            Print("[RDF FusionTest]   neutral-merge PASS (" + pass.ToString() + "/" + iffA.Count().ToString() + ")");
+        else
+            Print("[RDF FusionTest]   neutral-merge FAIL (" + pass.ToString() + "/" + iffA.Count().ToString() + ")", LogLevel.WARNING);
+    }
+
+    protected string IffName(ERDF_RadarIff iff)
+    {
+        if (iff == ERDF_RadarIff.RDF_IFF_FRIEND)
+            return "FRIEND";
+        if (iff == ERDF_RadarIff.RDF_IFF_FOE)
+            return "FOE";
+        if (iff == ERDF_RadarIff.RDF_IFF_NEUTRAL)
+            return "NEUTRAL";
+        return "UNKNOWN";
     }
 }
 
