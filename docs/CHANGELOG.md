@@ -1,24 +1,33 @@
 # CHANGELOG
 
+## 1.1.4 — 2026-08-20
+
+相对 1.1.2。工坊/专用服 DemData 真正修复：打包格式改为 `.conf`。
+
+> EN: Patch over 1.1.2. DemData ships as CONFResourceClass (`.conf`). Game/DS has no JSON resource loader — `Resource loader for extension not registered!` on `*.json`. Same pattern as SurfaceTable/Signatures. Profile JSON bake path unchanged.
+
+- **根因**：专用服对 `{GUID}DemData/...json` 报 `Resource loader for extension not registered!`，`resourceValid=0`。`JSONResourceClass` 仅 Workbench；运行时只有 `CONFResourceClass` 等已注册 loader。
+- **打包**：`DemData/**` 948 文件 JSON→CONF（保留原 GUID）；`RDF_DemPackConf` + `RDF_DemPackIo` + `RDF_DemGuidIndex`；运行时优先 profile JSON，再 packaged CONF。
+- **工具**：`tools/dem/rdf_dem_json_to_conf.py`、`rdf_dem_gen_guid_index.py`。
+- 成功日志：`using packaged SURF JSON: DemData/GM_Eden/`（逻辑仍称 SURF pack；文件为 `.conf`）。
+
 ## 1.1.2 — 2026-08-20
 
-相对 1.1.0。范围：`f4a726b` 之后 … `0f81218`（含）。补丁：工坊/专用服 DEM 加载、扇扫、WLR 阻力拟合、融合 NEUTRAL IFF。
+相对 1.1.0。范围：`f4a726b` 之后 … `0f81218`（含）。扇扫、WLR 阻力拟合、融合 NEUTRAL IFF；DEM 路径尝试由 1.1.4 取代。
 
-> EN: Patch over 1.1.0. Range: after `f4a726b` … `0f81218` (inclusive). Workshop/DS DemData via `$AddonId:` + ResourceName GUID index; sector-sweep scan; WLR full-drag ballistic fit; fusion keeps NEUTRAL IFF distinct from UNKNOWN.
+> EN: Patch over 1.1.0. Sector-sweep; WLR full-drag fit; NEUTRAL IFF. DemData FileIO/GUID attempts superseded by 1.1.4 CONF packaging.
 
-- **工坊 DEM**：专用服上裸相对路径 `DemData/` 对 `FileIO` 不可见（Workbench 松散工程可用）。`RDF_DemPackagedRoot` 尝试 `$AddonId:DemData/`；仍失败时经 `RDF_DemGuidIndex`（948 条 ResourceName）+ `RDF_DemJsonIo` 用 GUID 读 JSONResource（`LoadFromFile` / `ExpandFromRAW`）。修复 `DEM/SURF missing for GM_Eden` → `mode=LIVE`。临时仍可用 `$profile:RDF/DemData/`。
-- **扇区扫描**：`m_SectorSweepEnabled` 等 — 在中心±半宽内往返扫掠（对空/反炮兵窄扇区），优先于全向旋转与停驻波束。
-- **WLR 弹道**：发射/落点外推改为有界阻力的 Nelder–Mead 联合拟合（RK2 AirDrag）；失败回退真空拟合 + prefab 阻力先验。
-- **融合 IFF**：`MergeIff` 保留 NEUTRAL（友/敌覆盖中立；中立+中立仍中立；仅真冲突 → UNKNOWN）。`RDF_RadarFusionAutoTest` 回归。
+- **工坊 DEM（已由 1.1.4 取代）**：`$AddonId:` / JSON ResourceName 仍因无 JSON loader 失败。
+- **扇区扫描**：`m_SectorSweepEnabled` 等。
+- **WLR 弹道**：有界阻力 Nelder–Mead。
+- **融合 IFF**：保留 NEUTRAL。
 
-## 2026-08-20 — 工坊/专用服 DemData FileIO 路径
+## 2026-08-20 — DemData 改为 CONFResourceClass（专用服）
 
-> EN: Dedicated server / Steam Workshop packs do not expose bare relative `DemData/` to FileIO (Workbench loose addon roots do). Resolve packaged SURF via `$AddonId:DemData/<world>/` and, when that fails, `RDF_DemGuidIndex` ResourceNames + `RDF_DemJsonIo` (`LoadFromFile` / `ExpandFromRAW`). Profile path unchanged as first priority.
+> EN: DS log: `Resource loader for extension not registered!` for DemData JSON. Convert packaged packs to `.conf` + CONFResourceClass; load via SCR_ConfigHelperT. Keep profile `.json` FileIO for local bake.
 
-- `RDF_DemPackagedRoot.FindWorldRoot`：相对路径 → `$AddonId:` → 扫描 addon FS → GuidIndex/Resource 探测
-- `RDF_DemGuidIndex`（由 `tools/dem/rdf_dem_gen_guid_index.py` 自 `.meta` 生成）+ `RDF_DemJsonIo`
-- 症状：`SurfaceTable` GUID 成功，但 `DEM/SURF missing for GM_Eden` → `mode=LIVE (surface=UNKNOWN)`
-- 失败时日志含 `resource probe ... fileIo=… resourceValid=…`（`resourceValid=0` 表示工坊包未打进 DemData 资源）
+- Converter preserves Resource GUIDs from old `.json.meta`
+- `rdf_dem_json_to_conf.py` + `rdf_dem_gen_guid_index.py`
 
 ## 1.1.0 — 2026-08-19
 

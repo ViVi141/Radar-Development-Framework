@@ -87,31 +87,108 @@ class RDF_DemSurfaceJsonPack
     static bool TryLoadManifest(string rootDir, string expectWorldKey, out RDF_DemRuntimeManifest outManifest)
     {
         outManifest = null;
-        string path = BuildManifestPath(rootDir);
+        if (TryLoadManifestJson(rootDir, expectWorldKey, outManifest))
+            return true;
+        if (TryLoadManifestConf(rootDir, expectWorldKey, outManifest))
+            return true;
+        return false;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected static bool TryLoadManifestJson(
+        string rootDir,
+        string expectWorldKey,
+        out RDF_DemRuntimeManifest outManifest)
+    {
+        outManifest = null;
+        string path = RDF_DemPackIo.SurfManifestJsonPath(rootDir);
         RDF_DemSurfManifestDoc doc = new RDF_DemSurfManifestDoc();
-        if (!RDF_DemJsonIo.TryLoad(doc, path))
+        if (!RDF_DemPackIo.TryLoadJsonDoc(doc, path))
             return false;
-        if (doc.magic != MAGIC)
+        return FinishManifestFromFields(
+            rootDir,
+            expectWorldKey,
+            doc.magic,
+            doc.world,
+            doc.bounds_min_x,
+            doc.bounds_min_z,
+            doc.bounds_max_x,
+            doc.bounds_max_z,
+            doc.cell_m,
+            doc.tile_cells,
+            doc.tile_count_x,
+            doc.tile_count_z,
+            doc.chunks_dir,
+            outManifest);
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected static bool TryLoadManifestConf(
+        string rootDir,
+        string expectWorldKey,
+        out RDF_DemRuntimeManifest outManifest)
+    {
+        outManifest = null;
+        string path = RDF_DemPackIo.SurfManifestConfPath(rootDir);
+        RDF_DemSurfManifestConf conf = RDF_DemPackIo.LoadSurfManifestConf(path);
+        if (!conf)
             return false;
-        if (doc.world.IsEmpty())
+        return FinishManifestFromFields(
+            rootDir,
+            expectWorldKey,
+            conf.m_sMagic,
+            conf.m_sWorld,
+            conf.m_fBoundsMinX,
+            conf.m_fBoundsMinZ,
+            conf.m_fBoundsMaxX,
+            conf.m_fBoundsMaxZ,
+            conf.m_fCellM,
+            conf.m_iTileCells,
+            conf.m_iTileCountX,
+            conf.m_iTileCountZ,
+            conf.m_sChunksDir,
+            outManifest);
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected static bool FinishManifestFromFields(
+        string rootDir,
+        string expectWorldKey,
+        string magic,
+        string world,
+        float boundsMinX,
+        float boundsMinZ,
+        float boundsMaxX,
+        float boundsMaxZ,
+        float cellM,
+        int tileCells,
+        int tileCountX,
+        int tileCountZ,
+        string chunksDir,
+        out RDF_DemRuntimeManifest outManifest)
+    {
+        outManifest = null;
+        if (magic != MAGIC)
             return false;
-        if (!expectWorldKey.IsEmpty() && doc.world != expectWorldKey)
+        if (world.IsEmpty())
             return false;
-        if (doc.cell_m <= 0.0 || doc.tile_cells < 1)
+        if (!expectWorldKey.IsEmpty() && world != expectWorldKey)
             return false;
-        if (doc.tile_count_x < 1 || doc.tile_count_z < 1)
+        if (cellM <= 0.0 || tileCells < 1)
+            return false;
+        if (tileCountX < 1 || tileCountZ < 1)
             return false;
 
         RDF_DemRuntimeManifest manifest = new RDF_DemRuntimeManifest();
-        manifest.m_WorldKey = doc.world;
-        manifest.m_BoundsMinX = doc.bounds_min_x;
-        manifest.m_BoundsMinZ = doc.bounds_min_z;
-        manifest.m_BoundsMaxX = doc.bounds_max_x;
-        manifest.m_BoundsMaxZ = doc.bounds_max_z;
-        manifest.m_CellM = doc.cell_m;
-        manifest.m_TileCells = doc.tile_cells;
-        manifest.m_TileCountX = doc.tile_count_x;
-        manifest.m_TileCountZ = doc.tile_count_z;
+        manifest.m_WorldKey = world;
+        manifest.m_BoundsMinX = boundsMinX;
+        manifest.m_BoundsMinZ = boundsMinZ;
+        manifest.m_BoundsMaxX = boundsMaxX;
+        manifest.m_BoundsMaxZ = boundsMaxZ;
+        manifest.m_CellM = cellM;
+        manifest.m_TileCells = tileCells;
+        manifest.m_TileCountX = tileCountX;
+        manifest.m_TileCountZ = tileCountZ;
         manifest.m_MaxSpans = 1;
         manifest.m_IsSurfacePack = true;
         manifest.m_PreferLiveTerrainY = true;
@@ -119,7 +196,7 @@ class RDF_DemSurfaceJsonPack
         manifest.m_HeightYScale = 0.1;
         manifest.m_HeightChunksDir = string.Empty;
         manifest.m_RootDir = rootDir;
-        string chunks = doc.chunks_dir;
+        string chunks = chunksDir;
         if (chunks.IsEmpty())
             chunks = CHUNKS_DIR_NAME;
         manifest.m_TilesDir = rootDir + chunks;
@@ -432,9 +509,8 @@ class RDF_DemSurfaceJsonPack
                 manifest.m_TilesDir.Length() - manifest.m_RootDir.Length());
         }
 
-        string path = BuildRowPath(manifest.m_RootDir, chunksName, tileIz);
-        RDF_DemSurfRowDoc doc = new RDF_DemSurfRowDoc();
-        if (!RDF_DemJsonIo.TryLoad(doc, path))
+        RDF_DemSurfRowDoc doc = LoadRowDoc(manifest.m_RootDir, chunksName, tileIz);
+        if (!doc)
             return null;
         if (doc.iz != tileIz)
             return null;
@@ -443,6 +519,38 @@ class RDF_DemSurfaceJsonPack
         s_CachedIz = tileIz;
         s_CachedRow = doc;
         return doc;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected static RDF_DemSurfRowDoc LoadRowDoc(string rootDir, string chunksName, int tileIz)
+    {
+        string jsonPath = BuildRowPath(rootDir, chunksName, tileIz);
+        RDF_DemSurfRowDoc doc = new RDF_DemSurfRowDoc();
+        if (RDF_DemPackIo.TryLoadJsonDoc(doc, jsonPath))
+            return doc;
+
+        string confPath = RDF_DemPackIo.SurfRowConfPath(rootDir, tileIz);
+        RDF_DemChunkRowConf conf = RDF_DemPackIo.LoadChunkRowConf(confPath);
+        if (!conf)
+            return null;
+        if (!conf.m_aTiles)
+            return null;
+
+        RDF_DemSurfRowDoc fromConf = new RDF_DemSurfRowDoc();
+        fromConf.iz = conf.m_iIz;
+        fromConf.tiles = new array<ref RDF_DemSurfTileEntry>();
+        int n = conf.m_aTiles.Count();
+        for (int i = 0; i < n; i++)
+        {
+            RDF_DemChunkTileConf tile = conf.m_aTiles.Get(i);
+            if (!tile)
+                continue;
+            RDF_DemSurfTileEntry entry = new RDF_DemSurfTileEntry();
+            entry.ix = tile.m_iIx;
+            entry.hex = tile.m_sHex;
+            fromConf.tiles.Insert(entry);
+        }
+        return fromConf;
     }
 
     //--------------------------------------------------------------------------------------------

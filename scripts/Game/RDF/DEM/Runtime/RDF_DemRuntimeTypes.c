@@ -15,7 +15,8 @@ class RDF_DemRuntimeManifest
     string m_RootDir;
     string m_TilesDir;
 
-    // Surface-class-only JSON (workshop preferred): surf_manifest.json + surf_chunks/
+    // Surface pack (workshop preferred): packaged .conf or profile .json
+    // under DemData/<world>/ (surf_manifest + surf_chunks).
     // Height is sampled live via BaseWorld.GetSurfaceY when PreferLiveTerrainY is set.
     bool m_IsSurfacePack;
     bool m_PreferLiveTerrainY;

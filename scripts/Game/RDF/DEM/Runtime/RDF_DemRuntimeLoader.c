@@ -62,7 +62,7 @@ class RDF_DemRuntimeLoader
         }
 
         Warn("DEM/SURF missing for " + worldKey
-            + " (profile / FileIO DemData / Resource GUID index)");
+            + " (profile JSON / packaged CONF ResourceName)");
         return false;
     }
 

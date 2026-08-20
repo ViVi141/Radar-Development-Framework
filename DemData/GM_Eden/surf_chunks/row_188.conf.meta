@@ -1,0 +1,17 @@
+MetaFileClass {
+ Name "{EF1CA9C1ED5DDA8A}DemData/GM_Eden/surf_chunks/row_188.conf"
+ Configurations {
+  CONFResourceClass PC {
+  }
+  CONFResourceClass XBOX_ONE : PC {
+  }
+  CONFResourceClass XBOX_SERIES : PC {
+  }
+  CONFResourceClass PS4 : PC {
+  }
+  CONFResourceClass PS5 : PC {
+  }
+  CONFResourceClass HEADLESS : PC {
+  }
+ }
+}

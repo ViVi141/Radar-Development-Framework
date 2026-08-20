@@ -95,39 +95,91 @@ class RDF_DemHeightJsonPack
         if (manifest.m_RootDir.IsEmpty())
             return false;
 
-        string path = BuildManifestPath(manifest.m_RootDir);
+        if (TryAttachHeightPackJson(manifest))
+            return true;
+        if (TryAttachHeightPackConf(manifest))
+            return true;
+        return false;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected static bool TryAttachHeightPackJson(notnull RDF_DemRuntimeManifest manifest)
+    {
+        string path = RDF_DemPackIo.HeightManifestJsonPath(manifest.m_RootDir);
         RDF_DemHeightManifestDoc doc = new RDF_DemHeightManifestDoc();
-        if (!RDF_DemJsonIo.TryLoad(doc, path))
+        if (!RDF_DemPackIo.TryLoadJsonDoc(doc, path))
             return false;
-        if (doc.magic != MAGIC)
+        return FinishAttachHeight(
+            manifest,
+            doc.magic,
+            doc.world,
+            doc.cell_m,
+            doc.tile_cells,
+            doc.tile_count_x,
+            doc.tile_count_z,
+            doc.y_scale,
+            doc.chunks_dir);
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected static bool TryAttachHeightPackConf(notnull RDF_DemRuntimeManifest manifest)
+    {
+        string path = RDF_DemPackIo.HeightManifestConfPath(manifest.m_RootDir);
+        RDF_DemHeightManifestConf conf = RDF_DemPackIo.LoadHeightManifestConf(path);
+        if (!conf)
             return false;
-        if (doc.world.IsEmpty())
+        return FinishAttachHeight(
+            manifest,
+            conf.m_sMagic,
+            conf.m_sWorld,
+            conf.m_fCellM,
+            conf.m_iTileCells,
+            conf.m_iTileCountX,
+            conf.m_iTileCountZ,
+            conf.m_fYScale,
+            conf.m_sChunksDir);
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected static bool FinishAttachHeight(
+        notnull RDF_DemRuntimeManifest manifest,
+        string magic,
+        string world,
+        float cellM,
+        int tileCells,
+        int tileCountX,
+        int tileCountZ,
+        float yScaleIn,
+        string chunksDir)
+    {
+        if (magic != MAGIC)
             return false;
-        if (doc.world != manifest.m_WorldKey)
+        if (world.IsEmpty())
             return false;
-        if (doc.cell_m <= 0.0 || doc.tile_cells < 1)
+        if (world != manifest.m_WorldKey)
             return false;
-        if (doc.tile_count_x != manifest.m_TileCountX)
+        if (cellM <= 0.0 || tileCells < 1)
             return false;
-        if (doc.tile_count_z != manifest.m_TileCountZ)
+        if (tileCountX != manifest.m_TileCountX)
             return false;
-        if (doc.tile_cells != manifest.m_TileCells)
+        if (tileCountZ != manifest.m_TileCountZ)
             return false;
-        if (Math.AbsFloat(doc.cell_m - manifest.m_CellM) > 0.001)
+        if (tileCells != manifest.m_TileCells)
+            return false;
+        if (Math.AbsFloat(cellM - manifest.m_CellM) > 0.001)
             return false;
 
-        float yScale = doc.y_scale;
+        float yScale = yScaleIn;
         if (yScale <= 0.0)
             yScale = 0.1;
 
-        string chunks = doc.chunks_dir;
+        string chunks = chunksDir;
         if (chunks.IsEmpty())
             chunks = CHUNKS_DIR_NAME;
 
         manifest.m_HasHeightPack = true;
         manifest.m_HeightYScale = yScale;
         manifest.m_HeightChunksDir = manifest.m_RootDir + chunks;
-        // Prefer baked Y when pack is present (still fall back to GetSurfaceY on miss).
         if (RDF_DemBakeConstants.RUNTIME_DEM_PREFER_BAKED_HEIGHT)
             manifest.m_PreferLiveTerrainY = false;
         return true;
@@ -352,9 +404,9 @@ class RDF_DemHeightJsonPack
         string chunksDir = manifest.m_HeightChunksDir;
         if (chunksDir.IsEmpty())
             chunksDir = manifest.m_RootDir + CHUNKS_DIR_NAME;
-        string path = chunksDir + "row_" + tileIz.ToString() + ".json";
-        RDF_DemHeightRowDoc doc = new RDF_DemHeightRowDoc();
-        if (!RDF_DemJsonIo.TryLoad(doc, path))
+
+        RDF_DemHeightRowDoc doc = LoadRowDoc(manifest.m_RootDir, chunksDir, tileIz);
+        if (!doc)
             return null;
         if (doc.iz != tileIz)
             return null;
@@ -363,6 +415,41 @@ class RDF_DemHeightJsonPack
         s_CachedIz = tileIz;
         s_CachedRow = doc;
         return doc;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected static RDF_DemHeightRowDoc LoadRowDoc(
+        string rootDir,
+        string chunksDir,
+        int tileIz)
+    {
+        string jsonPath = chunksDir + "row_" + tileIz.ToString() + ".json";
+        RDF_DemHeightRowDoc doc = new RDF_DemHeightRowDoc();
+        if (RDF_DemPackIo.TryLoadJsonDoc(doc, jsonPath))
+            return doc;
+
+        string confPath = RDF_DemPackIo.HeightRowConfPath(rootDir, tileIz);
+        RDF_DemChunkRowConf conf = RDF_DemPackIo.LoadChunkRowConf(confPath);
+        if (!conf)
+            return null;
+        if (!conf.m_aTiles)
+            return null;
+
+        RDF_DemHeightRowDoc fromConf = new RDF_DemHeightRowDoc();
+        fromConf.iz = conf.m_iIz;
+        fromConf.tiles = new array<ref RDF_DemHeightTileEntry>();
+        int n = conf.m_aTiles.Count();
+        for (int i = 0; i < n; i++)
+        {
+            RDF_DemChunkTileConf tile = conf.m_aTiles.Get(i);
+            if (!tile)
+                continue;
+            RDF_DemHeightTileEntry entry = new RDF_DemHeightTileEntry();
+            entry.ix = tile.m_iIx;
+            entry.hex = tile.m_sHex;
+            fromConf.tiles.Insert(entry);
+        }
+        return fromConf;
     }
 
     //--------------------------------------------------------------------------------------------

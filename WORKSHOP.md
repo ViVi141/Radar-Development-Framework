@@ -10,7 +10,7 @@ Realistic radar, LiDAR and DEM sensor framework for Arma Reforger. Physical dete
 
 ## Description (≤ 5000 chars)
 
-# Radar Development Framework (RDF) — v1.1.2
+# Radar Development Framework (RDF) — v1.1.4
 
 A modular, workshop-ready sensor framework for Arma Reforger: **Radar**,
 **LiDAR**, and **DEM** bake/runtime. It models the detection chain as a
@@ -85,14 +85,23 @@ is included). Enable features explicitly — the framework is silent by default.
 
 ## Changelog (unlimited)
 
+## 1.1.4 — 2026-08-20
+
+Patch over 1.1.2. Dedicated-server DemData fix.
+
+- Root cause: game/DS has **no Resource loader for `.json`**
+  (`Resource loader for extension not registered!`). Workbench-only
+  `JSONResourceClass` cannot load DemData on servers.
+- Ship DemData as **`.conf` + `CONFResourceClass`** (same pattern as
+  SurfaceTable / Signatures). Profile JSON bake path unchanged.
+- Tools: `rdf_dem_json_to_conf.py`, `rdf_dem_gen_guid_index.py`.
+
 ## 1.1.2 — 2026-08-20
 
 Patch over 1.1.0 (`f4a726b` … `0f81218`).
 
-- Dedicated server / Workshop: load packaged DemData via `$AddonId:` and
-  ResourceName GUID index (`RDF_DemGuidIndex` / `RDF_DemJsonIo`) when FileIO
-  cannot see JSONResourceClass files. Fixes `DEM/SURF missing for GM_Eden` →
-  LIVE. Profile `$profile:RDF/DemData/` still first.
+- Dedicated server / Workshop DemData path attempts (`$AddonId:` / GUID
+  index). Superseded for packaging by 1.1.4 CONF conversion.
 - Sector-sweep scan (`m_SectorSweepEnabled`) for narrow azimuth search.
 - WLR launch/impact: full-drag Nelder–Mead fit (fallback vacuum + prefab drag).
 - Fusion IFF: keep NEUTRAL distinct from UNKNOWN when merging.

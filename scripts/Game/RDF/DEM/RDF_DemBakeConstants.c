@@ -7,13 +7,12 @@ class RDF_DemBakeConstants
     static const string DEM_DATA_DIR = "$profile:RDF/DemData/";
     static const string PACKAGED_DEM_DATA_DIR = "DemData/";
 
-    // Surface-class JSON (RDF_SURF_JSON_V1): live GetSurfaceY + packaged surface map.
+    // Surface-class pack: profile JSON and/or packaged CONF (workshop).
     static const string DEM_SURF_MANIFEST_NAME = "surf_manifest.json";
     static const string DEM_SURF_CHUNKS_DIR = "surf_chunks/";
     static const string DEM_SURF_MAGIC = "RDF_SURF_JSON_V1";
 
-    // Optional height JSON (RDF_HEIGHT_JSON_V1): offline pack from official .ttile.
-    // Same DemData/<world>/ root as SURF; no Workbench plugin; not from RDF bake CSV.
+    // Optional height pack: profile JSON and/or packaged CONF.
     static const string DEM_HEIGHT_MANIFEST_NAME = "height_manifest.json";
     static const string DEM_HEIGHT_CHUNKS_DIR = "height_chunks/";
     static const string DEM_HEIGHT_MAGIC = "RDF_HEIGHT_JSON_V1";
