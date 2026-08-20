@@ -1,5 +1,24 @@
 # CHANGELOG
 
+## 1.1.2 — 2026-08-20
+
+相对 1.1.0。范围：`f4a726b` 之后 … `0f81218`（含）。补丁：工坊/专用服 DEM 加载、扇扫、WLR 阻力拟合、融合 NEUTRAL IFF。
+
+> EN: Patch over 1.1.0. Range: after `f4a726b` … `0f81218` (inclusive). Workshop/DS DemData FileIO via `$AddonId:`; sector-sweep scan; WLR full-drag ballistic fit; fusion keeps NEUTRAL IFF distinct from UNKNOWN.
+
+- **工坊 DEM**：专用服上裸相对路径 `DemData/` 对 `FileIO` 不可见（Workbench 松散工程可用）。新增 `RDF_DemPackagedRoot`，经 `$AddonId:DemData/<world>/`（由 SurfaceTable 锚点反查 AddonId，并扫描已加载模组 FS）加载 SURF/HEIGHT。修复日志中 `DEM/SURF missing for GM_Eden` → `mode=LIVE`。临时仍可用 `$profile:RDF/DemData/`。
+- **扇区扫描**：`m_SectorSweepEnabled` 等 — 在中心±半宽内往返扫掠（对空/反炮兵窄扇区），优先于全向旋转与停驻波束。
+- **WLR 弹道**：发射/落点外推改为有界阻力的 Nelder–Mead 联合拟合（RK2 AirDrag）；失败回退真空拟合 + prefab 阻力先验。
+- **融合 IFF**：`MergeIff` 保留 NEUTRAL（友/敌覆盖中立；中立+中立仍中立；仅真冲突 → UNKNOWN）。`RDF_RadarFusionAutoTest` 回归。
+
+## 2026-08-20 — 工坊/专用服 DemData FileIO 路径
+
+> EN: Dedicated server / Steam Workshop packs do not expose bare relative `DemData/` to FileIO (Workbench loose addon roots do). Resolve packaged SURF via `$AddonId:DemData/<world>/` using `SCR_AddonTool` (anchor = SurfaceTable.conf GUID, then scan loaded addon filesystems). Profile path unchanged as first priority.
+
+- `RDF_DemPackagedRoot.FindWorldRoot`：相对路径 → `$AddonId:` → 扫描 `GetAllAddonFileSystems()`
+- `RDF_DemRuntimeLoader.LoadManifest` 使用解析后的 packaged root；HEIGHT 仍挂同一 `m_RootDir`
+- 症状：`SurfaceTable` GUID 成功，但 `DEM/SURF missing for GM_Eden` → `mode=LIVE (surface=UNKNOWN)`
+
 ## 1.1.0 — 2026-08-19
 
 相对 1.0.2。范围：`194d65d` 之后 … `e5dab5d`（含）。全部新旋钮默认关；不 Enable* 则 SHORAD 搜索行为不变。

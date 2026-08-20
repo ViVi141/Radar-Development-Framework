@@ -10,7 +10,7 @@ Realistic radar, LiDAR and DEM sensor framework for Arma Reforger. Physical dete
 
 ## Description (≤ 5000 chars)
 
-# Radar Development Framework (RDF) — v1.1.0
+# Radar Development Framework (RDF) — v1.1.2
 
 A modular, workshop-ready sensor framework for Arma Reforger: **Radar**,
 **LiDAR**, and **DEM** bake/runtime. It models the detection chain as a
@@ -84,6 +84,17 @@ is included). Enable features explicitly — the framework is silent by default.
 ---
 
 ## Changelog (unlimited)
+
+## 1.1.2 — 2026-08-20
+
+Patch over 1.1.0 (`f4a726b` … `0f81218`).
+
+- Dedicated server / Workshop: load packaged DemData via `$AddonId:DemData/`
+  (bare `DemData/` only worked in Workbench). Fixes `DEM/SURF missing for
+  GM_Eden` → LIVE. Profile `$profile:RDF/DemData/` still first.
+- Sector-sweep scan (`m_SectorSweepEnabled`) for narrow azimuth search.
+- WLR launch/impact: full-drag Nelder–Mead fit (fallback vacuum + prefab drag).
+- Fusion IFF: keep NEUTRAL distinct from UNKNOWN when merging.
 
 ## 1.1.0 — 2026-08-19
 
