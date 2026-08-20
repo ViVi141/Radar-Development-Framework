@@ -1,19 +1,18 @@
-// Resolve DemData/ inside a packed workshop addon for FileIO.
-// Relative "DemData/..." works in Workbench (loose project folder) but fails on
-// dedicated servers / Steam Workshop packs — those need "$AddonId:DemData/...".
+// Resolve DemData/<world>/ for packaged SURF/HEIGHT.
+// Workbench: relative FileIO. Dedicated server / Workshop: GuidIndex ResourceNames
+// (JSONResourceClass is often invisible to FileIO even under "$AddonId:").
 class RDF_DemPackagedRoot
 {
-    // Same GUID as RDF_RadarSurfaceTable — already proven loadable on DS.
     static const ResourceName ANCHOR_RESOURCE =
         "{B4E81F2A7C903D65}RadarData/SurfaceTable.conf";
     static const string FALLBACK_ADDON_ID = "RadarDevelopmentFramework";
 
     protected static string s_CachedAddonFs;
     protected static bool s_AddonFsResolved;
+    protected static bool s_LoggedProbe;
 
     //--------------------------------------------------------------------------------------------
-    // Returns "DemData/<worldKey>/" with whatever prefix FileIO can actually see.
-    // Empty string when no packaged SURF manifest is visible.
+    // Logical root "DemData/<world>/" (optionally "$AddonId:DemData/<world>/") when loadable.
     static string FindWorldRoot(string worldKey)
     {
         if (worldKey.IsEmpty())
@@ -21,29 +20,36 @@ class RDF_DemPackagedRoot
 
         string relativeRoot = RDF_DemBakeConstants.PACKAGED_DEM_DATA_DIR + worldKey + "/";
         string relativeManifest = relativeRoot + RDF_DemSurfaceJsonPack.MANIFEST_NAME;
-        if (FileIO.FileExists(relativeManifest))
+
+        if (RDF_DemJsonIo.Exists(relativeManifest))
             return relativeRoot;
 
         string addonFs = GetAddonFileSystemPrefix();
         if (!addonFs.IsEmpty())
         {
-            string addonRoot = addonFs + relativeRoot;
-            if (FileIO.FileExists(addonFs + relativeManifest))
-                return addonRoot;
+            string addonManifest = addonFs + relativeManifest;
+            if (RDF_DemJsonIo.Exists(addonManifest))
+                return addonFs + relativeRoot;
         }
 
         array<string> systems = SCR_AddonTool.GetAllAddonFileSystems();
-        if (!systems)
-            return string.Empty;
-
-        int n = systems.Count();
-        for (int i = 0; i < n; i++)
+        if (systems)
         {
-            string fs = systems.Get(i);
-            if (fs.IsEmpty())
-                continue;
-            if (FileIO.FileExists(fs + relativeManifest))
-                return fs + relativeRoot;
+            int n = systems.Count();
+            for (int i = 0; i < n; i++)
+            {
+                string fs = systems.Get(i);
+                if (fs.IsEmpty())
+                    continue;
+                if (RDF_DemJsonIo.Exists(fs + relativeManifest))
+                    return fs + relativeRoot;
+            }
+        }
+
+        if (!s_LoggedProbe)
+        {
+            s_LoggedProbe = true;
+            RDF_DemJsonIo.LogResourceProbe(relativeManifest);
         }
 
         return string.Empty;

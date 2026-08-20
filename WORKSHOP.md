@@ -89,9 +89,10 @@ is included). Enable features explicitly — the framework is silent by default.
 
 Patch over 1.1.0 (`f4a726b` … `0f81218`).
 
-- Dedicated server / Workshop: load packaged DemData via `$AddonId:DemData/`
-  (bare `DemData/` only worked in Workbench). Fixes `DEM/SURF missing for
-  GM_Eden` → LIVE. Profile `$profile:RDF/DemData/` still first.
+- Dedicated server / Workshop: load packaged DemData via `$AddonId:` and
+  ResourceName GUID index (`RDF_DemGuidIndex` / `RDF_DemJsonIo`) when FileIO
+  cannot see JSONResourceClass files. Fixes `DEM/SURF missing for GM_Eden` →
+  LIVE. Profile `$profile:RDF/DemData/` still first.
 - Sector-sweep scan (`m_SectorSweepEnabled`) for narrow azimuth search.
 - WLR launch/impact: full-drag Nelder–Mead fit (fallback vacuum + prefab drag).
 - Fusion IFF: keep NEUTRAL distinct from UNKNOWN when merging.

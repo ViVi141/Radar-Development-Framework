@@ -62,7 +62,7 @@ class RDF_DemRuntimeLoader
         }
 
         Warn("DEM/SURF missing for " + worldKey
-            + " (profile / DemData/ / $Addon:DemData / profile V3 CSV)");
+            + " (profile / FileIO DemData / Resource GUID index)");
         return false;
     }
 

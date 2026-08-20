@@ -96,11 +96,8 @@ class RDF_DemHeightJsonPack
             return false;
 
         string path = BuildManifestPath(manifest.m_RootDir);
-        if (!FileIO.FileExists(path))
-            return false;
-
         RDF_DemHeightManifestDoc doc = new RDF_DemHeightManifestDoc();
-        if (!doc.LoadFromFile(path))
+        if (!RDF_DemJsonIo.TryLoad(doc, path))
             return false;
         if (doc.magic != MAGIC)
             return false;
@@ -356,11 +353,8 @@ class RDF_DemHeightJsonPack
         if (chunksDir.IsEmpty())
             chunksDir = manifest.m_RootDir + CHUNKS_DIR_NAME;
         string path = chunksDir + "row_" + tileIz.ToString() + ".json";
-        if (!FileIO.FileExists(path))
-            return null;
-
         RDF_DemHeightRowDoc doc = new RDF_DemHeightRowDoc();
-        if (!doc.LoadFromFile(path))
+        if (!RDF_DemJsonIo.TryLoad(doc, path))
             return null;
         if (doc.iz != tileIz)
             return null;

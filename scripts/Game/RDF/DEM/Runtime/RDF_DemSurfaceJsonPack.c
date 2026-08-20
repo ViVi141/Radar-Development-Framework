@@ -88,11 +88,8 @@ class RDF_DemSurfaceJsonPack
     {
         outManifest = null;
         string path = BuildManifestPath(rootDir);
-        if (!FileIO.FileExists(path))
-            return false;
-
         RDF_DemSurfManifestDoc doc = new RDF_DemSurfManifestDoc();
-        if (!doc.LoadFromFile(path))
+        if (!RDF_DemJsonIo.TryLoad(doc, path))
             return false;
         if (doc.magic != MAGIC)
             return false;
@@ -436,11 +433,8 @@ class RDF_DemSurfaceJsonPack
         }
 
         string path = BuildRowPath(manifest.m_RootDir, chunksName, tileIz);
-        if (!FileIO.FileExists(path))
-            return null;
-
         RDF_DemSurfRowDoc doc = new RDF_DemSurfRowDoc();
-        if (!doc.LoadFromFile(path))
+        if (!RDF_DemJsonIo.TryLoad(doc, path))
             return null;
         if (doc.iz != tileIz)
             return null;
