@@ -37,13 +37,17 @@ class RDF_DemRuntimeLoader
             return true;
         }
 
-        // 2) Packaged surface JSON (workshop preferred ship path)
-        string packagedRoot = RDF_DemBakeConstants.PACKAGED_DEM_DATA_DIR + worldKey + "/";
-        if (RDF_DemSurfaceJsonPack.TryLoadManifest(packagedRoot, worldKey, outManifest))
+        // 2) Packaged surface JSON — Workbench relative path and/or "$AddonId:" FS
+        //    (Steam Workshop / dedicated server cannot see bare "DemData/..." via FileIO)
+        string packagedRoot = RDF_DemPackagedRoot.FindWorldRoot(worldKey);
+        if (!packagedRoot.IsEmpty())
         {
-            AttachOptionalHeightPack(outManifest);
-            Print("[RDF DEM Runtime] using packaged SURF JSON: " + packagedRoot, LogLevel.NORMAL);
-            return true;
+            if (RDF_DemSurfaceJsonPack.TryLoadManifest(packagedRoot, worldKey, outManifest))
+            {
+                AttachOptionalHeightPack(outManifest);
+                Print("[RDF DEM Runtime] using packaged SURF JSON: " + packagedRoot, LogLevel.NORMAL);
+                return true;
+            }
         }
 
         // 3) Profile V3 CSV (dev bake, full DEM)
@@ -58,7 +62,7 @@ class RDF_DemRuntimeLoader
         }
 
         Warn("DEM/SURF missing for " + worldKey
-            + " (profile/packaged SURF JSON, then profile V3 CSV)");
+            + " (profile / DemData/ / $Addon:DemData / profile V3 CSV)");
         return false;
     }
 
