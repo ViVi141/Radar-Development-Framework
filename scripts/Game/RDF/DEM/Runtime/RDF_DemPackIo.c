@@ -70,6 +70,11 @@ class RDF_DemPackIo
     //--------------------------------------------------------------------------------------------
     static ResourceName ResolveConfResource(string relativeOrFsPath)
     {
+        // Never map $profile:…/DemData/… onto the workshop GuidIndex — that made DS
+        // logs claim "profile SURF" while actually loading packaged CONF.
+        if (IsProfileFsPath(relativeOrFsPath))
+            return ResourceName.Empty;
+
         string key = ToDemDataKey(relativeOrFsPath);
         if (key.IsEmpty())
             return ResourceName.Empty;
@@ -83,6 +88,8 @@ class RDF_DemPackIo
             return false;
         if (FileIO.FileExists(relativeOrFsPath))
             return true;
+        if (IsProfileFsPath(relativeOrFsPath))
+            return false;
         string key = ToDemDataKey(relativeOrFsPath);
         if (key.IsEmpty())
             return false;
@@ -141,6 +148,19 @@ class RDF_DemPackIo
     }
 
     //--------------------------------------------------------------------------------------------
+    protected static bool IsProfileFsPath(string path)
+    {
+        if (path.IsEmpty())
+            return false;
+        string s = path;
+        s.Replace("\\", "/");
+        s.ToLower();
+        return s.IndexOf("$profile:") == 0;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    // Strip addon FS / normalize to GuidIndex keys "DemData/...".
+    // Do not call for $profile: paths (use IsProfileFsPath first).
     protected static string ToDemDataKey(string path)
     {
         if (path.IsEmpty())
@@ -148,6 +168,9 @@ class RDF_DemPackIo
 
         string s = path;
         s.Replace("\\", "/");
+
+        if (IsProfileFsPath(s))
+            return string.Empty;
 
         int dem = s.IndexOf("DemData/");
         if (dem >= 0)

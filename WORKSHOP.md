@@ -10,7 +10,7 @@ Realistic radar, LiDAR and DEM sensor framework for Arma Reforger. Physical dete
 
 ## Description (≤ 5000 chars)
 
-# Radar Development Framework (RDF) — v1.1.4
+# Radar Development Framework (RDF) — v1.1.5
 
 A modular, workshop-ready sensor framework for Arma Reforger: **Radar**,
 **LiDAR**, and **DEM** bake/runtime. It models the detection chain as a
@@ -84,6 +84,14 @@ is included). Enable features explicitly — the framework is silent by default.
 ---
 
 ## Changelog (unlimited)
+
+## 1.1.5 — 2026-08-20
+
+Patch over 1.1.4. DemData source-path labeling fix.
+
+- `$profile:…/DemData/…` no longer resolves through the workshop GuidIndex.
+  DS logs that said `using profile SURF` while loading packaged CONF are fixed;
+  expect `using packaged SURF CONF: DemData/<world>/`.
 
 ## 1.1.4 — 2026-08-20
 

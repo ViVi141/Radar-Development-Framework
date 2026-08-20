@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 1.1.5 — 2026-08-20
+
+相对 1.1.4。修正 DemData 数据源日志误标。
+
+> EN: Patch over 1.1.4. Do not resolve `$profile:…/DemData/…` through the workshop GuidIndex (that mislabeled packaged CONF loads as profile). Logs now show `using packaged SURF CONF: DemData/<world>/` when the workshop pack is used.
+
+- `$profile:` 路径只走 FileIO；GuidIndex 仅用于模组内 `DemData/` CONF
+- 成功日志：`using packaged SURF CONF: DemData/GM_Eden/`（而非假的 profile 路径）
+
 ## 1.1.4 — 2026-08-20
 
 相对 1.1.2。工坊/专用服 DemData 真正修复：打包格式改为 `.conf`。

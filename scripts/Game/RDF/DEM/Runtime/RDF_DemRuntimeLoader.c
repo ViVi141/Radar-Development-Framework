@@ -28,24 +28,23 @@ class RDF_DemRuntimeLoader
             return false;
         }
 
-        // 1) Profile surface JSON (live height + surface class; workshop format)
+        // 1) Profile surface JSON / CONF via FileIO only ($profile:…)
         string profileRoot = RDF_DemBakeConstants.DEM_DATA_DIR + worldKey + "/";
         if (RDF_DemSurfaceJsonPack.TryLoadManifest(profileRoot, worldKey, outManifest))
         {
             AttachOptionalHeightPack(outManifest);
-            Print("[RDF DEM Runtime] using profile SURF JSON: " + profileRoot, LogLevel.NORMAL);
+            Print("[RDF DEM Runtime] using profile SURF: " + profileRoot, LogLevel.NORMAL);
             return true;
         }
 
-        // 2) Packaged surface JSON — Workbench relative path and/or "$AddonId:" FS
-        //    (Steam Workshop / dedicated server cannot see bare "DemData/..." via FileIO)
+        // 2) Packaged CONF (workshop / DS) — GuidIndex ResourceNames
         string packagedRoot = RDF_DemPackagedRoot.FindWorldRoot(worldKey);
         if (!packagedRoot.IsEmpty())
         {
             if (RDF_DemSurfaceJsonPack.TryLoadManifest(packagedRoot, worldKey, outManifest))
             {
                 AttachOptionalHeightPack(outManifest);
-                Print("[RDF DEM Runtime] using packaged SURF JSON: " + packagedRoot, LogLevel.NORMAL);
+                Print("[RDF DEM Runtime] using packaged SURF CONF: " + packagedRoot, LogLevel.NORMAL);
                 return true;
             }
         }
