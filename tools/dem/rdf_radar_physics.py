@@ -739,7 +739,11 @@ def suggest_mti_clutter_floor(
     prf_hz: float,
     canceller_order: int = 1,
 ) -> float:
-    """Classic MTI residue ≈ (σ_f/PRF)^{2N}; N=1 two-pulse, N=2 three-pulse."""
+    """Classic MTI residue ≈ (2π·σ_f/PRF)^{2N}; N=1 two-pulse, N=2 three-pulse.
+
+    The (2π)^{2N} factor comes from |H(f)|² = 4·sin²(π·f/PRF) small-angle expansion
+    (sin(π·f/PRF) ≈ π·f/PRF for small f/PRF, so |H(f)|² ≈ 4·(π·f/PRF)² = (2π·f/PRF)²).
+    """
     if wavelength_m <= 0.0 or prf_hz <= 0.0:
         return 1.0e-4
     sigma_vr = max(0.05, float(sigma_vr_m_s))
@@ -749,7 +753,7 @@ def suggest_mti_clutter_floor(
     if order > 2:
         order = 2
     sigma_fd = 2.0 * sigma_vr / wavelength_m
-    x = abs(sigma_fd / prf_hz)
+    x = abs(2.0 * math.pi * sigma_fd / prf_hz)
     residue = x ** (2 * order)
     if residue < 1.0e-6:
         residue = 1.0e-6

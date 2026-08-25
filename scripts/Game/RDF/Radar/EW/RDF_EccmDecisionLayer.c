@@ -13,6 +13,12 @@ class RDF_EccmDecisionLayer
     protected float m_SidelobeCouplingOn;
     protected bool m_JamActive;
     protected bool m_PrfActive;
+    // Dwell-count hysteresis for PRF agility. A flickering deceptionCount
+    // (0/1 every other dwell) would otherwise flip PRF agility on/off every
+    // dwell. Keep PRF active until deception has been clear for this many
+    // consecutive dwells.
+    protected int m_PrfClearDwells;
+    protected static const int PRF_CLEAR_DWELLS = 3;
 
     void RDF_EccmDecisionLayer(
         float jnOnDb = 6.0,
@@ -53,7 +59,21 @@ class RDF_EccmDecisionLayer
         else if (jnDb < m_JnOffDb)
             m_JamActive = false;
 
-        m_PrfActive = deceptionCount > 0;
+        // PRF agility with dwell hysteresis: turn on immediately when any
+        // deception plot is seen, but only turn off after PRF_CLEAR_DWELLS
+        // consecutive clear dwells. Without this, a single flickering
+        // deception plot flips PRF agility every dwell.
+        if (deceptionCount > 0)
+        {
+            m_PrfActive = true;
+            m_PrfClearDwells = 0;
+        }
+        else
+        {
+            m_PrfClearDwells = m_PrfClearDwells + 1;
+            if (m_PrfClearDwells >= PRF_CLEAR_DWELLS)
+                m_PrfActive = false;
+        }
 
         outEnableSlb = false;
         outPrfAgility = m_PrfActive;
@@ -74,6 +94,7 @@ class RDF_EccmDecisionLayer
     {
         m_JamActive = false;
         m_PrfActive = false;
+        m_PrfClearDwells = 0;
     }
 
     string GetStatusShort()

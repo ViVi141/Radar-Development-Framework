@@ -7,6 +7,12 @@ class RDF_LidarScanner
     protected ref RDF_LidarSampleStrategy m_SampleStrategy;
     // Reused TraceParam — never assign owned ColliderName = string.Empty in the hot loop.
     protected ref TraceParam m_TraceParam;
+    // TraceDirectedRay scratch: reused across calls to avoid 3 allocations
+    // (starts / ends / samples) per call. TraceDirectedRay is a single-ray
+    // convenience wrapper, so a single-element scratch set is enough.
+    protected ref array<vector> m_ScratchDirStarts;
+    protected ref array<vector> m_ScratchDirEnds;
+    protected ref array<ref RDF_LidarSample> m_ScratchDirSamples;
 
     void RDF_LidarScanner(RDF_LidarSettings settings = null)
     {
@@ -151,9 +157,20 @@ class RDF_LidarScanner
 
     RDF_LidarSample TraceDirectedRay(vector start, vector end, IEntity exclude)
     {
-        ref array<vector> starts = new array<vector>();
-        ref array<vector> ends = new array<vector>();
-        ref array<ref RDF_LidarSample> samples = new array<ref RDF_LidarSample>();
+        // Reuse single-element scratch arrays across calls instead of
+        // allocating 3 fresh arrays every call.
+        if (!m_ScratchDirStarts)
+        {
+            m_ScratchDirStarts = new array<vector>();
+            m_ScratchDirEnds = new array<vector>();
+            m_ScratchDirSamples = new array<ref RDF_LidarSample>();
+        }
+        ref array<vector> starts = m_ScratchDirStarts;
+        ref array<vector> ends = m_ScratchDirEnds;
+        ref array<ref RDF_LidarSample> samples = m_ScratchDirSamples;
+        starts.Clear();
+        ends.Clear();
+        samples.Clear();
         starts.Insert(start);
         ends.Insert(end);
         ScanDirectedRays(starts, ends, exclude, samples);

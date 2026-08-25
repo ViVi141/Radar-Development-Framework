@@ -434,7 +434,11 @@ class RDF_RadarRangeWalkOffEffect : RDF_RadarEwEffect
     float m_ElevationDeg = 0.0;
     float m_PowerW = 0.000000000001;
     float m_RangeRateMs = 80.0;
-    float m_StartTimeS = 0.0;
+    // -1.0 = unanchored. Lazily anchored on first CollectFalsePlots so the
+    // effect starts walking from the moment it first runs, not from world
+    // time 0 (which would silently fling the false plot past m_MaxRangeM
+    // before any scan ever happens when the effect is created mid-mission).
+    float m_StartTimeS = -1.0;
     float m_MaxRangeM = 8000.0;
     float m_MinRangeM = 50.0;
 
@@ -447,6 +451,10 @@ class RDF_RadarRangeWalkOffEffect : RDF_RadarEwEffect
     {
         if (!m_Enabled || m_PowerW <= 0.0)
             return;
+
+        // Lazily anchor on first production (mirrors DeceptionJammerEffect).
+        if (m_StartTimeS < 0.0)
+            m_StartTimeS = worldTimeS;
 
         float tRel = worldTimeS - m_StartTimeS;
         if (tRel < 0.0)

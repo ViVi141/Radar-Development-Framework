@@ -82,6 +82,12 @@ class EccmDecisionLayer:
         self.sidelobe_coupling_on = sidelobe_coupling_on
         self._jam_active = False
         self._prf_active = False
+        # Dwell-count hysteresis for PRF agility: a flickering deception_count
+        # (0/1 every other dwell) would otherwise flip PRF agility on/off
+        # every dwell. Keep PRF active until deception has been clear for
+        # PRF_CLEAR_DWELLS consecutive dwells.
+        self._prf_clear_dwells = 0
+        self.PRF_CLEAR_DWELLS = 3
 
     def decide(self, obs: EccmObservations) -> EccmActions:
         if obs.jn_db >= self.jn_on_db:
@@ -91,8 +97,11 @@ class EccmDecisionLayer:
 
         if obs.deception_count > 0:
             self._prf_active = True
+            self._prf_clear_dwells = 0
         else:
-            self._prf_active = False
+            self._prf_clear_dwells += 1
+            if self._prf_clear_dwells >= self.PRF_CLEAR_DWELLS:
+                self._prf_active = False
 
         actions = EccmActions()
         actions.prf_agility = self._prf_active
@@ -108,3 +117,4 @@ class EccmDecisionLayer:
     def reset(self) -> None:
         self._jam_active = False
         self._prf_active = False
+        self._prf_clear_dwells = 0

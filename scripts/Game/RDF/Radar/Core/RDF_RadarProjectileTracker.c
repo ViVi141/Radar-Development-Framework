@@ -571,6 +571,22 @@ class RDF_RadarProjectileTracker
     protected ref array<float> m_ScratchPairCosts = new array<float>();
     protected ref array<int> m_ScratchPairTrackIdx = new array<int>();
     protected ref array<int> m_ScratchPairPlotIdx = new array<int>();
+    // RefreshWeaponLocate scratch: reused every scan to avoid 2 per-frame
+    // allocations (solvedThisScan / stillPending) and to stop replacing
+    // m_WlrPending with a fresh array each scan.
+    protected ref array<ref RDF_RadarTrack> m_ScratchWlrSolved = new array<ref RDF_RadarTrack>();
+    protected ref array<ref RDF_RadarTrack> m_ScratchWlrStillPending = new array<ref RDF_RadarTrack>();
+    // JPDA path scratch: reused every scan to avoid 7 per-frame allocations
+    // (plots / trackUpdated / plotClaimed / trackPred / plotMeas / betas /
+    // miss) plus 2N RDF_JpdaPoint allocations. The JpdaPoint arrays are
+    // pooled — objects are reused (fields overwritten) rather than freed.
+    protected ref array<ref RDF_RadarTarget> m_ScratchJpdaPlots = new array<ref RDF_RadarTarget>();
+    protected ref array<bool> m_ScratchJpdaTrackUpdated = new array<bool>();
+    protected ref array<bool> m_ScratchJpdaPlotClaimed = new array<bool>();
+    protected ref array<ref RDF_JpdaPoint> m_ScratchJpdaTrackPred = new array<ref RDF_JpdaPoint>();
+    protected ref array<ref RDF_JpdaPoint> m_ScratchJpdaPlotMeas = new array<ref RDF_JpdaPoint>();
+    protected ref array<ref array<float>> m_ScratchJpdaBetas = new array<ref array<float>>();
+    protected ref array<float> m_ScratchJpdaMiss = new array<float>();
 
     void ConfigureFromSettings(RDF_RadarSettings settings)
     {
@@ -790,11 +806,16 @@ class RDF_RadarProjectileTracker
         int solved = 0;
         // Tracks solved this scan (Phase 1 queue drain) must not be solved or
         // re-queued again in Phase 2 — they are still in m_Tracks.
-        array<ref RDF_RadarTrack> solvedThisScan = new array<ref RDF_RadarTrack>();
+        array<ref RDF_RadarTrack> solvedThisScan = m_ScratchWlrSolved;
+        solvedThisScan.Clear();
 
         // Phase 1: drain pending queue first (oldest-first priority) so deferred
         // solves do not starve behind the fresh eligible tracks each scan.
-        array<ref RDF_RadarTrack> stillPending = new array<ref RDF_RadarTrack>();
+        // Build the still-pending list into a scratch buffer, then swap it
+        // back into m_WlrPending in-place (Clear + CopyFrom) so the array
+        // reference is stable across scans (no per-frame replacement).
+        array<ref RDF_RadarTrack> stillPending = m_ScratchWlrStillPending;
+        stillPending.Clear();
         for (int q = 0; q < m_WlrPending.Count(); q++)
         {
             RDF_RadarTrack track = m_WlrPending.Get(q);
@@ -810,7 +831,9 @@ class RDF_RadarProjectileTracker
             solved = solved + 1;
             solvedThisScan.Insert(track);
         }
-        m_WlrPending = stillPending;
+        m_WlrPending.Clear();
+        for (int sp = 0; sp < stillPending.Count(); sp++)
+            m_WlrPending.Insert(stillPending.Get(sp));
 
         // Phase 2: fresh eligible tracks — solve now or queue overflow.
         for (int i = 0; i < m_Tracks.Count(); i++)
@@ -1136,7 +1159,8 @@ class RDF_RadarProjectileTracker
         float worldTimeSec,
         vector radarOrigin)
     {
-        array<ref RDF_RadarTarget> plots = new array<ref RDF_RadarTarget>();
+        array<ref RDF_RadarTarget> plots = m_ScratchJpdaPlots;
+        plots.Clear();
         for (int i = 0; i < targets.Count(); i++)
         {
             RDF_RadarTarget t = targets.Get(i);
@@ -1147,19 +1171,31 @@ class RDF_RadarProjectileTracker
         int nTracks = m_Tracks.Count();
         int nPlots = plots.Count();
 
-        array<bool> trackUpdated = new array<bool>();
+        array<bool> trackUpdated = m_ScratchJpdaTrackUpdated;
+        trackUpdated.Clear();
         for (int ti = 0; ti < nTracks; ti++)
             trackUpdated.Insert(false);
-        array<bool> plotClaimed = new array<bool>();
+        array<bool> plotClaimed = m_ScratchJpdaPlotClaimed;
+        plotClaimed.Clear();
         for (int pi = 0; pi < nPlots; pi++)
             plotClaimed.Insert(false);
 
         if (nTracks > 0 && nPlots > 0)
         {
-            array<ref RDF_JpdaPoint> trackPred = new array<ref RDF_JpdaPoint>();
+            // Pool RDF_JpdaPoint objects: reuse existing entries (overwrite
+            // fields) and only allocate when the pool is smaller than the
+            // current track/plot count.
+            array<ref RDF_JpdaPoint> trackPred = m_ScratchJpdaTrackPred;
             for (int ti = 0; ti < nTracks; ti++)
             {
-                RDF_JpdaPoint tp = new RDF_JpdaPoint();
+                RDF_JpdaPoint tp;
+                if (ti < trackPred.Count())
+                    tp = trackPred.Get(ti);
+                else
+                {
+                    tp = new RDF_JpdaPoint();
+                    trackPred.Insert(tp);
+                }
                 float pr;
                 float pa;
                 float pe;
@@ -1167,18 +1203,30 @@ class RDF_RadarProjectileTracker
                 m_Tracks.Get(ti).PredictPolarAt(worldTimeSec, radarOrigin, pr, pa, pe, prr);
                 tp.m_RangeM = pr;
                 tp.m_AzimuthDeg = pa;
-                trackPred.Insert(tp);
             }
-            array<ref RDF_JpdaPoint> plotMeas = new array<ref RDF_JpdaPoint>();
+            // Trim any surplus pooled entries from a previous larger frame.
+            while (trackPred.Count() > nTracks)
+                trackPred.Remove(trackPred.Count() - 1);
+
+            array<ref RDF_JpdaPoint> plotMeas = m_ScratchJpdaPlotMeas;
             for (int pi = 0; pi < nPlots; pi++)
             {
-                RDF_JpdaPoint pm = new RDF_JpdaPoint();
+                RDF_JpdaPoint pm;
+                if (pi < plotMeas.Count())
+                    pm = plotMeas.Get(pi);
+                else
+                {
+                    pm = new RDF_JpdaPoint();
+                    plotMeas.Insert(pm);
+                }
                 pm.m_RangeM = plots.Get(pi).m_Distance;
                 pm.m_AzimuthDeg = plots.Get(pi).m_AzimuthDeg;
-                plotMeas.Insert(pm);
             }
-            array<ref array<float>> betas = new array<ref array<float>>();
-            array<float> miss = new array<float>();
+            while (plotMeas.Count() > nPlots)
+                plotMeas.Remove(plotMeas.Count() - 1);
+
+            array<ref array<float>> betas = m_ScratchJpdaBetas;
+            array<float> miss = m_ScratchJpdaMiss;
             m_JpdaAssociator.Associate(
                 trackPred,
                 plotMeas,

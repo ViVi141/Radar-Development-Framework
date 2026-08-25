@@ -15,6 +15,13 @@ class RDF_ConicalSampleStrategy : RDF_LidarSampleStrategy
 
     override vector BuildDirection(int index, int count)
     {
+        // A single sample should point along the cap axis (+Z) rather than at
+        // an arbitrary off-axis direction (the general formula gives z =
+        // (1+cosA)/2, r > 0, phi = 0, i.e. a ray tilted toward +X). Degenerate
+        // to the axis so count=1 produces the cap centre.
+        if (count <= 1)
+            return Vector(0, 0, 1);
+
         // Uniformly distribute directions over the spherical cap [0, halfAngle]
         float halfRad = m_HalfAngleDeg * Math.DEG2RAD;
         float cosA = Math.Cos(halfRad);

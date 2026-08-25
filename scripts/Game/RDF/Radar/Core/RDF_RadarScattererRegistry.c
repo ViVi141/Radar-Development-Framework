@@ -1084,9 +1084,20 @@ class RDF_RadarScattererRegistry
 
     //------------------------------------------------------------------------------------------------
     // Packed int key — no string allocation per cell (hot path: CollectInSphere
-    // builds one key per grid cell per scan).
+    // builds one key per grid cell per scan). ix/iz are clamped to the supported
+    // half-range before packing so a too-small cell size or an out-of-bounds
+    // position degrades to the edge cell instead of silently colliding keys
+    // (which would mix unrelated scatterers into one bucket).
     protected static int GridKey(int ix, int iz)
     {
+        if (ix < -GRID_KEY_OFFSET)
+            ix = -GRID_KEY_OFFSET;
+        else if (ix > GRID_KEY_OFFSET - 1)
+            ix = GRID_KEY_OFFSET - 1;
+        if (iz < -GRID_KEY_OFFSET)
+            iz = -GRID_KEY_OFFSET;
+        else if (iz > GRID_KEY_OFFSET - 1)
+            iz = GRID_KEY_OFFSET - 1;
         return ((ix + GRID_KEY_OFFSET) << GRID_KEY_BITS) | (iz + GRID_KEY_OFFSET);
     }
 

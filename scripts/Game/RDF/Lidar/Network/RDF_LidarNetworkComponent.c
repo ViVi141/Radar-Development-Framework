@@ -145,12 +145,19 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
     protected void RpcAsk_SetDemoConfig(int rayCount, float updateInterval, float rangeM, bool renderWorld, bool drawOriginAxis, bool verbose)
     {
         rayCount = Math.MaxInt(rayCount, 1);
-        if (updateInterval > 0 && updateInterval < 0.01)
-            updateInterval = 0.01;
+        // Clamp tiny positive intervals to 0.01 and assign in one path. The
+        // old `if (updateInterval > 0 && updateInterval < 0.01) updateInterval
+        // = 0.01;` was a separate branch immediately followed by another
+        // `if (updateInterval > 0)` — merging them removes the dead-looking
+        // split and keeps zero/negative (disabled) values untouched.
+        if (updateInterval > 0)
+        {
+            if (updateInterval < 0.01)
+                updateInterval = 0.01;
+            m_UpdateInterval = updateInterval;
+        }
 
         m_RayCount = rayCount;
-        if (updateInterval > 0)
-            m_UpdateInterval = updateInterval;
         if (rangeM > 0)
             m_Range = Math.Clamp(rangeM, 0.1, 100000.0);
         m_RenderWorld = renderWorld;
@@ -337,7 +344,12 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
         // If we know expected part count and have all parts, attempt assembly
         if (buf.m_ExpectedParts > 0 && buf.m_ReceivedParts >= buf.m_ExpectedParts)
         {
-            string assembled = "";
+            // Collect parts into an array first so the final join can use a
+            // divide-and-conquer merge (O(n log n)) instead of the O(n²)
+            // `assembled += part` accumulation. Also lets us bail early on a
+            // missing part without partial work.
+            array<string> parts = new array<string>();
+            parts.Reserve(buf.m_ExpectedParts);
             for (int i = 0; i < buf.m_ExpectedParts; i++)
             {
                 string part = buf.m_Parts.Get(i);
@@ -346,8 +358,9 @@ class RDF_LidarNetworkComponent : RDF_LidarNetworkAPI
                     // missing part; wait for further arrivals
                     return;
                 }
-                assembled += part;
+                parts.Insert(part);
             }
+            string assembled = RDF_LidarExport.JoinStringParts(parts, "");
 
             array<ref RDF_LidarSample> samples = RDF_LidarExport.ParseCSVToSamples(assembled);
             if (!samples || samples.Count() == 0)

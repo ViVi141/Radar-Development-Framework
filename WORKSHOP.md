@@ -10,7 +10,7 @@ Realistic radar, LiDAR and DEM sensor framework for Arma Reforger. Physical dete
 
 ## Description (≤ 5000 chars)
 
-# Radar Development Framework (RDF) — v1.1.5
+# Radar Development Framework (RDF) — v1.1.6
 
 A modular, workshop-ready sensor framework for Arma Reforger: **Radar**,
 **LiDAR**, and **DEM** bake/runtime. It models the detection chain as a
@@ -84,6 +84,15 @@ is included). Enable features explicitly — the framework is silent by default.
 ---
 
 ## Changelog (unlimited)
+
+## 1.1.6 — 2026-08-25
+
+Patch over 1.1.5. Full-project C code review fixes (P0–P4 + important) and compile fixes.
+
+- P0: MTI clutter floor `(2π)^(2N)` factor; Nelder–Mead 5th-vertex drag span; JPDA clutter likelihood; DEM PreloadAllTiles residency; radar network audience origin; EW range-walk-off lazy anchor; LiDAR density/isWater over net; scatterer GridKey clamp; DEM tile bake boundary sea placeholder.
+- P1–P2: per-frame allocation scratch/pools; lifecycle leaks (MapOverlay hooks, scatterer Unregister, Lidar pollers/AutoRunner, CFAR row hits, DEM warn budget / touch wrap).
+- P3–P4 + important: AutoTest isolation; LiDAR sample strategy edges; PatternLut hardware match; measurement/clutter/fusion/ECCM/lock/scanner fixes.
+- Dead code: remove unused `GetEmittingInSphere`; compile: `string.Replace` in-place, `TryLoadProfile(hpbw, sll)`, unused `n` in ballistics.
 
 ## 1.1.5 — 2026-08-20
 

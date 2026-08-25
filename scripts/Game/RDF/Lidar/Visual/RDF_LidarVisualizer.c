@@ -19,6 +19,11 @@ class RDF_LidarVisualizer
     protected ref array<ref RDF_LidarSample> m_Samples;
     protected float m_LastRange = 50.0;
     protected ref RDF_LidarColorStrategy m_ColorStrategy;
+    // DrawBatchedMeshes scratch: the per-segment triangle buckets are reused
+    // across Render calls to avoid (2 + 2*segs) allocations every frame. The
+    // inner array<vector> buckets are Clear()'d, not freed.
+    protected ref array<ref array<vector>> m_ScratchTrisHits;
+    protected ref array<ref array<vector>> m_ScratchTrisMisses;
 
     protected ref array<ref RDF_LidarAfterglowBlip> m_Afterglow;
     protected int m_LastAfterglowScanSerial;
@@ -113,6 +118,10 @@ class RDF_LidarVisualizer
         m_StaticValid = false;
         if (m_Samples)
             m_Samples.Clear();
+        if (m_ScratchTrisHits)
+            m_ScratchTrisHits.Clear();
+        if (m_ScratchTrisMisses)
+            m_ScratchTrisMisses.Clear();
     }
 
     void ClearAfterglow()
@@ -668,12 +677,33 @@ class RDF_LidarVisualizer
         vector camUp = camMat[1];
 
         int segs = Math.MaxInt(1, m_Settings.m_RaySegments);
-        array<ref array<vector>> trisHits = new array<ref array<vector>>();
-        array<ref array<vector>> trisMisses = new array<ref array<vector>>();
+        // Reuse the outer bucket arrays across frames; grow the per-segment
+        // inner arrays lazily and Clear() them instead of reallocating.
+        array<ref array<vector>> trisHits = m_ScratchTrisHits;
+        if (!trisHits)
+        {
+            trisHits = new array<ref array<vector>>();
+            m_ScratchTrisHits = trisHits;
+        }
+        array<ref array<vector>> trisMisses = m_ScratchTrisMisses;
+        if (!trisMisses)
+        {
+            trisMisses = new array<ref array<vector>>();
+            m_ScratchTrisMisses = trisMisses;
+        }
+        // Ensure we have exactly `segs` buckets in each outer array.
+        while (trisHits.Count() < segs)
+            trisHits.Insert(new array<vector>());
+        while (trisHits.Count() > segs)
+            trisHits.Remove(trisHits.Count() - 1);
+        while (trisMisses.Count() < segs)
+            trisMisses.Insert(new array<vector>());
+        while (trisMisses.Count() > segs)
+            trisMisses.Remove(trisMisses.Count() - 1);
         for (int i = 0; i < segs; i++)
         {
-            trisHits.Insert(new array<vector>());
-            trisMisses.Insert(new array<vector>());
+            trisHits.Get(i).Clear();
+            trisMisses.Get(i).Clear();
         }
 
         float defaultPointSize = Math.Max(0.001, m_Settings.m_PointSize);
@@ -682,6 +712,10 @@ class RDF_LidarVisualizer
         for (int sampleIdx = 0; sampleIdx < drawLimit; sampleIdx++)
         {
             RDF_LidarSample sample = samples.Get(sampleIdx);
+            // Skip null samples (network gaps / partial deserialisation) so
+            // the visualiser does not NPE on a sparse sample array.
+            if (!sample)
+                continue;
             if (m_Settings.m_ShowHitsOnly && !sample.m_Hit)
                 continue;
 

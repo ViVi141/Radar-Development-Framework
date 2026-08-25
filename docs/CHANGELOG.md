@@ -1,5 +1,103 @@
 # CHANGELOG
 
+## 1.1.6 — 2026-08-25
+
+相对 1.1.5。全项目 C 代码评审（6 模块并行 review）的 P0–P4 与"重要问题"修复，并含编译修复（`string.Replace` 原地调用、`TryLoadProfile` 参数、Ballistics 未用变量）与死代码清理（`GetEmittingInSphere`）。
+
+> EN: Patch over 1.1.5. Completes every P0–P4 item and "important" issue from the full-project code review, plus compile fixes and dead-code removal. See `docs/CODE_REVIEW_2026-08-25.md`.
+
+### P1–P4 与重要问题
+
+承接 P0 修复。完成评审报告中的 P1（每帧分配热点）、P2（生命周期/资源泄漏）、P3（测试隔离一致性）、P4（采样策略边界）及"重要问题"全部条目。
+
+### P1 — 每帧分配热点（GC 压力）
+
+- **PlanDwells**（`RDF_RadarSensor.c`）：4 个 `new array`（tasks/scheduled/late/ids）提升为 scratch 字段，Clear 复用。
+- **RefreshWeaponLocates**（`RDF_RadarProjectileTracker.c`）：`solvedThisScan`/`stillPending` 提升为 scratch；`m_WlrPending` 改为 Clear+CopyIn 原地更新，不再每帧替换引用。
+- **JPDA 路径**（`RDF_RadarProjectileTracker.c` + `RDF_JpdaAssociator.c`）：7 个 array + 2N `RDF_JpdaPoint` 改走 scratch 池（对象复用、字段覆写、 surplus trim）；Associator 的 beta-row 改走 `m_BetaRowPool` 池。
+- **AddDeceptionFalsePlots**（`RDF_RadarScanner.c`）：`falsePlots` 提升为 `m_ScratchFalsePlots`。
+- **ApplyGate**（`RDF_RadarCfarProcessor.c`）：`targetAzIndices`/`targetRangeIndices` 提升为 scratch。
+- **Lidar 网络 CSV**（`RDF_LidarExport.c` + `RDF_LidarNetworkComponent.c`）：`csv += part` O(n²) 拼接改 `array<string>` + 分治合并 `JoinStringParts`（O(n log n)）；分块组装 `assembled += part` 同改。
+- **LidarHUD**（`RDF_LidarHUD.c`）：per-blip `array<float>` + `PolygonDrawCommand` 改走 `m_BlipCmdPool`/`m_BlipVertPool` 池；sweep 线单实例池。
+- **LidarVisualizer**（`RDF_LidarVisualizer.c`）：`DrawBatchedMeshes` 的 2 个外层数组 + 2·segs 个内层 `array<vector>` 改走 scratch（Clear 复用、按 segs 增减）。
+- **TraceDirectedRay**（`RDF_LidarScanner.c`）：3 个 `new array` 改走单元素 scratch。
+- **RDF_RadarHUD.UpdatePPI**（`RDF_RadarHUD.c`）：per-blip cmd/vert 池化 + sweep 单实例池。
+- **RDF_DemMaterialTable**（`RDF_DemMaterialTable.c`）：3 个 per-cell `new array<string>` 分割器改走共享静态 `s_SplitScratch`。
+- **RDF_DemColumnSpans**（`RDF_DemColumnSpans.c`）：`FormatSpanFields` 16 次 `row = row + ...` 拼接改 `array<string>` + 分治合并。
+
+### P2 — 生命周期/资源泄漏
+
+- **MapOverlay hook 永不注销**（`RDF_RadarAutoTestMapOverlay.c`）：新增 `UnregisterHooks`，`StopInternal` 调用 `SCR_MapEntity.GetOnMapOpen/Close().Remove`。
+- **Rwr/EsmArm 删目标前未 Unregister**（`RDF_RadarRwrAutoTest.c` + `RDF_RadarEsmArmAutoTest.c`）：删目标前调 `RDF_RadarScattererRegistry.Unregister`，与其它测试成对模式对齐。
+- **DEM AutoTest 不 ResetSession**（`RDF_RadarAutoTest.c`）：`StopInternal(restore=true)` 调 `sensor.ResetSession()`，避免单独跑两次时第二次继承上次状态。
+- **Lidar 静态 s_Pollers 永不释放**（`RDF_LidarNetworkScanner.c`）：`StaticPollTick` 检测 `m_Subject` 失效即移除 poller 并清引用；新增 `Cleanup()` 释放全部 poller 与静态数组。
+- **Lidar AutoRunner 永久调度**（`RDF_LidarAutoRunner.c`）：构造不再 `CallLater`；`StartAutoRun` 调度、`StopAutoRun` 用 `Remove(StaticTick)` 注销，空闲 AutoRunner 不再空跑。
+- **CfarProcessor m_RowHits 只增不减**（`RDF_RadarCfarProcessor.c`）：改按当前 grid 尺寸 Clear+重建，避免旧条目残留。
+- **DemRuntimeLoader s_WarnCount 永不复位**（`RDF_DemRuntimeLoader.c`）：新增 `ResetWarningBudget()`，`LoadManifest` 入口调用，长 DS 运行后续 warn 不再全静默。
+- **DemRuntimeCache m_TouchCounter 溢出**（`RDF_DemRuntimeCache.c`）：`TouchTile` 在 `0x7FFFFFFF` 处回绕到 0，LRU 比较仍正确。
+
+### P4 — 采样策略边界
+
+- **Hemisphere 采样偏极点**（`RDF_HemisphereSampleStrategy.c`）：`z = t` 改 `z = 1 - t`，极点（r→0）只由首索引命中，主体样本分布到地平线带。
+- **Scanline count≤sectors 全朝上**（`RDF_ScanlineSampleStrategy.c`）：`sectors = MinInt(m_Sectors, count)`，单行时 `t` 按扇区分布，不再全指 +Z。
+- **Conical count=1 同向**（`RDF_ConicalSampleStrategy.c`）：count≤1 退化为 `Vector(0,0,1)`（cap 轴）。
+
+### 补遗 — 死代码清理
+
+- **`RDF_RadarEmitterRegistry.GetEmittingInSphere`**（`RDF_RadarEmitterRegistry.c`）：该函数在循环内对每个球内辐射源 `new RDF_RadarTarget()`，性质同 P1 B 系列分配热点；全仓检索无任何调用方，属死代码，直接删除（保留 `Register/RegisterWithRadio/Unregister/SetEmitting/IsEmitting` 门面 API 不变）。
+
+### 重要问题
+
+- **PatternLut 硬件变更不重建**（`RDF_RadarPatternLut.c`）：`TryLoadProfile` 校验 profile 的 `hpbw_deg`/`sidelobe_level_db` 与请求参数匹配，不匹配则回退 `BuildSegmented`。
+- **Measurement rangeBin 未 clamp**（`RDF_RadarMeasurement.c`）：上界 clamp 到 `settings.m_RangeBinCount - 1`。
+- **ClutterModel sin(thetaRef) 零除**（`RDF_RadarClutterModel.c`）：`sin(thetaRef)` 下界保护 1e-6。
+- **FusionService fusedId 无回绕 + det 阈值过严**（`RDF_RadarFusionService.c`）：`m_NextFusedId` 在 `0x7FFFFFFF` 回绕（跳过 0）；`TryCrossFixHorizontal` 的 det 阈值改 `sin(m_MinCrossFixAngleDeg)·0.5`，与角度 gate 一致。
+- **LidarNetworkComponent 死分支**（`RDF_LidarNetworkComponent.c`）：`updateInterval > 0 && < 0.01` 与后续 `if (> 0)` 合并，消除死分支。
+- **LidarHUD/Visualizer sample 未判空**（`RDF_LidarHUD.c` + `RDF_LidarVisualizer.c`）：首元素/迭代元素判空，防 NPE。
+- **DemTileBake 死代码**（`RDF_DemTileBake.c`）：删除从未调用的 `HasGroundObstacle`/`QueryObstacleCallback`/`NormalToSlopeDeg` 及 `s_QueryHit`/`s_QueryHits` 静态字段。
+- **LockManager 配置/运行态耦合**（`RDF_RadarLockManager.c`）：`AcquireLock` 不再从配置标志同步到 `m_ArmLockActive`，运行态仅由显式 arm/disarm 改变。
+- **EccmDecisionLayer PRF 捷变无滞回**（`RDF_EccmDecisionLayer.c` + `rdf_radar_eccm.py`）：PRF 捷变引入 3-dwell 清除滞回，deceptionCount 在 0/1 间抖动不再每帧翻转。
+- **Scanner cursor 推进偏 1**（`RDF_RadarScanner.c`）：LOS 预算截断时 `processedCount = step`（回退到预算跳过的候选），公平游标指向该候选而非越过它，消除扫描空洞。
+
+### P3 — 测试隔离一致性
+
+- **Batch timed_out 字段不一致**（`RDF_RadarAutoTestBatch.c`）：`WriteStartFailedResult` 改用 `bool.ToString()` 与 `WriteResult` 一致。
+- **ShellFire 关联 gate 过松**（`RDF_RadarShellFireAutoTest.c`）：关联 gate 120m → 40m，避免非弹种但靠近弹的 plot 被误计。
+- **Suite step 0 无 gate 兜底**（`RDF_RadarAutoTestSuite.c`）：step 0 入口检测 gate busy 则记 `gate_busy` 并中止，不再误记为 "dem"。
+- **Perf/DemLosBench 不恢复 prior config**（`RDF_RadarPerfAutoTest.c` + `RDF_RadarDemLosBenchAutoTest.c`）：`StopInternal(restore=true)` 恢复 `m_PrevDemoEnabled`/`m_PrevHudEnabled`，遵守 Suite 契约；DemLosBench 新增保存/恢复。
+- **抽 RDF_RadarTestUtil 公共类**（新增 `RDF_RadarTestUtil.c`）：`BoolLabel`（12 份）+ `ArrayP95`（3 份）逻辑集中到静态方法，各测试本地方法改为一行委托。
+
+### 验证
+
+- Python golden 套件 238 测试全过（含 JPDA 2 个回归测试 + ECCM 滞回同步）
+- Enforce + Python 双轨同步（MTI floor、JPDA clutter、ECCM PRF 滞回）
+
+### P0 — 高危修复
+
+全项目 C 代码评审发现的 9 个 P0 级问题修复。
+
+> EN: Fixes 9 P0 issues found by a full-project C code review (6 parallel review agents).
+
+### 物理/数值错误
+
+- **【功能 bug】MTI 杂波基底漏 `(2π)^(2N)` 因子**（`RDF_RadarHwCalib.c`，高危）：`SuggestMtiClutterFloor` 用 `(σ_f/PRF)^(2N)` 缺 `(2π)^(2N)`，N=1 低估 ~40×、N=2 低估 ~1559×，导致 MTI floor 严重偏小、真实杂波下漏警。修复：`x = 2π·σ_f/PRF` 后再 `Pow`。Python 原型 `rdf_radar_physics.py` 同步。
+- **【功能 bug】Nelder-Mead 单纯形第 5 顶点退化**（`RDF_RadarBallistics.c`，高危）：4D 拟合 `{vx,vy,vz,drag}` 第 5 顶点与 init 完全相同，drag 维度无独立扰动，反推 WLR 退化为 3D 速度搜索 + drag 恒为先验。修复：第 5 顶点 `dart = dragInit + 0.3·(dragHi−dragLo)`。
+- **【功能 bug】JPDA 叶子节点 clutter=0 关联失效**（`RDF_JpdaAssociator.c`，高危）：clutter=0 默认下 `nPlots > nTracks` 时所有联合事件被叶节点拒绝，`m_EventCount=0`，`outBetas` 全 0 / `outMiss` 全 1，关联静默失效。修复：`Associate` 增 `clutter` 参数（默认 0，保持现有 hard-JPDA 语义），叶节点改为乘 `clutter^unassigned`；无可行事件时回退 `HardAssignCluster`。Python 原型 `rdf_radar_jpda.py` 同步，新增 2 个回归测试。
+- **【功能 bug】DEM `m_FullyResident` 判定过宽**（`RDF_DemRuntimeCache.c`，中危）：`PreloadAllTiles` 用 `loaded > 0` 标记 resident，90% tile 失败仍标 true，`BeginScan` 据此设 INT_MAX budget 遮蔽 holes。修复：改 `failed == 0 && loaded > 0`，新增 `m_ResidentHoles` 字段 + `GetResidentHoles()` getter 供调用方决策回退。
+- **【功能 bug】`GridKey` 整数溢出**（`RDF_RadarScattererRegistry.c`，中危）：`(ix+32768)<<16 | (iz+32768)` 正向范围只到 32767，cell 缩小或地图扩大时 cell 碰撞。修复：`GridKey` 入口对 ix/iz clamp 到 `[-32768, 32767]`，越界退化到边缘 cell 而非静默碰撞。
+- **【功能 bug】DEM 边界 cell 静默跳过**（`RDF_DemTileBake.c`，中危）：边界 tile 的越界 cell 用 `continue` 跳过，导致 tile 缺整行/列；运行时回退 live `GetSurfaceY` 但 tile 不完整。修复：越界 cell 改写海洋占位行（`BuildSeaSurfaceRow` + `oceanBaseY`），避免 TraceMove 离岸堆崩溃的同时保证 tile 完整。
+
+### 网络/多人正确性
+
+- **【功能 bug】`HasInterestedAudience` 用未初始化 origin**（`RDF_RadarNetworkComponent.c`，高危）：首次扫描前 `m_LastScanOrigin = "0 0 0"`，玩家远离世界原点时首帧被判定"无观众"跳过广播，JIP/早期客户端拿不到首帧。修复：改用 `GetOwner().GetOrigin()` 作为兴趣半径基准。
+- **【功能 bug】`RangeWalkOffEffect.m_StartTimeS` 默认 0.0 静默失效**（`RDF_RadarEwModel.c`，中危）：默认 0.0 而非 -1.0 懒锚定，任务 t=300s 创建时 `tRel = 300`，plot 立刻飞到 24km 被门过滤掉。修复：默认 -1.0，首次 `CollectFalsePlots` 懒锚定到 `worldTimeS`，与 `DeceptionJammerEffect` 语义对齐。
+- **【功能 bug】LiDAR 网络反序列化丢字段**（`RDF_LidarExport.c` + `RDF_LidarTypes.c` + `RDF_LidarMaterialColorStrategy.c`，中危）：`ParseCSVToSamples` 不还原 `m_End`/`m_Entity`/`m_Surface`/`m_ColliderName`，客户端 `MaterialColorStrategy` 因 `m_Surface=null` 全走 fallback 灰色。修复：CSV 格式扩展 `|colliderName|density|isWater`，`RDF_LidarSample` 增 `m_Density`/`m_IsWater` 字段，客户端重建 `m_End = start + dir·dist`，`MaterialColorStrategy` 用 `m_Density` 兜底着色。`m_Entity`/`m_Surface` 为服务端句柄不可序列化，保持 null 并注释。
+
+### 验证
+
+- Python golden 套件 238 测试全过（含 JPDA 新增 2 个回归测试）
+- Enforce + Python 双轨同步（MTI floor、JPDA clutter）
+
 ## 1.1.5 — 2026-08-20
 
 相对 1.1.4。修正 DemData 数据源日志误标。

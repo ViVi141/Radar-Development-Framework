@@ -46,48 +46,4 @@ class RDF_RadarEmitterRegistry
             return false;
         return entry.m_Emitting;
     }
-
-    static void GetEmittingInSphere(
-        vector center,
-        float radius,
-        array<ref RDF_RadarTarget> outTargets,
-        float worldTime)
-    {
-        if (!outTargets)
-            return;
-
-        array<ref RDF_RadarScatterer> entries = RDF_RadarScattererRegistry.GetEntries();
-        if (!entries)
-            return;
-
-        float r2 = radius * radius;
-        for (int i = 0; i < entries.Count(); i++)
-        {
-            RDF_RadarScatterer e = entries.Get(i);
-            if (!e || !e.m_Emitting || !e.m_Entity)
-                continue;
-
-            vector d = e.m_Position - center;
-            if (d.LengthSq() > r2)
-                continue;
-
-            RDF_RadarTarget t = new RDF_RadarTarget();
-            t.m_Entity = e.m_Entity;
-            t.m_ScattererId = e.m_ScattererId;
-            t.m_Position = e.m_Position;
-            t.m_Distance = d.Length();
-            t.m_Velocity = e.m_Velocity;
-            t.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_RADAR_EMITTER;
-            t.m_RcsM2 = e.m_RcsM2;
-            t.m_MeanRcsM2 = e.m_MeanRcsM2;
-            t.m_SwerlingModel = e.m_SwerlingModel;
-            t.m_AglM = e.m_AglM;
-            t.m_EmitFrequencyHz = e.m_EmitFrequencyHz;
-            t.m_EmitPeakPowerW = e.m_EmitPeakPowerW;
-            t.m_EmitAntennaGainDbi = e.m_EmitAntennaGainDbi;
-            t.m_EmitStrength = e.m_EmitStrength;
-            t.m_Time = worldTime;
-            outTargets.Insert(t);
-        }
-    }
 }

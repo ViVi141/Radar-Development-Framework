@@ -710,7 +710,7 @@ class RDF_RadarBallistics
             dragInit = dragLo;
         if (dragInit > dragHi)
             dragInit = dragHi;
-        int n = 4;   // vx, vy, vz, drag
+        // Simplex dimension = 4 (vx, vy, vz, drag) → 5 vertices.
         // Seed the simplex at the physical prior drag.
         array<vector> simplexVel = new array<vector>();
         array<float> simplexDrag = new array<float>();
@@ -734,7 +734,18 @@ class RDF_RadarBallistics
             simplexDrag.Insert(d);
             simplexCost.Insert(DragFitResidual(positions, times, anchor, p, d, wind, gravityMs2, dtS));
         }
-        float dart = dragInit;
+        // 5th vertex: perturb ONLY the drag axis so the simplex spans the drag
+        // dimension. Using dart = dragInit would duplicate vertex 0 and the
+        // simplex could not explore drag at all (WLR drag fit would silently
+        // degenerate to a 3D velocity search with drag pinned to the prior).
+        float dragSpan = dragHi - dragLo;
+        if (dragSpan < 1.0e-6)
+            dragSpan = Math.Max(1.0e-3, Math.AbsFloat(dragInit) * 0.3);
+        float dart = dragInit + 0.3 * dragSpan;
+        if (dart > dragHi)
+            dart = dragHi;
+        if (dart < dragLo)
+            dart = dragLo;
         vector vDragAxis = init;
         simplexVel.Insert(vDragAxis);
         simplexDrag.Insert(dart);

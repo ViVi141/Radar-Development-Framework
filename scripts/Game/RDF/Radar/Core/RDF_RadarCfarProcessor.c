@@ -4,6 +4,10 @@ class RDF_RadarCfarProcessor
 
     protected ref array<ref array<float>> m_PowerGrid;
     protected ref array<bool> m_RowHits;
+    // ApplyGate scratch: reused every scan to avoid 2 per-frame allocations
+    // (targetAzIndices / targetRangeIndices). Cleared, not freed.
+    protected ref array<int> m_ScratchTargetAzIndices;
+    protected ref array<int> m_ScratchTargetRangeIndices;
     protected int m_CachedAzBins;
     protected int m_CachedRangeBins;
 
@@ -11,6 +15,8 @@ class RDF_RadarCfarProcessor
     {
         m_PowerGrid = new array<ref array<float>>();
         m_RowHits = new array<bool>();
+        m_ScratchTargetAzIndices = new array<int>();
+        m_ScratchTargetRangeIndices = new array<int>();
         m_CachedAzBins = 0;
         m_CachedRangeBins = 0;
     }
@@ -36,8 +42,10 @@ class RDF_RadarCfarProcessor
 
         float rangeM = Math.Max(1.0, settings.m_Range);
         float scanAzimuth = Math.Atan2(scanForward[2], scanForward[0]);
-        array<int> targetAzIndices = new array<int>();
-        array<int> targetRangeIndices = new array<int>();
+        array<int> targetAzIndices = m_ScratchTargetAzIndices;
+        targetAzIndices.Clear();
+        array<int> targetRangeIndices = m_ScratchTargetRangeIndices;
+        targetRangeIndices.Clear();
         targetAzIndices.Reserve(outTargets.Count());
         targetRangeIndices.Reserve(outTargets.Count());
 
@@ -66,8 +74,18 @@ class RDF_RadarCfarProcessor
             FillEmptyCellsWithThermalNoise(azBinCount, rangeBinCount, noiseFloor);
 
         int flatCount = azBinCount * rangeBinCount;
-        while (m_RowHits.Count() < flatCount)
-            m_RowHits.Insert(false);
+        // Rebuild m_RowHits to match the current grid size. The old code only
+        // grew the array (`while Count() < flatCount Insert`), so shrinking
+        // azBinCount/rangeBinCount left stale entries that, while never read
+        // (loops use the live bin counts), kept the array over-sized for the
+        // rest of the session.
+        if (m_RowHits.Count() != flatCount)
+        {
+            m_RowHits.Clear();
+            m_RowHits.Reserve(flatCount);
+            for (int i = 0; i < flatCount; i++)
+                m_RowHits.Insert(false);
+        }
 
         for (int azHit = 0; azHit < azBinCount; azHit++)
         {

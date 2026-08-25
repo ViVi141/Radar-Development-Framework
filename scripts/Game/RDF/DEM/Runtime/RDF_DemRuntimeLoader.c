@@ -28,6 +28,10 @@ class RDF_DemRuntimeLoader
             return false;
         }
 
+        // Each manifest load is a fresh attempt: reset the warning budget so
+        // a previous failed load's 20-warning cap does not silence this one.
+        ResetWarningBudget();
+
         // 1) Profile surface JSON / CONF via FileIO only ($profile:…)
         string profileRoot = RDF_DemBakeConstants.DEM_DATA_DIR + worldKey + "/";
         if (RDF_DemSurfaceJsonPack.TryLoadManifest(profileRoot, worldKey, outManifest))
@@ -474,5 +478,15 @@ class RDF_DemRuntimeLoader
             s_WarnSuppressed = true;
             Print("[RDF DEM Runtime] further warnings suppressed", LogLevel.WARNING);
         }
+    }
+
+    // Reset the warning budget so a fresh session (or a re-bake after a
+    // config change) gets a clean slate. Call on session start / before a
+    // bake; otherwise the counter only ever grows and a long-running server
+    // would suppress every warning after the first 20 ever.
+    static void ResetWarningBudget()
+    {
+        s_WarnCount = 0;
+        s_WarnSuppressed = false;
     }
 }

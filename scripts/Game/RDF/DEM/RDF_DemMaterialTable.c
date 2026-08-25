@@ -23,6 +23,13 @@ class RDF_DemMaterialTable
     protected static ref map<string, float> s_DensityByBasename;
     protected static bool s_bInitialized;
     protected static ref TraceParam s_TraceParam;
+    // Shared split scratch for the per-cell string helpers (Normalize-
+    // MaterialKey / GetMaterialBasename / StripGamematSuffix / GetGeneric-
+    // LabelFromBasename). These are called per cell in the bake hot path;
+    // reusing one static buffer avoids 3 allocations per cell. Safe because
+    // none of the callers hold the array across a nested call to another
+    // helper (the result string is extracted before any nested reuse).
+    protected static ref array<string> s_SplitScratch;
 
     //------------------------------------------------------------------------------------------------
     static string NormalizeMaterialKey(string raw)
@@ -30,10 +37,12 @@ class RDF_DemMaterialTable
         if (!raw || raw == "")
             return "";
 
-        array<string> parts = new array<string>();
-        raw.Split("}", parts, false);
-        if (parts.Count() >= 2)
-            return parts[1];
+        if (!s_SplitScratch)
+            s_SplitScratch = new array<string>();
+        s_SplitScratch.Clear();
+        raw.Split("}", s_SplitScratch, false);
+        if (s_SplitScratch.Count() >= 2)
+            return s_SplitScratch[1];
         return raw;
     }
 
@@ -43,12 +52,14 @@ class RDF_DemMaterialTable
         if (!path || path == "")
             return "";
 
-        array<string> segs = new array<string>();
-        path.Split("/", segs, false);
-        int n = segs.Count();
+        if (!s_SplitScratch)
+            s_SplitScratch = new array<string>();
+        s_SplitScratch.Clear();
+        path.Split("/", s_SplitScratch, false);
+        int n = s_SplitScratch.Count();
         if (n < 1)
             return "";
-        return segs[n - 1];
+        return s_SplitScratch[n - 1];
     }
 
     //------------------------------------------------------------------------------------------------
@@ -59,11 +70,13 @@ class RDF_DemMaterialTable
 
         string s = basename;
         s.ToLower();
-        array<string> parts = new array<string>();
-        s.Split(".gamemat", parts, false);
-        if (parts.Count() < 1)
+        if (!s_SplitScratch)
+            s_SplitScratch = new array<string>();
+        s_SplitScratch.Clear();
+        s.Split(".gamemat", s_SplitScratch, false);
+        if (s_SplitScratch.Count() < 1)
             return "";
-        return parts[0];
+        return s_SplitScratch[0];
     }
 
     //------------------------------------------------------------------------------------------------
@@ -73,11 +86,13 @@ class RDF_DemMaterialTable
         if (!stem || stem == "")
             return "";
 
-        array<string> segs = new array<string>();
-        stem.Split("_", segs, false);
-        if (segs.Count() < 1)
+        // StripGamematSuffix above already extracted its result string, so
+        // reusing the shared scratch here is safe.
+        s_SplitScratch.Clear();
+        stem.Split("_", s_SplitScratch, false);
+        if (s_SplitScratch.Count() < 1)
             return "";
-        return segs[0];
+        return s_SplitScratch[0];
     }
 
     //------------------------------------------------------------------------------------------------

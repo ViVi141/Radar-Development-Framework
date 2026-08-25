@@ -390,8 +390,13 @@ class RDF_RadarLockManager
         m_LastUpdateTimeS = worldTimeS;
         m_CoastElapsedSec = 0.0;
 
-        if (m_ArmRequireLiveEmitter)
-            m_ArmLockActive = true;
+        // Do NOT set m_ArmLockActive here from the config flag. The runtime
+        // arm state must only change via explicit manual arm (LockArmTrackId)
+        // or disarm/reset. The evaluation paths already OR-in the config
+        // flag (`m_ArmLockActive || m_ArmRequireLiveEmitter`), so setting it
+        // here would make the runtime state sticky — toggling the config off
+        // after acquire would leave m_ArmLockActive latched true until the
+        // next disarm, breaking the config/runtime separation.
 
         bool stable = track.m_Confirmed;
         if (track.m_HitCount < m_AcquireHits)

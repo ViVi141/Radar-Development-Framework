@@ -19,8 +19,6 @@ class RDF_DemTileBake
     protected static float s_AccumS;
     protected static int s_TileWriteFails;
     protected static int s_LastProgressPct;
-    protected static bool s_QueryHit;
-    protected static int s_QueryHits;
 
     //------------------------------------------------------------------------------------------------
     static bool IsBakeRequested()
@@ -215,6 +213,8 @@ class RDF_DemTileBake
         float tileSpanM = s_CellM * s_TileCells;
         float originX = s_BoundsMin[0] + s_NextTileX * tileSpanM;
         float originZ = s_BoundsMin[2] + s_NextTileZ * tileSpanM;
+        // Ocean base is constant per world — hoist it out of the cell loop.
+        float oceanBaseY = world.GetOceanBaseHeight();
 
         // Absolute cell origin for stitching (matches ANNA origin_ix/origin_iz convention).
         // int*int is already integral; Math.Round would round-trip through float
@@ -247,10 +247,22 @@ class RDF_DemTileBake
                 float cz = originZ + (localIz + 0.5) * s_CellM;
 
                 if (cx > s_BoundsMax[0] || cz > s_BoundsMax[2])
+                {
+                    // Cell center is outside the world bounds. Previously this
+                    // was a bare `continue` which left the tile missing whole
+                    // rows/columns, so the runtime tile loaded with gaps and
+                    // fell back to live GetSurfaceY per query. Bake an ocean
+                    // placeholder instead so the tile is complete: outside the
+                    // world the surface is ocean, and TraceMove heap-corrupts
+                    // offshore (see comment below), so we must NOT run the
+                    // normal SampleAt path here.
+                    lines.Insert(BuildSeaSurfaceRow(
+                        localIx, localIz, oceanBaseY, 0.0,
+                        (int)EWaterSurfaceType.WST_OCEAN));
                     continue;
+                }
 
                 float seabedY = world.GetSurfaceY(cx, cz);
-                float oceanBaseY = world.GetOceanBaseHeight();
 
                 EWaterSurfaceType waterType;
                 float lakeArea;
@@ -503,37 +515,6 @@ class RDF_DemTileBake
     }
 
     //------------------------------------------------------------------------------------------------
-    protected static bool HasGroundObstacle(
-        notnull World world, float cx, float cz, float terrainY, out int outHits)
-    {
-        outHits = 0;
-        float half = s_CellM * 0.5;
-        float yMin = terrainY;
-        float yMax = terrainY + RDF_DemBakeConstants.OCC_CLEARANCE_M;
-
-        vector aabbMin = Vector(cx - half, yMin, cz - half);
-        vector aabbMax = Vector(cx + half, yMax, cz + half);
-
-        s_QueryHit = false;
-        s_QueryHits = 0;
-        world.QueryEntitiesByAABB(aabbMin, aabbMax, QueryObstacleCallback, null, EQueryEntitiesFlags.STATIC);
-
-        outHits = s_QueryHits;
-        return s_QueryHit;
-    }
-
-    //------------------------------------------------------------------------------------------------
-    protected static bool QueryObstacleCallback(IEntity entity)
-    {
-        if (!entity)
-            return true;
-
-        s_QueryHit = true;
-        s_QueryHits = s_QueryHits + 1;
-        return false;
-    }
-
-    //------------------------------------------------------------------------------------------------
     // Deep-ocean cell: sea surface only. No seabed slope, material Trace, or entity query.
     protected static string BuildSeaSurfaceRow(
         int localIx, int localIz, float waterSurfaceY, float waterDepthM, int waterTypeInt)
@@ -574,22 +555,6 @@ class RDF_DemTileBake
         float gz = (yzp - yzm) / (2.0 * step);
         float horiz = Math.Sqrt(gx * gx + gz * gz);
         return Math.RAD2DEG * Math.Atan2(horiz, 1.0);
-    }
-
-    //------------------------------------------------------------------------------------------------
-    protected static float NormalToSlopeDeg(vector normal)
-    {
-        if (normal == vector.Zero)
-            return 0;
-
-        float ny = normal[1];
-        if (ny > 1.0)
-            ny = 1.0;
-        if (ny < -1.0)
-            ny = -1.0;
-
-        float horiz = Math.Sqrt(normal[0] * normal[0] + normal[2] * normal[2]);
-        return Math.RAD2DEG * Math.Atan2(horiz, Math.AbsFloat(ny));
     }
 
     //------------------------------------------------------------------------------------------------

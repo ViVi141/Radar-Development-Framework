@@ -143,6 +143,10 @@ class RDF_RadarEsmArmAutoTest
         {
             RDF_RadarEmitterRegistry.SetEmitting(m_Emitter, false);
             RDF_RadarEmitterRegistry.Unregister(m_Emitter);
+            // Also drop the emitter from the scatterer registry (sweep may
+            // have added it as a regular scatterer); matches Rwr/Lock/Air
+            // cleanup pattern.
+            RDF_RadarScattererRegistry.Unregister(m_Emitter);
             SCR_EntityHelper.DeleteEntityAndChildren(m_Emitter);
             m_Emitter = null;
         }
@@ -361,8 +365,6 @@ class RDF_RadarEsmArmAutoTest
 
     protected string BoolLabel(bool v)
     {
-        if (v)
-            return "PASS";
-        return "FAIL";
+        return RDF_RadarTestUtil.BoolLabel(v);
     }
 }

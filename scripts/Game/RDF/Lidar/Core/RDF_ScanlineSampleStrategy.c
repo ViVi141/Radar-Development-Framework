@@ -10,21 +10,29 @@ class RDF_ScanlineSampleStrategy : RDF_LidarSampleStrategy
 
     override vector BuildDirection(int index, int count)
     {
-        int sector = index % m_Sectors;
-        int line = index / m_Sectors;
-        int lines = Math.Ceil(count / (float)m_Sectors);
+        // Cap the sector count to the sample count. When count <= m_Sectors
+        // every ray fell in a single line (lines == 1), t stayed 0 and ALL
+        // rays pointed straight up (z = 1.0). Capping m_Sectors to count
+        // guarantees at least 2 lines so t sweeps the full range.
+        int sectors = m_Sectors;
+        if (sectors > count)
+            sectors = Math.MaxInt(1, count);
+        int sector = index % sectors;
+        int line = index / sectors;
+        int lines = Math.MaxInt(1, Math.Ceil(count / (float)sectors));
 
         float t = 0.0;
-        // When count <= m_Sectors all rays fall in a single line (lines == 1).
-        // In that case t stays 0 and every ray points straight up (z = 1.0).
-        // To avoid this degenerate result, ensure count > m_Sectors when using this strategy.
         if (lines > 1)
             t = line / (float)(lines - 1); // 0..1 across lines
+        else
+            // Single line: distribute the (few) rays across the vertical
+            // sweep instead of stacking them all at z = 1.0.
+            t = (sector + 0.5) / sectors;
 
         // Map t -> z in [-1, 1]
         float z = Math.Lerp(1.0, -1.0, t);
         float r = Math.Sqrt(Math.Max(0.0, 1.0 - z * z));
-        float phi = 2.0 * Math.PI * (sector / (float)m_Sectors);
+        float phi = 2.0 * Math.PI * (sector / (float)sectors);
         return Vector(Math.Cos(phi) * r, Math.Sin(phi) * r, z);
     }
 }

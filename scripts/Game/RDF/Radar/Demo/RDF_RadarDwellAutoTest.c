@@ -493,8 +493,6 @@ class RDF_RadarDwellAutoTest
 
     protected string BoolLabel(bool value)
     {
-        if (value)
-            return "PASS";
-        return "FAIL";
+        return RDF_RadarTestUtil.BoolLabel(value);
     }
 }

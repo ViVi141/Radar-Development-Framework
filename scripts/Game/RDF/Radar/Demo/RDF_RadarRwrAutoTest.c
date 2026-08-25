@@ -136,6 +136,10 @@ class RDF_RadarRwrAutoTest
         m_Running = false;
         if (m_Target)
         {
+            // Unregister from the scatterer registry BEFORE deleting so the
+            // sweep does not leave a stale entry pointing at a freed entity
+            // (matches Lock/Air/ShellFire/Jpda/Dwell/Play cleanup pattern).
+            RDF_RadarScattererRegistry.Unregister(m_Target);
             SCR_EntityHelper.DeleteEntityAndChildren(m_Target);
             m_Target = null;
         }
@@ -293,8 +297,6 @@ class RDF_RadarRwrAutoTest
 
     protected string BoolLabel(bool v)
     {
-        if (v)
-            return "PASS";
-        return "FAIL";
+        return RDF_RadarTestUtil.BoolLabel(v);
     }
 }

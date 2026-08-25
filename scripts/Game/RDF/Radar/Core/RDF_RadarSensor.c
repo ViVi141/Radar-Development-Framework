@@ -70,6 +70,13 @@ class RDF_RadarSensor
     // so each track's revisit deadline survives across scans.
     protected ref RDF_DwellScheduler m_DwellScheduler;
     protected ref map<int, ref RDF_DwellTask> m_DwellTasks;
+    // PlanDwells scratch buffers: reused every scan to avoid 4 per-frame
+    // allocations (tasks / scheduled / late / ids). Cleared at entry, not
+    // freed; capacity is retained across scans.
+    protected ref array<ref RDF_DwellTask> m_ScratchDwellTasks;
+    protected ref array<ref RDF_DwellTask> m_ScratchScheduled;
+    protected ref array<ref RDF_DwellTask> m_ScratchLate;
+    protected ref array<int> m_ScratchDwellIds;
     // ECCM decision layer (TODO §9 S3) + last-decided actions for status.
     protected ref RDF_EccmDecisionLayer m_EccmDecision;
     protected bool m_EccmSlb;
@@ -99,6 +106,10 @@ class RDF_RadarSensor
         m_LastScanDurationMs = 0.0;
         m_DwellScheduler = new RDF_DwellScheduler();
         m_DwellTasks = new map<int, ref RDF_DwellTask>();
+        m_ScratchDwellTasks = new array<ref RDF_DwellTask>();
+        m_ScratchScheduled = new array<ref RDF_DwellTask>();
+        m_ScratchLate = new array<ref RDF_DwellTask>();
+        m_ScratchDwellIds = new array<int>();
         m_EccmDecision = new RDF_EccmDecisionLayer();
         m_BudgetGovernor = new RDF_RadarBudgetGovernor();
         m_BudgetGovernor.Configure(m_Settings);
@@ -835,7 +846,11 @@ class RDF_RadarSensor
             return bestKind;
         m_DwellScheduler.SetBudgetMs(m_Settings.m_DwellBudgetMs);
 
-        array<ref RDF_DwellTask> tasks = new array<ref RDF_DwellTask>();
+        // Reuse scratch buffers across scans (cleared, not freed) to avoid 4
+        // per-frame allocations. The references inside are weak (tasks point
+        // at m_DwellTasks entries) so clearing drops no owned objects.
+        array<ref RDF_DwellTask> tasks = m_ScratchDwellTasks;
+        tasks.Clear();
         array<ref RDF_RadarTrack> tracks = m_Tracker.GetAllTracks();
 
         // Fire-control: the locked target gets the highest-rate dwell.
@@ -905,12 +920,15 @@ class RDF_RadarSensor
             tasks.Insert(t);
         }
 
-        array<ref RDF_DwellTask> scheduled = new array<ref RDF_DwellTask>();
-        array<ref RDF_DwellTask> late = new array<ref RDF_DwellTask>();
+        array<ref RDF_DwellTask> scheduled = m_ScratchScheduled;
+        scheduled.Clear();
+        array<ref RDF_DwellTask> late = m_ScratchLate;
+        late.Clear();
         m_DwellScheduler.Plan(tasks, worldTimeS, scheduled, late);
         // late (deadline miss) is ignored for now; a future slice may coast them.
 
-        array<int> ids = new array<int>();
+        array<int> ids = m_ScratchDwellIds;
+        ids.Clear();
         int bestPri = RDF_DwellScheduler.ClassPriority(bestKind);
         for (int s = 0; s < scheduled.Count(); s++)
         {

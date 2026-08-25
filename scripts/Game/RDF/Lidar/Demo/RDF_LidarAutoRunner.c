@@ -21,6 +21,7 @@ class RDF_LidarAutoRunner
     protected bool m_WriteLiveCSV = false;
     protected int m_ScanSerial = 0;
     protected bool m_HudAfterglowTickScheduled = false;
+    protected static bool s_TickScheduled = false;
     protected static const int HUD_AFTERGLOW_TICK_MS = 100;
 
     void RDF_LidarAutoRunner()
@@ -32,8 +33,8 @@ class RDF_LidarAutoRunner
         RDF_LidarVisualSettings vs = m_Visualizer.GetSettings();
         if (vs)
             vs.ApplyShowcaseDefaults();
-        // recurring tick; scanning is gated by m_Running. Use a non-zero min tick interval to avoid per-frame overhead.
-        GetGame().GetCallqueue().CallLater(StaticTick, (int)(s_MinTickInterval * 1000.0), true);
+        // The recurring tick is scheduled on StartAutoRun and removed on
+        // StopAutoRun so an idle AutoRunner does not burn CPU forever.
     }
 
     // Configure minimum tick interval at runtime (seconds).
@@ -101,6 +102,7 @@ class RDF_LidarAutoRunner
         // Lazy bind: only when LiDAR demo actually starts (not on every game start).
         RDF_LidarNetworkUtils.BindAutoRunnerToLocalSubject(true);
         GetInstance().m_Running = true;
+        EnsureTickScheduled();
     }
 
     static void StopAutoRun()
@@ -108,11 +110,27 @@ class RDF_LidarAutoRunner
         RDF_LidarAutoRunner inst = GetInstance();
         inst.m_Running = false;
         inst.StopHudAfterglowTick();
+        // Remove the recurring tick so an idle AutoRunner does not keep
+        // waking up every s_MinTickInterval just to early-return on
+        // m_Running=false.
+        if (s_TickScheduled)
+        {
+            s_TickScheduled = false;
+            GetGame().GetCallqueue().Remove(StaticTick);
+        }
         // Release stale Shape refs and IEntity-holding sample refs immediately.
         // Without this, the last frame's shapes (ONCE flag shapes still occupy memory
         // as ref-counted objects) and sample IEntity refs survive until the next Render().
         if (inst.m_Visualizer)
             inst.m_Visualizer.Reset();
+    }
+
+    protected static void EnsureTickScheduled()
+    {
+        if (s_TickScheduled)
+            return;
+        s_TickScheduled = true;
+        GetGame().GetCallqueue().CallLater(StaticTick, (int)(s_MinTickInterval * 1000.0), true);
     }
 
     // Single code switch to enable/disable the demo auto-run.

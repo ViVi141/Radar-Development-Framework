@@ -83,6 +83,13 @@ class RDF_RadarHUD
 
     protected ref array<ref CanvasWidgetCommand> m_StaticCmds;
     protected ref array<ref CanvasWidgetCommand> m_AllCmds;
+    // UpdatePPI pools: reused every frame to avoid per-blip and per-sweep
+    // allocations. Blip cmds/verts are pooled by slot index; sweep is a
+    // single-instance pool.
+    protected ref array<ref PolygonDrawCommand> m_BlipCmdPool;
+    protected ref array<ref array<float>> m_BlipVertPool;
+    protected ref array<float> m_SweepVerts;
+    protected ref LineDrawCommand m_SweepCmd;
 
     // ---- float helpers ----
     static string F0(float v)
@@ -337,6 +344,8 @@ class RDF_RadarHUD
 
         m_StaticCmds = new array<ref CanvasWidgetCommand>();
         m_AllCmds    = new array<ref CanvasWidgetCommand>();
+        m_BlipCmdPool = new array<ref PolygonDrawCommand>();
+        m_BlipVertPool = new array<ref array<float>>();
 
         vector center = Vector(PPI_CX, PPI_CY, 0);
 
@@ -427,21 +436,24 @@ class RDF_RadarHUD
         {
             float sweepX = PPI_CX + (fx / flen) * PPI_R;
             float sweepY = PPI_CY - (fz / flen) * PPI_R;
-            array<float> sweepVerts = new array<float>();
-            sweepVerts.Insert(PPI_CX);
-            sweepVerts.Insert(PPI_CY);
-            sweepVerts.Insert(sweepX);
-            sweepVerts.Insert(sweepY);
-            LineDrawCommand sweep = new LineDrawCommand();
-            sweep.m_iColor   = COL_PPI_SWEEP;
-            sweep.m_fWidth   = 1.5;
-            sweep.m_Vertices = sweepVerts;
-            m_AllCmds.Insert(sweep);
+            if (!m_SweepVerts)
+                m_SweepVerts = new array<float>();
+            m_SweepVerts.Clear();
+            m_SweepVerts.Insert(PPI_CX);
+            m_SweepVerts.Insert(PPI_CY);
+            m_SweepVerts.Insert(sweepX);
+            m_SweepVerts.Insert(sweepY);
+            if (!m_SweepCmd)
+                m_SweepCmd = new LineDrawCommand();
+            m_SweepCmd.m_iColor   = COL_PPI_SWEEP;
+            m_SweepCmd.m_fWidth   = 1.5;
+            m_SweepCmd.m_Vertices = m_SweepVerts;
+            m_AllCmds.Insert(m_SweepCmd);
         }
 
+        int blipsAdded = 0;
         if (targets && m_DisplayRange > 0.0)
         {
-            int blipsAdded = 0;
             foreach (RDF_RadarTarget t : targets)
             {
                 if (blipsAdded >= PPI_MAX_BLIPS)
@@ -467,15 +479,37 @@ class RDF_RadarHUD
                 int blipCol = BlipColor(t);
                 float blipR = BlipRadius(t);
 
-                array<float> blipVerts = new array<float>();
+                // Reuse pooled vertex array + PolygonDrawCommand for this blip
+                // slot instead of allocating a fresh pair per blip per frame.
+                array<float> blipVerts;
+                if (blipsAdded < m_BlipVertPool.Count())
+                    blipVerts = m_BlipVertPool.Get(blipsAdded);
+                else
+                {
+                    blipVerts = new array<float>();
+                    m_BlipVertPool.Insert(blipVerts);
+                }
+                blipVerts.Clear();
                 m_Canvas.TessellateCircle(Vector(bx, by, 0), blipR, 8, blipVerts);
-                PolygonDrawCommand blip = new PolygonDrawCommand();
+                PolygonDrawCommand blip;
+                if (blipsAdded < m_BlipCmdPool.Count())
+                    blip = m_BlipCmdPool.Get(blipsAdded);
+                else
+                {
+                    blip = new PolygonDrawCommand();
+                    m_BlipCmdPool.Insert(blip);
+                }
                 blip.m_iColor   = blipCol;
                 blip.m_Vertices = blipVerts;
                 m_AllCmds.Insert(blip);
                 blipsAdded = blipsAdded + 1;
             }
         }
+        // Trim pools if this frame drew fewer blips than a previous one.
+        while (m_BlipCmdPool.Count() > blipsAdded)
+            m_BlipCmdPool.Remove(m_BlipCmdPool.Count() - 1);
+        while (m_BlipVertPool.Count() > blipsAdded)
+            m_BlipVertPool.Remove(m_BlipVertPool.Count() - 1);
 
         DrawWlrAlerts(origin, tracker);
         m_Canvas.SetDrawCommands(m_AllCmds);
@@ -704,5 +738,9 @@ class RDF_RadarHUD
         m_wRingLabel = null;
         m_StaticCmds = null;
         m_AllCmds    = null;
+        m_BlipCmdPool = null;
+        m_BlipVertPool = null;
+        m_SweepVerts = null;
+        m_SweepCmd = null;
     }
 }

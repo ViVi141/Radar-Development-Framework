@@ -128,6 +128,20 @@ class RDF_LidarNetworkScanner
         {
             RDF_LidarNetworkScannerPoller p = s_Pollers.Get(i);
             if (!p) { s_Pollers.Remove(i); continue; }
+            // Drop pollers whose subject entity was deleted mid-flight so we
+            // do not hold a stale IEntity ref (and do not call Scan with a
+            // null subject). The scanner ref is owned by the poller; clearing
+            // it here lets the GC reclaim the scanner once the poller is
+            // dropped.
+            if (!p.m_Subject)
+            {
+                p.m_Scanner = null;
+                p.m_OutSamples = null;
+                p.m_Handler = null;
+                p.m_Finished = true;
+                s_Pollers.Remove(i);
+                continue;
+            }
             p.Poll();
             if (p.m_Finished)
                 s_Pollers.Remove(i);
@@ -138,6 +152,29 @@ class RDF_LidarNetworkScanner
             GetGame().GetCallqueue().CallLater(StaticPollTick, 100, false);
         else
             s_PollersTickActive = false;
+    }
+
+    // Release every pending poller and drop the static ref array. Call on
+    // scene change / shutdown so pollers do not keep strong refs to deleted
+    // entities / scanners across loads. Idempotent.
+    static void Cleanup()
+    {
+        if (s_Pollers)
+        {
+            foreach (RDF_LidarNetworkScannerPoller p : s_Pollers)
+            {
+                if (p)
+                {
+                    p.m_Scanner = null;
+                    p.m_OutSamples = null;
+                    p.m_Handler = null;
+                    p.m_Finished = true;
+                }
+            }
+            s_Pollers.Clear();
+            s_Pollers = null;
+        }
+        s_PollersTickActive = false;
     }
 
     static void EnsurePollerTick()

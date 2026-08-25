@@ -23,6 +23,14 @@ class RDF_LidarMaterialColorStrategy : RDF_LidarColorStrategy
             if (bi)
                 density = bi.GetDensity();
         }
+        else if (sample.m_Density >= 0.0)
+        {
+            // Network path: m_Surface is null on the client (GameMaterial is
+            // not serialised), so use the density hint carried over the wire.
+            density = sample.m_Density;
+            if (sample.m_IsWater)
+                density = 1.0;
+        }
 
         float t = 0.5;
         if (density >= 0.0)
@@ -67,13 +75,25 @@ class RDF_LidarMaterialColorStrategy : RDF_LidarColorStrategy
     override float BuildPointSizeFromSample(RDF_LidarSample sample, float lastRange, RDF_LidarVisualSettings settings)
     {
         float baseSize = settings.m_PointSize;
-        if (!sample || !sample.m_Hit || !sample.m_Surface)
+        if (!sample || !sample.m_Hit)
             return baseSize;
 
-        BallisticInfo bi = sample.m_Surface.GetBallisticInfo();
-        if (!bi)
+        float density = -1.0;
+        if (sample.m_Surface)
+        {
+            BallisticInfo bi = sample.m_Surface.GetBallisticInfo();
+            if (bi)
+                density = bi.GetDensity();
+        }
+        else if (sample.m_Density >= 0.0)
+        {
+            density = sample.m_Density;
+            if (sample.m_IsWater)
+                density = 1.0;
+        }
+        if (density < 0.0)
             return baseSize;
-        float density = bi.GetDensity();
+
         float span = DENSITY_MAX - DENSITY_MIN;
         float t = 0.5;
         if (span > 0.0 && density >= 0.0)

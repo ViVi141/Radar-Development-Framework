@@ -656,7 +656,11 @@ class RDF_RadarShellFireAutoTest
                 continue;
 
             bool isProjectile = t.m_Type == ERDF_RadarTargetType.RDF_RADAR_TARGET_PROJECTILE;
-            bool nearShell = IsPlotNearAnyLiveShell(t, 120.0);
+            // Tightened from 120m to 40m: at 120m a non-projectile plot (bird,
+            // vehicle, clutter residue) near a live shell was mis-counted as a
+            // projectile plot. 40m keeps the association to the shell's actual
+            // ballistic neighbourhood.
+            bool nearShell = IsPlotNearAnyLiveShell(t, 40.0);
             if (!isProjectile && !nearShell)
                 continue;
 
@@ -769,9 +773,7 @@ class RDF_RadarShellFireAutoTest
 
     protected string BoolLabel(bool ok)
     {
-        if (ok)
-            return "PASS";
-        return "FAIL";
+        return RDF_RadarTestUtil.BoolLabel(ok);
     }
 
     protected void FinalizeAndReport()

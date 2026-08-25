@@ -86,6 +86,35 @@ class TestJpdaAssociate(unittest.TestCase):
         # 0.7 * 0 + 0.1 * 40 = 4 (miss contributes 0).
         self.assertAlmostEqual(dr, 4.0, places=6)
 
+    def test_more_plots_than_tracks_does_not_collapse(self):
+        # Regression: with clutter=0 and nPlots > nTracks, the old leaf check
+        # rejected every joint event (each leaves ≥1 plot unassigned), so
+        # enumeration returned no events and betas stayed all-zero / miss
+        # all-one — association silently failed. The fix falls back to greedy
+        # hard assignment so the cluster still produces useful betas.
+        tracks = [track(1, 1000.0, 0.0)]
+        plots = [plot(1, 1002.0, 0.0), plot(2, 1004.0, 0.0)]
+        res = jpda_associate(tracks, plots, JpdaGate(range_m=60.0, azimuth_deg=4.0))
+        # The track must claim exactly one plot (the nearer one) and not miss.
+        self.assertAlmostEqual(res.miss_probs[0], 0.0, places=6)
+        claimed = sum(1.0 for b in res.betas[0] if b > 0.5)
+        self.assertAlmostEqual(claimed, 1.0, places=6)
+        self.assertGreater(res.betas[0][0], 0.5)
+        self.assertLess(res.betas[0][1], 0.5)
+
+    def test_more_plots_than_tracks_soft_clutter_splits(self):
+        # With clutter > 0, unassigned plots are feasible (penalised), so the
+        # track splits probability across both plots and keeps a miss tail.
+        tracks = [track(1, 1000.0, 0.0)]
+        plots = [plot(1, 1002.0, 0.0), plot(2, 1004.0, 0.0)]
+        res = jpda_associate(
+            tracks, plots, JpdaGate(range_m=60.0, azimuth_deg=4.0), clutter=0.01
+        )
+        total = res.miss_probs[0] + sum(res.betas[0])
+        self.assertAlmostEqual(total, 1.0, places=6)
+        # Nearer plot should carry more weight than the farther one.
+        self.assertGreater(res.betas[0][0], res.betas[0][1])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -92,9 +92,10 @@ class RDF_RadarAutoTestBatch
             FileIO.MakeDirectory("$profile:RDF/RadarTests");
 
         array<string> lines = new array<string>();
+        bool timedOut = false;
         lines.Insert("ok=0");
         lines.Insert("elapsed_s=0");
-        lines.Insert("timed_out=false");
+        lines.Insert("timed_out=" + timedOut.ToString());
         lines.Insert("fail_count=1");
         lines.Insert("fail_steps=start_failed");
         lines.Insert("note=Suite did not enter running state (gate busy or already running)");

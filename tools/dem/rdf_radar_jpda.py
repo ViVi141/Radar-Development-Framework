@@ -174,6 +174,35 @@ def _marginalize_cluster(
     return beta, miss
 
 
+def _hard_assign_cluster(
+    track_ids: list[int],
+    plot_ids: list[int],
+    likelihoods: list[list[float]],
+    betas: list[list[float]],
+    miss: list[float],
+) -> None:
+    """Greedy nearest: each track takes its best unused valid plot.
+
+    Fallback when joint enumeration produces no feasible event (e.g. clutter=0
+    with unassigned plots, or cluster pruned by max_events before any leaf).
+    """
+    used: set[int] = set()
+    for t in track_ids:
+        best_plot = -1
+        best_lik = -1.0
+        for p in plot_ids:
+            if p in used:
+                continue
+            lik = likelihoods[t][p]
+            if lik > best_lik:
+                best_lik = lik
+                best_plot = p
+        if best_plot >= 0:
+            used.add(best_plot)
+            betas[t][best_plot] = 1.0
+            miss[t] = 0.0
+
+
 def jpda_associate(
     tracks: list[JpdaTrack],
     plots: list[JpdaPlot],
@@ -202,6 +231,11 @@ def jpda_associate(
         beta_c, miss_c = _marginalize_cluster(
             track_ids, plot_ids, valid, likelihoods, pd, clutter, max_events
         )
+        if not beta_c and not miss_c:
+            # No feasible joint event — fall back to greedy hard assignment so
+            # the cluster still produces useful betas instead of all-zero.
+            _hard_assign_cluster(track_ids, plot_ids, likelihoods, betas, miss)
+            continue
         for (t, p), value in beta_c.items():
             betas[t][p] = value
         for t, value in miss_c.items():

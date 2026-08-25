@@ -120,6 +120,13 @@ class RDF_RadarMeasurement
         int rangeBin = Math.Floor(workRange / rangeBinM);
         if (rangeBin < 0)
             rangeBin = 0;
+        // Clamp the upper end: a target at/above the last bin edge would
+        // produce rangeBin == binCount and the quantized range would land
+        // one bin past the end, breaking downstream bin-index consumers
+        // (CFAR / RWR / datalink) that assume rangeBin in [0, binCount-1].
+        int rangeBinCount = settings.m_RangeBinCount;
+        if (rangeBinCount > 0 && rangeBin >= rangeBinCount)
+            rangeBin = rangeBinCount - 1;
         float quantizedRange = (rangeBin + 0.5) * rangeBinM;
         float measuredRange = quantizedRange + settings.m_MeasRangeBiasM;
         // Math.RandomGaussFloat(stdDev, mean): sigma first, then the mean (0.0).

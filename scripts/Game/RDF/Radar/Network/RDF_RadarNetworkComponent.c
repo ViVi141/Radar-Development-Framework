@@ -407,13 +407,23 @@ class RDF_RadarNetworkComponent : RDF_RadarNetworkAPI
         if (players.Count() < 1)
             return true;
 
+        // Use the radar entity's live origin, not m_LastScanOrigin (which is
+        // "0 0 0" before the first scan). A radar far from world origin would
+        // otherwise deem every nearby player "not interested" and skip the
+        // first broadcast, leaving JIP / early-join clients without the first
+        // scan frame.
+        IEntity owner = GetOwner();
+        if (!owner)
+            return true;
+        vector center = owner.GetOrigin();
+
         float radiusSq = m_InterestRadiusM * m_InterestRadiusM;
         for (int i = 0; i < players.Count(); i++)
         {
             IEntity controlled = pm.GetPlayerControlledEntity(players.Get(i));
             if (!controlled)
                 continue;
-            vector delta = controlled.GetOrigin() - m_LastScanOrigin;
+            vector delta = controlled.GetOrigin() - center;
             float distSq = delta[0] * delta[0] + delta[2] * delta[2];
             if (distSq <= radiusSq)
                 return true;

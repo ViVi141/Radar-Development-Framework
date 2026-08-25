@@ -69,7 +69,7 @@ class RDF_RadarPatternLut
             }
         }
         s_Loaded = false;
-        if (TryLoadProfile())
+        if (TryLoadProfile(hpbw, sll))
         {
             s_Loaded = true;
             s_BuiltHpbw = hpbw;
@@ -87,9 +87,11 @@ class RDF_RadarPatternLut
     {
         if (s_Loaded)
             return;
-        if (TryLoadProfile())
+        if (TryLoadProfile(2.5, -25.0))
         {
             s_Loaded = true;
+            s_BuiltHpbw = 2.5;
+            s_BuiltSll = -25.0;
             return;
         }
         BuildSegmented(2.5, -25.0);
@@ -204,7 +206,7 @@ class RDF_RadarPatternLut
     }
 
     //--------------------------------------------------------------------------------------------
-    protected static bool TryLoadProfile()
+    protected static bool TryLoadProfile(float hpbwDeg, float sidelobeLevelDb)
     {
         if (!FileIO.FileExists(PROFILE_PATH))
             return false;
@@ -220,6 +222,14 @@ class RDF_RadarPatternLut
         if (n < 5)
             return false;
         if (doc.offset_max_deg <= doc.offset_min_deg)
+            return false;
+        // Reject a profile baked with different hardware params: previously
+        // a stale profile (baked with old HPBW/SLL) was loaded and the new
+        // params recorded as s_BuiltHpbw/s_BuiltSll, so the LUT silently
+        // mismatched the runtime hardware. Fall through to BuildSegmented.
+        if (Math.AbsFloat(doc.hpbw_deg - hpbwDeg) > 0.001)
+            return false;
+        if (Math.AbsFloat(doc.sidelobe_level_db - sidelobeLevelDb) > 0.01)
             return false;
 
         s_OffMin = doc.offset_min_deg;

@@ -104,7 +104,9 @@ class RDF_RadarHwCalib
     }
 
     //------------------------------------------------------------------------------------------------
-    // Classic MTI clutter residue ≈ (σ_f/PRF)^{2N}; N=1 two-pulse, N=2 three-pulse.
+    // Classic MTI clutter residue ≈ (2π·σ_f/PRF)^{2N}; N=1 two-pulse, N=2 three-pulse.
+    // The (2π)^{2N} factor comes from |H(f)|² = 4·sin²(π·f/PRF) small-angle expansion
+    // (sin(π·f/PRF) ≈ π·f/PRF for small f/PRF, so |H(f)|² ≈ 4·(π·f/PRF)² = (2π·f/PRF)²).
     static float SuggestMtiClutterFloor(
         float sigmaVrMs,
         float wavelengthM,
@@ -121,7 +123,7 @@ class RDF_RadarHwCalib
         if (order > 2)
             order = 2;
         float sigmaFd = 2.0 * sigmaVrMs / wavelengthM;
-        float x = sigmaFd / prfHz;
+        float x = 2.0 * Math.PI * sigmaFd / prfHz;
         if (x < 0.0)
             x = -x;
         float residue = Math.Pow(x, 2 * order);

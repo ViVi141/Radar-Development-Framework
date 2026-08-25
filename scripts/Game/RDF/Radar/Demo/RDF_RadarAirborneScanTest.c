@@ -583,8 +583,6 @@ class RDF_RadarAirborneScanTest
 
     protected string BoolLabel(bool value)
     {
-        if (value)
-            return "PASS";
-        return "FAIL";
+        return RDF_RadarTestUtil.BoolLabel(value);
     }
 }

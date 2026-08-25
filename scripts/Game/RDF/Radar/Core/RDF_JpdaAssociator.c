@@ -27,6 +27,10 @@ class RDF_JpdaAssociator
     protected ref array<int> m_CurPairs;
     protected ref array<float> m_EventLik;
     protected ref array<ref array<int>> m_EventPairs;
+    // Pool of beta-row arrays: reused across Associate calls to avoid N
+    // per-frame allocations (one row per track). Rows are Clear()'d and
+    // re-filled; surplus rows from a previous larger frame are trimmed.
+    protected ref array<ref array<float>> m_BetaRowPool;
     protected int m_EventCount;
 
     void RDF_JpdaAssociator()
@@ -37,6 +41,7 @@ class RDF_JpdaAssociator
         m_CurPairs = new array<int>();
         m_EventLik = new array<float>();
         m_EventPairs = new array<ref array<int>>();
+        m_BetaRowPool = new array<ref array<float>>();
         m_EventCount = 0;
     }
 
@@ -62,6 +67,12 @@ class RDF_JpdaAssociator
     }
 
     // Main entry: fills outBetas[t][p] and outMiss[t].
+    // clutter: per-unassigned-plot false-alarm weight. When clutter=0 (default),
+    // every plot must be assigned at the leaf — this preserves the existing
+    // "hard JPDA" semantics for nPlots <= nTracks. When nPlots > nTracks the
+    // enumeration produces no feasible event and we fall back to greedy hard
+    // assignment (see EnumerateCluster). Pass clutter > 0 to enable soft
+    // clutter modelling (unassigned plots penalised by clutter^count).
     void Associate(
         notnull array<ref RDF_JpdaPoint> tracks,
         notnull array<ref RDF_JpdaPoint> plots,
@@ -69,7 +80,8 @@ class RDF_JpdaAssociator
         float gateAzimuthDeg,
         float pd,
         notnull array<ref array<float>> outBetas,
-        notnull array<float> outMiss)
+        notnull array<float> outMiss,
+        float clutter = 0.0)
     {
         int nTracks = tracks.Count();
         int nPlots = plots.Count();
@@ -79,13 +91,26 @@ class RDF_JpdaAssociator
         outMiss.Clear();
         for (int t = 0; t < nTracks; t++)
         {
-            array<float> row = new array<float>();
+            // Reuse a pooled row array instead of allocating one per track
+            // per frame. Clear + refill keeps the capacity for next scan.
+            array<float> row;
+            if (t < m_BetaRowPool.Count())
+                row = m_BetaRowPool.Get(t);
+            else
+            {
+                row = new array<float>();
+                m_BetaRowPool.Insert(row);
+            }
+            row.Clear();
             row.Reserve(nPlots);
             for (int p = 0; p < nPlots; p++)
                 row.Insert(0.0);
             outBetas.Insert(row);
             outMiss.Insert(1.0);
         }
+        // Trim surplus pooled rows from a previous larger frame.
+        while (m_BetaRowPool.Count() > nTracks)
+            m_BetaRowPool.Remove(m_BetaRowPool.Count() - 1);
         if (nTracks <= 0 || nPlots <= 0)
             return;
 
@@ -187,7 +212,7 @@ class RDF_JpdaAssociator
                 continue;
             }
 
-            EnumerateCluster(clusterTracks, clusterPlots, pd, outBetas, outMiss);
+            EnumerateCluster(clusterTracks, clusterPlots, pd, clutter, outBetas, outMiss);
         }
     }
 
@@ -233,6 +258,7 @@ class RDF_JpdaAssociator
         notnull array<int> trackIds,
         notnull array<int> plotIds,
         float pd,
+        float clutter,
         notnull array<ref array<float>> outBetas,
         notnull array<float> outMiss)
     {
@@ -247,10 +273,18 @@ class RDF_JpdaAssociator
             plotIds,
             0,
             1.0,
-            pd);
+            pd,
+            clutter);
 
         if (m_EventCount <= 0)
+        {
+            // No feasible joint event (e.g. clutter=0 with unassigned plots, or
+            // all events pruned by MAX_CLUSTER_EVENTS before any leaf). Fall
+            // back to greedy hard assignment so the cluster still produces
+            // useful betas instead of all-zero / all-miss.
+            HardAssignCluster(trackIds, plotIds, outBetas, outMiss);
             return;
+        }
 
         float total = 0.0;
         for (int e = 0; e < m_EventLik.Count(); e++)
@@ -313,23 +347,37 @@ class RDF_JpdaAssociator
         notnull array<int> plotIds,
         int trackIndex,
         float currentLik,
-        float pd)
+        float pd,
+        float clutter)
     {
         if (m_EventCount >= MAX_CLUSTER_EVENTS)
             return;
         if (trackIndex >= trackIds.Count())
         {
-            // Leaf: with clutter=0, every plot must be assigned.
+            // Leaf: unassigned plots are clutter, weighted by clutter^count.
+            // When clutter=0 and any plot is unassigned, the event is
+            // infeasible (skip). When clutter>0, the event is feasible but
+            // penalised, so nPlots > nTracks no longer kills association.
+            int unassigned = 0;
             for (int pi = 0; pi < plotIds.Count(); pi++)
             {
                 if (!m_PlotUsed.Get(plotIds.Get(pi)))
-                    return;
+                    unassigned = unassigned + 1;
             }
+            float leafLik = currentLik;
+            if (unassigned > 0)
+            {
+                if (clutter <= 0.0)
+                    return;
+                leafLik = leafLik * Math.Pow(clutter, unassigned);
+            }
+            if (leafLik <= 0.0)
+                return;
             array<int> eventPairs = new array<int>();
             for (int k = 0; k < m_CurPairs.Count(); k++)
                 eventPairs.Insert(m_CurPairs.Get(k));
             m_EventPairs.Insert(eventPairs);
-            m_EventLik.Insert(currentLik);
+            m_EventLik.Insert(leafLik);
             m_EventCount = m_EventCount + 1;
             return;
         }
@@ -338,7 +386,7 @@ class RDF_JpdaAssociator
         float missW = 1.0 - pd;
 
         // Option 1: this track misses.
-        EnumerateRec(trackIds, plotIds, trackIndex + 1, currentLik * missW, pd);
+        EnumerateRec(trackIds, plotIds, trackIndex + 1, currentLik * missW, pd, clutter);
 
         // Option 2: assign to each unused valid plot.
         for (int pi = 0; pi < plotIds.Count(); pi++)
@@ -356,7 +404,8 @@ class RDF_JpdaAssociator
                 plotIds,
                 trackIndex + 1,
                 currentLik * m_Likelihood.Get(t).Get(p),
-                pd);
+                pd,
+                clutter);
             m_CurPairs.Remove(m_CurPairs.Count() - 1);
             m_CurPairs.Remove(m_CurPairs.Count() - 1);
             m_PlotUsed.Set(p, false);

@@ -219,6 +219,13 @@ class RDF_RadarAutoTest
         if (!restorePrevious)
             return;
 
+        // Clear session state so a second standalone run does not inherit
+        // tracks / scatterer entries from the previous run (matches
+        // Lock/ShellFire/Eccm/Dwell/Jpda/Perf/Play StopInternal pattern).
+        RDF_RadarSensor sensor = GetSensor();
+        if (sensor)
+            sensor.ResetSession();
+
         if (m_PreviousConfig)
             ApplySensorConfig(m_PreviousConfig);
         RDF_RadarAutoRunner.SetDemoEnabled(m_PreviousDemoEnabled);
@@ -666,8 +673,6 @@ class RDF_RadarAutoTest
 
     protected string BoolLabel(bool value)
     {
-        if (value)
-            return "PASS";
-        return "FAIL";
+        return RDF_RadarTestUtil.BoolLabel(value);
     }
 }

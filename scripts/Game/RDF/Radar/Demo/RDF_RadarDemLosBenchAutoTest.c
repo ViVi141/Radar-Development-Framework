@@ -40,6 +40,8 @@ class RDF_RadarDemLosBenchAutoTest
     protected int m_NlosSpawned;
     protected string m_DemStatus;
     protected bool m_PrevForceLocal;
+    protected bool m_PrevDemoEnabled;
+    protected bool m_PrevHudEnabled;
 
     protected ref RDF_RadarDemLosBenchPhase m_OnFlush;
     protected ref RDF_RadarDemLosBenchPhase m_OnCache;
@@ -108,6 +110,8 @@ class RDF_RadarDemLosBenchAutoTest
         }
 
         m_PrevForceLocal = RDF_RadarAutoRunner.IsForceLocalScan();
+        m_PrevDemoEnabled = RDF_RadarAutoRunner.IsDemoEnabled();
+        m_PrevHudEnabled = RDF_RadarAutoRunner.IsHudEnabled();
         m_Running = true;
         m_LoadTargets = new array<IEntity>();
         m_DemStatus = "DEM OFF";
@@ -198,8 +202,12 @@ class RDF_RadarDemLosBenchAutoTest
         m_Running = false;
         RDF_RadarAutoTestGate.Release("DemLosBench");
         ClearLoadTargets();
-        RDF_RadarAutoRunner.SetDemoEnabled(false);
-        RDF_RadarAutoRunner.SetHudEnabled(false);
+        // Restore the prior Demo/HUD state to honour the Suite contract
+        // (matches Lock/Air/ShellFire/Play). The Suite's FinishSuite
+        // disables Demo after all steps, so this mainly affects standalone
+        // runs where the user expects their prior Demo/HUD state back.
+        RDF_RadarAutoRunner.SetDemoEnabled(m_PrevDemoEnabled);
+        RDF_RadarAutoRunner.SetHudEnabled(m_PrevHudEnabled);
         RDF_RadarAutoRunner.StopAutoRun();
         RDF_RadarSensor sensor = RDF_RadarAutoRunner.GetSensor();
         if (sensor)

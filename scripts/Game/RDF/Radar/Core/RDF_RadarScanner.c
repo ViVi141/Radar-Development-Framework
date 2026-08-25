@@ -54,6 +54,9 @@ class RDF_RadarScanner
     // Queue-drain scratch: candidates popped from m_LosQueue for this tick's
     // deferred LOS slice (passed to ScanFromRegistry as the candidate source).
     protected ref array<ref RDF_RadarScatterer> m_QueueCandidates;
+    // Deception false-plot scratch: reused every scan to avoid a per-frame
+    // allocation in AddDeceptionFalsePlots. Cleared, not freed.
+    protected ref array<ref RDF_RadarFalsePlot> m_ScratchFalsePlots;
     // Scatterer ids already published this Scan() — dedups the same entity when
     // the queue drain and the sweep both touch it in one tick.
     protected ref array<int> m_PublishedScattererIds;
@@ -91,6 +94,7 @@ class RDF_RadarScanner
         m_StatLosQueued = 0;
         m_StatLosQueueDrained = 0;
         m_QueueCandidates = new array<ref RDF_RadarScatterer>();
+        m_ScratchFalsePlots = new array<ref RDF_RadarFalsePlot>();
         m_PublishedScattererIds = new array<int>();
         m_TruthScratch = new RDF_RadarTruthSample();
         m_DebugTruthByScattererId = new map<int, IEntity>();
@@ -824,6 +828,12 @@ class RDF_RadarScanner
                             // them; the next Scan() drains them first.
                             EnqueueRemainingLosCandidates(i, step, candidateCount);
                         }
+                        // This candidate was budget-skipped (only got a reused
+                        // LOS, not a fresh trace). Rewind processedCount so the
+                        // fair-scan cursor points AT it, not past it — otherwise
+                        // it would keep getting stale reused results until the
+                        // cursor wraps all the way around (scan hole).
+                        processedCount = step;
                         break;
                     }
                     RDF_RadarScanGeometry.FillLosExclude(m_LosExclude, subject, entry.m_Entity);
@@ -1235,7 +1245,8 @@ class RDF_RadarScanner
         if (outTargets.Count() >= maxTargets)
             return;
 
-        array<ref RDF_RadarFalsePlot> falsePlots = new array<ref RDF_RadarFalsePlot>();
+        array<ref RDF_RadarFalsePlot> falsePlots = m_ScratchFalsePlots;
+        falsePlots.Clear();
         m_Settings.m_EwStack.CollectFalsePlots(
             origin,
             scanForward,

@@ -224,19 +224,46 @@ class RDF_DemColumnSpans
         if (spanCount > maxSpans)
             spanCount = maxSpans;
 
-        string row = spanCount.ToString();
+        // Collect fragments into an array and join via divide-and-conquer so
+        // the total copy work is O(n log n) instead of the O(n²) cost of
+        // repeated `row = row + " " + x` (16 concatenations/cell × 1024
+        // cells/tile = ~16k quadratic-row builds per tile).
+        array<string> parts = new array<string>();
+        parts.Reserve(1 + maxSpans * 2);
+        parts.Insert(spanCount.ToString());
         for (int i = 0; i < maxSpans; i++)
         {
             if (i < spanCount)
             {
-                row = row + " " + spanLo.Get(i).ToString();
-                row = row + " " + spanHi.Get(i).ToString();
+                parts.Insert(spanLo.Get(i).ToString());
+                parts.Insert(spanHi.Get(i).ToString());
             }
             else
             {
-                row = row + " 0 0";
+                parts.Insert("0");
+                parts.Insert("0");
             }
         }
-        return row;
+        return JoinSpanParts(parts, " ");
+    }
+
+    // Divide-and-conquer join: O(n log n) total copy work vs O(n²) for
+    // repeated `row += part`. Each merge level copies the full payload once.
+    protected static string JoinSpanParts(array<string> parts, string sep)
+    {
+        int n = parts.Count();
+        if (n == 0)
+            return string.Empty;
+        if (n == 1)
+            return parts.Get(0);
+        return JoinSpanRange(parts, sep, 0, n);
+    }
+
+    protected static string JoinSpanRange(array<string> parts, string sep, int lo, int hi)
+    {
+        if (lo + 1 == hi)
+            return parts.Get(lo);
+        int mid = (lo + hi) / 2;
+        return JoinSpanRange(parts, sep, lo, mid) + sep + JoinSpanRange(parts, sep, mid, hi);
     }
 }

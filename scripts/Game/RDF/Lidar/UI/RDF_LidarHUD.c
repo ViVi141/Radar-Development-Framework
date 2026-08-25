@@ -89,6 +89,14 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
     // ---- CanvasWidget draw commands ----
     protected ref array<ref CanvasWidgetCommand> m_StaticCmds;
     protected ref array<ref CanvasWidgetCommand> m_AllCmds;
+    // Pools for per-blip draw commands and their vertex arrays. Reused every
+    // RedrawPhosphor to avoid 2 allocations per blip per frame (512 blips ×
+    // 100ms ≈ 5120 allocations/sec). Grown lazily; surplus entries trimmed.
+    protected ref array<ref PolygonDrawCommand> m_BlipCmdPool;
+    protected ref array<ref array<float>> m_BlipVertPool;
+    // Single-instance sweep line pool (1 per frame).
+    protected ref array<float> m_SweepVerts;
+    protected ref LineDrawCommand m_SweepCmd;
 
     // ---- phosphor afterglow ----
     protected ref array<ref RDF_LidarHudPhosphorBlip> m_Phosphor;
@@ -355,6 +363,8 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
 
         m_StaticCmds = new array<ref CanvasWidgetCommand>();
         m_AllCmds    = new array<ref CanvasWidgetCommand>();
+        m_BlipCmdPool = new array<ref PolygonDrawCommand>();
+        m_BlipVertPool = new array<ref array<float>>();
 
         vector center = Vector(PPI_CX, PPI_CY, 0);
 
@@ -480,7 +490,10 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
         if (!m_Phosphor)
             m_Phosphor = new array<ref RDF_LidarHudPhosphorBlip>();
 
-        vector origin = samples.Get(0).m_Start;
+        vector origin = vector.Zero;
+        RDF_LidarSample head = samples.Get(0);
+        if (head)
+            origin = head.m_Start;
         if (m_DisplayRange <= 0.0)
             return;
 
@@ -618,26 +631,51 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
                 if (bb > 255) bb = 255;
                 int blipCol = ARGB(ar, rr, gg, bb);
 
-                array<float> blipVerts = new array<float>();
+                // Reuse pooled vertex array + PolygonDrawCommand for this blip
+                // slot instead of allocating a fresh pair per blip per frame.
+                array<float> blipVerts;
+                if (i < m_BlipVertPool.Count())
+                    blipVerts = m_BlipVertPool.Get(i);
+                else
+                {
+                    blipVerts = new array<float>();
+                    m_BlipVertPool.Insert(blipVerts);
+                }
+                blipVerts.Clear();
                 m_Canvas.TessellateCircle(Vector(bx, by, 0), blipR, 6, blipVerts);
-                PolygonDrawCommand poly = new PolygonDrawCommand();
+                PolygonDrawCommand poly;
+                if (i < m_BlipCmdPool.Count())
+                    poly = m_BlipCmdPool.Get(i);
+                else
+                {
+                    poly = new PolygonDrawCommand();
+                    m_BlipCmdPool.Insert(poly);
+                }
                 poly.m_iColor = blipCol;
                 poly.m_Vertices = blipVerts;
                 m_AllCmds.Insert(poly);
             }
         }
+        // Trim pools if this frame drew fewer blips than a previous one.
+        while (m_BlipCmdPool.Count() > m_Phosphor.Count())
+            m_BlipCmdPool.Remove(m_BlipCmdPool.Count() - 1);
+        while (m_BlipVertPool.Count() > m_Phosphor.Count())
+            m_BlipVertPool.Remove(m_BlipVertPool.Count() - 1);
 
         // Cyan sweep line: view-aligned PPI puts subject forward at screen-up.
-        array<float> sweepVerts = new array<float>();
-        sweepVerts.Insert(PPI_CX);
-        sweepVerts.Insert(PPI_CY);
-        sweepVerts.Insert(PPI_CX);
-        sweepVerts.Insert(PPI_CY - PPI_R);
-        LineDrawCommand sweep = new LineDrawCommand();
-        sweep.m_iColor = COL_PPI_SWEEP;
-        sweep.m_fWidth = 1.5;
-        sweep.m_Vertices = sweepVerts;
-        m_AllCmds.Insert(sweep);
+        if (!m_SweepVerts)
+            m_SweepVerts = new array<float>();
+        m_SweepVerts.Clear();
+        m_SweepVerts.Insert(PPI_CX);
+        m_SweepVerts.Insert(PPI_CY);
+        m_SweepVerts.Insert(PPI_CX);
+        m_SweepVerts.Insert(PPI_CY - PPI_R);
+        if (!m_SweepCmd)
+            m_SweepCmd = new LineDrawCommand();
+        m_SweepCmd.m_iColor = COL_PPI_SWEEP;
+        m_SweepCmd.m_fWidth = 1.5;
+        m_SweepCmd.m_Vertices = m_SweepVerts;
+        m_AllCmds.Insert(m_SweepCmd);
 
         m_Canvas.SetDrawCommands(m_AllCmds);
     }
@@ -692,6 +730,10 @@ class RDF_LidarHUD : RDF_LidarScanCompleteHandler
         m_wRingLabel = null;
         m_StaticCmds = null;
         m_AllCmds    = null;
+        m_BlipCmdPool = null;
+        m_BlipVertPool = null;
+        m_SweepVerts = null;
+        m_SweepCmd = null;
         if (m_Phosphor)
             m_Phosphor.Clear();
         m_PhosphorWrite = 0;

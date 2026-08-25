@@ -211,6 +211,7 @@ class RDF_RadarAutoTestMapOverlay
         m_Aircraft = null;
         ResetPathState();
         ClearAllMarkers();
+        UnregisterHooks();
     }
 
     protected void RegisterHooks()
@@ -220,6 +221,19 @@ class RDF_RadarAutoTestMapOverlay
         s_HooksRegistered = true;
         SCR_MapEntity.GetOnMapOpen().Insert(StaticOnMapOpen);
         SCR_MapEntity.GetOnMapClose().Insert(StaticOnMapClose);
+    }
+
+    // Remove the map open/close hooks so a stopped AutoTest does not keep
+    // getting called every time the player opens the map (the callbacks
+    // early-out on m_Active=false, but the calls themselves are wasteful and
+    // the hook slots are a limited resource).
+    protected void UnregisterHooks()
+    {
+        if (!s_HooksRegistered)
+            return;
+        s_HooksRegistered = false;
+        SCR_MapEntity.GetOnMapOpen().Remove(StaticOnMapOpen);
+        SCR_MapEntity.GetOnMapClose().Remove(StaticOnMapClose);
     }
 
     protected static void StaticTick()

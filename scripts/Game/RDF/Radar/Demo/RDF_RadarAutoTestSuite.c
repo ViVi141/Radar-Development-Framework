@@ -287,6 +287,23 @@ class RDF_RadarAutoTestSuite
 
         if (step == 0)
         {
+            // Gate fallback: step 0 itself is synchronous and does not need
+            // the gate, but steps 1+ are async and DO. If the gate is already
+            // busy here (leaked acquisition from a previous run), the async
+            // steps would silently no-op and the suite would record the
+            // failure as "dem" (step 1's name) instead of the real cause.
+            // Fail fast with an explicit "gate_busy" reason instead.
+            if (RDF_RadarAutoTestGate.IsBusy())
+            {
+                Print("[RDF Radar AutoTestSuite] gate busy by "
+                    + RDF_RadarAutoTestGate.GetOwner()
+                    + " at step 0; aborting suite.", LogLevel.ERROR);
+                s_LastSuitePassed = false;
+                RecordFail("gate_busy");
+                s_Running = false;
+                s_Step = -1;
+                return;
+            }
             Print("[RDF Radar AutoTestSuite] step 1/7 Ballistics + InverseTrack");
             RDF_RadarBallisticsAutoTest.Start();
             RDF_RadarInverseTrackAutoTest.Start();

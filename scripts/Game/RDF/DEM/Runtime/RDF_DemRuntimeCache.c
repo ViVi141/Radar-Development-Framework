@@ -43,6 +43,7 @@ class RDF_DemRuntimeCache
     protected int m_LoadBudgetRemaining = 2;
     protected bool m_PreloadAll = RDF_DemBakeConstants.RUNTIME_DEM_PRELOAD_ALL;
     protected bool m_FullyResident;
+    protected int m_ResidentHoles;
     protected bool m_WorldSurfReady;
     protected ref array<int> m_WorldSurfClass;
     protected bool m_WorldHeightReady;
@@ -79,6 +80,7 @@ class RDF_DemRuntimeCache
         m_LastInitFailed = false;
         m_LiveHeightOnly = false;
         m_FullyResident = false;
+        m_ResidentHoles = 0;
         m_WorldSurfReady = false;
         m_WorldSurfClass = null;
         m_WorldHeightReady = false;
@@ -575,6 +577,15 @@ class RDF_DemRuntimeCache
     }
 
     //--------------------------------------------------------------------------------------------
+    // Number of tiles that failed to load during the last PreloadAllTiles call.
+    // Non-zero means IsFullyResident() is false and callers should fall back to
+    // live GetSurfaceY for the missing tiles instead of trusting the RAM cache.
+    int GetResidentHoles()
+    {
+        return m_ResidentHoles;
+    }
+
+    //--------------------------------------------------------------------------------------------
     protected bool NeedsHeightRam()
     {
         if (!m_Manifest)
@@ -639,6 +650,7 @@ class RDF_DemRuntimeCache
             m_LiveHeightOnly = false;
             m_Manifest = null;
             m_FullyResident = false;
+            m_ResidentHoles = 0;
             m_WorldSurfReady = false;
             m_WorldSurfClass = null;
             m_WorldHeightReady = false;
@@ -961,6 +973,7 @@ class RDF_DemRuntimeCache
         m_WorldCellsZ = cellsZ;
         m_WorldSurfReady = true;
         m_FullyResident = true;
+        m_ResidentHoles = 0;
         m_TilesByKey.Clear();
         m_TileTouchOrder.Clear();
 
@@ -1040,6 +1053,7 @@ class RDF_DemRuntimeCache
         m_WorldCellsZ = s_SharedCellsZ;
         m_WorldSurfReady = true;
         m_FullyResident = true;
+        m_ResidentHoles = 0;
         m_TilesByKey.Clear();
         m_TileTouchOrder.Clear();
         AdoptSharedHeightIfMatching();
@@ -1119,7 +1133,13 @@ class RDF_DemRuntimeCache
             }
         }
 
-        m_FullyResident = loaded > 0;
+        // FullyResident requires every tile to load. The previous `loaded > 0`
+        // test marked 90% failure as resident, causing BeginScan to grant
+        // INT_MAX budget and IsTerrainRamResident to lie, silently masking
+        // holes. Track the hole count so callers can fall back to live
+        // GetSurfaceY for the missing tiles.
+        m_FullyResident = (failed == 0 && loaded > 0);
+        m_ResidentHoles = failed;
         PreloadHeightWorldIfPresent();
         float ms = System.GetTickCount() - wall0;
         if (ms < 0.0)
@@ -1397,6 +1417,14 @@ class RDF_DemRuntimeCache
     //--------------------------------------------------------------------------------------------
     protected void TouchTile(string key)
     {
+        // Wrap before overflow: a 32-bit counter incremented once per scan
+        // would wrap in ~2.1 billion scans anyway, but on a long-running
+        // server with frequent scans we want a deterministic wrap (not UB).
+        // Wrapping is safe for LRU because we only compare relative order
+        // within the live set; the rare wrap just makes the next touch the
+        // new maximum, which is fine.
+        if (m_TouchCounter >= 0x7FFFFFFF)
+            m_TouchCounter = 0;
         m_TouchCounter = m_TouchCounter + 1;
         m_TileTouchOrder.Set(key, m_TouchCounter);
     }

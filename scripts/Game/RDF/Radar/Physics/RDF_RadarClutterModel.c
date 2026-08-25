@@ -46,7 +46,13 @@ class RDF_RadarClutterModel
         float refValue = GetSigma0Ref(surfaceClass, band);
         float exponent = GetSigma0Exponent(surfaceClass);
         float thetaRef = RDF_RadarSurfaceTable.GetThetaRefRad();
-        float ratio = Math.Sin(theta) / Math.Sin(thetaRef);
+        // Guard sin(thetaRef) == 0 (degenerate surface table / thetaRef = 0):
+        // without this the division yields inf/NaN and the Pow call propagates
+        // it into the clutter return, silently producing absurd sigma0.
+        float sinThetaRef = Math.Sin(thetaRef);
+        if (sinThetaRef < 0.000001)
+            sinThetaRef = 0.000001;
+        float ratio = Math.Sin(theta) / sinThetaRef;
         if (ratio < 0.000001)
             ratio = 0.000001;
 

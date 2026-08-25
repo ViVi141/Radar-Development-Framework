@@ -95,7 +95,14 @@ class RDF_RadarFusionService
 
             RDF_RadarFusedTrack fused = new RDF_RadarFusedTrack();
             fused.m_FusedId = m_NextFusedId;
-            m_NextFusedId = m_NextFusedId + 1;
+            // Wrap before overflow: a 32-bit id incremented once per fusion
+            // would wrap in ~2.1 billion fusions anyway, but on a long-running
+            // server we want a deterministic wrap (not UB). 0 is reserved as
+            // "invalid" so skip it on wrap.
+            if (m_NextFusedId >= 0x7FFFFFFF)
+                m_NextFusedId = 1;
+            else
+                m_NextFusedId = m_NextFusedId + 1;
             fused.m_TimeS = worldTimeS;
             fused.m_Type = a.m_Type;
             fused.m_NctrClass = a.m_NctrClass;
@@ -233,7 +240,7 @@ class RDF_RadarFusionService
         }
     }
 
-    // Horizontal bearing intersection of two radarâ†’target rays.
+    // Horizontal bearing intersection of two radar?target rays.
     // Rejects when azimuth angle between stations is too acute.
     bool TryCrossFixHorizontal(
         RDF_RadarDatalinkTrack a,
@@ -260,7 +267,15 @@ class RDF_RadarFusionService
             return false;
 
         float det = dx1 * dz2 - dz1 * dx2;
-        if (Math.AbsFloat(det) < 0.0001)
+        // The angle gate above already rejects |angle| < m_MinCrossFixAngleDeg
+        // and > 180 - m_MinCrossFixAngleDeg, so |det| = |sin(angle)| is already
+        // >= sin(minAngle). The old 1e-4 threshold (?0.006°) was dead code. Use
+        // a safety net proportional to the configured angle gate so the check
+        // still catches float-precision near-degeneracy without being dead.
+        float detFloor = Math.Sin(m_MinCrossFixAngleDeg * Math.DEG2RAD) * 0.5;
+        if (detFloor < 1.0e-6)
+            detFloor = 1.0e-6;
+        if (Math.AbsFloat(det) < detFloor)
             return false;
 
         float ox = o2[0] - o1[0];
