@@ -10,7 +10,7 @@ Realistic radar, LiDAR and DEM sensor framework for Arma Reforger. Physical dete
 
 ## Description (≤ 5000 chars)
 
-# Radar Development Framework (RDF) — v1.1.6
+# Radar Development Framework (RDF) — v1.1.7
 
 A modular, workshop-ready sensor framework for Arma Reforger: **Radar**,
 **LiDAR**, and **DEM** bake/runtime. It models the detection chain as a
@@ -84,6 +84,13 @@ is included). Enable features explicitly — the framework is silent by default.
 ---
 
 ## Changelog (unlimited)
+
+## 1.1.7 — 2026-08-27
+
+Patch over 1.1.6. Wind heading uses Arma world azimuth (0° = north = +Z).
+
+- `RDF_RadarGlobalWind.Set`: Vx/Vz from sin/cos of engine azimuth (was math 0 = +X).
+- AutoTest crosswind sample updated to direction 0° (+Z) with matching comment.
 
 ## 1.1.6 — 2026-08-25
 

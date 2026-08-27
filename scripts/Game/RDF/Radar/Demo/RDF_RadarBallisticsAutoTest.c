@@ -134,7 +134,8 @@ class RDF_RadarBallisticsAutoTest
         vector vel = Vector(180.0, 60.0, 0.0);
         RDF_RadarGlobalWind calm = ZeroWind();
         RDF_RadarGlobalWind cross = new RDF_RadarGlobalWind();
-        cross.Set(12.0, 90.0);
+        // 0° = towards north = +Z (engine GetWindDirection azimuth).
+        cross.Set(12.0, 0.0);
 
         RDF_RadarGroundHit calmHit = RDF_RadarBallistics.FindGroundIntersection(
             pos,

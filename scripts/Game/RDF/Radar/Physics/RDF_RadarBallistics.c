@@ -6,7 +6,8 @@
 class RDF_RadarGlobalWind
 {
     float m_SpeedMs;
-    // Velocity heading in degrees (wind blows towards), world XZ, 0 = +X.
+    // Velocity heading (blows towards). Engine GetWindDirection is Arma
+    // world azimuth: 0 = north = +Z, 90 = east = +X. Not math 0 = +X.
     float m_DirectionDeg;
     float m_Vx;
     float m_Vz;
@@ -24,8 +25,8 @@ class RDF_RadarGlobalWind
         m_SpeedMs = speedMs;
         m_DirectionDeg = directionDeg;
         float rad = directionDeg * Math.DEG2RAD;
-        m_Vx = speedMs * Math.Cos(rad);
-        m_Vz = speedMs * Math.Sin(rad);
+        m_Vx = speedMs * Math.Sin(rad);
+        m_Vz = speedMs * Math.Cos(rad);
     }
 }
 
@@ -182,8 +183,9 @@ class RDF_RadarBallistics
         return fallbackYM;
     }
 
-    // Sample the world's single global wind. Map UI adds +180 for display,
-    // so the API angle is treated as velocity heading (blows towards).
+    // Sample the world's single global wind.
+    // GetWindDirection is velocity heading (blows towards), Arma azimuth
+    // (0 = north = +Z). Map UI adds +180 so the compass shows meteorological FROM.
     static RDF_RadarGlobalWind SampleGlobalWind()
     {
         RDF_RadarWeatherSnapshot snap = SampleWorldWeather();

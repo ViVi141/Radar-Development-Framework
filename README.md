@@ -9,7 +9,7 @@ Modular sensor framework for Arma Reforger: **LiDAR**, **Radar**, and **DEM bake
 - **Repository**: [Radar-Development-Framework](https://github.com/ViVi141/Radar-Development-Framework)
 - **Contact**: 747384120@qq.com
 - **License**: Apache-2.0
-- **Version**: 1.1.6
+- **Version**: 1.1.7
 
 ---
 
@@ -225,7 +225,7 @@ Arma Reforger 用的模块化传感器开发框架：**LiDAR**、**雷达**、**
 - **Repository**: [Radar-Development-Framework](https://github.com/ViVi141/Radar-Development-Framework)
 - **Contact**: 747384120@qq.com
 - **License**: Apache-2.0
-- **版本**：1.1.6
+- **版本**：1.1.7
 
 ---
 

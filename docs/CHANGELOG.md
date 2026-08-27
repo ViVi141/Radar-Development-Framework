@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 1.1.7 — 2026-08-27
+
+相对 1.1.6。全局风向量与引擎 `GetWindDirection` 方位约定对齐（0° = 北 = +Z，90° = 东 = +X）。
+
+> EN: Patch over 1.1.6. Align global wind velocity components with Arma world azimuth from `GetWindDirection` (0° = north = +Z, 90° = east = +X), not math heading 0° = +X.
+
+- **`RDF_RadarGlobalWind.Set`**：`m_Vx = speed·sin(θ)`，`m_Vz = speed·cos(θ)`（原先 cos/sin 按数学角）。
+- **注释**：`SampleGlobalWind` / 风类字段说明 Map UI +180 仅影响气象「来向」显示。
+- **`RDF_RadarBallisticsAutoTest`**：横向风用例改为 `Set(12, 0)`（朝 +Z），与弹道初速 +X 正交。
+
 ## 1.1.6 — 2026-08-25
 
 相对 1.1.5。全项目 C 代码评审（6 模块并行 review）的 P0–P4 与"重要问题"修复，并含编译修复（`string.Replace` 原地调用、`TryLoadProfile` 参数、Ballistics 未用变量）与死代码清理（`GetEmittingInSphere`）。
