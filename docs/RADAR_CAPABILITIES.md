@@ -33,7 +33,7 @@
 - 通视：可选 **DEM HEIGHT 预检**（`m_EnableDemLosPrecheck`，默认开）地形刺穿则跳过 `TraceMove`；否则 `TraceMove`（`RDF_RadarScanGeometry`：`ANY_CONTACT` + `ExcludeArray` + 复用 TraceParam + 起点出壳）；遮挡时可选 **NLOS 地面反射弱检** + **双主导刃绕射**（Deygout-lite；DEM/`GetSurfaceY` 沿程，`/diff`；ν LUT）；可选 **DEM 柱 span 顶**（`m_EnableDemSpanOcclusion`，默认关，非 SURF）
 - 可选粗 RD 图（`m_EnableCoarseRd`，默认关）与多雷达共用 discovery focus 调度
 - 硬件参数 → 雷达方程、多普勒、MTI（Two/ThreePulse + 可选参差消盲 / MTD bank）、处理增益、SNR 门限（辐射源在 `m_EnableEsmReceive` 下用 ESM 方程）
-- DEM σ⁰ **地面杂波**进入噪声分母（ESM 路径跳过）；**按载频选 VHF/L/S/C/X 表**（工坊 conf 只覆盖其 tagged 波段）；可选 clutter-map **非对称 EMA**（快降慢升）+ PulseDoppler 足迹 σ⁰ 混合；`sea_state` 调制水面 σ⁰
+- DEM σ⁰ **地面杂波**进入噪声分母（ESM 路径跳过）；**按载频选 VHF/UHF/L/S/C/X/Ku/K/Ka 表**（工坊 conf 只覆盖其 tagged 波段）；可选 clutter-map **非对称 EMA**（快降慢升）+ PulseDoppler 足迹 σ⁰ 混合；`sea_state` 调制水面 σ⁰
 - **航迹 coast**：弹道速度更新 + 门限随 miss 增长 + Doppler-null/盲速软 miss
 - **测量合成**：距离门中心 + 波束角抖动 + 多普勒反解径向速度（SNR 越低越抖）
 - **测量噪声/偏差可调**：`SetMeasurementNoise` / `MeasNoiseScale`；下游可 override `RDF_RadarMeasurementModel`
@@ -203,7 +203,7 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 - Optional coarse RD map (`m_EnableCoarseRd`, default off) and shared multi-radar discovery focus scheduling
 - Hardware params → radar equation, Doppler, MTI / optional **MTD filter bank**, processing gain, SNR threshold (emitters use the ESM equation when `m_EnableEsmReceive` is on)
 - Default MTI remains two-pulse (`RDF_MTI_TWOPULSE`); `RDF_MTI_THREE_PULSE` uses sin⁴; classic paths score rotor spectrum + optional PRF-set max de-blind; `RDF_MTI_MTD_BANK` puts clutter in the near-zero bin and picks the best Doppler channel
-- DEM σ⁰ **ground clutter** enters the noise denominator (skipped on the ESM path); **VHF/L/S/C/X tables selected from carrier frequency** (workshop conf overlays only its tagged band); optional asymmetric clutter-map EMA (fast-down) + PulseDoppler footprint σ⁰ mix; `sea_state` scales water σ⁰
+- DEM σ⁰ **ground clutter** enters the noise denominator (skipped on the ESM path); **VHF/UHF/L/S/C/X/Ku/K/Ka tables selected from carrier frequency** (workshop conf overlays only its tagged band); optional asymmetric clutter-map EMA (fast-down) + PulseDoppler footprint σ⁰ mix; `sea_state` scales water σ⁰
 - **Measurement synthesis**: range-gate center + beam-angle jitter + Doppler-derived radial velocity (more jitter at lower SNR)
 - **Tunable measurement noise / bias**: `SetMeasurementNoise` / `MeasNoiseScale`; downstream can override `RDF_RadarMeasurementModel`
 - **Atmosphere / rain / weather-driven loss**: simplified; opt-in via `EnableAtmosphericPathLoss`

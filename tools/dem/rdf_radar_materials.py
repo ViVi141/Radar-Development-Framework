@@ -48,7 +48,9 @@ SURF_NAMES = [
     "fabric",
 ]
 
-# σ⁰_ref [dB] at 30° grazing, keyed by radar band tag.
+# σ⁰_ref [dB] at 30° grazing, keyed by UPPERCASE radar band tag
+# (Sigma0Table.builtin uppercases the lookup). Trends match Enforce
+# RDF_RadarSurfaceTable.InstallAllBandSigma0.
 _BAND_SIGMA0_DB = {
     "X": {
         "unknown": -18.0,
@@ -106,6 +108,20 @@ _BAND_SIGMA0_DB = {
         "snow_ice": -18.0,
         "fabric": -28.0,
     },
+    "UHF": {
+        "unknown": -23.0,
+        "water": -29.0,
+        "vegetation": -11.0,
+        "soil": -23.0,
+        "sand": -25.0,
+        "gravel": -21.0,
+        "asphalt": -17.0,
+        "hard": -15.0,
+        "wood": -18.0,
+        "metal": -7.5,
+        "snow_ice": -19.0,
+        "fabric": -28.0,
+    },
     # VHF (P-18 class): volume / resonance clutter — higher veg, lower smooth surfaces.
     "VHF": {
         "unknown": -24.0,
@@ -120,6 +136,48 @@ _BAND_SIGMA0_DB = {
         "metal": -8.0,
         "snow_ice": -20.0,
         "fabric": -28.0,
+    },
+    "KU": {
+        "unknown": -17.0,
+        "water": -20.0,
+        "vegetation": -13.0,
+        "soil": -17.0,
+        "sand": -19.0,
+        "gravel": -15.0,
+        "asphalt": -11.0,
+        "hard": -9.0,
+        "wood": -17.0,
+        "metal": -4.5,
+        "snow_ice": -19.0,
+        "fabric": -23.0,
+    },
+    "K": {
+        "unknown": -16.0,
+        "water": -18.0,
+        "vegetation": -12.5,
+        "soil": -16.0,
+        "sand": -18.0,
+        "gravel": -14.0,
+        "asphalt": -10.0,
+        "hard": -8.0,
+        "wood": -16.0,
+        "metal": -4.0,
+        "snow_ice": -18.0,
+        "fabric": -22.0,
+    },
+    "KA": {
+        "unknown": -15.0,
+        "water": -16.0,
+        "vegetation": -12.0,
+        "soil": -15.0,
+        "sand": -17.0,
+        "gravel": -13.0,
+        "asphalt": -9.0,
+        "hard": -7.0,
+        "wood": -15.0,
+        "metal": -3.5,
+        "snow_ice": -17.0,
+        "fabric": -21.0,
     },
 }
 
@@ -142,10 +200,14 @@ _DEFAULT_EXPONENT = {
 # RDF_RadarSurfaceTable.GetAttenuationScaleForBand.
 BAND_ATTENUATION_SCALE = {
     "VHF": 0.20,
+    "UHF": 0.30,
     "L": 0.40,
     "S": 0.55,
     "C": 0.75,
     "X": 1.0,
+    "KU": 1.35,
+    "K": 1.75,
+    "KA": 2.40,
 }
 
 

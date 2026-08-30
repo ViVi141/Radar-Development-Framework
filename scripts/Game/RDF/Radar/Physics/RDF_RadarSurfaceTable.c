@@ -67,12 +67,17 @@ class RDF_RadarSurfaceTable
     static const ResourceName PACKAGED_CONF =
         "{B4E81F2A7C903D65}RadarData/SurfaceTable.conf";
     static const int CLASS_COUNT = 12;
+    // IEEE radar bands (engineering). Indices must match InstallAllBandSigma0 order.
     static const int BAND_VHF = 0;
-    static const int BAND_L = 1;
-    static const int BAND_S = 2;
-    static const int BAND_C = 3;
-    static const int BAND_X = 4;
-    static const int BAND_COUNT = 5;
+    static const int BAND_UHF = 1;
+    static const int BAND_L = 2;
+    static const int BAND_S = 3;
+    static const int BAND_C = 4;
+    static const int BAND_X = 5;
+    static const int BAND_KU = 6;
+    static const int BAND_K = 7;
+    static const int BAND_KA = 8;
+    static const int BAND_COUNT = 9;
 
     protected static bool s_Loaded;
     protected static string s_Source;
@@ -128,7 +133,7 @@ class RDF_RadarSurfaceTable
         }
 
         s_Source = "builtin";
-        Print("[RDF SurfaceTable] using builtins (X overlay, VHF/L/S/C/X σ⁰)", LogLevel.NORMAL);
+        Print("[RDF SurfaceTable] using builtins (X overlay, VHF…Ka σ⁰)", LogLevel.NORMAL);
     }
 
     //--------------------------------------------------------------------------------------------
@@ -153,19 +158,27 @@ class RDF_RadarSurfaceTable
     }
 
     //--------------------------------------------------------------------------------------------
-    // Matches tools/dem/rdf_radar_channel.band_for_frequency.
+    // Matches tools/dem/rdf_radar_channel.band_for_frequency (IEEE radar bands).
     static string BandNameFromFrequencyHz(float frequencyHz)
     {
         float fGhz = frequencyHz / 1000000000.0;
         if (fGhz < 0.3)
             return "VHF";
+        if (fGhz < 1.0)
+            return "UHF";
         if (fGhz < 2.0)
             return "L";
         if (fGhz < 4.0)
             return "S";
         if (fGhz < 8.0)
             return "C";
-        return "X";
+        if (fGhz < 12.0)
+            return "X";
+        if (fGhz < 18.0)
+            return "Ku";
+        if (fGhz < 27.0)
+            return "K";
+        return "Ka";
     }
 
     //--------------------------------------------------------------------------------------------
@@ -178,6 +191,8 @@ class RDF_RadarSurfaceTable
         key.ToUpper();
         if (key == "VHF")
             return BAND_VHF;
+        if (key == "UHF")
+            return BAND_UHF;
         if (key == "L")
             return BAND_L;
         if (key == "S")
@@ -186,6 +201,13 @@ class RDF_RadarSurfaceTable
             return BAND_C;
         if (key == "X")
             return BAND_X;
+        // Check Ku/Ka before K (exact match; ToUpper → "KU"/"KA"/"K").
+        if (key == "KU")
+            return BAND_KU;
+        if (key == "KA")
+            return BAND_KA;
+        if (key == "K")
+            return BAND_K;
         return -1;
     }
 
@@ -197,17 +219,28 @@ class RDF_RadarSurfaceTable
 
     //--------------------------------------------------------------------------------------------
     // Foliage / volume attenuation vs X-band authorship (0.5 dB/km veg).
+    // Higher microwave bands suffer stronger canopy extinction.
     static float GetAttenuationScaleForBand(string band)
     {
         int idx = BandIndexFromName(band);
         if (idx == BAND_VHF)
             return 0.20;
+        if (idx == BAND_UHF)
+            return 0.30;
         if (idx == BAND_L)
             return 0.40;
         if (idx == BAND_S)
             return 0.55;
         if (idx == BAND_C)
             return 0.75;
+        if (idx == BAND_X)
+            return 1.0;
+        if (idx == BAND_KU)
+            return 1.35;
+        if (idx == BAND_K)
+            return 1.75;
+        if (idx == BAND_KA)
+            return 2.40;
         return 1.0;
     }
 
@@ -541,10 +574,16 @@ class RDF_RadarSurfaceTable
     }
 
     //--------------------------------------------------------------------------------------------
+    // Engineering σ⁰_ref [dB] @ 30° grazing. Trends (order-of-magnitude):
+    //   smooth surfaces / Bragg water ↑ with frequency; metal slightly ↑;
+    //   VHF/UHF vegetation volume resonance high; microwave canopy surface ↑.
+    // Matches tools/dem/rdf_radar_materials._BAND_SIGMA0_DB.
     protected static void InstallAllBandSigma0()
     {
         InstallBandSigma0Row(
             BAND_VHF, -24.0, -30.0, -10.0, -24.0, -26.0, -22.0, -18.0, -16.0, -14.0, -8.0, -20.0, -28.0);
+        InstallBandSigma0Row(
+            BAND_UHF, -23.0, -29.0, -11.0, -23.0, -25.0, -21.0, -17.0, -15.0, -18.0, -7.5, -19.0, -28.0);
         InstallBandSigma0Row(
             BAND_L, -22.0, -28.0, -12.0, -22.0, -24.0, -20.0, -16.0, -14.0, -22.0, -7.0, -18.0, -28.0);
         InstallBandSigma0Row(
@@ -553,6 +592,12 @@ class RDF_RadarSurfaceTable
             BAND_C, -19.0, -24.0, -15.0, -19.0, -21.0, -17.0, -13.0, -11.0, -19.0, -5.5, -21.0, -25.0);
         InstallBandSigma0Row(
             BAND_X, -18.0, -22.0, -14.0, -18.0, -20.0, -16.0, -12.0, -10.0, -18.0, -5.0, -20.0, -24.0);
+        InstallBandSigma0Row(
+            BAND_KU, -17.0, -20.0, -13.0, -17.0, -19.0, -15.0, -11.0, -9.0, -17.0, -4.5, -19.0, -23.0);
+        InstallBandSigma0Row(
+            BAND_K, -16.0, -18.0, -12.5, -16.0, -18.0, -14.0, -10.0, -8.0, -16.0, -4.0, -18.0, -22.0);
+        InstallBandSigma0Row(
+            BAND_KA, -15.0, -16.0, -12.0, -15.0, -17.0, -13.0, -9.0, -7.0, -15.0, -3.5, -17.0, -21.0);
     }
 
     //--------------------------------------------------------------------------------------------

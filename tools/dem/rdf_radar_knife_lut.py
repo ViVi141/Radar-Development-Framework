@@ -35,11 +35,14 @@ class KnifeLutCaseResult:
 # Common radar-band center wavelengths (engineering round numbers).
 BAND_WAVELENGTH_M = {
     "VHF": 3.0,
+    "UHF": 0.50,
     "L": 0.23,
     "S": 0.10,
     "C": 0.056,
     "X": 0.032,
     "Ku": 0.018,
+    "K": 0.012,
+    "Ka": 0.0085,
 }
 
 SCHEMA = "RDF_KNIFE_LUT_V1"
@@ -128,7 +131,7 @@ class GeometryLutAxes:
 def default_geometry_axes() -> GeometryLutAxes:
     # Axes must be ascending for searchsorted / multilinear interp.
     wavelengths = np.array(
-        sorted(BAND_WAVELENGTH_M[b] for b in ("VHF", "L", "S", "C", "X", "Ku")),
+        sorted(BAND_WAVELENGTH_M[b] for b in ("VHF", "UHF", "L", "S", "C", "X", "Ku", "K", "Ka")),
         dtype=np.float64,
     )
     h_obs = np.array(

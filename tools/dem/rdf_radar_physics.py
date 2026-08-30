@@ -266,17 +266,33 @@ class RadarHardware:
 
 
 def atmospheric_one_way_db_per_km(frequency_hz: float) -> float:
-    """Rough clear-air one-way loss near sea level (engineering fit)."""
+    """Clear-air one-way loss near sea level (engineering fit).
+
+    Matches Enforce RDF_RadarClutterModel.AtmosphericOneWayDbPerKm, including
+    the soft bump near the 22 GHz water-vapor line.
+    """
     f_ghz = frequency_hz / 1.0e9
+    if f_ghz < 0.3:
+        return 0.002
     if f_ghz < 1.0:
         return 0.003
+    if f_ghz < 2.0:
+        return 0.005
     if f_ghz < 4.0:
         return 0.007
     if f_ghz < 8.0:
         return 0.012
     if f_ghz < 12.0:
-        return 0.02
-    return 0.04
+        return 0.020
+    if f_ghz < 18.0:
+        return 0.045
+    if f_ghz < 22.0:
+        return 0.090
+    if f_ghz < 27.0:
+        return 0.140
+    if f_ghz < 40.0:
+        return 0.200
+    return 0.350
 
 
 # ---------------------------------------------------------------------------

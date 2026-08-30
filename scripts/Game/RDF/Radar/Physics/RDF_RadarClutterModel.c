@@ -286,18 +286,32 @@ class RDF_RadarClutterModel
 
     //------------------------------------------------------------------------------------------------
     // Clear-air one-way loss near sea level (engineering fit, dB/km).
+    // Matches tools/dem/rdf_radar_physics.atmospheric_one_way_db_per_km.
+    // Includes a soft bump near the 22 GHz water-vapor line (K band).
     static float AtmosphericOneWayDbPerKm(float frequencyHz)
     {
         float fGhz = frequencyHz / 1000000000.0;
+        if (fGhz < 0.3)
+            return 0.002;
         if (fGhz < 1.0)
             return 0.003;
+        if (fGhz < 2.0)
+            return 0.005;
         if (fGhz < 4.0)
             return 0.007;
         if (fGhz < 8.0)
             return 0.012;
         if (fGhz < 12.0)
-            return 0.02;
-        return 0.04;
+            return 0.020;
+        if (fGhz < 18.0)
+            return 0.045;
+        if (fGhz < 22.0)
+            return 0.090;
+        if (fGhz < 27.0)
+            return 0.140;
+        if (fGhz < 40.0)
+            return 0.200;
+        return 0.350;
     }
 
     //------------------------------------------------------------------------------------------------
@@ -321,6 +335,8 @@ class RDF_RadarClutterModel
 
     //------------------------------------------------------------------------------------------------
     // Simplified ITU-ish one-way rain loss (dB/km). Matches rdf_radar_systems.
+    // X-band and below keep a∝f^1.2, R^1 (SHORAD rain scale unchanged).
+    // Ku/K/Ka steepen so millimetre-wave CIWS feels rain correctly.
     static float RainOneWayDbPerKm(float rainMmH, float frequencyHz)
     {
         float r = rainMmH;
@@ -329,8 +345,30 @@ class RDF_RadarClutterModel
         float fGhz = frequencyHz / 1000000000.0;
         if (fGhz < 1.0)
             fGhz = 1.0;
-        float a = 0.0001 * Math.Pow(fGhz, 1.2);
-        return a * r;
+
+        float a;
+        float b;
+        if (fGhz < 12.0)
+        {
+            a = 0.0001 * Math.Pow(fGhz, 1.2);
+            b = 1.0;
+        }
+        else if (fGhz < 18.0)
+        {
+            a = 0.0001 * Math.Pow(fGhz, 1.35);
+            b = 1.05;
+        }
+        else if (fGhz < 27.0)
+        {
+            a = 0.00011 * Math.Pow(fGhz, 1.38);
+            b = 1.08;
+        }
+        else
+        {
+            a = 0.00012 * Math.Pow(fGhz, 1.40);
+            b = 1.10;
+        }
+        return a * Math.Pow(r, b);
     }
 
     //------------------------------------------------------------------------------------------------

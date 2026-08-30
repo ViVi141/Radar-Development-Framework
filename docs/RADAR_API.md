@@ -255,7 +255,7 @@ Enable only what you need. Defaults leave optional fidelity **off**.
 | `m_EnableDualKnifeEdge` / `m_KnifeEdgeMinUSeparation` | Dual-dominant knife-edge (Deygout-lite) |
 | `m_EnableKnifeEdgeLut` | ν→factor LUT (`RDF_RadarKnifeEdgeLut`) |
 | `Hardware.m_PolarizationMode` | `RDF_POL_H` / `V` / `CIRCULAR` match table |
-| `Hardware.GetBand()` | VHF/L/S/C/X from `m_FrequencyHz` (σ⁰ + foliage attenuation) |
+| `Hardware.GetBand()` | VHF/UHF/L/S/C/X/Ku/K/Ka from `m_FrequencyHz` (σ⁰ + foliage attenuation) |
 | `Hardware.GetScanFrequencyHz(scan)` | Hop carrier when hop is active (ECCM or `m_FrequencyHopEnabled`) |
 | `Hardware.ScaleApertureToFrequency(f)` | One-shot same-aperture retune (G ∝ f², HPBW ∝ 1/f) |
 | `Hardware.m_PolarizationFactor` | Extra linear trim on received power |
@@ -954,7 +954,7 @@ sensor.SetMeasurementModel(new MyGameplayNoise());
 | `m_EnableDualKnifeEdge` / `m_KnifeEdgeMinUSeparation` | 双主导刃（Deygout-lite） |
 | `m_EnableKnifeEdgeLut` | ν→factor LUT（`RDF_RadarKnifeEdgeLut`） |
 | `Hardware.m_PolarizationMode` | `RDF_POL_H` / `V` / `CIRCULAR` 匹配表 |
-| `Hardware.GetBand()` | 由 `m_FrequencyHz` 派生 VHF/L/S/C/X（σ⁰ 与植被衰减） |
+| `Hardware.GetBand()` | 由 `m_FrequencyHz` 派生 VHF/UHF/L/S/C/X/Ku/K/Ka（σ⁰ 与植被衰减） |
 | `Hardware.GetScanFrequencyHz(scan)` | 捷变激活时的扫描载频（ECCM 或 `m_FrequencyHopEnabled`） |
 | `Hardware.ScaleApertureToFrequency(f)` | 同一孔径一次改频（G ∝ f²，HPBW ∝ 1/f） |
 | `Hardware.m_PolarizationFactor` | 接收功率额外极化微调 |

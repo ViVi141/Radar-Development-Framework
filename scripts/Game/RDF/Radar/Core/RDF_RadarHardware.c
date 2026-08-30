@@ -256,7 +256,8 @@ class RDF_RadarHardware
     }
 
     //------------------------------------------------------------------------------------------------
-    // Engineering band tag from carrier. Matches rdf_radar_channel.band_for_frequency.
+    // Engineering band tag from carrier. Matches rdf_radar_channel.band_for_frequency
+    // (VHF / UHF / L / S / C / X / Ku / K / Ka).
     string GetBand()
     {
         return RDF_RadarSurfaceTable.BandNameFromFrequencyHz(m_FrequencyHz);

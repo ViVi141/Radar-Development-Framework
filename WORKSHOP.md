@@ -136,7 +136,7 @@ Minor over 1.0.2 (`194d65d` … `e5dab5d`). All new knobs default off; SHORAD
 search behaviour unchanged until you Enable*.
 
 - Pulse-width minimum-range eclipse (`m_EnablePulseBlindZone`).
-- Per-band VHF/L/S/C/X clutter σ⁰ + OBB aspect RCS (including roll).
+- Per-band VHF/UHF/L/S/C/X/Ku/K/Ka clutter σ⁰ + OBB aspect RCS (including roll).
 - Multi-band channel switch per dwell; Rayleigh RCS vs wavelength; optional
   aperture retune and intra-band hop.
 - Opt-in NCTR (rotor/fan/fixed from micro-Doppler), LPI search + Friis RWR,

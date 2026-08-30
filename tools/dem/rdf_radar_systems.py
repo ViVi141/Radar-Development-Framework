@@ -123,14 +123,28 @@ def fill_thermal_noise(
 
 
 def rain_one_way_db_per_km(rain_mm_h: float, frequency_hz: float) -> float:
-    """Very simplified ITU-ish rain loss (one-way dB/km)."""
+    """Simplified ITU-ish rain loss (one-way dB/km).
+
+    Matches Enforce RDF_RadarClutterModel.RainOneWayDbPerKm.
+    X-band and below keep a∝f^1.2, R^1 (SHORAD rain scale unchanged).
+    Ku/K/Ka steepen for millimetre-wave weather sensitivity.
+    """
     r = max(float(rain_mm_h), 0.0)
     if r <= 0.0:
         return 0.0
     f_ghz = max(frequency_hz / 1.0e9, 1.0)
-    # Rough: a * R^b with a growing with frequency.
-    a = 0.0001 * (f_ghz**1.2)
-    b = 1.0
+    if f_ghz < 12.0:
+        a = 0.0001 * (f_ghz**1.2)
+        b = 1.0
+    elif f_ghz < 18.0:
+        a = 0.0001 * (f_ghz**1.35)
+        b = 1.05
+    elif f_ghz < 27.0:
+        a = 0.00011 * (f_ghz**1.38)
+        b = 1.08
+    else:
+        a = 0.00012 * (f_ghz**1.40)
+        b = 1.10
     return a * (r**b)
 
 

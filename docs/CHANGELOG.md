@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 1.1.8 — 2026-08-31
+
+相对 1.1.7。扩展 IEEE 雷达波段表（UHF / Ku / K / Ka），并为各波段提供拟真 σ⁰、植被衰减、晴空大气与雨衰特性；Python 离线工具与 Enforce 对齐。
+
+> EN: Patch over 1.1.7. Adds IEEE radar bands UHF / Ku / K / Ka with per-band σ⁰, foliage attenuation, clear-air atmosphere, and rain models. Python offline tools stay parity with Enforce.
+
+- **波段标签**：`BandNameFromFrequencyHz` / `band_for_frequency` → VHF (&lt;0.3) / UHF (0.3–1) / L (1–2) / S / C / X (8–12) / Ku (12–18) / K (18–27) / Ka (≥27 GHz)。原先 0.3–1 GHz 误标为 L，现为 UHF；≥12 GHz 不再一律标 X。
+- **σ⁰**：`SurfaceTable` 内置九张表；Ku/K/Ka 水面与硬目标随频率升高，VHF/UHF 植被体散射仍偏高。
+- **植被衰减尺度**：VHF 0.20 … X 1.0 … Ku 1.35 … Ka 2.40。
+- **大气**：分波段晴空损耗；K 波段在 ~22 GHz 水汽线附近升高。
+- **雨衰**：&lt;12 GHz 保持原 a∝f^1.2（SHORAD 相对 9 GHz 比例不变）；Ku/K/Ka 系数变陡。
+- **工具**：`rdf_radar_materials` / `rdf_radar_physics` / `rdf_radar_systems` / `rdf_radar_knife_lut` + `test_rdf_radar_band.py`。
+
 ## 1.1.7 — 2026-08-27
 
 相对 1.1.6。全局风向量与引擎 `GetWindDirection` 方位约定对齐（0° = 北 = +Z，90° = 东 = +X）。

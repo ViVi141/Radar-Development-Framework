@@ -19,18 +19,25 @@ from rdf_radar_physics import RadarHardware, atmospheric_one_way_db_per_km, db_t
 
 
 def band_for_frequency(frequency_hz: float) -> str:
+    """IEEE radar band tag from carrier (matches Enforce BandNameFromFrequencyHz)."""
     f_ghz = frequency_hz / 1.0e9
     if f_ghz < 0.3:
         return "VHF"
     if f_ghz < 1.0:
-        return "L"
+        return "UHF"
     if f_ghz < 2.0:
         return "L"
     if f_ghz < 4.0:
         return "S"
     if f_ghz < 8.0:
         return "C"
-    return "X"
+    if f_ghz < 12.0:
+        return "X"
+    if f_ghz < 18.0:
+        return "Ku"
+    if f_ghz < 27.0:
+        return "K"
+    return "Ka"
 
 
 def hardware_at_frequency(
