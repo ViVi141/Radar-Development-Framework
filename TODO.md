@@ -19,7 +19,7 @@
 |----------|---------------------|
 | 功能链、Sensor 门面、双档回归、Network / 融合 | 多刃多径、DEM span（场景驱动，SURF 故意不带） |
 | 散射体全局表 + SURF 共享预载；LOS/物理复用、分片预算 | **瓶颈在 Trace / 世界查询**，不在 MTD 小循环算术 |
-| 测量噪声、GO/SO-CFAR、单刃绕射、MTD / coast / clutter map | 游戏内无 Debugger 批跑 CI；密码学 IFF 不做 |
+| 测量噪声、GO/SO-CFAR、单刃绕射、MTD / coast / clutter map | DEM 已有时仍穿帮：PPI 过空、半遮挡开关、budget 眨眼 — 见 **§11** |
 | Python golden + GA 双 job（unittest + full_sim） | 远程实时算力对局内玩法性价比低（见停车场） |
 
 入口：[README.md](README.md)
@@ -131,6 +131,8 @@
 - 全场 FDTD / 训练级 RD 图每帧 / 完整 DRFM
 - 远程替代本地 Trace / 实体查询
 - 用压缩 DEM「换」训练级局内实时链（压缩只助分发，不改复杂度阶）
+- 体素体积搜索世界 · Kalman/IMM 跟踪滤波（§11 明确不做；α-β + 可选 JPDA 足够玩法）
+- 高密度伪静态散射体无上限灌表（§11「慎做」：有 F1/§10 时勿先做）
 
 ---
 
@@ -146,7 +148,8 @@
 **刀刃绕射（已完成）**：单刃 Fresnel + DEM 沿程；与 NLOS bounce 取 max。  
 **数据链/融合（已完成）**：Hub + FusionService + 轻量 IFF。  
 **MTD Sprint（已完成）**：MTD bank、旋翼微多普勒、clutter map、coast、`PULSE_DOPPLER`、Python/CI 护栏。  
-**P2 可选/离线（已完成）**：粗 RD（默认关）、多雷达 focus 调度、DEM span 门控、mass_battle 拆分、HW 标定 JSON、AutoTest flag 批跑。
+**P2 可选/离线（已完成）**：粗 RD（默认关）、多雷达 focus 调度、DEM span 门控、mass_battle 拆分、HW 标定 JSON、AutoTest flag 批跑。  
+**玩法真实感（开放）**：§11 — F1 合成杂波点迹 + F2 budgetSkip 软 miss 优先；§10 座舱强度面并行。
 
 #### 8 — 传播数学拟真（无波形，2026-08-05）
 
@@ -170,11 +173,12 @@
 
 **下一步（择一，按体感）**
 
-1. **产品**：模组侧武器 prefab 接 `WeaponBridge`（框架外）。  
-2. **场景**：有城区/林冠数据时打开 `m_EnableDemSpanOcclusion`（需非 SURF V3/CSV）。  
-3. **调参**：`rdf_radar_hw_calibrate.py` 产出回灌 Hardware；粗 RD 仅 Perf 对照后显式打开。  
-4. **工程**：本地 Play + `RunAutoTestSuite.flag` 批跑（非无头 CI）。  
-5. **呈现（开放）**：机载仪表内嵌粗 range–az 杂波面 — 见 §10。
+1. **玩法真实感（推荐）**：§11 — DEM/表已有时的穿帮补丁（先 F1+F2）。  
+2. **呈现**：机载仪表内嵌粗 range–az 杂波面 — 见 §10（与 F1 互补）。  
+3. **产品**：模组侧武器 prefab 接 `WeaponBridge`（框架外）。  
+4. **场景**：有城区/林冠数据时打开 `m_EnableDemSpanOcclusion`（需非 SURF V3/CSV）。  
+5. **调参**：`rdf_radar_hw_calibrate.py` 产出回灌 Hardware；粗 RD 仅 Perf 对照后显式打开。  
+6. **工程**：本地 Play + `RunAutoTestSuite.flag` 批跑（非无头 CI）。
 
 #### 10 — 呈现：机载仪表 range–az 杂波面（开放，2026-08-31）
 
@@ -196,6 +200,39 @@
 - [ ] 明确：**独立 `RDF_RadarHUD` 浮层保持点迹即可**；强度面走仪表通道
 
 原型参考：`tools/dem/out/sector_howto_en.png` · `clutter_vs_dem_compare.png` · `render_range_az_clutter.py`
+
+#### 11 — 玩法真实感（DEM/表已有时的穿帮补丁，开放，2026-08-30）
+
+前提：SURF/HEIGHT + Signature/SurfaceTable 已齐时，远近难易与杂波门限大体合理。  
+玩家仍会一眼觉得「不是雷达」的，主要是**点迹形态、遮挡几何、时间连续性**——不是再缺一张表。  
+原则：**显示层更脏、时间轴更连续、遮挡更碎**；仍目标级方程；**不做**波形 / FDTD / 完整 DRFM / Kalman / 体素搜世界。  
+与 §10 关系：§10 = 座舱强度面；本节 F1 = HUD/点迹层匿名杂波 blip（可并存，默认都关）。
+
+| 档 | 项 | 治什么 | 收益 | 成本 | 依赖 |
+|----|----|--------|------|------|------|
+| **F1** | 波束脚印内合成少量匿名杂波点迹（低置信、难进确认航迹；MTI 后更稀）+ PPI/HUD 噪声底/余晖 | PPI 过空（黑底+几亮点） | 高 | 中 | DEM σ⁰；与 §10 强度面互补 |
+| **F2** | `budgetSkip` → 软 miss：保上一帧点迹或 coast 外推；锁定/高闭合率继续插队 | 高密度「排队眨眼」 | 高 | 低中 | 现有 coast / 优先级扫描 |
+| **F3** | OBB 多点通视（3～5 Trace）+ 通视比例缩放有效 RCS/检出概率 | 半遮挡整目标开关 | 高 | 中（吃 LOS 预算） | `ScanGeometry` / BudgetGovernor |
+| **F4** | 弹丸/载具首见快速进表；特征未命中先用类默认 RCS，下帧补全 | 出库/离膛真空半拍 | 中高 | 低 | `ScattererRegistry` |
+| **F5** | 玩法预设默认开 JPDA + 火控/跟踪驻留（搜索可仍 GNN） | 编队交叉换身 | 中高 | 低（接线） | §9 S1/S2 已落地 |
+| **F6** | EW 噪声底攻击/恢复时间常数；欺骗点与波门黏一段再拉开 | 干扰像开关 | 中 | 中 | EW Effect 栈；非相干 DRFM |
+| **F7** | 波束内高速/已跟踪候选热路径（绕过公平游标做完整物理更新） | 窄波束晚半拍 | 中 | 低中 | FairScan + Dwell |
+| **F8** | WLR 解算输出再走测量噪声/误差带（或模糊多假设择一） | 反炮位过准 | 中 | 低中 | MeasurementModel；WLR 仍可跳过 Doppler fold |
+| **慎做** | 高 σ⁰ / 烘焙兴趣柱 → 有上限伪静态散射体（默认不进确认航迹） | 「只读单位列表」 | 中 | 高 | 有 F1/§10 时多数够用 |
+| **不做** | 体素体积搜索 · 完整多刃/UTD · 相干 DRFM · Kalman/IMM | — | — | — | 见 §5 / 明确不做 |
+
+建议落地顺序：**F1 → F2 → F3 → F4 → F5/F6 → F7/F8**；先 F1+F2（观感与连续性，回归风险最低）。
+
+- [ ] **F1** 合成匿名杂波点迹 + HUD 噪声底（Settings 默认关；不进确认航迹；预算封顶）
+- [ ] **F2** `budgetSkip` 软 miss / 保点 / coast；状态行可区分「未刷新」与「真丢批」
+- [ ] **F3** 多点通视 + 部分 RCS（受 `m_MaxLosTracesPerScan` / 自适应预算约束）
+- [ ] **F4** Registry 快速进表 + 类默认 RCS 占位
+- [ ] **F5** Demo/玩法预设：`m_EnableJpda` + `m_EnableDwellScheduler`（回归仍 `StabilizeForRegression`）
+- [ ] **F6** EW 攻击/恢复时间常数 + 欺骗波门黏着（玩法层，非 DRFM）
+- [ ] **F7** 波束内高优先级热路径刷新
+- [ ] **F8** WLR 输出误差带 / 测量噪声回灌
+- [ ] 文档：`RADAR_CAPABILITIES` / recipes 写清「DEM 已有仍会穿帮」与本节开关
+- [ ] AutoTest：F1 不污染确认航迹；F2 Stress 下航迹连续；F3 半遮挡弱检；F8 WLR 误差带
 
 #### 9 — 系统层纵深（资源管理 / 关联 / ECCM，2026-08-14）
 
@@ -317,7 +354,7 @@ Regressions that look “too accurate” are closed-loop checks in a low-noise m
 |----------|----------|
 | Feature chain, Sensor facade, dual-tier regression, Network / fusion | Cascaded multipath, DEM span (scenario-only; SURF omits on purpose) |
 | Global scatterer table + shared SURF preload; LOS/physics reuse, shard budgets | **Bottleneck is Trace / world queries**, not small MTD arithmetic |
-| Measurement noise, GO/SO-CFAR, knife-edge, MTD / coast / clutter map | In-game AutoTest without Debugger; crypto IFF out of scope |
+| Measurement noise, GO/SO-CFAR, knife-edge, MTD / coast / clutter map | With DEM present, feel still breaks: empty PPI, half-occlusion on/off, budget blink — see **§11** |
 | Python golden + GA dual jobs (unittest + full_sim) | Remote realtime compute is poor value for in-game play (see parking lot) |
 
 Entry: [README.md](README.md)
@@ -429,6 +466,8 @@ Context: realistic channel, Network, fusion, MTD/rotor/coast, and dual-job Pytho
 - Full-field FDTD / training-grade RD map every frame / full DRFM
 - Remote replacing local Trace / entity queries
 - Treating compressed DEM as a ticket to training-grade in-game realtime chains (compression helps distribution, not complexity class)
+- Voxel volume world search · Kalman/IMM track filters (§11 skip; α-β + optional JPDA is enough for play)
+- Unbounded pseudo-static scatterer flood (§11 “Careful”: do not start here if F1/§10 exist)
 
 ---
 
@@ -444,7 +483,8 @@ Context: realistic channel, Network, fusion, MTD/rotor/coast, and dual-job Pytho
 **Knife-edge (done)**: single-edge Fresnel + DEM samples; max with NLOS bounce.  
 **Datalink/fusion (done)**: Hub + FusionService + light IFF.  
 **MTD Sprint (done)**: MTD bank, rotor micro-Doppler, clutter map, coast, `PULSE_DOPPLER`, Python/CI guards.  
-**P2 optional/offline (done)**: coarse RD (default off), multi-radar focus sched, DEM span gate, mass_battle split, HW calib JSON, AutoTest flag batch.
+**P2 optional/offline (done)**: coarse RD (default off), multi-radar focus sched, DEM span gate, mass_battle split, HW calib JSON, AutoTest flag batch.  
+**Gameplay feel (open)**: §11 — prioritize F1 synthetic clutter blips + F2 budgetSkip soft-miss; §10 cockpit intensity surface in parallel.
 
 #### 8 — Propagation math fidelity (no waveform, 2026-08-05)
 
@@ -468,11 +508,12 @@ Deepen target-level equations / measurement layer; **no** waveform → RD / full
 
 **Next (pick one by feel)**
 
-1. **Product**: mod-side weapon prefabs on `WeaponBridge` (outside framework).  
-2. **Scenario**: enable `m_EnableDemSpanOcclusion` when non-SURF V3/CSV canopy data exists.  
-3. **Tuning**: bake Hardware via `rdf_radar_hw_calibrate.py`; turn coarse RD on only after Perf checks.  
-4. **Engineering**: local Play + `RunAutoTestSuite.flag` (not headless CI).  
-5. **Presentation (open)**: cockpit-instrument coarse range–az clutter surface — see §10.
+1. **Gameplay feel (recommended)**: §11 — feel patches when DEM/tables already ship (start F1+F2).  
+2. **Presentation**: cockpit coarse range–az clutter surface — see §10 (complements F1).  
+3. **Product**: mod-side weapon prefabs on `WeaponBridge` (outside framework).  
+4. **Scenario**: enable `m_EnableDemSpanOcclusion` when non-SURF V3/CSV canopy data exists.  
+5. **Tuning**: bake Hardware via `rdf_radar_hw_calibrate.py`; turn coarse RD on only after Perf checks.  
+6. **Engineering**: local Play + `RunAutoTestSuite.flag` (not headless CI).
 
 #### 10 — Presentation: cockpit range–az clutter surface (open, 2026-08-31)
 
@@ -494,6 +535,39 @@ Goal: bring the offline **DEM σ⁰ → range–az intensity grid** (`tools/dem/
 - [ ] Explicit: keep floating `RDF_RadarHUD` as plot blips; intensity surface uses the instrument channel
 
 Prototype refs: `tools/dem/out/sector_howto_en.png` · `clutter_vs_dem_compare.png` · `render_range_az_clutter.py`
+
+#### 11 — Gameplay feel (patches when DEM/tables already ship; open, 2026-08-30)
+
+Premise: with SURF/HEIGHT + Signature/SurfaceTable present, range difficulty and clutter floors are mostly sane.  
+What still reads as “not radar” is **plot morphology, occlusion geometry, and temporal continuity** — not another missing table.  
+Principle: **dirtier display, smoother time axis, softer occlusion**; stay target-level equations; **no** waveform / FDTD / full DRFM / Kalman / voxel world search.  
+Relation to §10: §10 = cockpit intensity surface; F1 here = anonymous clutter blips on the HUD/plot layer (can coexist; both default off).
+
+| Tier | Item | Fixes | Benefit | Cost | Depends on |
+|------|------|-------|---------|------|------------|
+| **F1** | Sparse anonymous clutter blips in the beam footprint (low confidence; hard to confirm-track; thinner after MTI) + PPI/HUD noise floor / phosphor | Empty PPI (black + few blips) | High | Med | DEM σ⁰; complements §10 |
+| **F2** | `budgetSkip` → soft miss: keep last plot or coast; locked / high-closure stay prioritized | Dense “round-robin blink” | High | Low–med | Existing coast / priority scan |
+| **F3** | Multi-point LOS on OBB (3–5 traces) + clear-fraction scales effective RCS / Pd | Half-occlusion whole-target on/off | High | Med (burns LOS budget) | `ScanGeometry` / BudgetGovernor |
+| **F4** | Fast registry admit for projectiles/vehicles; class-default RCS placeholder until signature fills | Spawn / muzzle vacuum | Med–high | Low | `ScattererRegistry` |
+| **F5** | Gameplay presets default-on JPDA + fire-control/track dwell (search may stay GNN) | Formation track swaps | Med–high | Low (wiring) | §9 S1/S2 shipped |
+| **F6** | EW noise-floor attack/recovery time constants; deception sticks to gates before walking off | Jammer feels like a switch | Med | Med | EW Effect stack; not coherent DRFM |
+| **F7** | Hot-path full physics for in-beam high-speed / already-tracked candidates (bypass fair cursor) | Narrow-beam late blips | Med | Low–med | FairScan + Dwell |
+| **F8** | WLR outputs re-enter measurement noise / error bands (or pick one ambiguity hypothesis) | Counter-battery too surgical | Med | Low–med | MeasurementModel; WLR may still skip Doppler fold |
+| **Careful** | Bounded pseudo-static scatterers from high-σ⁰ / baked interest columns (default never confirm-track) | “Reading the unit list” | Med | High | Often enough with F1/§10 |
+| **Skip** | Voxel volume search · full multi-edge/UTD · coherent DRFM · Kalman/IMM | — | — | — | See §5 / out of scope |
+
+Ship order: **F1 → F2 → F3 → F4 → F5/F6 → F7/F8**; start with F1+F2 (feel + continuity, lowest regression risk).
+
+- [ ] **F1** Synthetic anonymous clutter blips + HUD noise floor (Settings default off; no confirm-track; hard budget)
+- [ ] **F2** `budgetSkip` soft miss / keep-plot / coast; status distinguishes “stale” vs “true drop”
+- [ ] **F3** Multi-point LOS + partial RCS (honour `m_MaxLosTracesPerScan` / adaptive budget)
+- [ ] **F4** Fast registry admit + class-default RCS placeholder
+- [ ] **F5** Demo/gameplay presets: `m_EnableJpda` + `m_EnableDwellScheduler` (regressions still `StabilizeForRegression`)
+- [ ] **F6** EW attack/recovery time constants + deception gate stickiness (gameplay layer, not DRFM)
+- [ ] **F7** In-beam high-priority hot-path refresh
+- [ ] **F8** WLR output error bands / measurement-noise re-injection
+- [ ] Docs: `RADAR_CAPABILITIES` / recipes — “DEM present, still breaks feel” + these toggles
+- [ ] AutoTest: F1 must not pollute confirm-tracks; F2 continuity under Stress; F3 partial-occlusion weak detect; F8 WLR error bands
 
 #### 9 — System-layer depth (resource management / association / ECCM, 2026-08-14)
 
