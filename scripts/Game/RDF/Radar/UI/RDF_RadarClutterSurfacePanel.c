@@ -44,6 +44,8 @@ class RDF_RadarClutterSurfacePanel
     protected float m_VrmFrac;
     protected float m_VrmDir;
     protected bool m_BlinkOn;
+    protected int m_LastRevision;
+    protected bool m_HaveRevision;
 
     protected ref array<ref CanvasWidgetCommand> m_Cmds;
     protected ref PolygonDrawCommand m_BgCmd;
@@ -75,6 +77,8 @@ class RDF_RadarClutterSurfacePanel
         m_VrmFrac = 0.55;
         m_VrmDir = 1.0;
         m_BlinkOn = false;
+        m_LastRevision = -1;
+        m_HaveRevision = false;
         m_Cmds = new array<ref CanvasWidgetCommand>();
         m_OverlayCmds = new array<ref CanvasWidgetCommand>();
         m_RunCmdPool = new array<ref PolygonDrawCommand>();
@@ -140,8 +144,28 @@ class RDF_RadarClutterSurfacePanel
         m_MaxRangeM = maxRangeM;
         m_SectorHalfDeg = sectorHalfDeg;
         m_ScanAzDeg = scanAzDeg;
-        sensor.CopyClutterSurfacePowers(m_Powers);
-        EnsureLevelBuffer();
+
+        int revision = sensor.GetClutterSurfaceRevision();
+        bool dataChanged = true;
+        if (m_HaveRevision && revision == m_LastRevision)
+            dataChanged = false;
+        m_LastRevision = revision;
+        m_HaveRevision = true;
+
+        // Chrome (VRM / blink sweep / status) still ticks every frame; only
+        // re-quantize + rebuild clutter wedges when the surface revision moves.
+        if (dataChanged)
+        {
+            sensor.CopyClutterSurfacePowers(m_Powers);
+            EnsureLevelBuffer();
+            m_LutFrame = m_LutFrame + 1;
+            if (m_LutFrame >= LUT_REFRESH_FRAMES)
+            {
+                m_LutFrame = 0;
+                RecomputeLut();
+            }
+            QuantizePowers();
+        }
 
         m_VrmFrac = m_VrmFrac + m_VrmDir * 0.0015;
         if (m_VrmFrac > 0.92)
@@ -155,14 +179,6 @@ class RDF_RadarClutterSurfacePanel
             m_VrmDir = 1.0;
         }
 
-        m_LutFrame = m_LutFrame + 1;
-        if (m_LutFrame >= LUT_REFRESH_FRAMES)
-        {
-            m_LutFrame = 0;
-            RecomputeLut();
-        }
-
-        QuantizePowers();
         UpdateBlinkPhase();
         BeginFrame();
 
@@ -180,7 +196,7 @@ class RDF_RadarClutterSurfacePanel
         AppendDynamicChrome();
         AppendOverlay();
         m_Canvas.SetDrawCommands(m_Cmds);
-        UpdateStatusText();
+        UpdateStatusText(sensor);
     }
 
     protected void EnsureLevelBuffer()
@@ -520,7 +536,7 @@ class RDF_RadarClutterSurfacePanel
         }
     }
 
-    protected void UpdateStatusText()
+    protected void UpdateStatusText(RDF_RadarSensor sensor)
     {
         if (!m_Status)
             return;
@@ -528,8 +544,18 @@ class RDF_RadarClutterSurfacePanel
         int halfDeg = m_SectorHalfDeg;
         int ringM = m_MaxRangeM / RING_COUNT;
         int azDeg = m_ScanAzDeg;
+        int rev = 0;
+        int rays = 0;
+        int samp = 0;
+        int cur = 0;
+        if (sensor)
+        {
+            rev = sensor.GetClutterSurfaceRevision();
+            sensor.TryGetClutterSurfaceFill(rays, samp, cur);
+        }
         string s = "CLTR  R=" + rM.ToString() + "m  ±" + halfDeg.ToString()
-            + "  ring=" + ringM.ToString() + "m  az=" + azDeg.ToString();
+            + "  ring=" + ringM.ToString() + "m  az=" + azDeg.ToString()
+            + "  r" + rev.ToString() + "  fill=" + rays.ToString();
         m_Status.SetText(s);
     }
 

@@ -1220,6 +1220,17 @@ class RDF_RadarSensor
         return surf.Peek(azBin, rangeBin);
     }
 
+    // 10·log10(σ⁰·A/R⁴). Empty → -300.
+    float PeekClutterSurfacePowerDb(int azBin, int rangeBin)
+    {
+        if (!m_Scanner)
+            return -300.0;
+        RDF_RadarRangeAzClutterSurface surf = m_Scanner.GetRangeAzClutterSurface();
+        if (!surf)
+            return -300.0;
+        return surf.PeekDb(azBin, rangeBin);
+    }
+
     int CopyClutterSurfacePowers(inout array<float> dst)
     {
         if (!dst)
@@ -1236,6 +1247,58 @@ class RDF_RadarSensor
             return 0;
         }
         return surf.CopyPowers(dst);
+    }
+
+    // Same az-major layout as CopyClutterSurfacePowers; values in dB.
+    int CopyClutterSurfacePowersDb(inout array<float> dst)
+    {
+        if (!dst)
+            return 0;
+        if (!m_Scanner)
+        {
+            dst.Clear();
+            return 0;
+        }
+        RDF_RadarRangeAzClutterSurface surf = m_Scanner.GetRangeAzClutterSurface();
+        if (!surf)
+        {
+            dst.Clear();
+            return 0;
+        }
+        return surf.CopyPowersDb(dst);
+    }
+
+    // Monotonic counter: grid resize or each Scan UpdateSector.
+    int GetClutterSurfaceRevision()
+    {
+        if (!m_Scanner)
+            return 0;
+        RDF_RadarRangeAzClutterSurface surf = m_Scanner.GetRangeAzClutterSurface();
+        if (!surf)
+            return 0;
+        return surf.GetRevision();
+    }
+
+    // Amortized fill progress for this surface (rays/samples last Scan + next az cursor).
+    bool TryGetClutterSurfaceFill(
+        out int raysThisScan,
+        out int samplesThisScan,
+        out int azCursor)
+    {
+        raysThisScan = 0;
+        samplesThisScan = 0;
+        azCursor = 0;
+        if (!m_Scanner)
+            return false;
+        RDF_RadarRangeAzClutterSurface surf = m_Scanner.GetRangeAzClutterSurface();
+        if (!surf)
+            return false;
+        if (surf.GetAzBinCount() < 1)
+            return false;
+        raysThisScan = surf.GetStatRaysThisScan();
+        samplesThisScan = surf.GetStatSamplesThisScan();
+        azCursor = surf.GetAzCursor();
+        return true;
     }
 
     string GetStatusShort()

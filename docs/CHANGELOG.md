@@ -8,6 +8,7 @@
 
 - **数据面**：`RDF_RadarRangeAzClutterSurface`（相对扫向 az×range，`σ⁰·A/R⁴`，扇区衰减 + `CellsPerScan` 摊销）；Scanner 在 `m_EnableRangeAzClutterSurface` 下每扫更新。
 - **Settings / Sensor**：`EnableClutterSurface` / `TryGetClutterSurfaceMeta` / `Peek` / `CopyClutterSurfacePowers`；`StabilizeForRegression` 强制关；状态行 `CAS …`。
+- **API 增量**：`GetClutterSurfaceRevision`（每扫/改栅递增）；`PeekClutterSurfacePowerDb` / `CopyClutterSurfacePowersDb`（空=-300 dB）；`TryGetClutterSurfaceFill`（上扫 rays/samples + azCursor）。演示面板按 revision 跳过重量化。
 - **座舱**：演示默认刷 `Computer_E_01_on_RT`（继承官方 `Computer_E_01_on`，`MaterialAssign` 屏→`Computer_Screen_RT.emat`）；可换 `Monitor_on_RT` / 原版 on|off|Monitor_*；+ `RDF_RadarClutterSurfaceScreen` / Panel / Demo。
 - **护栏**：`tools/dem/test_rdf_radar_range_az_clutter.py`；文档 RADAR_API / CAPABILITIES / TODO §10。
 

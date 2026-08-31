@@ -21,6 +21,8 @@ class RDF_RadarRangeAzClutterSurface
     protected float m_LastSectorHalfDeg;
     protected int m_StatRaysThisScan;
     protected int m_StatSamplesThisScan;
+    // Bumps on Configure resize and each UpdateSector (even budgeted partial fills).
+    protected int m_Revision;
 
     void RDF_RadarRangeAzClutterSurface()
     {
@@ -36,6 +38,7 @@ class RDF_RadarRangeAzClutterSurface
         m_LastSectorHalfDeg = 45.0;
         m_StatRaysThisScan = 0;
         m_StatSamplesThisScan = 0;
+        m_Revision = 0;
     }
 
     void Configure(
@@ -77,6 +80,7 @@ class RDF_RadarRangeAzClutterSurface
         m_AzBinCount = azBinCount;
         m_RangeBinCount = rangeBinCount;
         m_AzCursor = 0;
+        m_Revision = m_Revision + 1;
         int total = m_AzBinCount * m_RangeBinCount;
         m_Power.Clear();
         for (int i = 0; i < total; i++)
@@ -118,12 +122,30 @@ class RDF_RadarRangeAzClutterSurface
         return m_StatSamplesThisScan;
     }
 
+    int GetRevision()
+    {
+        return m_Revision;
+    }
+
+    // Next az column the amortized filler will refresh (0 .. nAz-1).
+    int GetAzCursor()
+    {
+        return m_AzCursor;
+    }
+
+    // Linear power (σ⁰·A/R⁴). Empty / OOB → 0.
     float Peek(int azBin, int rangeBin)
     {
         int idx = CellIndex(azBin, rangeBin);
         if (idx < 0)
             return 0.0;
         return m_Power.Get(idx);
+    }
+
+    // 10·log10(power). Empty / tiny → -300 dB (same floor as display LUT path).
+    float PeekDb(int azBin, int rangeBin)
+    {
+        return PowerToDb(Peek(azBin, rangeBin));
     }
 
     // Clear+append into dst (caller reuses the array). Returns cell count.
@@ -135,6 +157,18 @@ class RDF_RadarRangeAzClutterSurface
         int n = m_Power.Count();
         for (int i = 0; i < n; i++)
             dst.Insert(m_Power.Get(i));
+        return n;
+    }
+
+    // Same layout as CopyPowers, values in dB.
+    int CopyPowersDb(inout array<float> dst)
+    {
+        if (!dst)
+            return 0;
+        dst.Clear();
+        int n = m_Power.Count();
+        for (int i = 0; i < n; i++)
+            dst.Insert(PowerToDb(m_Power.Get(i)));
         return n;
     }
 
@@ -153,6 +187,7 @@ class RDF_RadarRangeAzClutterSurface
         if (m_AzBinCount < 8 || m_RangeBinCount < 8)
             return;
 
+        m_Revision = m_Revision + 1;
         m_LastScanAzimuthRad = scanAzimuthRad;
         m_LastSectorHalfDeg = sectorHalfDeg;
         if (m_LastSectorHalfDeg < 1.0)
@@ -320,5 +355,12 @@ class RDF_RadarRangeAzClutterSurface
         if (rangeBin < 0 || rangeBin >= m_RangeBinCount)
             return -1;
         return azBin * m_RangeBinCount + rangeBin;
+    }
+
+    static float PowerToDb(float power)
+    {
+        if (power <= 1.0e-30)
+            return -300.0;
+        return 10.0 * Math.Log10(power);
     }
 }

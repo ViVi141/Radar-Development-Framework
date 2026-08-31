@@ -159,5 +159,19 @@ class TestRangeAzClutterSurface(unittest.TestCase):
         self.assertGreater(float(db[4, 10]), -300.0)
 
 
+    def test_power_to_db_floor(self) -> None:
+        """Parity with RDF_RadarRangeAzClutterSurface.PowerToDb."""
+
+        def power_to_db(power: float) -> float:
+            if power <= 1.0e-30:
+                return -300.0
+            return 10.0 * math.log10(power)
+
+        self.assertEqual(power_to_db(0.0), -300.0)
+        self.assertEqual(power_to_db(1.0e-40), -300.0)
+        self.assertAlmostEqual(power_to_db(1.0e-10), -100.0, places=6)
+        self.assertAlmostEqual(power_to_db(1.0), 0.0, places=6)
+
+
 if __name__ == "__main__":
     unittest.main()

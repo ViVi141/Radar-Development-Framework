@@ -117,9 +117,14 @@ int nAz, nRng;
 float maxRangeM, sectorHalfDeg, scanAzDeg;
 if (sensor.TryGetClutterSurfaceMeta(nAz, nRng, maxRangeM, sectorHalfDeg, scanAzDeg))
 {
-    float p = sensor.PeekClutterSurfacePower(nAz / 2, 0);
+    int rev = sensor.GetClutterSurfaceRevision(); // bumps each Scan / grid resize
+    float p = sensor.PeekClutterSurfacePower(nAz / 2, 0);     // linear σ⁰·A/R⁴
+    float db = sensor.PeekClutterSurfacePowerDb(nAz / 2, 0);  // 10·log10; empty=-300
     array<float> buf = new array<float>();
-    sensor.CopyClutterSurfacePowers(buf); // az-major: az*nRng + range
+    sensor.CopyClutterSurfacePowers(buf);   // az-major: az*nRng + range
+    sensor.CopyClutterSurfacePowersDb(buf); // same layout, dB
+    int rays, samp, azCursor;
+    sensor.TryGetClutterSurfaceFill(rays, samp, azCursor); // last Scan budget stats
 }
 ```
 
@@ -849,8 +854,12 @@ Plot 带 `m_DopplerHz` / `m_DopplerBin` / `m_PrfIndex` / `m_RadialSpeedMs`（网
 sensor.EnableClutterSurface(true);
 // settings.m_ClutterSurfaceAzBins / RangeBins / CellsPerScan / DecayPerScan / SectorHalfDeg
 sensor.TryGetClutterSurfaceMeta(nAz, nRng, maxRangeM, sectorHalfDeg, scanAzDeg);
-sensor.PeekClutterSurfacePower(azBin, rangeBin);
-sensor.CopyClutterSurfacePowers(buf); // az 主序
+int rev = sensor.GetClutterSurfaceRevision(); // 每扫 / 改栅递增
+sensor.PeekClutterSurfacePower(azBin, rangeBin);     // 线性
+sensor.PeekClutterSurfacePowerDb(azBin, rangeBin);   // dB，空=-300
+sensor.CopyClutterSurfacePowers(buf);   // az 主序
+sensor.CopyClutterSurfacePowersDb(buf); // 同布局，dB
+sensor.TryGetClutterSurfaceFill(rays, samp, azCursor); // 上扫摊销进度
 ```
 
 `StabilizeForRegression()` 强制关闭。

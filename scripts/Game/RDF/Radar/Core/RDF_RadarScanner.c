@@ -170,9 +170,10 @@ class RDF_RadarScanner
         if (!m_RangeAzClutterSurface)
             return "CAS OFF";
         return string.Format(
-            "CAS %1x%2 rays=%3 samp=%4",
+            "CAS %1x%2 r%3 rays=%4 samp=%5",
             m_RangeAzClutterSurface.GetAzBinCount().ToString(),
             m_RangeAzClutterSurface.GetRangeBinCount().ToString(),
+            m_RangeAzClutterSurface.GetRevision().ToString(),
             m_RangeAzClutterSurface.GetStatRaysThisScan().ToString(),
             m_RangeAzClutterSurface.GetStatSamplesThisScan().ToString());
     }
