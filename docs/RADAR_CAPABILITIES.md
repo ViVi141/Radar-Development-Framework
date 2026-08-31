@@ -55,6 +55,7 @@
 #### 显示与测试
 
 - PPI HUD：默认为匿名量测点；假目标白色；NLOS 青色
+- **座舱 range–az 杂波面**（`m_EnableRangeAzClutterSurface`，默认关）：预算化 DEM 射线填粗栅；Sensor Peek/Copy；`RTTexture`→mesh `$rendertarget` + ×R⁴ LUT/扫线面板；角标 PPI 仍只画点迹
 - 量测驱动 α-β 跟踪 + `PredictAt` 外推（最近邻波门；匿名/假目标可进跟踪）
 - **锁定层** `RDF_RadarLockManager`：SEARCH → 截获 → 跟踪 → coast + `GetLockedTarget`
 - AutoTest：`RDF_RadarAutoTestSuite.StartAll()`（各测试自管通道）；套件 7 项 + 独立 Stress / RWR / ESM-ARM / Rocket / HeliDuel / SamEngage / Fusion / **DemLosBench**
@@ -224,6 +225,7 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 #### Display & testing
 
 - PPI HUD: anonymous measurement points by default; false targets white; NLOS cyan
+- **Cockpit range–az clutter surface** (`m_EnableRangeAzClutterSurface`, default off): budgeted DEM rays fill a coarse grid; Sensor Peek/Copy; `RTTexture`→mesh `$rendertarget` + ×R⁴ LUT/sweep panel; corner PPI stays plots-only
 - Measurement-driven α-β tracking + `PredictAt` extrapolation (nearest-neighbor gate; anonymous / false targets can enter tracking)
 - **Lock layer** `RDF_RadarLockManager`: SEARCH → acquire → track → coast + `GetLockedTarget`
 - AutoTest: `RDF_RadarAutoTestSuite.StartAll()` (each test owns channel flags); suite of 7 + standalone Stress / RWR / ESM-ARM / Rocket / HeliDuel / SamEngage / Fusion / **DemLosBench**

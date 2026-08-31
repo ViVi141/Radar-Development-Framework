@@ -266,6 +266,15 @@ class RDF_RadarSettings
     float m_RdDecayPerScan = 0.97;
     // Blend weight for coarse RD Peek into clutter noise (0 = ignore RD, 1 = RD only).
     float m_RdClutterBlend = 0.35;
+    // Cockpit range–az clutter intensity surface (default OFF). Independent of
+    // PhysicalDetect / ClutterMap: DEM σ⁰·A/R^4 for MFD display only.
+    bool m_EnableRangeAzClutterSurface = false;
+    int m_ClutterSurfaceAzBins = 64;
+    int m_ClutterSurfaceRangeBins = 64;
+    int m_ClutterSurfaceCellsPerScan = 96;
+    float m_ClutterSurfaceDecayPerScan = 0.92;
+    // <=0: use current scan sector half-angle / beam half-width.
+    float m_ClutterSurfaceSectorHalfDeg = 0.0;
     // When true and DEM cell has column spans (non-SURF V3/CSV), knife-edge /
     // NLOS obstacle height uses column top Y (canopy / urban slabs).
     // SURF packs stay surface-only; leave false unless scene needs span data.
@@ -388,6 +397,11 @@ class RDF_RadarSettings
         m_RdCellsPerScan = Math.Clamp(m_RdCellsPerScan, 1, 512);
         m_RdMapAlpha = Math.Clamp(m_RdMapAlpha, 0.01, 1.0);
         m_RdDecayPerScan = Math.Clamp(m_RdDecayPerScan, 0.5, 1.0);
+        m_ClutterSurfaceAzBins = Math.Clamp(m_ClutterSurfaceAzBins, 8, 128);
+        m_ClutterSurfaceRangeBins = Math.Clamp(m_ClutterSurfaceRangeBins, 8, 128);
+        m_ClutterSurfaceCellsPerScan = Math.Clamp(m_ClutterSurfaceCellsPerScan, 8, 512);
+        m_ClutterSurfaceDecayPerScan = Math.Clamp(m_ClutterSurfaceDecayPerScan, 0.5, 1.0);
+        m_ClutterSurfaceSectorHalfDeg = Math.Clamp(m_ClutterSurfaceSectorHalfDeg, 0.0, 180.0);
         m_ShellAirDrag = Math.Clamp(m_ShellAirDrag, 0.0, 1.0);
         m_WeaponLocateMinHits = Math.Clamp(m_WeaponLocateMinHits, 2, 32);
         m_WeaponLocateMinSpanS = Math.Clamp(m_WeaponLocateMinSpanS, 0.2, 30.0);
@@ -632,6 +646,13 @@ class RDF_RadarSettings
     }
 
     //------------------------------------------------------------------------------------------------
+    // Cockpit range–az clutter surface (display only; not detection).
+    void EnableRangeAzClutterSurface(bool enable)
+    {
+        m_EnableRangeAzClutterSurface = enable;
+    }
+
+    //------------------------------------------------------------------------------------------------
     // AutoTest / Debugger helper: turn OFF optional fidelity extras that make
     // logic-loop assertions flaky. Not a gameplay "ideal tier" — mods should
     // Enable* only what they need. Does not force CFAR on/off.
@@ -648,6 +669,7 @@ class RDF_RadarSettings
         m_EnableRangeAmbiguityFold = false;
         m_EnableDopplerAmbiguityFold = false;
         m_EnableCoarseRd = false;
+        m_EnableRangeAzClutterSurface = false;
         m_EnableDemSpanOcclusion = false;
         m_EnableClutterFootprintMix = false;
         m_EnableNctr = false;

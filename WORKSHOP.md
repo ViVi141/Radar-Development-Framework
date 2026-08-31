@@ -10,7 +10,7 @@ Realistic radar, LiDAR and DEM sensor framework for Arma Reforger. Physical dete
 
 ## Description (≤ 5000 chars)
 
-# Radar Development Framework (RDF) — v1.1.7
+# Radar Development Framework (RDF) — v1.1.9
 
 A modular, workshop-ready sensor framework for Arma Reforger: **Radar**,
 **LiDAR**, and **DEM** bake/runtime. It models the detection chain as a
@@ -22,6 +22,7 @@ measurements with real thresholds, clutter, jamming, and uncertainty.
 - Physical detection chain: radar equation, RCS + Swerling, Doppler, MTI / MTD
   with rotor micro-Doppler
 - DEM sigma0 terrain clutter, knife-edge diffraction, NLOS multipath
+- Opt-in cockpit range–az clutter surface (RTTexture MFD; default off)
 - CA / GO / SO-CFAR with thermal-noise false alarms
 - Measurement synthesis (quantized + noisy plots; anonymous by default)
 - ESM / RWR / anti-radiation (ARM) aiming
@@ -84,6 +85,14 @@ is included). Enable features explicitly — the framework is silent by default.
 ---
 
 ## Changelog (unlimited)
+
+## 1.1.9 — 2026-08-31
+
+Patch over 1.1.8. Cockpit range–az clutter intensity surface (TODO §10).
+
+- Budgeted DEM ray fill (`RDF_RadarRangeAzClutterSurface`) + Sensor Peek/Copy API (default off).
+- RTTexture→mesh `$rendertarget` screen shell + ×R⁴ LUT/sweep panel; corner PPI unchanged.
+- Python golden: `test_rdf_radar_range_az_clutter.py`.
 
 ## 1.1.7 — 2026-08-27
 

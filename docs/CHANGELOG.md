@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 1.1.9 — 2026-08-31
+
+相对 1.1.8。座舱 **range–az 杂波强度面**（TODO §10）：预算化 DEM 射线填充粗栅 + Sensor 只读 API；`RTTexture`→mesh `$rendertarget` 外壳与 ×R⁴ LUT/扫线内容层。默认关；不进检测链；不改角标 PPI。
+
+> EN: Patch over 1.1.8. Cockpit **range–az clutter intensity surface** (TODO §10): budgeted DEM ray fill + Sensor read API; `RTTexture`→mesh `$rendertarget` shell and ×R⁴ LUT/sweep content. Default off; not on the detect path; corner PPI unchanged.
+
+- **数据面**：`RDF_RadarRangeAzClutterSurface`（相对扫向 az×range，`σ⁰·A/R⁴`，扇区衰减 + `CellsPerScan` 摊销）；Scanner 在 `m_EnableRangeAzClutterSurface` 下每扫更新。
+- **Settings / Sensor**：`EnableClutterSurface` / `TryGetClutterSurfaceMeta` / `Peek` / `CopyClutterSurfacePowers`；`StabilizeForRegression` 强制关；状态行 `CAS …`。
+- **座舱**：演示默认刷 `Computer_E_01_on_RT`（继承官方 `Computer_E_01_on`，`MaterialAssign` 屏→`Computer_Screen_RT.emat`）；可换 `Monitor_on_RT` / 原版 on|off|Monitor_*；+ `RDF_RadarClutterSurfaceScreen` / Panel / Demo。
+- **护栏**：`tools/dem/test_rdf_radar_range_az_clutter.py`；文档 RADAR_API / CAPABILITIES / TODO §10。
+
 ## 1.1.8 — 2026-08-31
 
 相对 1.1.7。扩展 IEEE 雷达波段表（UHF / Ku / K / Ka），并为各波段提供拟真 σ⁰、植被衰减、晴空大气与雨衰特性；Python 离线工具与 Enforce 对齐。

@@ -1,0 +1,13 @@
+GenericEntity : "{2595F6426CDFDBBB}Prefabs/Props/Civilian/Computer_E_01/Computer_E_01_Monitor_on.et" {
+ ID "F0DBA538AC2A0552"
+ components {
+  MeshObject "{5872F0EB7FA40561}" {
+   Materials {
+    MaterialAssignClass "{D7A31F04C8E26B92}" {
+     SourceMaterial "Computer_Screen_On"
+     AssignedMaterial "{C1A84F02B7D35E91}RadarData/ClutterSurface/Computer_Screen_RT.emat"
+    }
+   }
+  }
+ }
+}

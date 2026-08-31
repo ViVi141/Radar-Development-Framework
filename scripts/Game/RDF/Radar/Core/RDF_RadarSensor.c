@@ -1169,6 +1169,75 @@ class RDF_RadarSensor
         return entry.m_Entity;
     }
 
+    void EnableClutterSurface(bool on)
+    {
+        if (!m_Settings)
+            return;
+        m_Settings.EnableRangeAzClutterSurface(on);
+    }
+
+    bool IsClutterSurfaceEnabled()
+    {
+        if (!m_Settings)
+            return false;
+        return m_Settings.m_EnableRangeAzClutterSurface;
+    }
+
+    bool TryGetClutterSurfaceMeta(
+        out int nAz,
+        out int nRng,
+        out float maxRangeM,
+        out float sectorHalfDeg,
+        out float scanAzDeg)
+    {
+        nAz = 0;
+        nRng = 0;
+        maxRangeM = 0.0;
+        sectorHalfDeg = 0.0;
+        scanAzDeg = 0.0;
+        if (!m_Scanner)
+            return false;
+        RDF_RadarRangeAzClutterSurface surf = m_Scanner.GetRangeAzClutterSurface();
+        if (!surf)
+            return false;
+        if (surf.GetAzBinCount() < 1 || surf.GetRangeBinCount() < 1)
+            return false;
+        nAz = surf.GetAzBinCount();
+        nRng = surf.GetRangeBinCount();
+        maxRangeM = surf.GetMaxRangeM();
+        sectorHalfDeg = surf.GetSectorHalfDeg();
+        scanAzDeg = surf.GetScanAzimuthDeg();
+        return true;
+    }
+
+    float PeekClutterSurfacePower(int azBin, int rangeBin)
+    {
+        if (!m_Scanner)
+            return 0.0;
+        RDF_RadarRangeAzClutterSurface surf = m_Scanner.GetRangeAzClutterSurface();
+        if (!surf)
+            return 0.0;
+        return surf.Peek(azBin, rangeBin);
+    }
+
+    int CopyClutterSurfacePowers(inout array<float> dst)
+    {
+        if (!dst)
+            return 0;
+        if (!m_Scanner)
+        {
+            dst.Clear();
+            return 0;
+        }
+        RDF_RadarRangeAzClutterSurface surf = m_Scanner.GetRangeAzClutterSurface();
+        if (!surf)
+        {
+            dst.Clear();
+            return 0;
+        }
+        return surf.CopyPowers(dst);
+    }
+
     string GetStatusShort()
     {
         string modeName = "SEARCH";
@@ -1195,6 +1264,10 @@ class RDF_RadarSensor
         if (m_Scanner)
             ew = " | " + m_Scanner.GetEwStatsShort();
 
+        string cas = "";
+        if (m_Scanner && m_Settings && m_Settings.m_EnableRangeAzClutterSurface)
+            cas = " | " + m_Scanner.GetClutterSurfaceStatsShort();
+
         string gov = "";
         if (m_BudgetGovernor && m_BudgetGovernor.IsEnabled())
         {
@@ -1214,6 +1287,7 @@ class RDF_RadarSensor
             + reuse
             + mtd
             + ew
+            + cas
             + gov
             + lock;
 

@@ -174,28 +174,29 @@
 2. **场景**：有城区/林冠数据时打开 `m_EnableDemSpanOcclusion`（需非 SURF V3/CSV）。  
 3. **调参**：`rdf_radar_hw_calibrate.py` 产出回灌 Hardware；粗 RD 仅 Perf 对照后显式打开。  
 4. **工程**：本地 Play + `RunAutoTestSuite.flag` 批跑（非无头 CI）。  
-5. **呈现（开放）**：机载仪表内嵌粗 range–az 杂波面 — 见 §10。
+5. **呈现**：§10 已落地；模组侧屏 mesh `$rendertarget` + 入舱 EnableScreen。
 
-#### 10 — 呈现：机载仪表 range–az 杂波面（开放，2026-08-31）
+#### 10 — 呈现：机载仪表 range–az 杂波面（已落地，2026-08-31）
 
 目标：离线已验证的 **DEM σ⁰ → range–az 强度栅**（`tools/dem/render_range_az_clutter.py`）进入游戏，但**不要**再做一个右下角独立 PPI 浮层；优先做成**载具/机载座舱仪表的一部分**（MFD / 雷达屏 mesh / 布局 Widget 挂在座舱）。
 
 | 档 | 项 | 收益 | 成本 | 备注 |
 |----|----|------|------|------|
-| **P1** | 低分辨率强度纹理（约 128²–256²）：仅刷当前扇区 + 余晖 | 电影感地面回波，体感强 | 中 | 非 per-blip Canvas；需 ImageWidget / 运行时纹理 |
+| **P1** | 低分辨率强度纹理（约 128²–256²）：仅刷当前扇区 + 余晖 | 电影感地面回波，体感强 | 中 | 数据面 64×64 默认；RTTexture 外壳 |
 | **P1** | API：Scanner/Sensor 暴露粗栅格或扇区功率带，供仪表读 | 模组可接座舱 | 中 | 与现有 plots 并存；默认关 |
-| **P1** | 座舱集成路径：布局/材质槽挂仪表，而非 `RDF_RadarHUD` 屏幕角浮层 | 沉浸 | 中 | 由载具模组消费；框架提供纹理/API |
-| **P2** | ×R⁴ 显示拉伸 + 高对比伪彩（仪表侧 LUT） | 强弱可读 | 低 | 离线脚本已有参考 |
-| **P2** | 窄扇形扫线与仪表方位同步 | 读得懂 | 低中 | 对照 `sector_howto*.png` |
+| **P1** | 座舱集成路径：布局/材质槽挂仪表，而非 `RDF_RadarHUD` 屏幕角浮层 | 沉浸 | 中 | RTTexture→`$rendertarget`；Demo 可预览 |
+| **P2** | ×R⁴ 显示拉伸 + 高对比伪彩（仪表侧 LUT） | 强弱可读 | 低 | Panel 已接 |
+| **P2** | 窄扇形扫线与仪表方位同步 | 读得懂 | 低中 | 相对扫向中心扫线 |
 | **不做** | 游戏内双栏 DEM 对照调试图 | 调参用 | — | 留离线；HUD 不塞 |
 
-- [ ] **P1** 粗 range–az 杂波纹理生成（扇区增量更新，预算封顶）
-- [ ] **P1** Sensor/组件只读 API + Settings 开关（默认关；Ideal/回归不强制）
-- [ ] **P1** 机载/载具仪表挂载示例（座舱 Widget 或屏幕材质；**非**独立全屏/角标 UI）
-- [ ] **P2** 显示 LUT（距离补偿 + 伪彩）与扫线同步
-- [ ] 明确：**独立 `RDF_RadarHUD` 浮层保持点迹即可**；强度面走仪表通道
+- [x] **P1** 粗 range–az 杂波纹理生成（扇区增量更新，预算封顶）
+- [x] **P1** Sensor/组件只读 API + Settings 开关（默认关；Ideal/回归不强制）
+- [x] **P1** 机载/载具仪表挂载示例（RTTexture 屏组件 + Demo；**非**角标 UI）
+- [x] **P2** 显示 LUT（距离补偿 + 伪彩）与扫线同步
+- [x] 明确：**独立 `RDF_RadarHUD` 浮层保持点迹即可**；强度面走仪表通道
 
-原型参考：`tools/dem/out/sector_howto_en.png` · `clutter_vs_dem_compare.png` · `render_range_az_clutter.py`
+原型参考：`tools/dem/out/sector_howto_en.png` · `clutter_vs_dem_compare.png` · `render_range_az_clutter.py`  
+模组侧仍需：屏 mesh 材质 `$rendertarget` + 入舱才 EnableScreen。
 
 #### 9 — 系统层纵深（资源管理 / 关联 / ECCM，2026-08-14）
 
@@ -472,28 +473,29 @@ Deepen target-level equations / measurement layer; **no** waveform → RD / full
 2. **Scenario**: enable `m_EnableDemSpanOcclusion` when non-SURF V3/CSV canopy data exists.  
 3. **Tuning**: bake Hardware via `rdf_radar_hw_calibrate.py`; turn coarse RD on only after Perf checks.  
 4. **Engineering**: local Play + `RunAutoTestSuite.flag` (not headless CI).  
-5. **Presentation (open)**: cockpit-instrument coarse range–az clutter surface — see §10.
+5. **Presentation**: §10 shipped; mod-side screen mesh `$rendertarget` + EnableScreen on enter.
 
-#### 10 — Presentation: cockpit range–az clutter surface (open, 2026-08-31)
+#### 10 — Presentation: cockpit range–az clutter surface (shipped, 2026-08-31)
 
 Goal: bring the offline **DEM σ⁰ → range–az intensity grid** (`tools/dem/render_range_az_clutter.py`) in-game, **not** as another corner-screen PPI overlay. Prefer a **vehicle / airborne cockpit instrument** (MFD / radar-screen mesh / layout widget on the panel).
 
 | Tier | Item | Benefit | Cost | Notes |
 |------|------|---------|------|-------|
-| **P1** | Low-res intensity texture (~128²–256²): update current sector + phosphor decay | Movie-like ground returns | Med | Not per-blip Canvas; needs ImageWidget / runtime texture |
+| **P1** | Low-res intensity texture (~128²–256²): update current sector + phosphor decay | Movie-like ground returns | Med | Data plane default 64×64; RTTexture shell |
 | **P1** | API: Scanner/Sensor exposes coarse grid or sector power strip for instruments | Mods can wire cockpits | Med | Coexists with plots; default off |
-| **P1** | Cockpit mount path (layout / material slot) — not `RDF_RadarHUD` screen-corner float | Immersion | Med | Vehicle mods consume; framework supplies texture/API |
-| **P2** | ×R⁴ display stretch + high-contrast LUT (instrument-side) | Readable strength | Low | Offline script is the reference |
-| **P2** | Narrow-sector sweep synced to instrument heading | Legibility | Low–med | See `sector_howto_en.png` |
+| **P1** | Cockpit mount path (layout / material slot) — not `RDF_RadarHUD` screen-corner float | Immersion | Med | RTTexture→`$rendertarget`; Demo preview |
+| **P2** | ×R⁴ display stretch + high-contrast LUT (instrument-side) | Readable strength | Low | Panel shipped |
+| **P2** | Narrow-sector sweep synced to instrument heading | Legibility | Low–med | Boresight-centered sweep |
 | **Skip** | In-game dual-pane DEM debug compare | Tuning only | — | Stay offline; keep HUD clean |
 
-- [ ] **P1** Coarse range–az clutter texture (sector incremental update, hard budget)
-- [ ] **P1** Read-only Sensor/component API + Settings flag (default off; Ideal/regression not forced)
-- [ ] **P1** Airborne/vehicle instrument mount example (cockpit widget or screen material; **not** standalone HUD)
-- [ ] **P2** Display LUT (range compensation + false color) + sweep sync
-- [ ] Explicit: keep floating `RDF_RadarHUD` as plot blips; intensity surface uses the instrument channel
+- [x] **P1** Coarse range–az clutter texture (sector incremental update, hard budget)
+- [x] **P1** Read-only Sensor/component API + Settings flag (default off; Ideal/regression not forced)
+- [x] **P1** Airborne/vehicle instrument mount example (RTTexture screen + Demo; **not** corner HUD)
+- [x] **P2** Display LUT (range compensation + false color) + sweep sync
+- [x] Explicit: keep floating `RDF_RadarHUD` as plot blips; intensity surface uses the instrument channel
 
-Prototype refs: `tools/dem/out/sector_howto_en.png` · `clutter_vs_dem_compare.png` · `render_range_az_clutter.py`
+Prototype refs: `tools/dem/out/sector_howto_en.png` · `clutter_vs_dem_compare.png` · `render_range_az_clutter.py`  
+Mods still need: screen mesh `$rendertarget` material + EnableScreen only while occupied.
 
 #### 9 — System-layer depth (resource management / association / ECCM, 2026-08-14)
 

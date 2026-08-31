@@ -18,6 +18,7 @@ class RDF_RadarScanner
     protected ref RDF_RadarScanReuseCache m_ScanReuseCache;
     protected ref RDF_RadarClutterMap m_ClutterMap;
     protected ref RDF_RadarCoarseRdMap m_CoarseRdMap;
+    protected ref RDF_RadarRangeAzClutterSurface m_RangeAzClutterSurface;
     // Reused TraceParam / ExcludeArray (SCR_PlacedCommandInfoDisplay / nametag style).
     // Never write owned ColliderName / TraceMaterial in the hot loop.
     protected ref TraceParam m_TraceParam;
@@ -87,6 +88,7 @@ class RDF_RadarScanner
         m_ScanReuseCache = new RDF_RadarScanReuseCache();
         m_ClutterMap = new RDF_RadarClutterMap();
         m_CoarseRdMap = new RDF_RadarCoarseRdMap();
+        m_RangeAzClutterSurface = new RDF_RadarRangeAzClutterSurface();
         m_TraceParam = new TraceParam();
         m_LosExclude = new array<IEntity>();
         m_PassCtx = new RDF_RadarScanPassContext();
@@ -154,6 +156,25 @@ class RDF_RadarScanner
     {
         if (m_DemCache)
             m_DemCache.Clear();
+    }
+
+    RDF_RadarRangeAzClutterSurface GetRangeAzClutterSurface()
+    {
+        return m_RangeAzClutterSurface;
+    }
+
+    string GetClutterSurfaceStatsShort()
+    {
+        if (!m_Settings || !m_Settings.m_EnableRangeAzClutterSurface)
+            return "CAS OFF";
+        if (!m_RangeAzClutterSurface)
+            return "CAS OFF";
+        return string.Format(
+            "CAS %1x%2 rays=%3 samp=%4",
+            m_RangeAzClutterSurface.GetAzBinCount().ToString(),
+            m_RangeAzClutterSurface.GetRangeBinCount().ToString(),
+            m_RangeAzClutterSurface.GetStatRaysThisScan().ToString(),
+            m_RangeAzClutterSurface.GetStatSamplesThisScan().ToString());
     }
 
     // Drop LOS / scan reuse so the next Scan() re-runs DEM precheck + TraceMove.
@@ -518,6 +539,16 @@ class RDF_RadarScanner
                 m_Settings.m_RdCellsPerScan);
             m_CoarseRdMap.AmortizeDecay(m_Settings.m_RdDecayPerScan);
         }
+        if (m_RangeAzClutterSurface && m_Settings.m_EnableRangeAzClutterSurface)
+        {
+            m_RangeAzClutterSurface.Configure(
+                m_Settings.m_ClutterSurfaceAzBins,
+                m_Settings.m_ClutterSurfaceRangeBins,
+                range,
+                ResolveClutterSurfaceSectorHalfDeg(),
+                m_Settings.m_ClutterSurfaceCellsPerScan,
+                m_Settings.m_ClutterSurfaceDecayPerScan);
+        }
         if (m_DemCache)
         {
             m_DemCache.SetPreloadAll(m_Settings.m_DemPreloadAll);
@@ -589,6 +620,8 @@ class RDF_RadarScanner
         passCtx.m_LosBudget = losBudget;
         passCtx.m_LosUsed = 0;
         passCtx.m_FreshBudget = freshBudget;
+
+        UpdateRangeAzClutterSurface(origin, scanAzimuthRad, halfAngleRad, worldTime);
 
         if (m_LosCache)
             m_LosCache.MaybePrune(wallTime);
@@ -1479,5 +1512,54 @@ class RDF_RadarScanner
         float angle = worldTime * rpm * Math.PI * 2.0 / 60.0 + m_Settings.m_ScanPhaseOffsetRad;
         angle = NormalizeAngleRad(angle);
         return Vector(Math.Cos(angle), 0.0, Math.Sin(angle));
+    }
+
+    protected float ResolveClutterSurfaceSectorHalfDeg()
+    {
+        if (!m_Settings)
+            return 45.0;
+        if (m_Settings.m_ClutterSurfaceSectorHalfDeg > 0.0)
+            return m_Settings.m_ClutterSurfaceSectorHalfDeg;
+        if (m_Settings.m_EnableMechanicalScan && m_Settings.m_Hardware)
+            return m_Settings.m_Hardware.m_AzimuthBeamwidthDeg * 0.5;
+        return m_Settings.m_SectorHalfAngleDeg;
+    }
+
+    protected void UpdateRangeAzClutterSurface(
+        vector origin,
+        float scanAzimuthRad,
+        float halfAngleRad,
+        float worldTime)
+    {
+        if (!m_Settings || !m_Settings.m_EnableRangeAzClutterSurface)
+            return;
+        if (!m_RangeAzClutterSurface || !m_DemCache)
+            return;
+
+        float sectorHalfDeg = halfAngleRad * RAD_TO_DEG;
+        if (m_Settings.m_ClutterSurfaceSectorHalfDeg > 0.0)
+            sectorHalfDeg = m_Settings.m_ClutterSurfaceSectorHalfDeg;
+
+        string band = "";
+        if (m_Settings.m_Hardware)
+        {
+            int scanNumber = m_Settings.m_Hardware.GetScanNumber(worldTime);
+            float freqHz = m_Settings.m_Hardware.GetScanFrequencyHz(scanNumber);
+            band = RDF_RadarSurfaceTable.BandNameFromFrequencyHz(freqHz);
+        }
+
+        m_RangeAzClutterSurface.Configure(
+            m_Settings.m_ClutterSurfaceAzBins,
+            m_Settings.m_ClutterSurfaceRangeBins,
+            m_LastRange,
+            sectorHalfDeg,
+            m_Settings.m_ClutterSurfaceCellsPerScan,
+            m_Settings.m_ClutterSurfaceDecayPerScan);
+        m_RangeAzClutterSurface.UpdateSector(
+            m_DemCache,
+            origin,
+            scanAzimuthRad,
+            sectorHalfDeg,
+            band);
     }
 }

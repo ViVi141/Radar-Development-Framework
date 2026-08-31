@@ -99,6 +99,48 @@ Plots expose `m_DopplerHz`, `m_DopplerBin`, `m_PrfIndex`, `m_RadialSpeedMs` (net
 Helicopter signatures auto-fill rotor tip / blade / RCS fraction when conf omits them (`Helicopters/*`).  
 Classic TwoPulse / ThreePulse now also score rotor spectrum lines (not body-only).
 
+### Range–az clutter surface (cockpit MFD, default OFF)
+
+Display-only DEM σ⁰·A/R⁴ grid for airborne / vehicle instruments. **Not** part of
+detection / CFAR / tracks. **Do not** fold into `RDF_RadarHUD` corner PPI.
+
+```c
+sensor.EnableClutterSurface(true);   // Settings.m_EnableRangeAzClutterSurface
+// Optional knobs (Validate clamps):
+//   settings.m_ClutterSurfaceAzBins = 64;         // 8–128
+//   settings.m_ClutterSurfaceRangeBins = 64;
+//   settings.m_ClutterSurfaceCellsPerScan = 96;   // amortized DEM rays
+//   settings.m_ClutterSurfaceDecayPerScan = 0.92; // phosphor
+//   settings.m_ClutterSurfaceSectorHalfDeg = 0;   // 0 = use scan half-angle
+
+int nAz, nRng;
+float maxRangeM, sectorHalfDeg, scanAzDeg;
+if (sensor.TryGetClutterSurfaceMeta(nAz, nRng, maxRangeM, sectorHalfDeg, scanAzDeg))
+{
+    float p = sensor.PeekClutterSurfacePower(nAz / 2, 0);
+    array<float> buf = new array<float>();
+    sensor.CopyClutterSurfacePowers(buf); // az-major: az*nRng + range
+}
+```
+
+`StabilizeForRegression()` forces the surface **off**.
+
+**Cockpit mount (official RTTexture pattern):**
+
+1. Screen mesh material: `AlbedoMap` / `BCRMap` / `EmissiveMap` = `$rendertarget`
+   (RDF ships `RadarData/ClutterSurface/Computer_Screen_RT.emat` for the vanilla
+   `Computer_E_01` screen slot).
+2. **Play demo (recommended):** Script Console while Play is running:
+   `RDF_RadarClutterSurfaceManualDemo.Start();` / `Stop();`
+   Spawns `Computer_E_01_on_RT` (vanilla `Computer_E_01_on` + RT MaterialAssign).
+   `StartMonitorOnly()` / `StartVanillaOn()` for siblings. Or attach
+   `RDF_RadarClutterSurfaceDemo` (picker: on / Monitor_on / off / *_RT).
+3. Product vehicles: call `RDF_RadarClutterSurfaceScreen.EnableScreen(screenMesh, sensor)`
+   only while the local player is in the compartment; `DisableScreen()` on leave.
+4. Optional workspace preview: Demo attribute `m_bWorkspacePreviewFallback` if spawn fails.
+
+Grid axes are **boresight-relative** (center column = current scan azimuth).
+
 ### ESM + anti-radiation aim (no weapon prefab)
 
 ```c
@@ -798,6 +840,28 @@ sensor.ConfigureMode(ERDF_RadarSensorMode.RDF_RADAR_MODE_PULSE_DOPPLER, 96);
 Plot 带 `m_DopplerHz` / `m_DopplerBin` / `m_PrfIndex` / `m_RadialSpeedMs`（网络同步）。  
 直升机 signature 缺旋翼字段时，运行时对 `Helicopters/*` 自动填 UH-1/Mi-8 类默认。  
 经典 TwoPulse / ThreePulse 也会对旋翼谱线取 max（不再只吃机身 Doppler）。
+
+### Range–az 杂波面（座舱仪表，默认关）
+
+仅显示用的 DEM σ⁰·A/R⁴ 粗栅，**不进**检测 / CFAR / 航迹。**不要**叠进 `RDF_RadarHUD` 角标 PPI。
+
+```c
+sensor.EnableClutterSurface(true);
+// settings.m_ClutterSurfaceAzBins / RangeBins / CellsPerScan / DecayPerScan / SectorHalfDeg
+sensor.TryGetClutterSurfaceMeta(nAz, nRng, maxRangeM, sectorHalfDeg, scanAzDeg);
+sensor.PeekClutterSurfacePower(azBin, rangeBin);
+sensor.CopyClutterSurfacePowers(buf); // az 主序
+```
+
+`StabilizeForRegression()` 强制关闭。
+
+座舱挂载：Play 后在 **Script Console** 执行
+`RDF_RadarClutterSurfaceManualDemo.Start();`（停：`Stop();`）——刷
+`Prefabs/RDF/ClutterSurface/Computer_E_01_on_RT.et`（继承官方 `Computer_E_01_on`，
+屏槽 `MaterialAssign`→`Computer_Screen_RT.emat`）。仅显示器：`StartMonitorOnly();`；
+原版 on + 运行时 remap：`StartVanillaOn();`。也可挂组件 `RDF_RadarClutterSurfaceDemo`
+（Attribute 可选 on / Monitor_on / off 等同族）。
+离舱/停用必须 `Stop()` / `DisableScreen()`。栅为**相对扫向**。
 
 ### ESM + 反辐射瞄点（不含武器 prefab）
 

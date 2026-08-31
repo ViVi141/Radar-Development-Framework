@@ -1,0 +1,78 @@
+FrameWidgetClass {
+ Name "rootFrame"
+ Slot FrameWidgetSlot "{B8D42F01A1C37E97}" {
+  SizeX 288
+  OffsetRight -288
+  SizeY 256
+  OffsetBottom -256
+ }
+ Color 1 1 1 1
+ {
+  RTTextureWidgetClass "{B8D42F01A1C37E91}" {
+   Name "RTTexture"
+   Slot FrameWidgetSlot "{B8D42F01A1C37E92}" {
+    OffsetLeft 0
+    PositionY 0
+    OffsetTop 0
+    SizeX 288
+    OffsetRight -288
+    SizeY 256
+    OffsetBottom -256
+   }
+   {
+    FrameWidgetClass "{B8D42F01A1C37E93}" {
+     Name "ScreenRoot"
+     Slot FrameWidgetSlot "{B8D42F01A1C37E94}" {
+      Anchor 0 0 1 1
+      PositionX 0
+      OffsetLeft 0
+      PositionY 0
+      OffsetTop 0
+      SizeX 0
+      OffsetRight 0
+      SizeY 0
+      OffsetBottom 0
+     }
+     Color 0 0 0 1
+     {
+      CanvasWidgetClass "{B8D42F01A1C37E95}" {
+       Name "IntensityCanvas"
+       Slot FrameWidgetSlot "{B8D42F01A1C37E96}" {
+        Anchor 0 0 1 1
+        PositionX 0
+        OffsetLeft 0
+        PositionY 0
+        OffsetTop 0
+        SizeX 0
+        OffsetRight 0
+        SizeY 226
+        OffsetBottom -226
+       }
+      }
+      TextWidgetClass "{B8D42F01A1C37E98}" {
+       Name "StatusText"
+       Slot FrameWidgetSlot "{B8D42F01A1C37E99}" {
+        PositionX 4
+        OffsetLeft 4
+        PositionY 230
+        OffsetTop 230
+        SizeX 280
+        OffsetRight -284
+        SizeY 22
+        OffsetBottom -252
+       }
+       Color 0.85 0.85 0.85 1
+       Text "CLTR"
+       "Font Size" 12
+       "Min Font Size" 10
+       "Vertical Alignment" Center
+       FontProperties FontProperties "{B8D42F01A1C37E9A}" {
+        Font "{EABA4FE9D014CCEF}UI/Fonts/RobotoCondensed/RobotoCondensed_Bold.fnt"
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+}

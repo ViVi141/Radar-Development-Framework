@@ -1,0 +1,17 @@
+MatPBRBasic {
+ Color 1 1 1 1
+ Emissive 1 1 1 0
+ EmissiveLV 1.35
+ CastShadow 0
+ OccludeRain 0
+ OccludeWetness 0
+ NoDecals 1
+ RoughnessScale 0.255
+ MetalnessScale 0
+ EmissiveMap "$rendertarget"
+ BCRMap "$rendertarget"
+ OpacityMap
+ NMOMap
+ GlobalMapsUVTransform MatUVTransform "{C1A84F02B7D35E92}" {
+ }
+}

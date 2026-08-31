@@ -1,0 +1,20 @@
+GenericEntity : "{A9DC69EC1CE466A0}Prefabs/Props/Civilian/Computer_E_01/Computer_E_01_on.et" {
+ ID "F0DBA538AC2A0552"
+ {
+  GenericEntity : "{2595F6426CDFDBBB}Prefabs/Props/Civilian/Computer_E_01/Computer_E_01_Monitor_on.et" {
+   ID "620AA4AC9B735F5F"
+   coords 0 0.116 -0.08
+   angles 0 -1.906 0
+   components {
+    MeshObject "{5872F0EB7FA40561}" {
+     Materials {
+      MaterialAssignClass "{D7A31F04C8E26B93}" {
+       SourceMaterial "Computer_Screen_On"
+       AssignedMaterial "{C1A84F02B7D35E91}RadarData/ClutterSurface/Computer_Screen_RT.emat"
+      }
+     }
+    }
+   }
+  }
+ }
+}
