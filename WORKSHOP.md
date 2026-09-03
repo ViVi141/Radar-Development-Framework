@@ -10,7 +10,7 @@ Realistic radar, LiDAR and DEM sensor framework for Arma Reforger. Physical dete
 
 ## Description (≤ 5000 chars)
 
-# Radar Development Framework (RDF) — v1.1.9
+# Radar Development Framework (RDF) — v1.1.10
 
 A modular, workshop-ready sensor framework for Arma Reforger: **Radar**,
 **LiDAR**, and **DEM** bake/runtime. It models the detection chain as a
@@ -85,6 +85,13 @@ is included). Enable features explicitly — the framework is silent by default.
 ---
 
 ## Changelog (unlimited)
+
+## 1.1.10 — 2026-09-03
+
+Patch over 1.1.9. One-way path API for ESM/SIGINT DF; entity classifier matches prefab resource paths.
+
+- `EvaluateOneWayPathFactor` / `EvaluateHorizonFactor` on physical detect (LOS two-ray / NLOS multipath + site LUT + k-Earth + optional atm).
+- Classifier: token match on class name then prefab resource path; add `drone` / `pchela` vehicle tokens.
 
 ## 1.1.9 — 2026-08-31
 

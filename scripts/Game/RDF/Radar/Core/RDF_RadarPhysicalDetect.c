@@ -10,6 +10,7 @@ class RDF_RadarPhysicalDetect
     protected static ref array<float> s_DopplerLines;
     protected static ref array<float> s_DopplerPowers;
     protected static ref array<float> s_PrfList;
+    protected static ref RDF_RadarTruthSample s_PathScratch;
 
     static void Process(
         RDF_RadarTruthSample target,
@@ -480,6 +481,172 @@ class RDF_RadarPhysicalDetect
         target.m_Detected = target.m_SnrDb >= settings.m_DetectionSnrDb;
 
         target.m_ScanNumber = scanNumberPre;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // One-way path power factor for ESM / SIGINT DF (not Friis / RCS / CFAR).
+    // LOS: optional two-ray. NLOS: max(ground-bounce, knife-edge) + site LUT.
+    // Always folds k-Earth horizon and optional one-way atmospheric loss.
+    static float EvaluateOneWayPathFactor(
+        vector rxPos,
+        vector txPos,
+        float wavelengthM,
+        bool losBlocked,
+        float losHitFraction,
+        BaseWorld world,
+        RDF_RadarSettings settings,
+        RDF_DemRuntimeCache demCache)
+    {
+        if (!settings)
+            return 1.0;
+
+        float distance = vector.Distance(rxPos, txPos);
+        if (distance < 1.0)
+            distance = 1.0;
+
+        float lambdaM = wavelengthM;
+        if (lambdaM < 0.001)
+            lambdaM = 0.001;
+
+        float hitFraction = losHitFraction;
+        if (hitFraction <= 0.0)
+        {
+            if (!losBlocked)
+                hitFraction = 1.0;
+            else
+                hitFraction = 0.5;
+        }
+
+        float factor = 1.0;
+        if (losBlocked)
+        {
+            bool usedKnifeEdge = false;
+            factor = ComputeNlosMultipathFactor(
+                rxPos,
+                txPos,
+                distance,
+                hitFraction,
+                world,
+                -1.0,
+                false,
+                0.0,
+                lambdaM,
+                settings,
+                demCache,
+                usedKnifeEdge);
+            if (settings.m_EnableSitePathLut)
+            {
+                float siteF = EvalSitePathFactor(rxPos, txPos, distance, settings);
+                if (siteF > factor)
+                    factor = siteF;
+            }
+        }
+        else
+        {
+            RDF_RadarTruthSample scratch = BorrowPathScratch(txPos, world, settings, demCache);
+            factor = ComputeLosTwoRayFactor(
+                rxPos,
+                scratch,
+                distance,
+                lambdaM,
+                settings,
+                world,
+                demCache);
+        }
+
+        float horizon = EvaluateHorizonFactor(
+            rxPos, txPos, world, settings, demCache);
+        factor = factor * horizon;
+
+        if (settings.m_EnableAtmosphericLoss)
+        {
+            float freqHz = LIGHT_SPEED / lambdaM;
+            float atmDb = settings.m_AtmLossDbPerKmOneWay;
+            if (atmDb < 0.0)
+                atmDb = RDF_RadarClutterModel.AtmosphericOneWayDbPerKm(freqHz);
+            float latmTwoWay = RDF_RadarClutterModel.AtmosphericLossLinear(
+                distance, atmDb, 0.0);
+            float latmOneWay = Math.Sqrt(latmTwoWay);
+            if (latmOneWay > 1.0)
+                factor = factor / latmOneWay;
+        }
+
+        if (factor < 0.0)
+            factor = 0.0;
+        return factor;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // k-Earth radio-horizon soft factor only (cheap ranker before full path).
+    static float EvaluateHorizonFactor(
+        vector rxPos,
+        vector txPos,
+        BaseWorld world,
+        RDF_RadarSettings settings,
+        RDF_DemRuntimeCache demCache)
+    {
+        if (!settings)
+            return 1.0;
+        if (!settings.m_EnableAtmosphericRefraction)
+            return 1.0;
+
+        float distance = vector.Distance(rxPos, txPos);
+        if (distance < 1.0)
+            return 1.0;
+
+        float rxAgl = ResolveRadarAglM(rxPos, world, settings, demCache);
+        float txTerrainY = SampleTerrainY(txPos[0], txPos[2], world, settings, demCache);
+        float txAgl = txPos[1] - txTerrainY;
+        if (txAgl < 1.0)
+            txAgl = 1.0;
+
+        float horizonM = RDF_RadarClutterModel.RadioHorizonRangeM(
+            rxAgl, txAgl, settings.m_EarthRadiusFactor);
+        if (settings.m_EnableAtmosphericDuct)
+            horizonM = horizonM * settings.m_DuctHorizonScale;
+        return RDF_RadarClutterModel.HorizonSoftFactor(distance, horizonM);
+    }
+
+    protected static RDF_RadarTruthSample BorrowPathScratch(
+        vector txPos,
+        BaseWorld world,
+        RDF_RadarSettings settings,
+        RDF_DemRuntimeCache demCache)
+    {
+        if (!s_PathScratch)
+            s_PathScratch = new RDF_RadarTruthSample();
+
+        RDF_RadarTruthSample scratch = s_PathScratch;
+        scratch.m_Position = txPos;
+        scratch.m_Type = ERDF_RadarTargetType.RDF_RADAR_TARGET_ANONYMOUS;
+        scratch.m_AglM = -1.0;
+        scratch.m_DemSampleValid = false;
+        scratch.m_DemTerrainY = 0.0;
+        scratch.m_DemSurfaceClass = ERDF_DemSurfaceClass.RDF_DEM_SURF_UNKNOWN;
+
+        if (demCache)
+        {
+            RDF_DemRuntimeCellSample demSample;
+            if (demCache.TrySampleAt(txPos[0], txPos[2], demSample))
+            {
+                if (demSample && demSample.m_Valid)
+                {
+                    scratch.m_DemSampleValid = true;
+                    scratch.m_DemTerrainY = demSample.m_TerrainY;
+                    scratch.m_DemSurfaceClass = demSample.m_SurfaceClass;
+                    scratch.m_AglM = txPos[1] - demSample.m_TerrainY;
+                }
+            }
+        }
+
+        if (!scratch.m_DemSampleValid && world)
+        {
+            scratch.m_DemTerrainY = SampleTerrainY(
+                txPos[0], txPos[2], world, settings, demCache);
+            scratch.m_AglM = txPos[1] - scratch.m_DemTerrainY;
+        }
+
+        return scratch;
     }
 
     protected static float EvalSitePathFactor(

@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 1.1.10 — 2026-09-03
+
+相对 1.1.9。为 ESM / SIGINT DF 暴露单向路径功率因子；实体分类器改为类名 + prefab 资源路径双匹配，覆盖 GenericEntity 机架（如 Pchela）。
+
+> EN: Patch over 1.1.9. One-way path power factor for ESM / SIGINT DF; entity classifier matches class name then prefab resource path (covers GenericEntity airframes such as Pchela).
+
+- **物理检测**：`EvaluateOneWayPathFactor`（LOS 双径 / NLOS 多径 + site LUT + k-Earth 地平线 + 可选单向大气损耗）；`EvaluateHorizonFactor`（仅地平线软因子）；`BorrowPathScratch` 复用 scratch sample。
+- **分类器**：`MatchesTokens` + `GetLowerPrefabResourceName`；车辆 token 增加 `drone` / `pchela`。
+
 ## 1.1.9 — 2026-08-31
 
 相对 1.1.8。座舱 **range–az 杂波强度面**（TODO §10）：预算化 DEM 射线填充粗栅 + Sensor 只读 API；`RTTexture`→mesh `$rendertarget` 外壳与 ×R⁴ LUT/扫线内容层。默认关；不进检测链；不改角标 PPI。

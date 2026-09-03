@@ -1,0 +1,17 @@
+MetaFileClass {
+ Name "{AFF92D8042827288}RadarData/SurfaceTable.json"
+ Configurations {
+  JSONResourceClass PC {
+  }
+  JSONResourceClass XBOX_ONE : PC {
+  }
+  JSONResourceClass XBOX_SERIES : PC {
+  }
+  JSONResourceClass PS4 : PC {
+  }
+  JSONResourceClass PS5 : PC {
+  }
+  JSONResourceClass HEADLESS : PC {
+  }
+ }
+}

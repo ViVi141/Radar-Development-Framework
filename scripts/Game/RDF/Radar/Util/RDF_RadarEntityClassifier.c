@@ -32,6 +32,10 @@ class RDF_RadarEntityClassifier
         s_VehicleTokens.Insert("plane");
         s_VehicleTokens.Insert("rotor");
         s_VehicleTokens.Insert("character");
+        // Script-driven airframes (e.g. SIGINT Pchela) are GenericEntity; match
+        // prefab resource path tokens, not only the entity class name.
+        s_VehicleTokens.Insert("drone");
+        s_VehicleTokens.Insert("pchela");
     }
 
     static bool IsProjectile(IEntity entity)
@@ -49,8 +53,7 @@ class RDF_RadarEntityClassifier
         }
 
         EnsureTokens();
-        string lower = GetLowerPrefabClassName(entity);
-        return ContainsAnyToken(lower, s_ProjectileTokens);
+        return MatchesTokens(entity, s_ProjectileTokens);
     }
 
     static bool IsVehicleOrCharacter(IEntity entity)
@@ -65,8 +68,7 @@ class RDF_RadarEntityClassifier
             return true;
 
         EnsureTokens();
-        string lower = GetLowerPrefabClassName(entity);
-        return ContainsAnyToken(lower, s_VehicleTokens);
+        return MatchesTokens(entity, s_VehicleTokens);
     }
 
     // Fast reject used by sphere-query callback before inserting candidates.
@@ -88,11 +90,22 @@ class RDF_RadarEntityClassifier
                 return true;
         }
 
-        // One GetClassName + one lowercase pass for both token sets.
         EnsureTokens();
-        string lower = GetLowerPrefabClassName(entity);
-        return ContainsAnyToken(lower, s_VehicleTokens)
-            || ContainsAnyToken(lower, s_ProjectileTokens);
+        if (MatchesTokens(entity, s_VehicleTokens))
+            return true;
+        return MatchesTokens(entity, s_ProjectileTokens);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Class name first (cheap for Vehicle/Character roots); resource path next so
+    // GenericEntity airframes under Prefabs/Vehicles/.../Pchela still qualify.
+    protected static bool MatchesTokens(IEntity entity, array<string> tokens)
+    {
+        string lowerClass = GetLowerPrefabClassName(entity);
+        if (ContainsAnyToken(lowerClass, tokens))
+            return true;
+        string lowerRes = GetLowerPrefabResourceName(entity);
+        return ContainsAnyToken(lowerRes, tokens);
     }
 
     //------------------------------------------------------------------------------------------------
@@ -130,5 +143,20 @@ class RDF_RadarEntityClassifier
         if (!container)
             return "";
         return container.GetClassName();
+    }
+
+    protected static string GetLowerPrefabResourceName(IEntity entity)
+    {
+        if (!entity)
+            return "";
+        EntityPrefabData prefab = entity.GetPrefabData();
+        if (!prefab)
+            return "";
+        ResourceName prefabName = prefab.GetPrefabName();
+        if (prefabName.IsEmpty())
+            return "";
+        string asString = prefabName;
+        asString.ToLower();
+        return asString;
     }
 }
