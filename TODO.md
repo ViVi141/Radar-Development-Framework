@@ -170,12 +170,14 @@
 
 **下一步（择一，按体感）**
 
-1. **产品**：模组侧武器 prefab 接 `WeaponBridge`（框架外）。  
-2. **场景**：有城区/林冠数据时打开 `m_EnableDemSpanOcclusion`（需非 SURF V3/CSV）。  
-3. **调参**：`rdf_radar_hw_calibrate.py` 产出回灌 Hardware；粗 RD 仅 Perf 对照后显式打开。  
-4. **工程**：本地 Play + `RunAutoTestSuite.flag` 批跑（非无头 CI）。  
-5. **呈现**：§10 已落地；模组侧屏 mesh `$rendertarget` + 入舱 EnableScreen。
+1. **拟真打包（已落地）**：任务里用 `ConfigureModeWithFidelity` / `Create*Gameplay`；默认 `ConfigureMode` 仍精简。  
+2. **产品**：模组侧武器 prefab 接 `WeaponBridge`（框架外）。  
+3. **场景**：有城区/林冠数据时打开 `m_EnableDemSpanOcclusion`（需非 SURF V3/CSV）；固定站 bake SitePathLut。  
+4. **调参**：`rdf_radar_hw_calibrate.py` 产出回灌 Hardware；粗 RD 仅 Perf 对照后显式打开。  
+5. **工程**：本地 Play + `RunAutoTestSuite.flag` 批跑（非无头 CI）。  
+6. **呈现**：§10 已落地；模组侧屏 mesh `$rendertarget` + 入舱 EnableScreen。
 
+- [x] **拟真打包**：`ERDF_RadarFidelityPreset` + `ApplyGameplayFidelity`（SHORAD/AIRBORNE/WLR/ESM）
 #### 10 — 呈现：机载仪表 range–az 杂波面（已落地，2026-08-31）
 
 目标：离线已验证的 **DEM σ⁰ → range–az 强度栅**（`tools/dem/render_range_az_clutter.py`）进入游戏，但**不要**再做一个右下角独立 PPI 浮层；优先做成**载具/机载座舱仪表的一部分**（MFD / 雷达屏 mesh / 布局 Widget 挂在座舱）。
@@ -469,11 +471,14 @@ Deepen target-level equations / measurement layer; **no** waveform → RD / full
 
 **Next (pick one by feel)**
 
-1. **Product**: mod-side weapon prefabs on `WeaponBridge` (outside framework).  
-2. **Scenario**: enable `m_EnableDemSpanOcclusion` when non-SURF V3/CSV canopy data exists.  
-3. **Tuning**: bake Hardware via `rdf_radar_hw_calibrate.py`; turn coarse RD on only after Perf checks.  
-4. **Engineering**: local Play + `RunAutoTestSuite.flag` (not headless CI).  
-5. **Presentation**: §10 shipped; mod-side screen mesh `$rendertarget` + EnableScreen on enter.
+1. **Fidelity packs (shipped)**: use `ConfigureModeWithFidelity` / `Create*Gameplay` in missions; plain `ConfigureMode` stays lean.  
+2. **Product**: mod-side weapon prefabs on `WeaponBridge` (outside framework).  
+3. **Scenario**: enable `m_EnableDemSpanOcclusion` when non-SURF V3/CSV canopy data exists; bake SitePathLut for fixed sites.  
+4. **Tuning**: bake Hardware via `rdf_radar_hw_calibrate.py`; turn coarse RD on only after Perf checks.  
+5. **Engineering**: local Play + `RunAutoTestSuite.flag` (not headless CI).  
+6. **Presentation**: §10 shipped; mod-side screen mesh `$rendertarget` + EnableScreen on enter.
+
+- [x] **Fidelity packs**: `ERDF_RadarFidelityPreset` + `ApplyGameplayFidelity` (SHORAD/AIRBORNE/WLR/ESM)
 
 #### 10 — Presentation: cockpit range–az clutter surface (shipped, 2026-08-31)
 

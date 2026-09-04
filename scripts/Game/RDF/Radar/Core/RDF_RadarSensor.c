@@ -250,6 +250,42 @@ class RDF_RadarSensor
         }
     }
 
+    // ConfigureMode then ApplyGameplayFidelity for the matching role pack.
+    // Defaults (ConfigureMode alone) stay lean for AutoTest / Stress.
+    void ConfigureModeWithFidelity(
+        ERDF_RadarSensorMode mode,
+        int maxTargets,
+        ERDF_RadarFidelityPreset fidelity)
+    {
+        ConfigureMode(mode, maxTargets);
+        if (fidelity == ERDF_RadarFidelityPreset.RDF_FIDELITY_NONE)
+            fidelity = FidelityPresetForMode(mode);
+        ApplyGameplayFidelity(fidelity);
+    }
+
+    // Apply an opt-in fidelity pack to the live settings and re-Configure.
+    void ApplyGameplayFidelity(ERDF_RadarFidelityPreset preset)
+    {
+        if (!m_Settings)
+            return;
+        if (preset == ERDF_RadarFidelityPreset.RDF_FIDELITY_NONE)
+            return;
+        m_Settings.ApplyGameplayFidelity(preset);
+        Configure(m_Settings);
+    }
+
+    // Map product mode → recommended gameplay fidelity pack.
+    static ERDF_RadarFidelityPreset FidelityPresetForMode(ERDF_RadarSensorMode mode)
+    {
+        if (mode == ERDF_RadarSensorMode.RDF_RADAR_MODE_WLR)
+            return ERDF_RadarFidelityPreset.RDF_FIDELITY_WLR;
+        if (mode == ERDF_RadarSensorMode.RDF_RADAR_MODE_ESM)
+            return ERDF_RadarFidelityPreset.RDF_FIDELITY_ESM;
+        if (mode == ERDF_RadarSensorMode.RDF_RADAR_MODE_PULSE_DOPPLER)
+            return ERDF_RadarFidelityPreset.RDF_FIDELITY_AIRBORNE;
+        return ERDF_RadarFidelityPreset.RDF_FIDELITY_SHORAD;
+    }
+
     static RDF_RadarSettings CreateSearchSettings(int maxTargets)
     {
         RDF_RadarSettings s = new RDF_RadarSettings();
@@ -272,6 +308,14 @@ class RDF_RadarSensor
         s.m_EnableMechanicalScan = false;
         s.m_EnableWeaponLocate = false;
         s.Validate();
+        return s;
+    }
+
+    // Same as CreateSearchSettings, then ApplyGameplayFidelity(SHORAD).
+    static RDF_RadarSettings CreateSearchSettingsWithFidelity(int maxTargets)
+    {
+        RDF_RadarSettings s = CreateSearchSettings(maxTargets);
+        s.ApplyGameplayFidelity(ERDF_RadarFidelityPreset.RDF_FIDELITY_SHORAD);
         return s;
     }
 
@@ -308,6 +352,14 @@ class RDF_RadarSensor
         s.m_TrackCoastMaxSec = 8.0;
         s.m_TrackMaxMisses = 6;
         s.Validate();
+        return s;
+    }
+
+    // Same as CreatePulseDopplerSettings, then ApplyGameplayFidelity(AIRBORNE).
+    static RDF_RadarSettings CreatePulseDopplerSettingsWithFidelity(int maxTargets)
+    {
+        RDF_RadarSettings s = CreatePulseDopplerSettings(maxTargets);
+        s.ApplyGameplayFidelity(ERDF_RadarFidelityPreset.RDF_FIDELITY_AIRBORNE);
         return s;
     }
 
@@ -357,6 +409,14 @@ class RDF_RadarSensor
         return s;
     }
 
+    // Same as CreateWlrSettings, then ApplyGameplayFidelity(WLR).
+    static RDF_RadarSettings CreateWlrSettingsWithFidelity(int maxTargets)
+    {
+        RDF_RadarSettings s = CreateWlrSettings(maxTargets);
+        s.ApplyGameplayFidelity(ERDF_RadarFidelityPreset.RDF_FIDELITY_WLR);
+        return s;
+    }
+
     static RDF_RadarSettings CreateEsmSettings(int maxTargets)
     {
         RDF_RadarSettings s = new RDF_RadarSettings();
@@ -388,6 +448,14 @@ class RDF_RadarSensor
             s.m_Hardware.Validate();
         }
         s.Validate();
+        return s;
+    }
+
+    // Same as CreateEsmSettings, then ApplyGameplayFidelity(ESM).
+    static RDF_RadarSettings CreateEsmSettingsWithFidelity(int maxTargets)
+    {
+        RDF_RadarSettings s = CreateEsmSettings(maxTargets);
+        s.ApplyGameplayFidelity(ERDF_RadarFidelityPreset.RDF_FIDELITY_ESM);
         return s;
     }
 

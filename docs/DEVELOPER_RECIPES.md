@@ -128,6 +128,12 @@ sensor.ConfigureMode(ERDF_RadarSensorMode.RDF_RADAR_MODE_PULSE_DOPPLER, 96);
 按需保真（默认关，见 API）：
 
 ```c
+// 角色一键包（推荐玩法）：
+sensor.ConfigureModeWithFidelity(
+    ERDF_RadarSensorMode.RDF_RADAR_MODE_SEARCH, 64,
+    ERDF_RadarFidelityPreset.RDF_FIDELITY_NONE); // NONE → 按 mode 自动选 SHORAD
+
+// 或自行组合：
 cfg.EnableAtmosphericPathLoss(true);
 cfg.EnableLosTwoRayMultipath();
 cfg.SetMeasurementNoise(1.5, 2.0, 0.1, 0.05);
@@ -395,7 +401,9 @@ cfg.Validate();
 sensor.Configure(cfg);
 ```
 
-Mode presets: `SetMode` / `ConfigureMode`. Optional fidelity helpers: see RADAR_API.
+Mode presets: `SetMode` / `ConfigureMode`. Opt-in fidelity packs:
+`ConfigureModeWithFidelity` / `Create*SettingsWithFidelity` / `ApplyGameplayFidelity`
+(see RADAR_API). Plain `ConfigureMode` stays lean for Stress / AutoTest.
 
 ---
 

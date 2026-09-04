@@ -99,6 +99,27 @@ class RDF_RadarDemoConfig
         return RDF_RadarSensor.CreatePulseDopplerSettings(maxTargets);
     }
 
+    // Opt-in gameplay fidelity packs (propagation + measurement). Defaults stay lean.
+    static RDF_RadarSettings CreateSearchGameplay(int maxTargets = 64)
+    {
+        return RDF_RadarSensor.CreateSearchSettingsWithFidelity(maxTargets);
+    }
+
+    static RDF_RadarSettings CreatePulseDopplerGameplay(int maxTargets = 96)
+    {
+        return RDF_RadarSensor.CreatePulseDopplerSettingsWithFidelity(maxTargets);
+    }
+
+    static RDF_RadarSettings CreateWlrGameplay(int maxTargets = 128)
+    {
+        return RDF_RadarSensor.CreateWlrSettingsWithFidelity(maxTargets);
+    }
+
+    static RDF_RadarSettings CreateEsmGameplay(int maxTargets = 64)
+    {
+        return RDF_RadarSensor.CreateEsmSettingsWithFidelity(maxTargets);
+    }
+
     static RDF_RadarSettings CreateWithDeceptionJammer(int maxTargets = 64)
     {
         RDF_RadarSettings s = CreateDefault(maxTargets);

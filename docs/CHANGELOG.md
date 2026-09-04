@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 1.1.11 — 2026-09-05
+
+相对 1.1.10。新增 **按角色 opt-in 拟真打包**（不改默认精简档 / Stress）。
+
+> EN: Patch over 1.1.10. Opt-in **gameplay fidelity packs** per role (defaults / Stress stay lean).
+
+- **拟真打包**：`ERDF_RadarFidelityPreset` + `ApplyGameplayFidelity`（SHORAD / AIRBORNE / WLR / ESM）；`ConfigureModeWithFidelity` / `Create*SettingsWithFidelity` / `DemoConfig.Create*Gameplay`。组合已有 Enable*（大气、折射、双径、热填、NCTR 等），不抬 Trace 预算；AutoTest 仍 `StabilizeForRegression()`。
+
 ## 1.1.10 — 2026-09-03
 
 相对 1.1.9。为 ESM / SIGINT DF 暴露单向路径功率因子；实体分类器改为类名 + prefab 资源路径双匹配，覆盖 GenericEntity 机架（如 Pchela）。

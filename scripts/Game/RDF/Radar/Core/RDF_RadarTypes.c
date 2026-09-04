@@ -15,6 +15,18 @@ enum ERDF_CfarMode
     RDF_CFAR_SO
 }
 
+// Opt-in gameplay fidelity packs (propagation + measurement). Not a hidden
+// "realistic tier": defaults stay lean; call ApplyGameplayFidelity after
+// Create*Settings / ConfigureMode. AutoTest still uses StabilizeForRegression.
+enum ERDF_RadarFidelityPreset
+{
+    RDF_FIDELITY_NONE,
+    RDF_FIDELITY_SHORAD,
+    RDF_FIDELITY_AIRBORNE,
+    RDF_FIDELITY_WLR,
+    RDF_FIDELITY_ESM
+}
+
 // MTI / MTD processing mode. TwoPulse = legacy sin² canceller (default).
 // MtdBank = DFT Doppler filter bank; clutter stays in the near-zero bin.
 // ThreePulse appended (value 2) so existing saved MtdBank=1 stays valid.

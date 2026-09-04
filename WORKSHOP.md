@@ -10,7 +10,7 @@ Realistic radar, LiDAR and DEM sensor framework for Arma Reforger. Physical dete
 
 ## Description (≤ 5000 chars)
 
-# Radar Development Framework (RDF) — v1.1.10
+# Radar Development Framework (RDF) — v1.1.11
 
 A modular, workshop-ready sensor framework for Arma Reforger: **Radar**,
 **LiDAR**, and **DEM** bake/runtime. It models the detection chain as a
@@ -85,6 +85,12 @@ is included). Enable features explicitly — the framework is silent by default.
 ---
 
 ## Changelog (unlimited)
+
+## 1.1.11 — 2026-09-05
+
+Patch over 1.1.10. Opt-in gameplay fidelity packs per role.
+
+- `ApplyGameplayFidelity` / `ConfigureModeWithFidelity` / `Create*SettingsWithFidelity` (SHORAD / AIRBORNE / WLR / ESM). Defaults stay lean.
 
 ## 1.1.10 — 2026-09-03
 

@@ -286,9 +286,45 @@ Also assignable on settings: `cfg.m_MeasurementModel = new MyGameplayNoise();`
 ### Opt-in channel fidelity (no ideal/realistic tiers)
 
 Enable only what you need. Defaults leave optional fidelity **off**.
+For a ready-made pack per role, call `ApplyGameplayFidelity` (or
+`ConfigureModeWithFidelity` / `Create*SettingsWithFidelity`) — still opt-in;
+AutoTest keeps using `StabilizeForRegression()`.
+
+| Preset | Typical use | Turns on |
+|--------|-------------|----------|
+| `RDF_FIDELITY_SHORAD` | SEARCH / STARE | atm+weather, refraction, two-ray, glint, rain-sea, CFAR thermal, mild noise, range PRF fold |
+| `RDF_FIDELITY_AIRBORNE` | PULSE_DOPPLER | SHORAD pack + Doppler fold + NCTR + clutter sharpen |
+| `RDF_FIDELITY_WLR` | WLR | atm+weather, refraction, CFAR thermal, WLR-biased noise (no two-ray / PRF folds) |
+| `RDF_FIDELITY_ESM` | ESM | atm+weather, refraction, two-ray, Friis RWR, pattern+site LUT |
+
+```c
+// Lean default (Stress / AutoTest friendly):
+sensor.ConfigureMode(ERDF_RadarSensorMode.RDF_RADAR_MODE_SEARCH, 64);
+
+// Gameplay pack for the matching role:
+sensor.ConfigureModeWithFidelity(
+    ERDF_RadarSensorMode.RDF_RADAR_MODE_SEARCH, 64,
+    ERDF_RadarFidelityPreset.RDF_FIDELITY_NONE); // NONE → auto from mode
+
+// Or compose Enable* yourself:
+RDF_RadarSettings cfg = RDF_RadarSensor.CreateSearchSettings(64);
+cfg.SetMeasurementNoise(2.0, 3.0, 0.15, 0.1);
+cfg.EnableAtmosphericPathLoss(true);
+cfg.EnableLosTwoRayMultipath();
+cfg.EnableAtmosphericRefraction();
+cfg.EnablePrfAmbiguityFolds(true, true);
+cfg.EnableAntennaPatternFidelity(true, true);
+cfg.m_Hardware.m_PolarizationMode = ERDF_RadarPolarization.RDF_POL_CIRCULAR;
+cfg.m_Hardware.m_PolarizationFactor = 0.9;
+cfg.m_Hardware.m_SidelobeLevelDb = -30.0;
+cfg.Validate();
+```
 
 | Helper / field | Effect |
 |----------------|--------|
+| `ApplyGameplayFidelity(preset)` | Role pack (see table above) |
+| `ConfigureModeWithFidelity(mode, n, preset)` | ConfigureMode + pack |
+| `Create*SettingsWithFidelity` / `DemoConfig.Create*Gameplay` | Factory with pack |
 | `SetMeasurementNoise(scale, …)` | Measurement noise / bias |
 | `EnableCfarThermalFill(true)` | Thermal fill of empty CFAR cells |
 | `EnableAtmosphericPathLoss(weatherDriven)` | Clear-air (+ optional weather) path loss |
@@ -309,22 +345,6 @@ Enable only what you need. Defaults leave optional fidelity **off**.
 | `Hardware.m_SidelobeLevelDb` | One-way sidelobe floor (two-way = lin²) |
 | `NoiseJammerEffect.EnableSlb(true)` | Blank sidelobe-only jam coupling |
 | `StabilizeForRegression()` | AutoTest helper: turn optional fidelity **off** |
-
-```c
-RDF_RadarSettings cfg = RDF_RadarSensor.CreateSearchSettings(64);
-// Pick what the mission needs — no mega-preset:
-cfg.SetMeasurementNoise(2.0, 3.0, 0.15, 0.1);
-cfg.EnableAtmosphericPathLoss(true);
-cfg.EnableLosTwoRayMultipath();
-cfg.EnableAtmosphericRefraction();
-cfg.EnablePrfAmbiguityFolds(true, true);
-cfg.EnableAntennaPatternFidelity(true, true);
-cfg.m_Hardware.m_PolarizationMode = ERDF_RadarPolarization.RDF_POL_CIRCULAR;
-cfg.m_Hardware.m_PolarizationFactor = 0.9;
-cfg.m_Hardware.m_SidelobeLevelDb = -30.0;
-cfg.Validate();
-```
-
 ### Scan LOS (what mods need to know)
 
 **You do not change call sites.** Keep using `Configure` / `Tick` / `ScanOnce`.
@@ -1011,9 +1031,45 @@ sensor.SetMeasurementModel(new MyGameplayNoise());
 ### 按需通道保真（无理想/逼真双档）
 
 需要什么开什么；可选保真项默认关。
+按角色一键打包用 `ApplyGameplayFidelity`（或 `ConfigureModeWithFidelity` /
+`Create*SettingsWithFidelity`）——仍是 opt-in；AutoTest 继续
+`StabilizeForRegression()`。
+
+| 预设 | 典型用途 | 打开内容 |
+|------|----------|----------|
+| `RDF_FIDELITY_SHORAD` | SEARCH / STARE | 大气+天气、折射、双径、闪烁、雨海、CFAR 热填、轻度噪声、距离 PRF 折叠 |
+| `RDF_FIDELITY_AIRBORNE` | PULSE_DOPPLER | SHORAD 包 + 多普勒折叠 + NCTR + 杂波锐化 |
+| `RDF_FIDELITY_WLR` | WLR | 大气+天气、折射、CFAR 热填、WLR 向噪声（无双径 / PRF 折叠） |
+| `RDF_FIDELITY_ESM` | ESM | 大气+天气、折射、双径、Friis RWR、方向图+站址 LUT |
+
+```c
+// 精简默认（Stress / AutoTest 友好）：
+sensor.ConfigureMode(ERDF_RadarSensorMode.RDF_RADAR_MODE_SEARCH, 64);
+
+// 对应角色的玩法包：
+sensor.ConfigureModeWithFidelity(
+    ERDF_RadarSensorMode.RDF_RADAR_MODE_SEARCH, 64,
+    ERDF_RadarFidelityPreset.RDF_FIDELITY_NONE); // NONE → 按 mode 自动选
+
+// 或自行组合 Enable*：
+RDF_RadarSettings cfg = RDF_RadarSensor.CreateSearchSettings(64);
+cfg.SetMeasurementNoise(2.0, 3.0, 0.15, 0.1);
+cfg.EnableAtmosphericPathLoss(true);
+cfg.EnableLosTwoRayMultipath();
+cfg.EnableAtmosphericRefraction();
+cfg.EnablePrfAmbiguityFolds(true, true);
+cfg.EnableAntennaPatternFidelity(true, true);
+cfg.m_Hardware.m_PolarizationMode = ERDF_RadarPolarization.RDF_POL_CIRCULAR;
+cfg.m_Hardware.m_PolarizationFactor = 0.9;
+cfg.m_Hardware.m_SidelobeLevelDb = -30.0;
+cfg.Validate();
+```
 
 | 辅助 / 字段 | 作用 |
 |-------------|------|
+| `ApplyGameplayFidelity(preset)` | 角色打包（见上表） |
+| `ConfigureModeWithFidelity(mode, n, preset)` | ConfigureMode + 打包 |
+| `Create*SettingsWithFidelity` / `DemoConfig.Create*Gameplay` | 带打包的工厂 |
 | `SetMeasurementNoise(scale, …)` | 测量噪声 / 偏差 |
 | `EnableCfarThermalFill(true)` | CFAR 空单元热填空 |
 | `EnableAtmosphericPathLoss(weatherDriven)` | 晴空（+可选天气）路径损耗 |
@@ -1034,22 +1090,6 @@ sensor.SetMeasurementModel(new MyGameplayNoise());
 | `Hardware.m_SidelobeLevelDb` | 单程旁瓣地板（双程 = lin²） |
 | `NoiseJammerEffect.EnableSlb(true)` | 旁瓣耦合消隐 |
 | `StabilizeForRegression()` | AutoTest：关掉可选保真项 |
-
-```c
-RDF_RadarSettings cfg = RDF_RadarSensor.CreateSearchSettings(64);
-// 按任务需要开项 — 无大包预设：
-cfg.SetMeasurementNoise(2.0, 3.0, 0.15, 0.1);
-cfg.EnableAtmosphericPathLoss(true);
-cfg.EnableLosTwoRayMultipath();
-cfg.EnableAtmosphericRefraction();
-cfg.EnablePrfAmbiguityFolds(true, true);
-cfg.EnableAntennaPatternFidelity(true, true);
-cfg.m_Hardware.m_PolarizationMode = ERDF_RadarPolarization.RDF_POL_CIRCULAR;
-cfg.m_Hardware.m_PolarizationFactor = 0.9;
-cfg.m_Hardware.m_SidelobeLevelDb = -30.0;
-cfg.Validate();
-```
-
 ### 扫描通视（模组只要知道这些）
 
 **不用改调用点。** 继续 `Configure` / `Tick` / `ScanOnce`。  

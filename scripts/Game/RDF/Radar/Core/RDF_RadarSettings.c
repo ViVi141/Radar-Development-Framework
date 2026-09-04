@@ -150,7 +150,7 @@ class RDF_RadarSettings
     bool m_KeepEntityTruth = false;
     // Measurement synthesis extras (applied when synthesis is on).
     // 0 = quantized / bias-only (or clean when biases are 0). Opt into noise via
-    // SetMeasurementNoise(...); there is no ideal/realistic mega-preset.
+    // SetMeasurementNoise(...) or ApplyGameplayFidelity(...).
     float m_MeasNoiseScale = 1.0;
     float m_MeasRangeBiasM = 0.0;
     float m_MeasAzimuthBiasDeg = 0.0;
@@ -559,6 +559,101 @@ class RDF_RadarSettings
         m_MeasAzimuthBiasDeg = 0.0;
         m_MeasElevationBiasDeg = 0.0;
         m_MeasDopplerBiasHz = 0.0;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Opt-in gameplay packs: compose existing Enable* helpers for common roles.
+    // Does not raise TraceMove budget. Does not enable JPDA / coarse RD / mesh RCS.
+    // Map from product mode via RDF_RadarSensor.FidelityPresetForMode.
+    void ApplyGameplayFidelity(ERDF_RadarFidelityPreset preset)
+    {
+        if (preset == ERDF_RadarFidelityPreset.RDF_FIDELITY_NONE)
+            return;
+        if (preset == ERDF_RadarFidelityPreset.RDF_FIDELITY_SHORAD)
+        {
+            ApplyShoradGameplayFidelity();
+            return;
+        }
+        if (preset == ERDF_RadarFidelityPreset.RDF_FIDELITY_AIRBORNE)
+        {
+            ApplyAirborneGameplayFidelity();
+            return;
+        }
+        if (preset == ERDF_RadarFidelityPreset.RDF_FIDELITY_WLR)
+        {
+            ApplyWlrGameplayFidelity();
+            return;
+        }
+        if (preset == ERDF_RadarFidelityPreset.RDF_FIDELITY_ESM)
+        {
+            ApplyEsmGameplayFidelity();
+            return;
+        }
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Ground SHORAD / SEARCH / STARE: low-AGL multipath + weather + mild noise.
+    protected void ApplyShoradGameplayFidelity()
+    {
+        ApplyCommonPropagationFidelity();
+        SetMeasurementNoise(2.0, 2.0, 0.12, 0.08);
+        EnableLosTwoRayMultipath();
+        m_EnableMultipathGlint = true;
+        m_EnableRainSeaClutterDamp = true;
+        EnablePrfAmbiguityFolds(true, false);
+        Validate();
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Pulse-Doppler / air search: SHORAD pack + Doppler fold + NCTR + clutter sharpen.
+    protected void ApplyAirborneGameplayFidelity()
+    {
+        ApplyCommonPropagationFidelity();
+        SetMeasurementNoise(2.5, 3.0, 0.15, 0.12);
+        EnableLosTwoRayMultipath();
+        m_EnableMultipathGlint = true;
+        m_EnableRainSeaClutterDamp = true;
+        EnablePrfAmbiguityFolds(true, true);
+        m_EnableNctr = true;
+        EnableClutterSharpen(true, 0.15, 0.45, true);
+        m_ClutterFootprintSamples = 5;
+        Validate();
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Counter-battery: path loss / refraction matter at long range; skip two-ray
+    // (projectiles ignore it) and PRF folds (weapon-locate prefers unfolded range).
+    protected void ApplyWlrGameplayFidelity()
+    {
+        ApplyCommonPropagationFidelity();
+        SetMeasurementNoise(2.0, 5.0, 0.2, 0.15);
+        m_EnableMultipathGlint = false;
+        m_EnableRainSeaClutterDamp = false;
+        EnablePrfAmbiguityFolds(false, false);
+        Validate();
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Receive-only ESM / DF: one-way atm + horizon + Friis RWR + optional site LUT.
+    protected void ApplyEsmGameplayFidelity()
+    {
+        ApplyCommonPropagationFidelity();
+        SetMeasurementNoise(1.5, 0.0, 0.25, 0.1);
+        EnableLosTwoRayMultipath();
+        m_EnableRwrFriis = true;
+        EnablePatternAndSiteLuts(true, true);
+        EnablePrfAmbiguityFolds(false, false);
+        Validate();
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Shared: clear-air + weather rain/fog, 4/3 refraction, CFAR thermal, pattern tables.
+    protected void ApplyCommonPropagationFidelity()
+    {
+        EnableAtmosphericPathLoss(true);
+        EnableAtmosphericRefraction();
+        EnableCfarThermalFill(true);
+        EnableAntennaPatternFidelity(true, true);
     }
 
     //------------------------------------------------------------------------------------------------
