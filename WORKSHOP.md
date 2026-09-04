@@ -88,9 +88,10 @@ is included). Enable features explicitly — the framework is silent by default.
 
 ## 1.1.11 — 2026-09-05
 
-Patch over 1.1.10. Opt-in gameplay fidelity packs per role.
+Patch over 1.1.10. Opt-in gameplay fidelity packs per role + data-layer bake-back.
 
 - `ApplyGameplayFidelity` / `ConfigureModeWithFidelity` / `Create*SettingsWithFidelity` (SHORAD / AIRBORNE / WLR / ESM). Defaults stay lean.
+- AIRBORNE loads HwCalib when present; `TryEnableSitePathLutIfBaked`; UAV rotor defaults for NCTR; `install_profile_calib.py`.
 
 ## 1.1.10 — 2026-09-03
 

@@ -601,6 +601,8 @@ class RDF_RadarSettings
         m_EnableMultipathGlint = true;
         m_EnableRainSeaClutterDamp = true;
         EnablePrfAmbiguityFolds(true, false);
+        m_CfarMode = ERDF_CfarMode.RDF_CFAR_GO;
+        TryEnableSitePathLutIfBaked();
         Validate();
     }
 
@@ -617,6 +619,9 @@ class RDF_RadarSettings
         m_EnableNctr = true;
         EnableClutterSharpen(true, 0.15, 0.45, true);
         m_ClutterFootprintSamples = 5;
+        m_CfarMode = ERDF_CfarMode.RDF_CFAR_GO;
+        ApplyHardwareCalibFidelity();
+        TryEnableSitePathLutIfBaked();
         Validate();
     }
 
@@ -630,6 +635,7 @@ class RDF_RadarSettings
         m_EnableMultipathGlint = false;
         m_EnableRainSeaClutterDamp = false;
         EnablePrfAmbiguityFolds(false, false);
+        TryEnableSitePathLutIfBaked();
         Validate();
     }
 
@@ -641,7 +647,8 @@ class RDF_RadarSettings
         SetMeasurementNoise(1.5, 0.0, 0.25, 0.1);
         EnableLosTwoRayMultipath();
         m_EnableRwrFriis = true;
-        EnablePatternAndSiteLuts(true, true);
+        m_EnablePatternLut = true;
+        TryEnableSitePathLutIfBaked();
         EnablePrfAmbiguityFolds(false, false);
         Validate();
     }
@@ -654,6 +661,36 @@ class RDF_RadarSettings
         EnableAtmosphericRefraction();
         EnableCfarThermalFill(true);
         EnableAntennaPatternFidelity(true, true);
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Prefer profile HwCalib.json scalars; else derive MTD leakage from σ_vr.
+    // Safe when MTI is off — Validate applies on next Configure.
+    protected void ApplyHardwareCalibFidelity()
+    {
+        if (!m_Hardware)
+            return;
+        m_Hardware.m_LoadHwCalibFromProfile = true;
+        m_Hardware.m_DeriveMtdLeakageFromSigmaVr = true;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Enable fixed-site path LUT only when $profile bake is present and valid.
+    // Returns false (and leaves site LUT off) when the file is missing / bad.
+    bool TryEnableSitePathLutIfBaked()
+    {
+        RDF_RadarSitePathLut.SetEnabled(true);
+        RDF_RadarSitePathLut.Reload();
+        if (RDF_RadarSitePathLut.IsReady())
+        {
+            m_EnableSitePathLut = true;
+            m_EnablePatternLut = true;
+            return true;
+        }
+
+        RDF_RadarSitePathLut.SetEnabled(false);
+        m_EnableSitePathLut = false;
+        return false;
     }
 
     //------------------------------------------------------------------------------------------------
@@ -772,6 +809,7 @@ class RDF_RadarSettings
         m_EnableRainSeaClutterDamp = false;
         m_EnableAtmosphericDuct = false;
         m_EnableMultipathGlint = false;
+        m_EnableSitePathLut = false;
         m_WeaponGradeMinConfidence = 0.0;
     }
 

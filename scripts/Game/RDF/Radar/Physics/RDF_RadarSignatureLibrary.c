@@ -49,6 +49,12 @@ class RDF_RadarSignatureLibrary
     static const float MI8_HELI_ROTOR_FRAC = 0.40;
     static const float MI8_HELI_HUB_MS = 45.0;
 
+    // Small UAS / FPV / ISR drones (NCTR + micro-Doppler when tip was unset).
+    static const float DEFAULT_UAV_TIP_MS = 95.0;
+    static const int DEFAULT_UAV_BLADES = 2;
+    static const float DEFAULT_UAV_ROTOR_FRAC = 0.22;
+    static const float DEFAULT_UAV_HUB_MS = 12.0;
+
     // Newly measured unknown models (runtime) flushed at most this often.
     static const float AUTO_EXPORT_INTERVAL_S = 30.0;
 
@@ -274,6 +280,7 @@ class RDF_RadarSignatureLibrary
         sig.m_SwerlingModel = RDF_RadarRcsModel.GetDefaultSwerlingModel(targetType);
         sig.m_TypeHint = TargetTypeToInt(targetType);
         MaybeApplyHelicopterRotorDefaults(sig);
+        MaybeApplyUavRotorDefaults(sig);
         MaybeApplyJetFanDefaults(sig);
 
         s_StatMeasured = s_StatMeasured + 1;
@@ -351,6 +358,7 @@ class RDF_RadarSignatureLibrary
             if (sig.m_CharacteristicLengthM < 0.1)
                 sig.m_CharacteristicLengthM = 0.1;
             MaybeApplyHelicopterRotorDefaults(sig);
+            MaybeApplyUavRotorDefaults(sig);
             MaybeApplyJetFanDefaults(sig);
 
             s_ByKey.Set(sig.m_Key, sig);
@@ -422,6 +430,7 @@ class RDF_RadarSignatureLibrary
             if (sig.m_CharacteristicLengthM < 0.1)
                 sig.m_CharacteristicLengthM = 0.1;
             MaybeApplyHelicopterRotorDefaults(sig);
+            MaybeApplyUavRotorDefaults(sig);
             MaybeApplyJetFanDefaults(sig);
 
             s_ByKey.Set(sig.m_Key, sig);
@@ -652,6 +661,52 @@ class RDF_RadarSignatureLibrary
         sig.m_BladeCount = DEFAULT_HELI_BLADES;
         sig.m_RotorRcsFraction = DEFAULT_HELI_ROTOR_FRAC;
         sig.m_HubWidthMs = DEFAULT_HELI_HUB_MS;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // Small UAS / FPV / ISR airframes (GenericEntity drones, Pchela, etc.).
+    // Runs after heli defaults so Helicopters/* keep manned-rotor numbers.
+    protected static void MaybeApplyUavRotorDefaults(RDF_RadarSignature sig)
+    {
+        if (!sig)
+            return;
+        if (sig.m_RotorTipSpeedMs > 0.0)
+            return;
+        if (sig.m_FanTipSpeedMs > 0.0)
+            return;
+        if (sig.m_Key == "")
+            return;
+
+        string key = sig.m_Key;
+        string keyLower = key;
+        keyLower.ToLower();
+
+        bool isUav = false;
+        if (keyLower.IndexOf("drone") >= 0)
+            isUav = true;
+        if (!isUav && keyLower.IndexOf("uav") >= 0)
+            isUav = true;
+        if (!isUav && keyLower.IndexOf("pchela") >= 0)
+            isUav = true;
+        if (!isUav && keyLower.IndexOf("quadcopter") >= 0)
+            isUav = true;
+        if (!isUav && keyLower.IndexOf("/fpv") >= 0)
+            isUav = true;
+        if (!isUav && keyLower.IndexOf("orlan") >= 0)
+            isUav = true;
+        if (!isUav && keyLower.IndexOf("lancet") >= 0)
+            isUav = true;
+        if (!isUav)
+            return;
+        if (key.IndexOf("Helicopters/") >= 0)
+            return;
+        if (key.IndexOf("VehParts/") >= 0)
+            return;
+
+        sig.m_RotorTipSpeedMs = DEFAULT_UAV_TIP_MS;
+        sig.m_BladeCount = DEFAULT_UAV_BLADES;
+        sig.m_RotorRcsFraction = DEFAULT_UAV_ROTOR_FRAC;
+        sig.m_HubWidthMs = DEFAULT_UAV_HUB_MS;
     }
 
     //------------------------------------------------------------------------------------------------

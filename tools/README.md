@@ -30,7 +30,8 @@ chmod +x run_tools.sh   # once
 CI: `.github/workflows/python-dem-tests.yml` runs unittest discover + `full_sim` coverage checks (`detection.mtd_bank`, rotor CPA, PRF stagger, `propagation.refraction_horizon` / `ambiguity_fold`).
 
 Offline HW bake-back: `python rdf_radar_hw_calibrate.py --preset shorad` → `calib/prf_clutter_*.json`.
-Copy to `$profile:RDF/RadarData/HwCalib.json` (PulseDoppler loads it) or rely on `m_DeriveMtdLeakageFromSigmaVr`.  
+Install into profile: `python install_profile_calib.py` (→ `$profile:RDF/RadarData/HwCalib.json`); `--with-site` / `--all` for SitePathLut / Pattern / KnifeEdge.  
+PulseDoppler / AIRBORNE fidelity loads HwCalib; or rely on `m_DeriveMtdLeakageFromSigmaVr`.  
 Heli rotor conf fill: `python rdf_sig_patch_heli_rotors.py` (UH-1 / Mi-8 airframes; skips VehParts).  
 Mass-battle sim: `rdf_radar_mass_battle_sim.py` (facade) + `mass_battle/` package
 (`_impl.py` holds the logic; thematic modules are re-exports — see
@@ -107,6 +108,7 @@ Generated files go to `tools/dem/out/` (gitignored except `.gitkeep`). Do not co
 | `rdf_radar_shellfire_offline.py` | ShellFire / WLR offline mirror |
 | `rdf_radar_mass_battle_sim.py` | Multi-radar DEM battle facade → `mass_battle/` |
 | `rdf_radar_hw_calibrate.py` | Offline HW bake-back → `calib/prf_clutter_*.json` |
+| `install_profile_calib.py` | Copy calib JSON → `$profile:RDF/RadarData/` (HwCalib default; `--with-site` / `--all`) |
 | `rdf_knife_edge_eden_validate.py` | Eden knife-edge validation helper |
 | `rdf_radar_pattern_site_validate.py` | Pattern + site-path LUT bake → `calib/PatternLut.json` / `SitePathLut.json` |
 | `rdf_voxel_em_validate.py` | 3D voxel EM feasibility suite → `out/voxel_em_report.json` |
@@ -230,6 +232,7 @@ cd tools\dem
 | `rdf_radar_shellfire_offline.py` | ShellFire / WLR 离线镜像 |
 | `rdf_radar_mass_battle_sim.py` | 多雷达 DEM 战场 facade → `mass_battle/` |
 | `rdf_radar_hw_calibrate.py` | 离线 HW 回灌 → `calib/prf_clutter_*.json` |
+| `install_profile_calib.py` | 拷贝 calib JSON → `$profile:RDF/RadarData/`（默认 HwCalib；`--with-site` / `--all`） |
 | `rdf_knife_edge_eden_validate.py` | Eden 刀刃绕射校验 |
 | `rdf_radar_pattern_site_validate.py` | 方向图 + 站点路径 LUT → `calib/PatternLut.json` / `SitePathLut.json` |
 | `rdf_voxel_em_validate.py` | 3D 体素 EM 可行性套件 → `out/voxel_em_report.json` |

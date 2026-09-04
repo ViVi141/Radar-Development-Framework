@@ -325,6 +325,7 @@ cfg.Validate();
 | `ApplyGameplayFidelity(preset)` | Role pack (see table above) |
 | `ConfigureModeWithFidelity(mode, n, preset)` | ConfigureMode + pack |
 | `Create*SettingsWithFidelity` / `DemoConfig.Create*Gameplay` | Factory with pack |
+| `TryEnableSitePathLutIfBaked()` | Site LUT on only if profile bake loads |
 | `SetMeasurementNoise(scale, …)` | Measurement noise / bias |
 | `EnableCfarThermalFill(true)` | Thermal fill of empty CFAR cells |
 | `EnableAtmosphericPathLoss(weatherDriven)` | Clear-air (+ optional weather) path loss |
@@ -1070,6 +1071,7 @@ cfg.Validate();
 | `ApplyGameplayFidelity(preset)` | 角色打包（见上表） |
 | `ConfigureModeWithFidelity(mode, n, preset)` | ConfigureMode + 打包 |
 | `Create*SettingsWithFidelity` / `DemoConfig.Create*Gameplay` | 带打包的工厂 |
+| `TryEnableSitePathLutIfBaked()` | 仅当 profile bake 可读时打开站址 LUT |
 | `SetMeasurementNoise(scale, …)` | 测量噪声 / 偏差 |
 | `EnableCfarThermalFill(true)` | CFAR 空单元热填空 |
 | `EnableAtmosphericPathLoss(weatherDriven)` | 晴空（+可选天气）路径损耗 |

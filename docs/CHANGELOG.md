@@ -2,11 +2,15 @@
 
 ## 1.1.11 — 2026-09-05
 
-相对 1.1.10。新增 **按角色 opt-in 拟真打包**（不改默认精简档 / Stress）。
+相对 1.1.10。新增 **按角色 opt-in 拟真打包**，并加深数据层回灌：UAV 旋翼默认、HwCalib / SitePathLut 条件启用、profile 安装脚本。
 
-> EN: Patch over 1.1.10. Opt-in **gameplay fidelity packs** per role (defaults / Stress stay lean).
+> EN: Patch over 1.1.10. Opt-in **gameplay fidelity packs** per role, plus data-layer bake-back: UAV rotor defaults, conditional HwCalib / SitePathLut, profile install script.
 
 - **拟真打包**：`ERDF_RadarFidelityPreset` + `ApplyGameplayFidelity`（SHORAD / AIRBORNE / WLR / ESM）；`ConfigureModeWithFidelity` / `Create*SettingsWithFidelity` / `DemoConfig.Create*Gameplay`。组合已有 Enable*（大气、折射、双径、热填、NCTR 等），不抬 Trace 预算；AutoTest 仍 `StabilizeForRegression()`。
+- **AIRBORNE**：`ApplyHardwareCalibFidelity`（`m_LoadHwCalibFromProfile` + σᵥᵣ 推导）；SHORAD/AIRBORNE 用 GO-CFAR。
+- **SitePathLut**：`TryEnableSitePathLutIfBaked()` — 仅当 `$profile:RDF/RadarData/SitePathLut.json` 可读时打开；`StabilizeForRegression` 清掉。
+- **签名**：`MaybeApplyUavRotorDefaults`（drone / uav / pchela / fpv / orlan / lancet）服务 NCTR / 微多普勒。
+- **工具**：`tools/dem/install_profile_calib.py`（默认装 HwCalib；`--with-site` / `--all`）。
 
 ## 1.1.10 — 2026-09-03
 

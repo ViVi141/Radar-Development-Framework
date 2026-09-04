@@ -133,6 +133,10 @@ sensor.ConfigureModeWithFidelity(
     ERDF_RadarSensorMode.RDF_RADAR_MODE_SEARCH, 64,
     ERDF_RadarFidelityPreset.RDF_FIDELITY_NONE); // NONE → 按 mode 自动选 SHORAD
 
+// 离线标定装进 profile（PowerShell）：
+//   python tools/dem/install_profile_calib.py
+// AIRBORNE 包会读 HwCalib；有 SitePathLut 时 SHORAD/WLR/ESM 自动 TryEnable。
+
 // 或自行组合：
 cfg.EnableAtmosphericPathLoss(true);
 cfg.EnableLosTwoRayMultipath();
