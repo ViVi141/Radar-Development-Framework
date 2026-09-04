@@ -2,15 +2,17 @@
 
 ## 1.1.11 — 2026-09-05
 
-相对 1.1.10。新增 **按角色 opt-in 拟真打包**，并加深数据层回灌：UAV 旋翼默认、HwCalib / SitePathLut 条件启用、profile 安装脚本。
+相对 1.1.10。新增 **按角色 opt-in 拟真打包**；数据层回灌加深（UAV 旋翼、条件启用）；**HwCalib / SitePathLut 随模组打包发布**（profile 仍可覆盖）。
 
-> EN: Patch over 1.1.10. Opt-in **gameplay fidelity packs** per role, plus data-layer bake-back: UAV rotor defaults, conditional HwCalib / SitePathLut, profile install script.
+> EN: Patch over 1.1.10. Opt-in **gameplay fidelity packs**; deeper bake-back wiring; **HwCalib / SitePathLut ship in the addon** (profile still overrides).
 
 - **拟真打包**：`ERDF_RadarFidelityPreset` + `ApplyGameplayFidelity`（SHORAD / AIRBORNE / WLR / ESM）；`ConfigureModeWithFidelity` / `Create*SettingsWithFidelity` / `DemoConfig.Create*Gameplay`。组合已有 Enable*（大气、折射、双径、热填、NCTR 等），不抬 Trace 预算；AutoTest 仍 `StabilizeForRegression()`。
-- **AIRBORNE**：`ApplyHardwareCalibFidelity`（`m_LoadHwCalibFromProfile` + σᵥᵣ 推导）；SHORAD/AIRBORNE 用 GO-CFAR。
-- **SitePathLut**：`TryEnableSitePathLutIfBaked()` — 仅当 `$profile:RDF/RadarData/SitePathLut.json` 可读时打开；`StabilizeForRegression` 清掉。
-- **签名**：`MaybeApplyUavRotorDefaults`（drone / uav / pchela / fpv / orlan / lancet）服务 NCTR / 微多普勒。
-- **工具**：`tools/dem/install_profile_calib.py`（默认装 HwCalib；`--with-site` / `--all`）。
+- **AIRBORNE**：`ApplyHardwareCalibFidelity`（加载 HwCalib + σᵥᵣ 推导）；SHORAD/AIRBORNE 用 GO-CFAR。
+- **打包资源**：`RadarData/HwCalib.conf|.json`、`RadarData/SitePathLut.conf|.json`（+ `.meta`）。加载顺序与 SurfaceTable 相同：profile → packaged `.conf` → packaged JSON。打包脚本：`tools/dem/rdf_pack_radar_calib.py`。
+- **SitePathLut**：`TryEnableSitePathLutIfBaked()`；打包表为 synthetic 恒等因子（原点需匹配才生效）；实站仍用 profile / 重 bake 覆盖。`StabilizeForRegression` 清掉开关。
+- **签名**：`MaybeApplyUavRotorDefaults`（drone / uav / pchela / fpv / orlan / lancet）。
+- **工具**：`install_profile_calib.py`（本机覆盖用；工坊玩家不再依赖它才能吃到默认标定）。
+- **文档**：[DEVELOPER_RECIPES.md](DEVELOPER_RECIPES.md) §3 扩为「新图 DEM + 标定打包」检查清单（HEIGHT/SURF → SitePathLut → 拟真包）。
 
 ## 1.1.10 — 2026-09-03
 

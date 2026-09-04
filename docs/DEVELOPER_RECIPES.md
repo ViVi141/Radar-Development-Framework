@@ -12,7 +12,7 @@
 
 1. [给实体挂上雷达并使用](#1-给实体挂上雷达并使用)
 2. [更改雷达参数](#2-更改雷达参数)
-3. [新地图：制作 HEIGHT + SURF 并让游戏识别](#3-新地图制作-height--surf-并让游戏识别)
+3. [新地图：DEM（HEIGHT+SURF）与标定打包](#3-新地图demheightsurf与标定打包)
 4. [给某个 prefab 单独写 RCS 签名](#4-给某个-prefab-单独写-rcs-签名)
 
 ---
@@ -133,9 +133,10 @@ sensor.ConfigureModeWithFidelity(
     ERDF_RadarSensorMode.RDF_RADAR_MODE_SEARCH, 64,
     ERDF_RadarFidelityPreset.RDF_FIDELITY_NONE); // NONE → 按 mode 自动选 SHORAD
 
-// 离线标定装进 profile（PowerShell）：
-//   python tools/dem/install_profile_calib.py
-// AIRBORNE 包会读 HwCalib；有 SitePathLut 时 SHORAD/WLR/ESM 自动 TryEnable。
+// 离线标定：
+//   python tools/dem/rdf_pack_radar_calib.py   # 打进模组 RadarData/（工坊发布）
+//   python tools/dem/install_profile_calib.py # 仅本机覆盖打包默认
+// AIRBORNE 包会读 HwCalib；SitePathLut 有 bake（打包或 profile）时 TryEnable。
 
 // 或自行组合：
 cfg.EnableAtmosphericPathLoss(true);
@@ -147,7 +148,10 @@ AutoTest 稳定用：`cfg.StabilizeForRegression();`（关掉可选保真噪声�
 
 ---
 
-## 3. 新地图：制作 HEIGHT + SURF 并让游戏识别
+## 3. 新地图：DEM（HEIGHT+SURF）与标定打包
+
+新图进工坊时，至少要让雷达认得到地形；固定站任务再补站址路径表。  
+整条链路：**DEM 打包 →（可选）SitePathLut → 发布 RadarData → 任务开拟真包**。
 
 运行时用**世界文件名**当 key（无扩展名）。例：世界是 `worlds/MyIsland/GM_MyIsland.ent` → 目录必须是：
 
@@ -204,7 +208,7 @@ python tools\dem\rdf_dem_pack_surface_json.py --world GM_MyIsland --match-height
 
 会生成与 HEIGHT 同网格的 **UNKNOWN** SURF（杂波弱，但 `SURF+H` / LOS 预检可用）。有 bake 后再 `--from-bin` 重填类。
 
-### 3.4 保存到模组并被识别
+### 3.4 保存 DEM 到模组并被识别
 
 1. 把整份目录拷进**本模组根**：
 
@@ -225,7 +229,7 @@ addons/Radar-Development-Framework/DemData/GM_MyIsland/
 
 HUD：`SURF+H`。若只有 SURF：`SURF RAM`；皆无：`LIVE`。
 
-### 3.5 常见踩坑
+### 3.5 DEM 常见踩坑
 
 | 现象 | 原因 |
 |------|------|
@@ -235,6 +239,77 @@ HUD：`SURF+H`。若只有 SURF：`SURF RAM`；皆无：`LIVE`。
 | 杂波全 UNKNOWN | 只用了 match-height；需 bake + `--from-bin` |
 
 细节与体积：[DEM.md](DEM.md)。
+
+### 3.6 标定：HwCalib + SitePathLut（随模组发布）
+
+加载顺序与 SurfaceTable 相同：**profile → 打包 `.conf` → 打包 JSON**。  
+框架已带默认 `RadarData/HwCalib.*` 与 synthetic `SitePathLut.*`；**新图固定站应重 bake 站址表再打进模组**。
+
+#### HwCalib（硬件 / 杂波泄漏）
+
+- **一般情况**：沿用仓库默认 SHORAD 标定即可，工坊玩家不用再拷 profile。  
+- **要改 PRF / σᵥᵣ / MTD 泄漏时**：
+
+```powershell
+cd tools\dem
+python rdf_radar_hw_calibrate.py --preset shorad
+python rdf_pack_radar_calib.py
+```
+
+写出 `RadarData/HwCalib.conf|.json|.meta`，随模组发布。  
+仅本机试数、不想改仓库文件时：`python install_profile_calib.py`（profile 覆盖打包默认）。
+
+AIRBORNE / PulseDoppler / `ApplyGameplayFidelity(AIRBORNE)` 会读这份表；没有可读文件时退回 σᵥᵣ 公式推导。
+
+#### SitePathLut（固定站地形路径表）
+
+**只对钉死在地图上的雷达站有意义**（阵地 SHORAD / WLR / ESM）。车载乱飞可跳过。
+
+1. 先有该图的 `DemData/<world>/`（至少 HEIGHT，推荐 SURF+H）。  
+2. 用**雷达世界坐标** bake（与任务里天线原点一致，含高度）：
+
+```powershell
+cd tools\dem
+python rdf_radar_pattern_site_validate.py `
+  --dem-dir "..\..\DemData\GM_MyIsland" `
+  --origin-x 1234.0 --origin-y 45.0 --origin-z 5678.0 `
+  --max-range-m 8000
+```
+
+写出 `tools/dem/calib/SitePathLut.json`（并带 PatternLut；Pattern 可不改默认）。  
+未给 `--dem-dir` 时脚本会生成 **synthetic 恒等脊**，只能验证管线，**不能当实战表**。
+
+3. 打进模组资源：
+
+```powershell
+python rdf_pack_radar_calib.py
+```
+
+得到 `RadarData/SitePathLut.conf|.json|.meta`。
+
+4. 任务里开拟真包（会 `TryEnableSitePathLutIfBaked`）：
+
+```c
+sensor.ConfigureModeWithFidelity(
+    ERDF_RadarSensorMode.RDF_RADAR_MODE_WLR, 128,
+    ERDF_RadarFidelityPreset.RDF_FIDELITY_NONE);
+```
+
+或手动：`cfg.TryEnableSitePathLutIfBaked();`
+
+**门控**：表内绑了 bake 原点；雷达挪出容差（`m_SitePathMaxOriginDriftM`）后路径因子**不会误乘**，相当于自动关掉站址表。
+
+多站地图：运行时只持有**一张**全局 SitePathLut；多站请按「主站 bake 进模组 / 其它站 profile 覆盖」规划，或拆下游模组各自打包。
+
+### 3.7 新图发布检查清单
+
+| 步骤 | 产出 | 不做会怎样 |
+|------|------|------------|
+| HEIGHT + SURF → `DemData/<world>/` | 杂波 / LOS 预检 / WLR 地面 | `LIVE`，杂波与通视变差 |
+| （可选）`rdf_radar_hw_calibrate` + `rdf_pack_radar_calib` | `RadarData/HwCalib.*` | 用默认包或 σᵥᵣ 推导，仍能玩 |
+| 固定站：`pattern_site_validate --dem-dir …` + pack | `RadarData/SitePathLut.*` | 用 synthetic 恒等或关着；无站址地形预表 |
+| 任务 `ConfigureModeWithFidelity` | 大气 / 双径 / 噪声等 | 默认精简档，体感偏「理想」 |
+| 城区/林冠且有非 SURF span | `m_EnableDemSpanOcclusion = true` | 柱顶遮挡仍按地表 |
 
 ---
 
@@ -321,6 +396,7 @@ if (sig)
 |------|------|
 | 锁定 / 武器 | [VEHICLE_RADAR_LOCK_GUIDE.md](VEHICLE_RADAR_LOCK_GUIDE.md) |
 | 通视缓存 / DEM 预检 | [RADAR_API.md](RADAR_API.md) § 扫描通视 |
+| 新图 DEM + HwCalib / SitePathLut | 上文 §3.6–3.7；工具 [tools/README.md](../tools/README.md) |
 | AutoTest / DemLosBench | [AUTOTEST_CI_LIMITS.md](AUTOTEST_CI_LIMITS.md) |
 | 工具脚本索引 | [tools/README.md](../tools/README.md) |
 
@@ -336,7 +412,7 @@ Practical recipes for mod authors. Contracts: [RADAR_API.md](RADAR_API.md). Inte
 
 1. [Attach radar to an entity](#1-attach-radar-to-an-entity)
 2. [Change radar parameters](#2-change-radar-parameters)
-3. [New world: HEIGHT + SURF packs](#3-new-world-height--surf-packs)
+3. [New world: DEM + calib packaging](#3-new-world-dem--calib-packaging)
 4. [Per-prefab RCS signature](#4-per-prefab-rcs-signature)
 
 ---
@@ -411,7 +487,9 @@ Mode presets: `SetMode` / `ConfigureMode`. Opt-in fidelity packs:
 
 ---
 
-## 3. New world: HEIGHT + SURF packs
+## 3. New world: DEM + calib packaging
+
+Pipeline for a workshop-ready world: **DEM packs → (optional) SitePathLut → ship RadarData → enable fidelity in the mission**.
 
 Folder key = world `.ent` basename (e.g. `GM_MyIsland.ent` → `DemData/GM_MyIsland/`).
 
@@ -425,6 +503,54 @@ python tools\dem\rdf_dem_pack_surface_json.py --world GM_MyIsland --match-height
 Copy into mod `DemData/GM_MyIsland/`. Expect log `mode=SURF` `heightPack=1` and HUD `SURF+H`.
 
 Lookup: `$profile:RDF/DemData/<key>/` then mod `DemData/<key>/`.
+
+### 3.1 HwCalib + SitePathLut (ship with the addon)
+
+Load order (same as SurfaceTable): **profile → packaged `.conf` → packaged JSON**.
+
+**HwCalib** (MTD leakage / clutter floor): defaults already live under `RadarData/HwCalib.*`. Rebuild only if you change PRF / σᵥᵣ:
+
+```powershell
+cd tools\dem
+python rdf_radar_hw_calibrate.py --preset shorad
+python rdf_pack_radar_calib.py
+```
+
+Local override without touching the repo: `python install_profile_calib.py`.
+
+**SitePathLut** (fixed-site path factors): needed for pinned SHORAD / WLR / ESM sites, not roaming vehicles. Bake with the **radar world origin** after DEM exists:
+
+```powershell
+cd tools\dem
+python rdf_radar_pattern_site_validate.py `
+  --dem-dir "..\..\DemData\GM_MyIsland" `
+  --origin-x 1234.0 --origin-y 45.0 --origin-z 5678.0 `
+  --max-range-m 8000
+python rdf_pack_radar_calib.py
+```
+
+Without `--dem-dir` you get a **synthetic identity** table (pipeline check only). Origin mismatch → factors are not applied (`m_SitePathMaxOriginDriftM`).
+
+Mission enable:
+
+```c
+sensor.ConfigureModeWithFidelity(
+    ERDF_RadarSensorMode.RDF_RADAR_MODE_WLR, 128,
+    ERDF_RadarFidelityPreset.RDF_FIDELITY_NONE);
+// or: cfg.TryEnableSitePathLutIfBaked();
+```
+
+One global SitePathLut at runtime: pack the primary site; other sites use profile override or separate downstream mods.
+
+### 3.2 New-world ship checklist
+
+| Step | Artifact | If skipped |
+|------|----------|------------|
+| HEIGHT + SURF → `DemData/<world>/` | Clutter / LOS precheck / WLR ground | `LIVE`, weaker clutter & LOS |
+| Optional HwCalib re-pack | `RadarData/HwCalib.*` | Stock pack or σᵥᵣ derive |
+| Fixed site: pattern_site + pack | `RadarData/SitePathLut.*` | Synthetic identity / off |
+| `ConfigureModeWithFidelity` | Atm / two-ray / noise pack | Lean defaults |
+| Urban/canopy + non-SURF spans | `m_EnableDemSpanOcclusion` | Surface-only occlusion |
 
 ---
 
@@ -447,5 +573,6 @@ Unknown prefabs are measured on first sighting and may export to profile CSV.
 |-------|-----|
 | Lock / weapons | [VEHICLE_RADAR_LOCK_GUIDE.md](VEHICLE_RADAR_LOCK_GUIDE.md) |
 | LOS / DEM precheck | [RADAR_API.md](RADAR_API.md) § Scan LOS |
+| New world DEM + HwCalib / SitePathLut | §3.1–3.2 above; [tools/README.md](../tools/README.md) |
 | AutoTest | [AUTOTEST_CI_LIMITS.md](AUTOTEST_CI_LIMITS.md) |
 | Tools | [tools/README.md](../tools/README.md) |

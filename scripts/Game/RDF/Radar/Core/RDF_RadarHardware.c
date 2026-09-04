@@ -59,7 +59,7 @@ class RDF_RadarHardware
     float m_ClutterSigmaVrMs = 0.5;
     // When true, Validate() sets m_MtdClutterLeakage from σ_vr (unless calib applied).
     bool m_DeriveMtdLeakageFromSigmaVr = false;
-    // Prefer $profile:RDF/RadarData/HwCalib.json scalars when present.
+    // Prefer profile / packaged HwCalib scalars when present (workshop .conf).
     bool m_LoadHwCalibFromProfile = false;
     bool m_HwCalibApplied;
     bool m_EnableMti = true;

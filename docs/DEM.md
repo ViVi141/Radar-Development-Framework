@@ -144,6 +144,8 @@ python tools\dem\rdf_dem_bake_help.py
 `DemData/` 的 SURF/HEIGHT JSON **进 Git**；profile 烘焙 CSV / `.dem.data` 仍本地另管。
 `.dem.data` 仅作离线中间格式（`--from-bin`），游戏运行时不再加载。
 
+新图从 DEM 到 HwCalib / SitePathLut 的逐步操作：[DEVELOPER_RECIPES.md](DEVELOPER_RECIPES.md) §3。
+
 ### 离线 npz 仿真
 
 ```powershell
@@ -297,6 +299,8 @@ python tools\dem\rdf_dem_bake_help.py
 
 `DemData/` SURF/HEIGHT JSON is **in Git**; profile bake CSV / `.dem.data` stay local.
 `.dem.data` remains only as an offline intermediate (`--from-bin`); the game runtime no longer loads it.
+
+Step-by-step new-world DEM + HwCalib / SitePathLut: [DEVELOPER_RECIPES.md](DEVELOPER_RECIPES.md) §3.
 
 ### Offline npz simulation
 

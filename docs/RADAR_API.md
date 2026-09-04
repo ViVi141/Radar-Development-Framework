@@ -325,7 +325,9 @@ cfg.Validate();
 | `ApplyGameplayFidelity(preset)` | Role pack (see table above) |
 | `ConfigureModeWithFidelity(mode, n, preset)` | ConfigureMode + pack |
 | `Create*SettingsWithFidelity` / `DemoConfig.Create*Gameplay` | Factory with pack |
-| `TryEnableSitePathLutIfBaked()` | Site LUT on only if profile bake loads |
+| `TryEnableSitePathLutIfBaked()` | Site LUT on only if profile/packaged bake loads |
+| `RadarData/HwCalib.conf` | Packaged SHORAD HW calib (workshop; profile overrides) |
+| `RadarData/SitePathLut.conf` | Packaged site path LUT (synthetic identity; origin-gated) |
 | `SetMeasurementNoise(scale, …)` | Measurement noise / bias |
 | `EnableCfarThermalFill(true)` | Thermal fill of empty CFAR cells |
 | `EnableAtmosphericPathLoss(weatherDriven)` | Clear-air (+ optional weather) path loss |
@@ -1071,7 +1073,9 @@ cfg.Validate();
 | `ApplyGameplayFidelity(preset)` | 角色打包（见上表） |
 | `ConfigureModeWithFidelity(mode, n, preset)` | ConfigureMode + 打包 |
 | `Create*SettingsWithFidelity` / `DemoConfig.Create*Gameplay` | 带打包的工厂 |
-| `TryEnableSitePathLutIfBaked()` | 仅当 profile bake 可读时打开站址 LUT |
+| `TryEnableSitePathLutIfBaked()` | 仅当 profile/打包 bake 可读时打开站址 LUT |
+| `RadarData/HwCalib.conf` | 打包 SHORAD HW 标定（工坊；profile 可覆盖） |
+| `RadarData/SitePathLut.conf` | 打包站址路径 LUT（synthetic 恒等；原点门控） |
 | `SetMeasurementNoise(scale, …)` | 测量噪声 / 偏差 |
 | `EnableCfarThermalFill(true)` | CFAR 空单元热填空 |
 | `EnableAtmosphericPathLoss(weatherDriven)` | 晴空（+可选天气）路径损耗 |

@@ -41,7 +41,7 @@
 - **LOS 双射线多径** + **4/3 地球折射** + **PRF 距离/多普勒模糊折叠**（无波形仿真；按需 Enable*；WLR 跳过多普勒折叠）
 - **极化**：`Hardware.m_PolarizationMode`（H/V/圆）匹配表 × `m_PolarizationFactor` 微调；圆极化对雨杂波抑制（`m_EnablePolarizationMatch`，默认开）
 - **旁瓣 / 方向图**：分段方位 LUT（主瓣+旁瓣峰+地板，`m_EnablePatternLut` 默认开）或高斯+`m_SidelobeLevelDb` 地板；EW 可选 SLB（默认关）
-- **固定站路径表**：极坐标 DEM 路径因子（`m_EnableSitePathLut`，默认关；需 bake `SitePathLut.json`）
+- **固定站路径表**：极坐标 DEM 路径因子（`m_EnableSitePathLut`；打包 `RadarData/SitePathLut`，profile 可覆盖；原点不匹配则不生效）
 - **无理想/逼真双档**：需要什么开什么；AutoTest 用 `StabilizeForRegression()`
 - **散射体表拟真输入**：姿态方位+俯仰+滚转 **OBB 投影 RCS**（局部盒 × 机体轴）、**按波长的瑞利/光学缩放**（`ka<10`）、Swerling 起伏、AGL、DEM 缓存、辐射源射频摘要；烘焙表优先读 `Signatures/*.conf`（工坊），profile CSV 回退
 - DEM / 地表：`GetSurfaceY` + SURF JSON；电磁参数优先 `RadarData/SurfaceTable.conf`
@@ -211,7 +211,7 @@ In short: suited for **playable sensor gameplay with physical thresholds and mea
 - **LOS two-ray multipath** + **4/3-Earth refraction** + **PRF range/Doppler ambiguity fold** (no waveform sim; opt-in Enable*; WLR skips Doppler fold)
 - **Polarization**: `Hardware.m_PolarizationMode` (H/V/circular) match table × `m_PolarizationFactor` trim; circular rain-clutter reject (`m_EnablePolarizationMatch`, default on)
 - **Pattern / sidelobes**: segmented az LUT (mainlobe+peaks+floor, `m_EnablePatternLut` default on) or Gaussian+`m_SidelobeLevelDb` floor; optional EW SLB (default off)
-- **Fixed-site path LUT**: polar DEM path factors (`m_EnableSitePathLut`, default off; needs baked `SitePathLut.json`)
+- **Fixed-site path LUT**: polar DEM path factors (`m_EnableSitePathLut`; ships `RadarData/SitePathLut`, profile overrides; origin-gated)
 - **No ideal/realistic tiers**: enable what you need; AutoTest uses `StabilizeForRegression()`
 - **Scatterer-table fidelity inputs**: azimuth + elevation + roll **OBB projected RCS** (local box × body axes), **Rayleigh/optical RCS vs wavelength** (`ka<10`), Swerling fluctuation, AGL, DEM cache, emitter RF summary; baked tables prefer `Signatures/*.conf` (workshop), profile CSV fallback
 - DEM / surface: `GetSurfaceY` + SURF JSON; EM params prefer `RadarData/SurfaceTable.conf`

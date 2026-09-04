@@ -1,6 +1,7 @@
 // Fixed-site polar (az × range) terrain path-factor LUT.
 // Offline bake: tools/dem/rdf_radar_pattern_site_validate.py
-// Profile: $profile:RDF/RadarData/SitePathLut.json
+// Load order: profile JSON → packaged RadarData/SitePathLut.conf → packaged JSON.
+// Pack: tools/dem/rdf_pack_radar_calib.py (shipped synthetic identity is origin-gated).
 class RDF_RadarSitePathLutDoc : JsonApiStruct
 {
     string schema;
@@ -34,9 +35,13 @@ class RDF_RadarSitePathLut
 {
     static const string SCHEMA = "RDF_SITE_PATH_LUT_V1";
     static const string PROFILE_PATH = "$profile:RDF/RadarData/SitePathLut.json";
+    static const string PACKAGED_JSON_PATH = "RadarData/SitePathLut.json";
+    static const ResourceName PACKAGED_CONF =
+        "{D4E81F2A7C903E11}RadarData/SitePathLut.conf";
 
     protected static bool s_Loaded;
     protected static bool s_Enabled;
+    protected static string s_Source;
     protected static float s_OriginX;
     protected static float s_OriginY;
     protected static float s_OriginZ;
@@ -57,24 +62,44 @@ class RDF_RadarSitePathLut
         if (!s_Enabled)
             return false;
         EnsureLoaded();
-        if (!s_Loaded)
-            return false;
         if (!s_Factors)
             return false;
         return true;
     }
 
     //--------------------------------------------------------------------------------------------
+    static string GetSource()
+    {
+        EnsureLoaded();
+        return s_Source;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    // Load order: profile JSON → packaged .conf → packaged JSON.
     static void EnsureLoaded()
     {
         if (s_Loaded)
             return;
         s_Loaded = true;
-        if (!TryLoadProfile())
+        s_Source = "";
+        s_Factors = null;
+        s_AzCount = 0;
+        s_RangeCount = 0;
+
+        if (TryLoadJsonFile(PROFILE_PATH))
         {
-            s_Factors = null;
-            s_AzCount = 0;
-            s_RangeCount = 0;
+            s_Source = "profile:" + PROFILE_PATH;
+            return;
+        }
+        if (TryLoadConf(PACKAGED_CONF))
+        {
+            s_Source = "conf:" + PACKAGED_CONF;
+            return;
+        }
+        if (TryLoadJsonFile(PACKAGED_JSON_PATH))
+        {
+            s_Source = "packaged:" + PACKAGED_JSON_PATH;
+            return;
         }
     }
 
@@ -84,6 +109,7 @@ class RDF_RadarSitePathLut
     {
         s_Loaded = false;
         s_Factors = null;
+        s_Source = "";
         EnsureLoaded();
     }
 
@@ -167,14 +193,61 @@ class RDF_RadarSitePathLut
     }
 
     //--------------------------------------------------------------------------------------------
-    protected static bool TryLoadProfile()
+    protected static bool TryLoadJsonFile(string path)
     {
-        if (!FileIO.FileExists(PROFILE_PATH))
+        if (!FileIO.FileExists(path))
             return false;
 
         RDF_RadarSitePathLutDoc doc = new RDF_RadarSitePathLutDoc();
-        if (!doc.LoadFromFile(PROFILE_PATH))
+        if (!doc.LoadFromFile(path))
             return false;
+        return ApplyDoc(doc);
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected static bool TryLoadConf(ResourceName path)
+    {
+        if (path.IsEmpty())
+            return false;
+
+        RDF_RadarSitePathLutConf conf =
+            SCR_ConfigHelperT<RDF_RadarSitePathLutConf>.GetConfigObject(path);
+        if (!conf)
+            return false;
+        if (!conf.m_sSchema || conf.m_sSchema != SCHEMA)
+            return false;
+        if (!conf.m_aFactors)
+            return false;
+        if (conf.m_iAzCount < 4 || conf.m_iRangeCount < 4)
+            return false;
+        int expect = conf.m_iAzCount * conf.m_iRangeCount;
+        if (conf.m_aFactors.Count() < expect)
+            return false;
+        if (conf.m_fMaxRangeM < 10.0)
+            return false;
+
+        s_OriginX = conf.m_fOriginX;
+        s_OriginY = conf.m_fOriginY;
+        s_OriginZ = conf.m_fOriginZ;
+        s_MaxRangeM = conf.m_fMaxRangeM;
+        s_AzCount = conf.m_iAzCount;
+        s_RangeCount = conf.m_iRangeCount;
+        s_Factors = new array<float>();
+        for (int i = 0; i < expect; i++)
+        {
+            float f = conf.m_aFactors.Get(i);
+            if (f < 0.0)
+                f = 0.0;
+            if (f > 1.0)
+                f = 1.0;
+            s_Factors.Insert(f);
+        }
+        return true;
+    }
+
+    //--------------------------------------------------------------------------------------------
+    protected static bool ApplyDoc(notnull RDF_RadarSitePathLutDoc doc)
+    {
         if (!doc.schema || doc.schema != SCHEMA)
             return false;
         if (!doc.factors)

@@ -171,15 +171,16 @@
 **下一步（择一，按体感）**
 
 1. **拟真打包（已落地）**：任务里用 `ConfigureModeWithFidelity` / `Create*Gameplay`；默认 `ConfigureMode` 仍精简。  
-2. **标定回灌（已加深）**：`python tools/dem/install_profile_calib.py`；AIRBORNE 读 HwCalib；`TryEnableSitePathLutIfBaked`；UAV 旋翼默认。  
+2. **标定回灌（已加深 + 打包）**：`rdf_pack_radar_calib.py` 写入 `RadarData/HwCalib` + `SitePathLut`；工坊随模组发布。本机覆盖用 `install_profile_calib.py`。  
 3. **产品**：模组侧武器 prefab 接 `WeaponBridge`（框架外）。  
-4. **场景**：有城区/林冠数据时打开 `m_EnableDemSpanOcclusion`（需非 SURF V3/CSV）；固定站用 `--dem-dir` 重 bake SitePathLut。  
-5. **调参**：`rdf_radar_hw_calibrate.py` 自定义 preset 后再 install；粗 RD 仅 Perf 对照后显式打开。  
+4. **场景**：有城区/林冠数据时打开 `m_EnableDemSpanOcclusion`；固定站用 `--dem-dir` 重 bake SitePathLut 后重新 `rdf_pack_radar_calib.py` 或装 profile。  
+5. **调参**：`rdf_radar_hw_calibrate.py` 自定义 preset 后再 pack/install；粗 RD 仅 Perf 对照后显式打开。  
 6. **工程**：本地 Play + `RunAutoTestSuite.flag` 批跑（非无头 CI）。  
 7. **呈现**：§10 已落地；模组侧屏 mesh `$rendertarget` + 入舱 EnableScreen。
 
 - [x] **拟真打包**：`ERDF_RadarFidelityPreset` + `ApplyGameplayFidelity`（SHORAD/AIRBORNE/WLR/ESM）
-- [x] **标定回灌接线**：HwCalib / SitePathLut 条件启用 + `install_profile_calib.py` + UAV 旋翼默认
+- [x] **标定回灌接线**：HwCalib / SitePathLut 条件启用 + UAV 旋翼默认
+- [x] **标定随模组发布**：`RadarData/HwCalib.*` + `SitePathLut.*`（profile → conf → JSON）
 #### 10 — 呈现：机载仪表 range–az 杂波面（已落地，2026-08-31）
 
 目标：离线已验证的 **DEM σ⁰ → range–az 强度栅**（`tools/dem/render_range_az_clutter.py`）进入游戏，但**不要**再做一个右下角独立 PPI 浮层；优先做成**载具/机载座舱仪表的一部分**（MFD / 雷达屏 mesh / 布局 Widget 挂在座舱）。
@@ -474,15 +475,16 @@ Deepen target-level equations / measurement layer; **no** waveform → RD / full
 **Next (pick one by feel)**
 
 1. **Fidelity packs (shipped)**: use `ConfigureModeWithFidelity` / `Create*Gameplay` in missions; plain `ConfigureMode` stays lean.  
-2. **Calib bake-back (deepened)**: `python tools/dem/install_profile_calib.py`; AIRBORNE loads HwCalib; `TryEnableSitePathLutIfBaked`; UAV rotor defaults.  
+2. **Calib bake-back (deepened + packaged)**: `rdf_pack_radar_calib.py` writes `RadarData/HwCalib` + `SitePathLut` for workshop. Local override via `install_profile_calib.py`.  
 3. **Product**: mod-side weapon prefabs on `WeaponBridge` (outside framework).  
-4. **Scenario**: enable `m_EnableDemSpanOcclusion` when non-SURF V3/CSV canopy data exists; re-bake SitePathLut with `--dem-dir` for fixed sites.  
-5. **Tuning**: custom `rdf_radar_hw_calibrate.py` preset then install; turn coarse RD on only after Perf checks.  
+4. **Scenario**: enable `m_EnableDemSpanOcclusion` when non-SURF canopy data exists; re-bake SitePathLut then re-pack or install profile.  
+5. **Tuning**: custom `rdf_radar_hw_calibrate.py` preset then pack/install; turn coarse RD on only after Perf checks.  
 6. **Engineering**: local Play + `RunAutoTestSuite.flag` (not headless CI).  
 7. **Presentation**: §10 shipped; mod-side screen mesh `$rendertarget` + EnableScreen on enter.
 
 - [x] **Fidelity packs**: `ERDF_RadarFidelityPreset` + `ApplyGameplayFidelity` (SHORAD/AIRBORNE/WLR/ESM)
-- [x] **Calib wiring**: conditional HwCalib / SitePathLut + `install_profile_calib.py` + UAV rotor defaults
+- [x] **Calib wiring**: conditional HwCalib / SitePathLut + UAV rotor defaults
+- [x] **Calib ships with addon**: `RadarData/HwCalib.*` + `SitePathLut.*` (profile → conf → JSON)
 
 #### 10 — Presentation: cockpit range–az clutter surface (shipped, 2026-08-31)
 

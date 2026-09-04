@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Copy offline calib JSON into the Arma Reforger profile for in-game bake-back.
+"""Copy offline calib JSON into the Arma Reforger profile (local override).
+
+Workshop builds already ship RadarData/HwCalib + SitePathLut. Use this script
+only when you want a machine-specific bake to override the packaged defaults
+($profile wins over packaged .conf / JSON).
 
 Sources (under tools/dem/calib/):
   prf_clutter_shorad.json  -> HwCalib.json      (default)

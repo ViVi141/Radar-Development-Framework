@@ -1,5 +1,6 @@
 // Offline HW calib bake-back (MTD leakage / floor / bins).
-// Profile JSON from tools/dem/rdf_radar_hw_calibrate.py → in-game Hardware.
+// Load order: profile JSON → packaged RadarData/HwCalib.conf → packaged JSON.
+// Rebuild packaged files: tools/dem/rdf_pack_radar_calib.py
 class RDF_RadarHwCalibDoc : JsonApiStruct
 {
     string schema;
@@ -31,6 +32,9 @@ class RDF_RadarHwCalib
 {
     static const string SCHEMA = "RDF_HW_CALIB_V1";
     static const string PROFILE_PATH = "$profile:RDF/RadarData/HwCalib.json";
+    static const string PACKAGED_JSON_PATH = "RadarData/HwCalib.json";
+    static const ResourceName PACKAGED_CONF =
+        "{D4E81F2A7C903E01}RadarData/HwCalib.conf";
 
     //------------------------------------------------------------------------------------------------
     // Suggest non-zero-bin leakage from Gaussian clutter σ_vr (matches Python).
@@ -135,20 +139,66 @@ class RDF_RadarHwCalib
     }
 
     //------------------------------------------------------------------------------------------------
-    // Load profile calib JSON and apply scalar fields onto hardware.
+    // Load order (SurfaceTable-style): profile JSON → packaged .conf → packaged JSON.
+    // m_LoadHwCalibFromProfile still gates the call; name kept for net/settings compat.
     static bool TryApplyFromProfile(notnull RDF_RadarHardware hardware)
     {
-        if (!FileIO.FileExists(PROFILE_PATH))
+        if (TryApplyJsonFile(PROFILE_PATH, hardware))
+            return true;
+        if (TryApplyConf(PACKAGED_CONF, hardware))
+            return true;
+        if (TryApplyJsonFile(PACKAGED_JSON_PATH, hardware))
+            return true;
+        return false;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    protected static bool TryApplyJsonFile(string path, notnull RDF_RadarHardware hardware)
+    {
+        if (!FileIO.FileExists(path))
             return false;
 
         RDF_RadarHwCalibDoc doc = new RDF_RadarHwCalibDoc();
-        if (!doc.LoadFromFile(PROFILE_PATH))
+        if (!doc.LoadFromFile(path))
             return false;
         if (!doc.schema || doc.schema != SCHEMA)
             return false;
 
         ApplyDoc(doc, hardware);
         return true;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    protected static bool TryApplyConf(ResourceName path, notnull RDF_RadarHardware hardware)
+    {
+        if (path.IsEmpty())
+            return false;
+
+        RDF_RadarHwCalibConf conf =
+            SCR_ConfigHelperT<RDF_RadarHwCalibConf>.GetConfigObject(path);
+        if (!conf)
+            return false;
+        if (!conf.m_sSchema || conf.m_sSchema != SCHEMA)
+            return false;
+
+        ApplyConf(conf, hardware);
+        return true;
+    }
+
+    //------------------------------------------------------------------------------------------------
+    static void ApplyConf(notnull RDF_RadarHwCalibConf conf, notnull RDF_RadarHardware hardware)
+    {
+        RDF_RadarHwCalibDoc doc = new RDF_RadarHwCalibDoc();
+        doc.schema = conf.m_sSchema;
+        doc.preset = conf.m_sPreset;
+        doc.prf_hz = conf.m_fPrfHz;
+        doc.mti_clutter_floor = conf.m_fMtiClutterFloor;
+        doc.mtd_clutter_leakage = conf.m_fMtdClutterLeakage;
+        doc.doppler_bin_count = conf.m_iDopplerBinCount;
+        doc.mti_mode = conf.m_sMtiMode;
+        doc.clutter_sigma_vr_m_s = conf.m_fClutterSigmaVrMs;
+        doc.prf_stagger_ratio = conf.m_fPrfStaggerRatio;
+        ApplyDoc(doc, hardware);
     }
 
     //------------------------------------------------------------------------------------------------

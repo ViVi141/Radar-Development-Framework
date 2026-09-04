@@ -1,0 +1,12 @@
+{
+  "schema": "RDF_HW_CALIB_V1",
+  "preset": "shorad",
+  "prf_hz": 4000.0,
+  "mti_clutter_floor": 0.0001,
+  "mtd_clutter_leakage": 1e-09,
+  "doppler_bin_count": 16,
+  "mti_mode": "mtd_bank",
+  "clutter_sigma_vr_m_s": 0.5,
+  "prf_stagger_ratio": 1.2,
+  "notes": "Packaged SHORAD bake-back; profile HwCalib.json overrides"
+}
